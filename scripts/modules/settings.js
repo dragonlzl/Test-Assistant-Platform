@@ -314,10 +314,6 @@
       }
       state.settings.assistantEnabled = resolveAssistantEnabled(state.settings.assistantEnabled);
       state.settings.assistantModelId = resolveAssistantModelId(state.settings.assistantModelId);
-      if (state.settings.assistantModelId) {
-        var found = findModelByAnyId(state.settings.assistantModelId);
-        if (!found) state.settings.assistantModelId = '';
-      }
       return {
         assistantEnabled: state.settings.assistantEnabled === true,
         assistantModelId: state.settings.assistantModelId || '',
@@ -344,23 +340,36 @@
       ensureAssistantSettings();
       if (assistantModelSelect) {
         var options = listAssistantModels();
+        var selectedAssistantModelId = state.settings.assistantModelId ? String(state.settings.assistantModelId) : '';
+        var selectedExists = false;
+        if (selectedAssistantModelId) {
+          selectedExists = options.some(function(item) {
+            return item && item.id && String(item.id) === selectedAssistantModelId;
+          });
+        }
         if (!options.length) {
-          assistantModelSelect.innerHTML = '<option value="">暂无模型可选</option>';
-          assistantModelSelect.value = '';
+          if (selectedAssistantModelId) {
+            assistantModelSelect.innerHTML = '<option value="' + escapeHtml(selectedAssistantModelId) + '">已保存模型（待加载）：' + escapeHtml(selectedAssistantModelId) + '</option>';
+            assistantModelSelect.value = selectedAssistantModelId;
+          } else {
+            assistantModelSelect.innerHTML = '<option value="">暂无模型可选</option>';
+            assistantModelSelect.value = '';
+          }
         } else {
-          var html = '<option value="">请选择助手模型</option>' + options.map(function(item) {
+          var fallbackOption = '';
+          if (selectedAssistantModelId && !selectedExists) {
+            fallbackOption = '<option value="' + escapeHtml(selectedAssistantModelId) + '">已保存模型（待同步或已删除）：' + escapeHtml(selectedAssistantModelId) + '</option>';
+          }
+          var html = '<option value="">请选择助手模型</option>' + fallbackOption + options.map(function(item) {
             var suffix = item.usable ? '' : '（配置不完整）';
-            var selected = item.id && item.id === state.settings.assistantModelId ? ' selected' : '';
+            var selected = item.id && item.id === selectedAssistantModelId ? ' selected' : '';
             var disabled = item.usable ? '' : ' disabled';
             var label = escapeHtml(item.name + ' (' + item.provider + ')' + suffix);
             return '<option value="' + escapeHtml(item.id) + '"' + selected + disabled + '>' + label + '</option>';
           }).join('');
           assistantModelSelect.innerHTML = html;
-          if (state.settings.assistantModelId) {
-            assistantModelSelect.value = state.settings.assistantModelId;
-          }
-          if (!assistantModelSelect.value) {
-            state.settings.assistantModelId = '';
+          if (selectedAssistantModelId) {
+            assistantModelSelect.value = selectedAssistantModelId;
           }
         }
       }
@@ -786,8 +795,9 @@
         state.settings = Object.assign({}, defaultSettings);
       }
       var hasLocalSettings = false;
-      // DB-first：当检测到已登录（本地有 token 且后端设置接口可用）时，不使用本地缓存覆盖，
-      // 以避免多端同号时出现本地旧值抢占；无登录/无后端时继续使用 localStorage 作为回退。
+      var saved = {};
+      // DB-first：当检测到已登录（本地有 token 且后端设置接口可用）时，不使用本地缓存整体覆盖，
+      // 但助手开关/模型允许使用最近一次本地缓存作启动兜底，避免页面初始化阶段被错误锁定。
       var shouldUseLocal = true;
       try {
         if (api && typeof api.listSettings === 'function' && typeof api.getStoredToken === 'function') {
@@ -797,23 +807,29 @@
       } catch (err) {
         shouldUseLocal = true;
       }
-      if (shouldUseLocal) {
-        var saved = {};
-        try {
-          var raw = localStorage.getItem(settingsKey) || '';
-          if (raw) hasLocalSettings = true;
-          saved = raw ? (JSON.parse(raw || '{}') || {}) : {};
-        } catch (err) {
-          console.warn('调用设置加载失败', err);
-          saved = {};
-        }
-        if (saved && typeof saved === 'object') {
+      try {
+        var raw = localStorage.getItem(settingsKey) || '';
+        if (raw) hasLocalSettings = true;
+        saved = raw ? (JSON.parse(raw || '{}') || {}) : {};
+      } catch (err) {
+        console.warn('调用设置加载失败', err);
+        saved = {};
+      }
+      if (saved && typeof saved === 'object') {
+        if (shouldUseLocal) {
           Object.keys(saved).forEach(function(key) {
             if (!Object.prototype.hasOwnProperty.call(saved, key)) return;
             var val = saved[key];
             if (val === undefined) return;
             state.settings[key] = val;
           });
+        } else {
+          if (Object.prototype.hasOwnProperty.call(saved, 'assistantEnabled')) {
+            state.settings.assistantEnabled = saved.assistantEnabled === true;
+          }
+          if (Object.prototype.hasOwnProperty.call(saved, 'assistantModelId')) {
+            state.settings.assistantModelId = resolveAssistantModelId(saved.assistantModelId);
+          }
         }
       }
 

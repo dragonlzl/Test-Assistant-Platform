@@ -19,6 +19,146 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 更新记录：2026-03-10 AI 助手补齐复用子项多条命中时的精确过滤与“全部”批量执行
+  - 问题现象：
+    - 当用户输入“把当前页面用例的 222 子项执行结果改为通过”时，助手会把“222”误识别成“把当前页面用例的222”，导致候选范围放大到所有带复用子项的用例；
+    - 在范围确认阶段，用户回复“全部”时，助手无法把它理解成“对全部匹配条目执行”，会继续卡在“请回复选第1个/操作第2条”；
+    - 复用子项多条命中后的成功文案也缺少“匹配范围/批量处理”语义，难以确认是否真按预期批量执行。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - 为复用子项明细更新新增“按子项名/子项序号过滤匹配用例”的解析能力，不再把所有含复用子项的用例都列出来；
+      - 为 `detail_update` 的执行结果/备注场景补齐批量目标解析，支持在多条匹配用例中生成“全部匹配子项…”聚合候选，并在确认后一次性批量更新；
+      - 确认文案与返回结果补齐 `matched_cases` 范围信息，成功后可输出“匹配 222 的 2 条用例”这类明确回执。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 修复复用子项名提取，把“把当前页面用例的222”规范为真实子项名“222”；
+      - 在 `detail_case` 待确认态中补充“全部”提示，并优先把这类范围回复交给模型做选择判断，再用现有候选匹配兜底；
+      - 批量成功文案补齐“匹配范围 + 条数 + 更新字段”摘要，便于用户确认实际生效范围。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增 `assistantMcpApi tempexec.reuse_update 修改多个匹配子项状态时会先确认范围并支持全部执行`；
+      - 新增 `助手在复用子项范围确认后回复“全部”时会交给模型判断并批量执行`；
+      - 同步更新 `助手处理复用子项时若存在多条用例会先确认具体条目`，验证候选只保留真正命中 `222` 的用例。
+  - 使用效果：
+    - 复用子项多条命中时，助手会先只列出真正包含目标子项的用例；
+    - 用户在确认阶段直接回复“全部”，助手会把它理解为“对全部匹配用例统一执行”，而不是继续停在选择态；
+    - 最终确认卡与成功回执都会明确展示批量作用范围。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "修改多个匹配子项状态时会先确认范围并支持全部执行|回复“全部”时会交给模型判断并批量执行|若存在多条用例会先确认具体条目"`（通过，3/3）
+    - 本次未新增 / 修改后端 API，API 自动化回归不适用。
+  - 复用说明：
+    - 复用了现有 `tempexec.reuse_update`、助手待确认态、确认卡与复用子项更新 API，没有新增后端接口；
+    - 改动集中在现有前端解析与确认链路，属于最小增量修复。
+
+- 更新记录：2026-03-09 AI 助手为复用预设子项新增补齐两段式范围确认
+  - 问题现象：
+    - 用户说“帮我给皮肤用例增加预设子项，111、222”时，助手可能直接误判为搜索当前用例，而不是先确认处理范围；
+    - 当同一复用执行文件下存在多条用例时，直接执行会让结果偏离用户真实意图。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 让“增加/新增/添加预设子项”优先命中 `tempexec.reuse_update`，不再先走当前用例搜索；
+      - 增加 `preset_scope` / `preset_case` 两段式等待态与中文提示，先确认“整份执行用例”还是“某条用例”，再进入具体条目选择。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - `preset_add / preset_set` 在多条复用用例场景下先返回范围确认；
+      - 选择整份时更新 `reusePresets`，选择单条时仅更新该条用例的 `reuseDetails`。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增“新增预设子项命中多条用例时会先确认范围”与“助手不会误走搜索而会先确认范围”回归用例。
+  - 使用效果：
+    - 当“皮肤用例”这类表达既可能指整份执行用例，也可能指其中某条用例时，助手会严格先大方向确认，再细方向确认；
+    - 不会再未经确认就直接把新增预设子项应用到错误目标。
+
+- 更新记录：2026-03-09 AI 助手补齐复用预设子项改名、范围澄清与中文任务名兜底
+  - 问题现象：
+    - 用户要求修改复用预设子项名称时，助手还不能先区分“整份预设”还是“某条用例”，容易直接落入不明确的修改范围；
+    - 部分任务卡在模型输出原始工具名时，仍可能展示 `case_library.search_case_candidates`、`case_library.get_case_detail` 这类英文工具名，不符合“全中文任务描述”的要求；
+    - 本轮联调还暴露出 `scripts/modules/assistant.js` 存在重复分支导致的未闭合语法错误，进而阻断任务继续执行。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - 为复用预设子项名称修改补齐 `preset_rename` 识别与执行分支；
+      - 当用户表达“把某个预设子项改名”但范围不清楚时，先返回大方向确认（整份预设 / 单条用例），若选择单条，再进入第二轮具体用例确认；
+      - 整份修改时只更新 `reusePresets`，单条修改时只更新目标用例的 `reuseDetails`，不影响同文件其它用例。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 新增 `preset_rename` 的自然语言解析、等待态摘要、确认文案与成功回执；
+      - 为任务步骤标题补上一层中文兜底规范化：即使模型或旧链路吐出原始工具名，展示层也会优先转成“定位当前用例”“读取用例详情”“删除全部复用子项”等中文业务描述；
+      - 修复 `buildAssistantFriendlyTaskLabel(...)` 中重复 `case.update` 分支引入的未闭合问题，恢复助手执行链路。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增 `assistantMcpApi tempexec.reuse_update 修改预设子项名称时会先确认修改范围`；
+      - 新增 `assistantMcpApi tempexec.reuse_update 选择整份后会修改预设子项名称`；
+      - 新增 `assistantMcpApi tempexec.reuse_update 选择单条后只修改对应子项名称`。
+  - 使用效果：
+    - 当用户说“把皮肤用例的游侠皮肤改成游侠新皮肤”这类指令时，助手会先判断是要改整份预设，还是只改某条用例，再继续执行；
+    - 单条修改不会误伤同文件下其它复用用例，整份修改则会按预设语义统一生效；
+    - 任务卡与步骤列表会继续强制使用中文任务描述，不再把工具名直接展示给用户。
+  - 测试与验证（本次增量）：
+    - `node --check /Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/core/tempexecCore.js && node --check /Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js && node --check /Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js && node --check /Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config /Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/playwright.config.js /Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js --grep "assistantMcpApi tempexec.reuse_update 修改预设子项名称时会先确认修改范围|assistantMcpApi tempexec.reuse_update 选择整份后会修改预设子项名称|assistantMcpApi tempexec.reuse_update 选择单条后只修改对应子项名称" --reporter=line --workers=1`（通过，3/3）
+    - 同文件里 2 条既有“中文任务步骤”UI 用例在当前 mocked 设置初始化链路下仍会卡在助手设置轮询，未纳入本次增量通过项，问题不由本轮改动引入。
+  - 复用说明：
+    - 继续复用既有 `tempexec.reuse_update`、任务状态卡、确认卡与复用子项编辑能力；
+    - 本次主要补齐“预设改名范围澄清 + 中文展示兜底 + 语法修复”，属于在现有助手链路上的最小增量增强。
+
+- 更新记录：2026-03-09 AI 助手支持识别复用型执行用例，并可预设/修改子项
+  - 问题现象：
+    - 当用户在执行页提出“给皮肤用例预设子项”“把某个子项改为通过”“给子项加备注”这类复用型操作时，助手仍会误走通用 `case.update`，最终报“缺少可编辑字段”；
+    - 现有执行页其实已经具备复用预设子项、子项执行结果、子项备注与子项名称的编辑能力，但助手链路没有识别“目标是否为复用类型”，也没有把这类请求路由到正确能力。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - 新增 `tempexec.reuse_update` MCP 工具，统一承接复用型执行用例的两类操作：设置/追加预设子项，以及修改某条用例子项的执行结果、备注、名称；
+      - 工具执行前会先定位目标执行用例，并判断是否为复用类型；若不是复用类型，会直接返回明确中文错误，不再误弹通用“修改用例”确认；
+      - 复用预设子项操作复用了现有 `startTempExecPresetDraft / confirmTempExecPresetDraft / removeTempExecPreset`；子项结果/备注/名称操作复用了现有 `updateTempExecReuseStatus / updateTempExecReuseNote / updateTempExecReuseText`，未新增后端接口。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 新增复用型指令识别与参数补全：当用户提到“预设子项 / 子项执行结果 / 子项备注 / 子项名称”时，会优先改写为 `tempexec.reuse_update`，不再误落到 `case.update`；
+      - 更新工具目录、任务卡中文文案与成功回执，任务区会显示“设置复用预设子项”“修改复用子项执行结果”等中文步骤，执行完成后返回可读结果，而不是原始 JSON。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增 `assistantMcpApi tempexec.reuse_update 可为复用执行用例设置预设子项`；
+      - 新增 `assistantMcpApi tempexec.reuse_update 遇到非复用用例会直接拒绝`；
+      - 新增 `assistantMcpApi tempexec.reuse_update 可修改复用子项执行结果和备注`；
+      - 新增 `助手遇到复用子项请求时会改走 tempexec.reuse_update`，覆盖真实助手链路的改写与确认流程。
+  - 使用效果：
+    - 现在助手会先判断目标执行用例是不是复用类型，再决定是否继续执行复用子项操作；
+    - 对复用型执行用例，助手可以直接设置预设子项，也可以修改指定条目下某个子项的执行结果、备注和名称；
+    - 聊天区任务卡、确认说明和成功提示都会使用中文业务文案，不再暴露“缺少可编辑字段”这类误导性失败信息。
+  - 测试与验证（本次增量）：
+    - `node --check /Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js && node --check /Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js && node --check /Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config /Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/playwright.config.js /Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js -g "assistantMcpApi tempexec.reuse_update 可为复用执行用例设置预设子项|assistantMcpApi tempexec.reuse_update 遇到非复用用例会直接拒绝|assistantMcpApi tempexec.reuse_update 可修改复用子项执行结果和备注|助手遇到复用子项请求时会改走 tempexec.reuse_update|assistantMcpApi case.update 确认文案应说明字段和修改内容" --reporter=line --workers=1`（通过，5/5）
+    - `npx playwright test --config /Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/playwright.config.js /Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js -g "assistantMcpApi transfer_to_exec 仅在同执行版本同名时要求覆盖确认|助手会先询问执行版本再把指定用例转到当前执行|assistantMcpApi tempexec.remove_files 命中同名不同版本时会先要求选择版本|助手移除同名不同版本用例时会先询问版本再执行" --reporter=line --workers=1`（通过，4/4）
+    - 本次未新增 / 修改后端 API，API 自动化回归不适用。
+  - 复用说明：
+    - 完全复用了现有执行页复用预设、复用子项状态/备注/名称更新能力，以及助手确认卡、任务卡和 MCP 分发链路；
+    - 本次只是在助手层补齐“识别复用型意图 + 路由正确工具 + 输出中文结果”，属于最小增量扩展。
+
+
+- 更新记录：2026-03-09 AI 助手补齐复用子项“删除全部”范围澄清，并支持按范围继续执行
+  - 问题现象：
+    - 当用户说“帮我删除全部子项”时，如果当前复用执行用例里有多条 case，助手会直接落到第 1 条，只删除一条用例下的子项，未先确认删除范围；
+    - 当用户说“帮我删除皮肤用例的全部子项”时，“皮肤用例”既可能指整份执行用例，也可能指若干条匹配用例，甚至可能指某一条用例，助手此前没有把这层歧义问清楚；
+    - 在范围待确认后，用户回复“整份都删”“只删第2条”这类明确范围时，助手仍可能无法命中候选，导致流程卡在待选状态。
+  - 修复内容：
+    - `scripts/modules/app.js`
+      - 补齐 `tempexec.reuse_update` 删除全部子项的范围解析：区分整份执行用例、匹配到的多条用例、单条用例三类目标；
+      - 当范围不明确时，统一返回 `selection_required`，并给出全中文候选项，不再默认回退到第 1 条；
+      - 删除确认文案与执行结果回执补充范围信息：整份删除会显示“共 N 条用例、M 项”，多条匹配删除会显示“匹配某关键词的 N 条用例”，避免误解为只删了一条；
+      - 真正执行删除时，改为按 `{ caseIndex, detail }` 聚合结果逐条调用现有删除能力，确保跨多条 case 删除也能正确落库 / 刷新。
+    - `scripts/modules/assistant.js`
+      - 扩展复用待选状态，新增 `selectionType` 与 `applyPatch`，允许同一套待选机制同时承接“选复用执行用例”和“选删除范围”两类场景；
+      - 新增删除范围专用解析，支持“整份都删”“只删第2条”等中文回复直接命中对应候选，而不是只能按列表序号选择；
+      - 等待态摘要、重试提示、成功提示均改为删除范围专用中文文案，不再误写成“选择哪一份复用执行用例”。
+    - `tests/ui/assistant_global.spec.js`
+      - 新增 `assistantMcpApi tempexec.reuse_update 删除全部子项命中多条用例时会先要求确认范围`；
+      - 新增 `助手删除“皮肤用例”的全部复用子项时会先确认范围再执行`；
+      - 同步回归已有复用预设、复用子项修改、复用候选选择、单条删除与单条全部删除场景，确保原链路不回退。
+  - 使用效果：
+    - 现在助手会先判断“全部子项”到底是整份执行用例、多条匹配用例，还是某一条用例；
+    - 判断不清时，会先追问范围；判断清楚后，才会进入“允许操作”确认卡；
+    - 用户回复“整份都删”“只删第2条”后，助手可以继续执行，并返回准确的全中文删除成功提示。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/core/tempexecCore.js && node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi tempexec.reuse_update|助手遇到复用子项请求时会改走 tempexec.reuse_update|助手处理复用子项请求命中多个候选时会先列出候选并支持模型确认选择|助手可删除全部复用子项且需要用户允许|助手删除“皮肤用例”的全部复用子项时会先确认范围再执行" --reporter=line --workers=1`（通过，10/10）
+    - 本次未新增 / 修改后端 API，API 自动化回归不适用。
+  - 复用说明：
+    - 继续复用了现有 `tempexec.reuse_update`、`tempExecApi.removeTempExecReuseEntry(...)`、助手确认卡与待选续跑链路，没有新增后端接口；
+    - 本次属于在既有复用子项删除链路上补齐范围解析与中文交互，保持最小增量实现。
+
+
 - 更新记录：2026-03-09 AI 助手转执行仅在明确版本意图时自动续跑，并在同版本同名时先确认覆盖
   - 问题现象：
     - 当用户只说“转到当前执行”而没有明确指定执行版本时，助手仍可能根据原始语句自动挑选某个执行版本，导致版本选择阶段被跳过；
@@ -5970,3 +6110,254 @@
   - 复用说明：
     - 没有新增后端接口；本次继续复用了现有助手任务状态机、MCP 工具执行链、转执行待确认状态与任务卡渲染；
     - 新增的是转执行 continuation 中的“计划版本意图保留”与“唯一版本兜底续跑”，后续同类“先人工确认，再继续执行”的链路都可以继续复用这一层状态承接能力。
+
+- 更新记录：2026-03-09 AI 助手支持复用执行用例的模糊候选匹配与模型确认选择
+  - 问题现象：
+    - 当用户说“帮我给皮肤用例预设子项”这类不带完整文件名的指令时，助手之前仍按完整名称硬匹配，容易直接报“当前执行中未找到匹配用例文件”；
+    - 即使命中了多份可能候选，也没有先列出候选并让用户确认，导致复用型用例操作在多版本/多同类场景下容易受阻。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - 复用子项工具 `tempexec.reuse_update` 改为复用当前执行用例的模糊匹配能力，不再依赖完整名称；
+      - 当命中多份复用执行用例时，返回 `selection_required`，并携带全中文候选列表、版本名和原始待执行参数；
+      - 执行阶段仅在不处于“用例执行”页时才切页，避免确认后再次执行时把已选候选状态冲掉。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 新增“复用执行用例待选择”状态，支持先展示候选、等待用户回复，再继续原来的复用预设/复用子项修改动作；
+      - 用户回复“选第2个”“游侠那个”这类表达时，会优先交给模型做候选判断，再回退到本地兜底匹配；
+      - 成功后统一输出复用预设/复用子项的中文成功提示，失败时保留候选上下文供继续确认。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增 MCP 层“模糊命中多份复用执行用例先要求选择”用例；
+      - 新增 UI 链路“列出候选后支持用户说‘游侠那个’并继续完成预设子项”的用例；
+      - 同时回归复用子项既有能力与相邻的执行移除多版本选择链路。
+  - 使用效果：
+    - 现在用户不需要记住完整文件名，只要给出像“皮肤用例”这样的目标描述，助手就会从当前执行里找出可能候选并列给用户确认；
+    - 多候选场景下会明确展示版本名，用户确认后才继续执行，不会再因为完整名称不一致直接失败；
+    - 用户可直接回复“游侠那个”“选第2个”等自然语言，助手会完成确认并继续后续复用操作。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "assistantMcpApi tempexec.reuse_update 可为复用执行用例设置预设子项|assistantMcpApi tempexec.reuse_update 模糊命中多份复用执行用例时会先要求选择|assistantMcpApi tempexec.reuse_update 遇到非复用用例会直接拒绝|assistantMcpApi tempexec.reuse_update 可修改复用子项执行结果和备注|助手遇到复用子项请求时会改走 tempexec.reuse_update|助手处理复用子项请求命中多个候选时会先列出候选并支持模型确认选择|assistantMcpApi tempexec.remove_files 命中同名不同版本时会先要求选择|助手移除同名不同版本用例时会先询问版本再执行" --reporter=line --workers=1`（通过，8/8）
+    - 本次未改动后端接口，`tests/api/` 无新增用例，API 回归不适用。
+  - 复用说明：
+    - 继续复用了现有的当前执行用例模糊匹配、`selection_required` 交互协议、确认卡、任务状态卡以及模型候选选择能力；
+    - 新增的是复用子项场景下的待选择状态承接与成功回执复用，后续其它“先选目标再继续写操作”的场景可直接复用这套状态机。
+
+- 更新记录：2026-03-09 AI 助手支持删除复用子项，并要求用户确认后执行
+  - 问题现象：
+    - 当用户在复用型执行用例中说“帮我删除全部子项”或“删除某个子项”时，助手此前无法识别为有效的复用子项操作，常见报错是“未识别到复用子项操作类型”；
+    - 即使页面本身支持通过子项右侧删除按钮删除，助手链路也没有把这类意图接到 `tempexec.reuse_update`，因此无法通过 AI 助手完成删除；
+    - 删除属于高风险写操作，必须先经过用户确认，不能直接执行。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/core/tempexecCore.js`
+      - 为 `removeTempExecReuseEntry` 增加可选参数，支持在助手已经完成确认后以 `skipConfirm` 模式直接执行删除，避免再次弹出页面确认抽屉导致链路卡住；
+      - 保持页面原有按钮删除行为不变，UI 侧仍然沿用原确认抽屉。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - `tempexec.reuse_update` 新增 `detail_delete` 模式，支持删除单个复用子项，或按 `deleteAll/scope=all` 删除当前目标用例条目的全部复用子项；
+      - 新增删除目标解析与确认文案，能够明确提示“删除第 N 条的子项”或“删除第 N 条的全部子项，共 X 项”；
+      - 删除执行结果会返回中文成功数据，供助手输出明确回执。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 扩展复用子项自然语言解析，支持识别“删除子项”“移除子项”“删掉全部子项”“删除第2个子项”“删除子项游侠皮肤”等表达；
+      - 更新任务步骤文案、写操作标签和成功回执，删除时会显示“删除复用子项 / 删除全部复用子项”；
+      - 保持删除仍走助手确认卡，只有用户点击允许后才会真正执行。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增 MCP 测试，覆盖“删除指定复用子项且要求确认”；
+      - 新增 UI 测试，覆盖“帮我删除全部子项”后先弹确认卡、允许后删除成功的完整助手链路。
+  - 使用效果：
+    - 现在可以直接对复用型执行用例说“帮我删除全部子项”或“删除子项游侠皮肤”；
+    - 助手会先展示确认卡，用户允许后才删除，不会绕过确认直接改数据；
+    - 删除成功后会返回明确中文提示，例如“已删除复用子项：执行用例‘皮肤用例’第 1 条，共 2 项”。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/core/tempexecCore.js && node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "assistantMcpApi tempexec.reuse_update 可为复用执行用例设置预设子项|assistantMcpApi tempexec.reuse_update 模糊命中多份复用执行用例时会先要求选择|assistantMcpApi tempexec.reuse_update 遇到非复用用例会直接拒绝|assistantMcpApi tempexec.reuse_update 可修改复用子项执行结果和备注|assistantMcpApi tempexec.reuse_update 可删除指定复用子项并要求确认|助手遇到复用子项请求时会改走 tempexec.reuse_update|助手处理复用子项请求命中多个候选时会先列出候选并支持模型确认选择|助手可删除全部复用子项且需要用户允许" --reporter=line --workers=1`（通过，8/8）
+    - 本次未改动后端接口，`tests/api/` 无新增用例，API 回归不适用。
+  - 复用说明：
+    - 继续复用了现有的 `tempexec.reuse_update` 工具、助手确认卡、待选择状态机与复用子项目标解析链路；
+    - 新增的是删除模式、删除确认文案和无二次弹窗的底层执行方式，后续如果还要支持批量删除某类子项，也可以直接复用这套模式扩展。
+
+- 更新记录：2026-03-09 AI 助手兼容旧版复用批量工具，并把任务步骤统一为中文描述
+  - 问题现象：
+    - 当模型规划里仍输出旧工具名 `case_library.batch_operate_reuse_sub_items` 时，任务卡片会直接展示原始工具名，用户看到的不是中文任务描述；
+    - 同一旧计划里如果参数仍是历史写法（例如 `action: delete`、`deleteAll: true`），执行链路会在复用子项确认前报“未识别到复用子项操作类型”，导致任务中断；
+    - 某些模型还会重复输出完全相同的两步旧计划，任务卡因此出现重复步骤，观感上像“还没开始就卡住”。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 为旧版复用批量工具补齐别名归一：`case_library.batch_operate_reuse_sub_items` 及其下划线/单复数变体，都会统一映射为 `tempexec.reuse_update`；
+      - 为复用子项命令解析补齐历史参数兼容，`mode/action/type/intent/task/operationType/operateType/operate/op` 都会参与识别，`delete/remove/delete_all` 等历史写法会统一落到 `detail_delete`；
+      - 任务步骤文案现在会把旧工具计划翻译成中文，如“删除全部复用子项”，同时对完全相同的 MCP 计划做去重，避免任务卡出现重复步骤。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - MCP 入口同步补齐旧工具别名归一和历史 `action: delete/remove` 解析，保证任务卡中文化后真正执行时也能走到 `tempexec.reuse_update`；
+      - `assistantResolveTempExecReuseMode(...)` 现在能识别旧参数，不会再因为 legacy payload 被判定为“未识别到复用子项操作类型”。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增“旧复用批量工具映射为中文复用删除操作”测试；
+      - 新增“旧版重复规划只展示 1 个中文步骤并可继续执行”测试，覆盖旧 alias、中文任务卡、计划去重和执行成功链路。
+  - 使用效果：
+    - 现在即使模型仍返回旧工具名，任务卡也会展示成中文步骤，而不会再出现 `case_library.batch_operate_reuse_sub_items` 这类原始标识；
+    - 历史写法 `action: delete`、`deleteAll: true` 也能继续执行删除复用子项，不会在确认前卡死；
+    - 完全重复的旧计划会自动折叠为 1 个步骤，任务卡更贴近真实执行过程。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - 使用本地函数抽取校验以下关键链路（通过）：
+      - 旧工具名 `case_library.batch_operate_reuse_sub_items` 会归一为 `tempexec.reuse_update`；
+      - 历史参数 `action: delete` + `deleteAll: true` 会解析为 `detail_delete` + `scope=all`；
+      - 任务步骤会生成中文“删除全部复用子项”；
+      - 重复的旧 MCP 计划会在任务卡侧去重为 1 步；
+      - `case_library.query_exec_cases` / `case_library.batch_set_exec_results` / `case_library.batch_archive_cases` 也会生成中文任务标签。
+    - `APP_DB_FILE=apitest.db npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi case_library.batch_operate_reuse_sub_items 会映射为中文复用删除操作|助手规划旧版复用批量工具时会显示中文步骤并成功执行" --reporter=line --workers=1`（未通过；当前沙箱环境下 Chromium/Chrome 启动即被系统拒绝，报错为 `MachPortRendezvousServer ... Permission denied (1100)`，属于环境限制，不是业务断言失败）
+    - 本次未改动后端接口，`tests/api/` 无新增用例，API 回归不适用。
+  - 复用说明：
+    - 继续复用了现有的 MCP 工具归一、任务状态卡、复用子项确认与执行链路；
+    - 新增的是“旧 alias + 旧参数格式”的兼容层与任务步骤去重逻辑，后续如果模型又输出历史工具名，也可以直接沿用这一层兼容能力。
+
+- 更新记录：2026-03-09 AI 助手任务卡强制中文化，禁止展示原始工具名
+  - 问题现象：
+    - 在模型规划或续跑任务时，任务卡里仍可能直接出现 `case_library.search_case_candidates`、`case_library.get_case_detail` 这类原始工具名；
+    - 这种展示方式既不符合用户预期，也会让任务卡看起来像“模型内部日志”，而不是给用户看的中文任务步骤；
+    - 即使最终步骤能执行成功，只要任务卡里还残留工具名，就会造成“任务列表没有中文展示”的体验问题。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 为 `case_library.search_case_candidates`、`case_library.get_case_detail` 及其变体补齐别名归一，统一按 `cases.list_current` 处理，避免任务卡直接回显原始工具名；
+      - 强化 `cases.list_current` 的任务标签生成：带 `query` 时显示“定位当前用例：xxx”，带 `detailLevel=full` 时显示“读取用例详情：xxx”；
+      - 新增未知工具的中文兜底标签，即使模型临时吐出未收录工具名，任务步骤也只会显示中文，不再原样展示工具名；
+      - 同步加强模型提示，明确要求“任务预览和最终步骤名称都必须是中文任务描述，绝不能直接输出工具名”。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - MCP 工具归一同步补齐 `case_library.search_case_candidates`、`case_library.get_case_detail` 的兼容映射，保证执行链路也能落到现有标准工具，而不是因为伪工具名受阻。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增“助手规划伪工具名时任务步骤仍会强制显示中文”用例，覆盖任务卡中不再出现原始工具名、而是显示“定位当前用例 / 读取用例详情 / 删除全部复用子项”的链路。
+  - 使用效果：
+    - 现在任务卡里的步骤名称会被强制转成中文任务描述；
+    - 即使模型偶尔规划出 `case_library.search_case_candidates`、`case_library.get_case_detail` 这类伪工具名，用户看到的也会是“定位当前用例”“读取用例详情”等中文；
+    - 任务卡不再允许把 MCP 工具名直接裸露给用户。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - 本地函数抽取校验（通过）：
+      - `case_library.search_case_candidates` 会归一为 `cases.list_current`；
+      - `case_library.get_case_detail` 会归一为 `cases.list_current`；
+      - 对应任务标签分别输出“定位当前用例：皮肤用例”“读取用例详情：皮肤用例”。
+    - `APP_DB_FILE=apitest.db npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "助手规划伪工具名时任务步骤仍会强制显示中文" --reporter=line --workers=1`（未通过；当前沙箱环境下 Chromium 启动即被系统拒绝，报错为 `MachPortRendezvousServer ... Permission denied (1100)`，属于环境限制，不是业务断言失败）
+    - 本次未改动后端接口，`tests/api/` 无新增用例，API 回归不适用。
+  - 复用说明：
+    - 继续复用了现有的工具归一、任务状态卡与任务步骤文案生成链路；
+    - 新增的是“工具名绝不直出”的中文兜底策略，后续即使模型再冒出历史名或伪工具名，也能沿用这层保护。
+
+- 更新记录：2026-03-09 AI 助手批量修改/删除复用子项时改为摘要展示，不再逐项铺开
+  - 问题现象：
+    - 当复用子项数量很多时，确认卡和完成回执会把每一项名称全部展开，导致消息非常长；
+    - 在“整份删除全部子项”这类场景里，几十上百个重复项被逐条列出，用户很难快速确认关键影响范围；
+    - 实际上这些子项往往是同一规则的批量处理，不需要逐项阅读每个名字。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - 新增复用子项批量名称摘要 helper；
+      - 当预设子项或删除全部子项的目标数量较大时，确认文案改为“共 N 项，将统一处理”，不再把每一项全部列出；
+      - 数量较少时仍保留原有逐项展示，兼顾可读性与明确性。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 完成回执同步改为摘要策略；
+      - 大批量场景下只说明“共 N 条用例、M 项，已统一处理”，不再追加“分别为 ...”长串明细。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增“批量删除很多子项时确认文案会自动摘要”用例；
+      - 新增“大批量成功回执只输出摘要”用例。
+  - 使用效果：
+    - 当修改/删除数量很多时，助手会优先展示总量和处理范围，不再刷屏式列出所有子项；
+    - 用户仍然能看到核心影响范围（多少条用例、多少项），但确认成本显著降低；
+    - 小批量场景仍保留细项展示，不影响日常精确确认。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - 本地函数抽取校验（通过）：
+      - 大批量确认摘要会输出“共 9 项，将统一处理”；
+      - 大批量成功回执会输出“已删除复用子项：执行用例“皮肤用例”，共 5 条用例，9 项，已统一处理”；
+      - 回执中不再出现“分别为 ...”长串明细。
+    - `APP_DB_FILE=apitest.db npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js --grep "assistantMcpApi tempexec.reuse_update 批量删除很多子项时确认文案会自动摘要|formatTempExecReuseUpdateSuccessText 大批量时只输出摘要" --reporter=line --workers=1`（当前沙箱环境下预计仍会被 Chromium 启动权限拦截，属于环境限制）
+    - 本次未改动后端接口，`tests/api/` 无新增用例，API 回归不适用。
+  - 复用说明：
+    - 继续复用了现有复用子项确认卡与成功回执链路；
+    - 新增的是“超量摘要展示”策略，后续其它批量写操作也可以沿用这一套阈值控制逻辑。
+
+
+
+- 更新记录：2026-03-09 AI 助手已开启仍显示锁定时修复初始化中断与启动兜底
+  - 问题现象：
+    - 用户已在设置页勾选“开启助手”并选择模型后，右下角 AI 助手仍显示“锁定”；
+    - 页面刷新或重新进入后，已保存的助手模型有时会丢失，导致入口继续保持锁定；
+    - 联调时发现部分页面的助手相关 API 没有挂载完成，助手面板/锁定态读取到的始终是默认关闭状态。
+  - 根因分析：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js` 中误把仅存在于助手模块闭包内的 `formatTempExecReuseUpdateSuccessText` 直接暴露到全局，触发 `ReferenceError`，导致后续 `window.app.assistantSettingsApi` 注册被中断；
+    - 助手入口依赖 `assistantSettingsApi.getSettings()` 读取开关状态，上述初始化中断后，即使用户已经保存设置，入口也只能按默认关闭态展示为锁定；
+    - 同时，登录态启动时若模型列表尚未完成加载，旧逻辑会让本地已保存的 `assistantModelId` 兜底不足，刷新后更容易再次回到锁定态。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - 移除会直接引用未定义闭包函数的错误暴露逻辑，改为安全兜底，避免页面初始化被 `ReferenceError` 打断；
+      - 恢复 `window.app.assistantSettingsApi` 的正常挂载，使助手锁定态可以正确读取真实设置。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 由助手模块在自身初始化完成后再暴露 `formatTempExecReuseUpdateSuccessTextForTest`，测试入口与运行时能力保持一致；
+      - 结合已有锁定态刷新逻辑，确保助手在设置开启后能立即解除锁定。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/settings.js`
+      - 保留本地已保存的 `assistantModelId`，避免模型列表未加载完成时被提前清空；
+      - 登录态启动时允许本地最近一次助手设置作为启动兜底，减少刷新后误锁定。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增页面导航 helper，并把“锁定跳设置”“登录态本地助手设置兜底”“本地模型 ID 保留”“助手面板背景”“大批量摘要文案”等回归用例切到真实挂载助手的页面执行；
+      - 修正依赖 `page.reload()` 导致 init script 再次清空 localStorage 的测试夹具问题。
+  - 使用效果：
+    - 用户在设置页开启助手并选择模型后，助手入口会按真实状态解除锁定；
+    - 已保存的助手模型在刷新和重新进入页面时不会被无故清空；
+    - 助手相关全局 API 会稳定挂载，不再因为测试辅助导出语句报错而影响真实功能。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/app.js && node --check scripts/modules/assistant.js && node --check tests/ui/assistant_global.spec.js`（通过）
+    - `npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "助手默认锁定并点击引导到设置页|登录态下本地已保存的助手设置不会让入口持续锁定|本地已保存的助手模型 ID 在页面启动后不会被清空|助手面板背景应为非透明|formatTempExecReuseUpdateSuccessText 大批量时只输出摘要" --project=chromium`（通过，5/5）
+    - `npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_assistant.spec.js`（通过，1/1）
+  - 复用说明：
+    - 继续复用既有助手设置、锁定态刷新与本地/远端设置同步链路；
+    - 本次主要修复初始化中断根因，并补强助手设置启动兜底与真实页面回归用例，属于在现有架构上的最小增量修复。
+
+- 更新记录：2026-03-10 AI 助手复用子项匹配改为模型主导，并补强二段式范围确认
+  - 问题现象：
+    - 用户输入“222 子项”这类自然语言时，助手会被规则切词牵着走，容易把“222 子项”机械压成“222子项”，导致命中错误或直接失败；
+    - 当复用执行用例里存在多个相近子项时，助手没有先把“当前已有候选子项 + 用户原话”交给模型判断，而是仍偏向固定字符串匹配；
+    - 在文件/版本范围还没唯一确认前，助手有机会先进入子项层确认，不符合“先大范围、再细节确认”的要求；
+    - 复用子项选择追问文案偏笼统，用户看不清这次到底是要改执行结果、改备注，还是删除子项。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 新增复用子项候选构建与模型选择预处理：在 `tempexec.reuse_update` 的助手直达入口、模型规划工具入口、`update_case` 规划入口三条链路上，统一先把“当前候选子项列表 + 用户原话”交给模型判断；
+      - 新增 `detail_choice` 待确认状态，支持在模型无法唯一判断时先追问用户，并支持后续回复“选第1个”“第2个子项”或直接补充更具体子项名继续执行；
+      - 复用子项确认文案补充“本次操作”摘要，能明确到“修改执行结果 / 修改备注 / 修改名称 / 删除子项”；
+      - 复用 `sourceUserText` 保留原始用户输入，避免后续再被中间解析结果抹掉语义；
+      - 调整本地预解析：当文件/版本范围仍有歧义时，不再擅自沿用当前激活文件进入子项层，而是保持先确认大范围。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增“助手处理‘222 子项’时会把当前子项候选交给模型判断并命中正确子项”；
+      - 新增“助手处理复用子项命中多个候选且模型无法唯一判断时会先让用户确认”。
+  - 使用效果：
+    - 复用子项匹配不再依赖机械拼字，助手会优先参考当前候选数据与用户原话，由模型判断目标；
+    - 当模型能唯一判断时，助手可直接命中正确子项继续执行；
+    - 当模型仍无法唯一判断时，助手会先追问具体子项，并保持“先范围、后细项”的确认顺序；
+    - 追问文案会明确告诉用户这次具体是“改什么字段”或“删什么项”，避免只看到泛泛的“确认操作”。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js tests/ui/assistant_global.spec.js`（通过）
+    - 本地静态接线断言（通过）：
+      - `detail_choice` 选择态、追问文案与等待态已接入；
+      - `tryHandleCaseUpdateCommand`、`executeModelMcpToolCall`、`executeModelPlannedAction(update_case)` 三条入口均已接入 `prepareTempExecReuseArgsByModel(...)`；
+      - 文件/版本范围歧义时不再自动沿用当前激活文件进入子项选择。
+    - `APP_DB_FILE=apitest.db npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "助手处理“222 子项”时会把当前子项候选交给模型判断并命中正确子项|助手处理复用子项命中多个候选且模型无法唯一判断时会先让用户确认|assistantMcpApi tempexec.reuse_update 新增预设子项命中多条用例时会先确认范围|助手给皮肤用例增加预设子项时会先确认范围而不是直接搜索|assistantMcpApi tempexec.reuse_update 修改预设子项名称时会先确认修改范围|助手删除“皮肤用例”的全部复用子项时会先确认范围再执行|助手遇到复用子项请求时会改走 tempexec.reuse_update|助手处理复用子项请求命中多个候选时会先列出候选并支持模型确认选择" --project=chromium --reporter=line`（未通过；当前沙箱环境下 Chromium 启动即被系统拒绝，报错为 `MachPortRendezvousServer ... Permission denied (1100)`，属于环境限制，不是业务断言失败）
+    - 本次未改动后端接口，`tests/api/` 无新增用例，API 回归不适用。
+  - 复用说明：
+    - 继续复用了现有的模型候选选择器、复用子项写入工具 `tempexec.reuse_update`、待确认状态机与助手成功回执链路；
+    - 新增的是“复用子项模型预解析 + detail_choice 追问态”这一层通用能力，后续其它需要“候选列表 + 用户原话 + 模型判断”的选择场景也可直接沿用。
+
+- 更新记录：2026-03-10 复用子项多用例场景补充“先选条目再改子项”
+  - 问题现象：
+    - 当复用执行用例里有多条用例时，若用户未明确“第几条”，`tempexec.reuse_update` 会默认落到第 1 条用例，导致操作命中错误条目；
+    - 复用子项选择流程缺少“用例条目”这一层选择确认，用户无法先确认是哪条用例再改子项；
+    - 复用子项选择被取消后缺少明确的“用例条目”恢复提示。
+  - 修复内容：
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/app.js`
+      - `assistantResolveTempExecReuseCaseIndex` 不再默认返回 1，避免未确认时自动落到首条用例；
+      - 新增 `detail_case` 选择构建与索引解析，`tempexec.reuse_update` 在无法唯一定位用例条目时返回 `selection_required`；
+      - `tempexec.reuse_update` 的确认阶段支持 `selection_required` 回退，让助手先选用例条目再进入子项确认。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/assistant.js`
+      - 补齐 `detail_case` 取消与继续提示，保持“用例条目候选仍保留”的明确反馈。
+    - `/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/assistant_global.spec.js`
+      - 新增“助手处理复用子项时若存在多条用例会先确认具体条目”用例。
+  - 使用效果：
+    - 多条用例场景下，助手会先确认具体用例条目，再进入子项修改/删除流程；
+    - 避免默认落到第 1 条用例导致误改，并补齐取消后的继续提示。
+  - 测试与验证（本次增量）：
+    - `node --check scripts/modules/assistant.js scripts/modules/app.js tests/ui/assistant_global.spec.js`（通过）
+    - `APP_DB_FILE=apitest.db npx playwright test --config tests/playwright.config.js tests/ui/assistant_global.spec.js -g "助手处理复用子项时若存在多条用例会先确认具体条目" --project=chromium --reporter=line`（未通过；Chromium 启动阶段触发 `MachPortRendezvousServer ... Permission denied (1100)`，为沙箱环境限制）
+    - 本次未改动后端接口，`tests/api/` 无新增用例，API 回归不适用。
+  - 复用说明：
+    - 复用既有的复用子项选择态与工具调用链路，仅补充“用例条目层级”选择与索引解析逻辑。

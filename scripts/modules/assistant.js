@@ -31,6 +31,8 @@
   var failureHistoryLimit = 10;
   var actionHandlers = {};
   var approvalCounter = 0;
+  var approvalMessageIdBySignature = {};
+  var pendingApprovalRequestBySignature = {};
   var chatHistory = [];
   var failureHistory = [];
   var replyPending = false;
@@ -39,11 +41,16 @@
   var assistantInputImageMaxCount = 10;
   var assistantInputImageMaxEdge = 1600;
   var assistantInputImageMaxBytes = 4 * 1024 * 1024;
+  var pendingInteraction = null;
   var pendingTempExecRemoveSelection = null;
+  var pendingTempExecReuseTargetSelection = null;
   var pendingExecTransferSelection = null;
   var pendingExecTransferVersionSelection = null;
   var pendingExecTransferCreateVersionConfirm = null;
   var pendingExecTransferVersionNameClarify = null;
+  var assistantPlatformContextMarkdownCache = '';
+  var assistantPlatformContextMarkdownPromise = null;
+  var assistantPlatformContextMarkdownUrl = 'assets/assistant-platform-context.md';
 
   function byId(id) {
     return document.getElementById(id);
@@ -1231,6 +1238,7 @@
     return {
       assistantApi: window.app && window.app.assistantApi ? window.app.assistantApi : null,
       assistantMcpApi: window.app && window.app.assistantMcpApi ? window.app.assistantMcpApi : null,
+      assistantCapabilityApi: window.app && window.app.assistantCapabilityApi ? window.app.assistantCapabilityApi : null,
       assistantSettingsApi: window.app && window.app.assistantSettingsApi ? window.app.assistantSettingsApi : null,
       assistantModelDiagApi: window.app && window.app.assistantModelDiagApi ? window.app.assistantModelDiagApi : null,
     };
@@ -1268,6 +1276,45 @@
     return '执行中';
   }
 
+  function sanitizeAssistantTaskStepLabel(rawLabel) {
+    var text = rawLabel === undefined || rawLabel === null ? '' : String(rawLabel).trim();
+    var splitIndex = -1;
+    var head = '';
+    var detail = '';
+    var normalizedTool = '';
+    var normalizedAction = '';
+    var fallbackArgs = {};
+    var fallbackLabel = '';
+    if (!text) return '';
+    splitIndex = text.indexOf('：');
+    if (splitIndex < 0) splitIndex = text.indexOf(':');
+    if (splitIndex >= 0) {
+      head = String(text.slice(0, splitIndex)).trim();
+      detail = String(text.slice(splitIndex + 1)).trim();
+    } else {
+      head = text;
+    }
+    normalizedTool = normalizeMcpToolName(head);
+    if (normalizedTool) {
+      if (detail) fallbackArgs.query = detail;
+      fallbackLabel = buildAssistantFriendlyTaskLabel(normalizedTool, fallbackArgs, detail || '') || buildAssistantUnknownToolTaskLabel(normalizedTool, fallbackArgs);
+      return fallbackLabel || text;
+    }
+    normalizedAction = normalizeModelActionName(head);
+    if (normalizedAction) {
+      fallbackArgs = { action: normalizedAction };
+      if (detail) fallbackArgs.query = detail;
+      fallbackLabel = buildAssistantTaskStepLabelFromAction(fallbackArgs);
+      return fallbackLabel || text;
+    }
+    if (/^[a-z0-9_.-]+$/i.test(head) && (head.indexOf('.') !== -1 || head.indexOf('_') !== -1)) {
+      if (detail) fallbackArgs.query = detail;
+      fallbackLabel = buildAssistantUnknownToolTaskLabel(head, fallbackArgs);
+      return fallbackLabel || text;
+    }
+    return text;
+  }
+
   function normalizeAssistantTaskState(taskState) {
     var data = taskState && typeof taskState === 'object' ? taskState : null;
     var steps = [];
@@ -1283,14 +1330,29 @@
           ? String(item.description).trim()
           : '';
         var stepStatus = normalizeAssistantTaskStatus(item.status);
+        var capabilityId = normalizeMcpToolName(item.capabilityId || item.capability || item.tool || item.name || '');
+        var capabilityArgs = item.capabilityArgs && typeof item.capabilityArgs === 'object'
+          ? JSON.parse(JSON.stringify(item.capabilityArgs))
+          : (item.args && typeof item.args === 'object' ? JSON.parse(JSON.stringify(item.args)) : {});
+        label = sanitizeAssistantTaskStepLabel(label);
+        if (shouldUseAssistantProtocolTaskFallbackLabel(label) && description === '基于已执行步骤整理最终答复。') {
+          label = '整理结果并回复用户';
+        }
+        if (shouldUseAssistantProtocolTaskFallbackLabel(label) && capabilityId) {
+          var derivedLabel = buildAssistantTaskStepLabelFromMcpCall({ tool: capabilityId, args: capabilityArgs }, '');
+          if (derivedLabel) label = derivedLabel;
+        }
         if (!label) label = '步骤 ' + (index + 1);
         if (!stepStatus) stepStatus = 'waiting';
         return {
+          id: item.id !== undefined && item.id !== null ? String(item.id) : ('step-' + (index + 1)),
           label: label,
           description: description,
           status: stepStatus,
           planKey: item.planKey !== undefined && item.planKey !== null ? String(item.planKey) : '',
           preview: item.preview === true,
+          capabilityId: capabilityId,
+          capabilityArgs: capabilityArgs,
         };
       }).filter(function(step) {
         return !!(step && step.label);
@@ -1322,11 +1384,14 @@
       status: normalized.status,
       steps: normalized.steps.map(function(step) {
         return {
+          id: step.id || '',
           label: step.label,
           description: step.description,
           status: step.status,
           planKey: step.planKey || '',
           preview: step.preview === true,
+          capabilityId: step.capabilityId || '',
+          capabilityArgs: step.capabilityArgs && typeof step.capabilityArgs === 'object' ? JSON.parse(JSON.stringify(step.capabilityArgs)) : {},
         };
       }),
     };
@@ -1387,6 +1452,124 @@
     return buildAssistantTaskContinuation('mcp', data.items.slice(1), data.stepIndices.slice(1), data.userText || '', data.responseHint || '');
   }
 
+  function normalizeAssistantBlockType(value) {
+    var raw = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+    if (!raw) return '';
+    if (raw === 'notice' || raw === 'alert') return 'notice';
+    if (raw === 'choice_list' || raw === 'choice' || raw === 'choices') return 'choice_list';
+    if (raw === 'content_list' || raw === 'list' || raw === 'items') return 'content_list';
+    if (raw === 'code_block' || raw === 'code') return 'code_block';
+    return '';
+  }
+
+  function normalizeAssistantBlockNoticeLevel(value) {
+    var raw = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+    if (raw === 'success' || raw === 'ok') return 'success';
+    if (raw === 'warn' || raw === 'warning') return 'warn';
+    if (raw === 'error' || raw === 'danger' || raw === 'blocked') return 'error';
+    return 'info';
+  }
+
+  function normalizeAssistantChoiceListItems(items) {
+    var list = Array.isArray(items) ? items : [];
+    return list.map(function(item, index) {
+      var row = item && typeof item === 'object' ? item : {};
+      var label = row.label !== undefined && row.label !== null
+        ? String(row.label).trim()
+        : (row.name !== undefined && row.name !== null ? String(row.name).trim() : '');
+      var replyText = row.replyText !== undefined && row.replyText !== null
+        ? String(row.replyText).trim()
+        : (label ? ('选第' + (index + 1) + '个') : '');
+      if (!label) label = '选项 ' + (index + 1);
+      return {
+        id: row.id !== undefined && row.id !== null ? String(row.id) : ('choice-' + (index + 1)),
+        label: label,
+        description: row.description !== undefined && row.description !== null ? String(row.description).trim() : '',
+        replyText: replyText,
+      };
+    }).filter(function(item) { return !!(item && item.label); });
+  }
+
+  function normalizeAssistantContentListItems(items) {
+    var list = Array.isArray(items) ? items : [];
+    return list.map(function(item, index) {
+      if (item && typeof item === 'object') {
+        return {
+          label: item.label !== undefined && item.label !== null ? String(item.label).trim() : '',
+          description: item.description !== undefined && item.description !== null ? String(item.description).trim() : '',
+          text: item.text !== undefined && item.text !== null ? String(item.text).trim() : '',
+        };
+      }
+      var text = item === undefined || item === null ? '' : String(item).trim();
+      return {
+        label: '',
+        description: '',
+        text: text || ('条目 ' + (index + 1)),
+      };
+    }).filter(function(item) { return !!(item && (item.label || item.description || item.text)); });
+  }
+
+  function normalizeAssistantBlocks(blocks) {
+    var list = Array.isArray(blocks) ? blocks : [];
+    return list.map(function(block) {
+      var item = block && typeof block === 'object' ? block : {};
+      var type = normalizeAssistantBlockType(item.type || item.blockType || item.kind);
+      if (!type) return null;
+      if (type === 'notice') {
+        return {
+          type: 'notice',
+          level: normalizeAssistantBlockNoticeLevel(item.level || item.variant || item.status),
+          title: item.title !== undefined && item.title !== null ? String(item.title).trim() : '',
+          text: item.text !== undefined && item.text !== null
+            ? String(item.text).trim()
+            : (item.message !== undefined && item.message !== null ? String(item.message).trim() : ''),
+        };
+      }
+      if (type === 'choice_list') {
+        return {
+          type: 'choice_list',
+          title: item.title !== undefined && item.title !== null ? String(item.title).trim() : '',
+          prompt: item.prompt !== undefined && item.prompt !== null
+            ? String(item.prompt).trim()
+            : (item.text !== undefined && item.text !== null ? String(item.text).trim() : ''),
+          items: normalizeAssistantChoiceListItems(item.items),
+        };
+      }
+      if (type === 'content_list') {
+        return {
+          type: 'content_list',
+          title: item.title !== undefined && item.title !== null ? String(item.title).trim() : '',
+          ordered: item.ordered === true || item.order === true || item.listType === 'ordered',
+          items: normalizeAssistantContentListItems(item.items),
+        };
+      }
+      if (type === 'code_block') {
+        return {
+          type: 'code_block',
+          title: item.title !== undefined && item.title !== null ? String(item.title).trim() : '',
+          language: item.language !== undefined && item.language !== null ? String(item.language).trim().toLowerCase() : '',
+          code: item.code !== undefined && item.code !== null
+            ? String(item.code)
+            : (item.content !== undefined && item.content !== null ? String(item.content) : ''),
+        };
+      }
+      return null;
+    }).filter(function(item) {
+      if (!item) return false;
+      if (item.type === 'notice') return !!(item.title || item.text);
+      if (item.type === 'choice_list') return !!((item.prompt || item.title) && item.items && item.items.length);
+      if (item.type === 'content_list') return !!(item.items && item.items.length);
+      if (item.type === 'code_block') return !!item.code;
+      return false;
+    });
+  }
+
+  function cloneAssistantBlocks(blocks) {
+    return normalizeAssistantBlocks(blocks).map(function(block) {
+      return JSON.parse(JSON.stringify(block));
+    });
+  }
+
   function loadHistory() {
     var key = getHistoryStorageKey();
     var list = [];
@@ -1405,6 +1588,7 @@
             createdAt: Number(item.createdAt) || Date.now(),
             actions: [],
             attachments: [],
+            blocks: normalizeAssistantBlocks(item.blocks),
             taskState: normalizeAssistantTaskState(item.taskState),
           };
         });
@@ -1433,6 +1617,7 @@
         title: item.title,
         text: item.text,
         createdAt: item.createdAt,
+        blocks: normalizeAssistantBlocks(item.blocks),
         taskState: normalizeAssistantTaskState(item.taskState),
       };
     });
@@ -1711,6 +1896,7 @@
       thinking: opts.thinking === true,
       transient: opts.transient === true,
       attachments: normalizeAssistantMessageAttachments(opts.attachments),
+      blocks: normalizeAssistantBlocks(opts.blocks),
       taskState: normalizeAssistantTaskState(opts.taskState),
     };
     chatHistory.push(msg);
@@ -1734,6 +1920,9 @@
       if (text !== undefined) msg.text = text === null ? '' : String(text);
       if (Object.prototype.hasOwnProperty.call(opts, 'attachments')) {
         msg.attachments = normalizeAssistantMessageAttachments(opts.attachments);
+      }
+      if (Object.prototype.hasOwnProperty.call(opts, 'blocks')) {
+        msg.blocks = normalizeAssistantBlocks(opts.blocks);
       }
       if (Object.prototype.hasOwnProperty.call(opts, 'taskState')) {
         msg.taskState = normalizeAssistantTaskState(opts.taskState);
@@ -1770,6 +1959,141 @@
     wrap.innerHTML = html;
     container.appendChild(wrap);
     return wrap;
+  }
+
+  function appendAssistantCodeBlock(container, block) {
+    var item = block && typeof block === 'object' ? block : {};
+    var wrap = document.createElement('section');
+    var title = null;
+    var codeClass = item.language ? ('language-' + escapeHtml(item.language)) : '';
+    wrap.className = 'assistant-block assistant-block-code';
+    if (item.title) {
+      title = document.createElement('div');
+      title.className = 'assistant-block-title';
+      title.textContent = item.title;
+      wrap.appendChild(title);
+    }
+    wrap.insertAdjacentHTML('beforeend', '<div class="assistant-code-block"><button class="assistant-code-copy-btn" type="button">复制</button><pre><code' + (codeClass ? (' class=\"' + codeClass + '\"') : '') + '>' + escapeHtml(item.code || '') + '</code></pre></div>');
+    container.appendChild(wrap);
+    return wrap;
+  }
+
+  function appendAssistantNoticeBlock(container, block) {
+    var item = block && typeof block === 'object' ? block : {};
+    var wrap = document.createElement('section');
+    var title = null;
+    var textWrap = null;
+    wrap.className = 'assistant-block assistant-block-notice assistant-block-notice-' + normalizeAssistantBlockNoticeLevel(item.level);
+    if (item.title) {
+      title = document.createElement('div');
+      title.className = 'assistant-block-title';
+      title.textContent = item.title;
+      wrap.appendChild(title);
+    }
+    if (item.text) {
+      textWrap = document.createElement('div');
+      textWrap.className = 'assistant-block-content';
+      textWrap.innerHTML = renderMarkdownMessageHtml(item.text);
+      wrap.appendChild(textWrap);
+    }
+    container.appendChild(wrap);
+    return wrap;
+  }
+
+  function appendAssistantContentListBlock(container, block) {
+    var item = block && typeof block === 'object' ? block : {};
+    var wrap = document.createElement('section');
+    var title = null;
+    var list = document.createElement(item.ordered === true ? 'ol' : 'ul');
+    wrap.className = 'assistant-block assistant-block-list';
+    list.className = 'assistant-block-list-items';
+    if (item.title) {
+      title = document.createElement('div');
+      title.className = 'assistant-block-title';
+      title.textContent = item.title;
+      wrap.appendChild(title);
+    }
+    (Array.isArray(item.items) ? item.items : []).forEach(function(entry) {
+      var row = entry && typeof entry === 'object' ? entry : {};
+      var li = document.createElement('li');
+      var main = row.text || row.label || '';
+      if (row.label && row.text && row.label !== row.text) main = row.label + '：' + row.text;
+      li.className = 'assistant-block-list-item';
+      li.textContent = main || row.description || '';
+      if (row.description && main) {
+        var desc = document.createElement('div');
+        desc.className = 'assistant-block-list-desc';
+        desc.textContent = row.description;
+        li.appendChild(desc);
+      }
+      list.appendChild(li);
+    });
+    wrap.appendChild(list);
+    container.appendChild(wrap);
+    return wrap;
+  }
+
+  function appendAssistantChoiceListBlock(container, block) {
+    var item = block && typeof block === 'object' ? block : {};
+    var wrap = document.createElement('section');
+    var title = null;
+    var prompt = null;
+    var list = document.createElement('ol');
+    var actions = document.createElement('div');
+    wrap.className = 'assistant-block assistant-block-choice-list';
+    list.className = 'assistant-block-choice-items';
+    actions.className = 'assistant-actions assistant-block-choice-actions';
+    if (item.title) {
+      title = document.createElement('div');
+      title.className = 'assistant-block-title';
+      title.textContent = item.title;
+      wrap.appendChild(title);
+    }
+    if (item.prompt) {
+      prompt = document.createElement('div');
+      prompt.className = 'assistant-block-content';
+      prompt.innerHTML = renderMarkdownMessageHtml(item.prompt);
+      wrap.appendChild(prompt);
+    }
+    (Array.isArray(item.items) ? item.items : []).forEach(function(choice) {
+      var row = choice && typeof choice === 'object' ? choice : {};
+      var li = document.createElement('li');
+      li.className = 'assistant-block-choice-item';
+      li.textContent = row.label || '选项';
+      if (row.description) {
+        var desc = document.createElement('div');
+        desc.className = 'assistant-block-list-desc';
+        desc.textContent = row.description;
+        li.appendChild(desc);
+      }
+      list.appendChild(li);
+      if (row.replyText) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'assistant-action-btn assistant-one-shot-btn';
+        btn.textContent = row.label || row.replyText;
+        btn.addEventListener('click', function() {
+          submitAssistantQuickReply(row.replyText);
+        });
+        actions.appendChild(btn);
+      }
+    });
+    wrap.appendChild(list);
+    if (actions.childNodes.length) wrap.appendChild(actions);
+    container.appendChild(wrap);
+    return wrap;
+  }
+
+  function appendMessageBlocks(container, blocks) {
+    var list = normalizeAssistantBlocks(blocks);
+    if (!container || !list.length) return [];
+    return list.map(function(block) {
+      if (block.type === 'notice') return appendAssistantNoticeBlock(container, block);
+      if (block.type === 'choice_list') return appendAssistantChoiceListBlock(container, block);
+      if (block.type === 'content_list') return appendAssistantContentListBlock(container, block);
+      if (block.type === 'code_block') return appendAssistantCodeBlock(container, block);
+      return null;
+    }).filter(function(item) { return !!item; });
   }
 
   function appendMessageTaskState(container, taskState) {
@@ -1866,6 +2190,7 @@
       body.className = 'assistant-msg-body';
       var bodyText = msg.text === undefined || msg.text === null ? '' : String(msg.text);
       var attachments = normalizeAssistantMessageAttachments(msg.attachments);
+      var blocks = normalizeAssistantBlocks(msg.blocks);
       if (msg.role === 'user') {
         if (attachments.length) {
           appendMessageAttachments(body, attachments);
@@ -1885,6 +2210,9 @@
         } else {
           if (msg.taskState) {
             appendMessageTaskState(body, msg.taskState);
+          }
+          if (blocks.length) {
+            appendMessageBlocks(body, blocks);
           }
           if (bodyText) {
             appendMessageTextBlock(body, renderMarkdownMessageHtml(bodyText));
@@ -2011,15 +2339,28 @@
     var settingsSnap = getSettingsSnapshot();
     var selectedId = settingsSnap && settingsSnap.assistantModelId ? String(settingsSnap.assistantModelId) : '';
     var models = [];
+    var selectedExists = false;
     if (apis.assistantSettingsApi && typeof apis.assistantSettingsApi.listModels === 'function') {
       models = apis.assistantSettingsApi.listModels() || [];
     }
+    if (Array.isArray(models) && selectedId) {
+      selectedExists = models.some(function(model) {
+        return model && model.id && String(model.id) === selectedId;
+      });
+    }
     if (!Array.isArray(models) || !models.length) {
-      modelPicker.innerHTML = '<option value="">暂无模型</option>';
-      modelPicker.value = '';
+      if (selectedId) {
+        modelPicker.innerHTML = '<option value="' + escapeHtml(selectedId) + '">已保存模型（待加载）：' + escapeHtml(selectedId) + '</option>';
+        modelPicker.value = selectedId;
+      } else {
+        modelPicker.innerHTML = '<option value="">暂无模型</option>';
+        modelPicker.value = '';
+      }
       return;
     }
-    modelPicker.innerHTML = models.map(function(model) {
+    modelPicker.innerHTML = (selectedId && !selectedExists
+      ? ('<option value="' + escapeHtml(selectedId) + '">已保存模型（待同步或已删除）：' + escapeHtml(selectedId) + '</option>')
+      : '') + models.map(function(model) {
       var id = model && model.id ? String(model.id) : '';
       if (!id) return '';
       var label = (model.name || '未命名模型') + ' (' + (model.provider || 'custom') + ')';
@@ -2062,6 +2403,10 @@
   function clearChatHistory() {
     chatHistory = [];
     actionHandlers = {};
+    approvalMessageIdBySignature = {};
+    pendingApprovalRequestBySignature = {};
+    clearPendingInteraction();
+    clearPendingTempExecReuseTargetSelection();
     clearPendingTempExecRemoveSelection();
     clearPendingExecTransferSelection();
     clearPendingExecTransferManualState();
@@ -2122,13 +2467,33 @@
     return raw.slice(0, Math.max(1, max - 1)) + '…';
   }
 
-  function buildConversationPriorityPrompt(latestUserText) {
+  function buildConversationPriorityPrompt(latestUserText, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var pending = opts.pendingInteraction && typeof opts.pendingInteraction === 'object' ? opts.pendingInteraction : null;
+    var pendingKind = pending && pending.kind ? String(pending.kind) : '';
+    var pendingPrompt = pending && pending.prompt ? trimConversationHistoryReferenceText(String(pending.prompt), 100) : '';
+    var pendingSourceUserText = pending && pending.sourceUserText ? trimConversationHistoryReferenceText(String(pending.sourceUserText), 140) : '';
     var latest = trimConversationHistoryReferenceText(latestUserText, 140);
     var lines = [
       '上下文处理策略：',
       '- 本轮最新消息是主任务，重要性约 90%。',
       '- 历史对话只作为弱参考，重要性约 10%。',
       '- 先只根据本轮最新消息判断：这是延续上文，还是一个新的独立指令/问题。',
+      pending
+        ? ('- 当前存在待确认上下文（kind=' + pendingKind + '），它比普通历史更重要；除非用户明显换了新话题，否则优先把本轮消息理解为对待确认问题的补充或回答。')
+        : '',
+      pendingPrompt
+        ? ('- 当前待确认问题：' + pendingPrompt)
+        : '',
+      pendingSourceUserText
+        ? ('- 当前待确认上下文对应的原始用户请求：' + pendingSourceUserText)
+        : '',
+      pending
+        ? '- 若本轮最新消息是“是/不是/好的/全部/第2条/就改222”这类短回复，优先把它理解为对待确认问题的回答，不要误判成全新请求。'
+        : '',
+      (pendingKind === 'model_clarify' && pendingSourceUserText)
+        ? '- 当最新消息较短、带省略、只补了范围/页面/对象时，应把它视为对上述原始用户请求的补充限定，不要把这句短回复单独改写成新的无关任务。'
+        : '',
       '- 只有当最新消息与上文强相关，或出现“这个/那个/继续/刚才/上一个/就今天的/按刚才那个”等承接、省略、补充表达时，才回看历史。',
       '- 如果最新消息本身已经完整明确，应把它当作新的独立请求，忽略大部分历史，不要被旧话题带偏。',
       '- 若历史信息与本轮最新消息冲突，以本轮最新消息为准。',
@@ -2138,11 +2503,21 @@
     return lines.join('\n');
   }
 
-  function buildConversationPromptWithPriority(basePrompt, latestUserText) {
+  function buildConversationPromptWithPriority(basePrompt, latestUserText, options) {
     var prompt = basePrompt === undefined || basePrompt === null ? '' : String(basePrompt).trim();
-    var strategy = buildConversationPriorityPrompt(latestUserText);
+    var strategy = buildConversationPriorityPrompt(latestUserText, options);
     if (!prompt) return strategy;
     return prompt + '\n' + strategy;
+  }
+
+  function buildAssistantContinuationTaskUserText(latestUserText, pendingInteraction) {
+    var latest = latestUserText === undefined || latestUserText === null ? '' : String(latestUserText).trim();
+    var pending = pendingInteraction && typeof pendingInteraction === 'object' ? pendingInteraction : null;
+    var source = pending && pending.sourceUserText ? String(pending.sourceUserText).trim() : '';
+    if (!source) return latest;
+    if (!latest) return source;
+    if (latest === source) return source;
+    return source + '\n补充信息：' + latest;
   }
 
   function buildConversationHistory(limit, latestUserText) {
@@ -2229,8 +2604,17 @@ return lines.join('\n');
     var payload = meta && typeof meta === 'object' ? meta : {};
     var detail = payload.detail === undefined || payload.detail === null ? '' : String(payload.detail).trim();
     var reason = payload.reason === undefined || payload.reason === null ? '' : String(payload.reason).trim();
+    var signature = JSON.stringify({
+      label: label,
+      detail: detail,
+      reason: reason,
+    });
+    if (signature && pendingApprovalRequestBySignature[signature] && pendingApprovalRequestBySignature[signature].promise) {
+      return pendingApprovalRequestBySignature[signature].promise;
+    }
     approvalCounter += 1;
-    return new Promise(function(resolve) {
+    var requestState = { promise: null };
+    requestState.promise = new Promise(function(resolve) {
       var settled = false;
       var approvalMsg = null;
       var lines = [
@@ -2242,45 +2626,64 @@ return lines.join('\n');
       function settleText(allowed) {
         return allowed === true ? '已允许，正在执行...' : '已拒绝，本次操作已取消。';
       }
-      function updateApprovalCard(allowed) {
-        if (!approvalMsg || !approvalMsg.id) return;
-        replaceMessage(approvalMsg.id, lines.join('\n') + '\n' + settleText(allowed), {
+      function setApprovalCard(text, actions) {
+        var msgOptions = {
           title: '系统',
-        });
+          actions: Array.isArray(actions) ? actions : [],
+          autoReplyActions: false,
+        };
+        if (approvalMsg && approvalMsg.id) {
+          replaceMessage(approvalMsg.id, text, msgOptions);
+          return;
+        }
+        if (signature && approvalMessageIdBySignature[signature]) {
+          removeMessageById(approvalMessageIdBySignature[signature]);
+          delete approvalMessageIdBySignature[signature];
+        }
+        approvalMsg = addMessage('sys', text, msgOptions);
+        if (signature && approvalMsg && approvalMsg.id) {
+          approvalMessageIdBySignature[signature] = approvalMsg.id;
+        }
       }
       function finish(allowed) {
         if (settled) return;
         settled = true;
         var approved = allowed === true;
-        updateApprovalCard(approved);
+        setApprovalCard(lines.join('\n') + '\n' + settleText(approved), []);
+        if (signature && pendingApprovalRequestBySignature[signature] === requestState) {
+          delete pendingApprovalRequestBySignature[signature];
+        }
         setStatus('');
         resolve(approved);
       }
-      approvalMsg = addMessage('sys', lines.join('\n'), {
-        title: '系统',
-        actions: [
-          {
-            label: '允许操作',
-            variant: 'allow',
-            className: 'assistant-approval-btn',
-            title: '继续执行本次操作',
-            onClick: function() { finish(true); },
-          },
-          {
-            label: '不允许',
-            variant: 'deny',
-            className: 'assistant-approval-btn',
-            title: '取消本次操作',
-            onClick: function() { finish(false); },
-          },
-        ],
-      });
+      setApprovalCard(lines.join('\n'), [
+        {
+          label: '允许操作',
+          variant: 'allow',
+          className: 'assistant-approval-btn',
+          title: '继续执行本次操作',
+          onClick: function() { finish(true); },
+        },
+        {
+          label: '不允许',
+          variant: 'deny',
+          className: 'assistant-approval-btn',
+          title: '取消本次操作',
+          onClick: function() { finish(false); },
+        },
+      ]);
     });
+    if (signature) pendingApprovalRequestBySignature[signature] = requestState;
+    return requestState.promise;
   }
 
 
   function clearPendingTempExecRemoveSelection() {
     pendingTempExecRemoveSelection = null;
+  }
+
+  function clearPendingTempExecReuseTargetSelection() {
+    pendingTempExecReuseTargetSelection = null;
   }
 
   function clearPendingExecTransferSelection() {
@@ -2334,6 +2737,19 @@ return lines.join('\n');
   function updateActivePendingAssistantState(options) {
     var opts = options && typeof options === 'object' ? options : {};
     var taskStepIndex = Number(opts.taskStepIndex);
+    if (pendingTempExecReuseTargetSelection) {
+      if (Object.prototype.hasOwnProperty.call(opts, 'taskState')) {
+        pendingTempExecReuseTargetSelection.taskState = cloneAssistantTaskState(opts.taskState);
+      }
+      if (Number.isFinite(taskStepIndex)) pendingTempExecReuseTargetSelection.taskStepIndex = taskStepIndex;
+      if (Object.prototype.hasOwnProperty.call(opts, 'continuation')) {
+        pendingTempExecReuseTargetSelection.continuation = cloneAssistantTaskContinuation(opts.continuation);
+      }
+      if (Object.prototype.hasOwnProperty.call(opts, 'sourceUserText')) {
+        pendingTempExecReuseTargetSelection.sourceUserText = opts.sourceUserText === undefined || opts.sourceUserText === null ? '' : String(opts.sourceUserText);
+      }
+      return pendingTempExecReuseTargetSelection;
+    }
     if (pendingTempExecRemoveSelection) {
       if (Object.prototype.hasOwnProperty.call(opts, 'taskState')) {
         pendingTempExecRemoveSelection.taskState = cloneAssistantTaskState(opts.taskState);
@@ -2358,7 +2774,22 @@ return lines.join('\n');
     return '';
   }
 
+  function buildTempExecReuseSelectionWaitingSummary(selectionType) {
+    var type = selectionType === undefined || selectionType === null ? '' : String(selectionType);
+    if (type === 'delete_scope') return '等待你确认要删除哪一层范围的全部子项。';
+    if (type === 'rename_scope') return '等待你确认是改整份预设，还是只改某条用例的子项名称。';
+    if (type === 'rename_case') return '等待你确认要修改哪一条用例的子项名称。';
+    if (type === 'preset_scope') return '等待你确认是更新整份预设，还是只处理某条用例。';
+    if (type === 'preset_case') return '等待你确认要给哪一条用例新增或设置子项。';
+    if (type === 'detail_choice') return '等待你确认要操作哪一个复用子项。';
+    if (type === 'detail_case') return '等待你确认要操作哪一条用例的子项。';
+    return '等待你确认要操作哪一份复用执行用例。';
+  }
+
   function getPendingAssistantWaitingSummary() {
+    if (pendingTempExecReuseTargetSelection) {
+      return buildTempExecReuseSelectionWaitingSummary(pendingTempExecReuseTargetSelection.selectionType);
+    }
     if (pendingTempExecRemoveSelection) return '等待你确认要移出哪个版本的执行用例。';
     return getPendingExecTransferWaitingSummary();
   }
@@ -2821,12 +3252,13 @@ return lines.join('\n');
     var index = 0;
     var digitMatch = null;
     var chineseMatch = null;
+    var suffix = '(?:子项|测试项|用例|版本|候选)?';
     if (!compact) return 0;
-    digitMatch = compact.match(/^(?:选|就|用|转|执行)第?(\d+)(?:个|条|项|份|号)?$/);
-    if (!digitMatch) digitMatch = compact.match(/^第(\d+)(?:个|条|项|份|号)$/);
+    digitMatch = compact.match(new RegExp('^(?:选|就|用|转|执行|改|删|删除|处理)?第?(\\d+)(?:个|条|项|份|号)?' + suffix + '$'));
+    if (!digitMatch) digitMatch = compact.match(new RegExp('^第(\\d+)(?:个|条|项|份|号)' + suffix + '$'));
     if (digitMatch) return toPositiveInt(digitMatch[1], 0);
-    chineseMatch = compact.match(/^(?:选|就|用|转|执行)第?([一二两三四五六七八九十]+)(?:个|条|项|份|号)?$/);
-    if (!chineseMatch) chineseMatch = compact.match(/^第([一二两三四五六七八九十]+)(?:个|条|项|份|号)$/);
+    chineseMatch = compact.match(new RegExp('^(?:选|就|用|转|执行|改|删|删除|处理)?第?([一二两三四五六七八九十]+)(?:个|条|项|份|号)?' + suffix + '$'));
+    if (!chineseMatch) chineseMatch = compact.match(new RegExp('^第([一二两三四五六七八九十]+)(?:个|条|项|份|号)' + suffix + '$'));
     if (chineseMatch) index = parseSimpleChinesePositiveInt(chineseMatch[1]);
     return index > 0 ? index : 0;
   }
@@ -2917,6 +3349,407 @@ return lines.join('\n');
     };
   }
 
+
+
+  async function resolveAssistantChoiceByModel(options) {
+    return resolveExecTransferChoiceByModel(options);
+  }
+
+  function listTempExecFilesForAssistant() {
+    var state = window.app && window.app.state && typeof window.app.state === 'object'
+      ? window.app.state
+      : null;
+    return state && Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+  }
+
+  function getActiveTempExecFileForAssistant() {
+    var list = listTempExecFilesForAssistant();
+    var state = window.app && window.app.state && typeof window.app.state === 'object'
+      ? window.app.state
+      : null;
+    var activeId = state ? String(state.tempExecActiveId || state.tempExecActiveFileId || '').trim() : '';
+    var i = 0;
+    if (!list.length) return null;
+    if (activeId) {
+      for (i = 0; i < list.length; i += 1) {
+        var item = list[i] && typeof list[i] === 'object' ? list[i] : null;
+        if (!item) continue;
+        if (String(item.id || '').trim() === activeId) return item;
+      }
+    }
+    return list.length === 1 ? list[0] : null;
+  }
+
+  function isTempExecFileWithReuseCasesForAssistant(file) {
+    var target = file && typeof file === 'object' ? file : null;
+    var cases = [];
+    var i = 0;
+    if (!target) return false;
+    if (target.reuseEnabled === true) return true;
+    cases = Array.isArray(target.cases) ? target.cases : [];
+    for (i = 0; i < cases.length; i += 1) {
+      if (isAssistantReuseCaseItem(cases[i])) return true;
+    }
+    return false;
+  }
+
+  function isActiveTempExecReuseFileForAssistant() {
+    var file = getActiveTempExecFileForAssistant();
+    return !!(file && isTempExecFileWithReuseCasesForAssistant(file));
+  }
+
+  function buildLiveTempExecCaseDataForAssistant() {
+    var file = getActiveTempExecFileForAssistant();
+    var cases = [];
+    var fileId = '';
+    var fileName = '';
+    var items = [];
+    if (!file || !Array.isArray(file.cases)) return null;
+    cases = file.cases;
+    fileId = file.id === undefined || file.id === null ? '' : String(file.id);
+    fileName = getTempExecFileDisplayName(file, '当前执行用例');
+    items = cases.map(function(item, index) {
+      var row = item && typeof item === 'object' ? item : {};
+      var details = getVisibleReuseDetailsForAssistantCase(row).map(function(detail, detailIndex) {
+        var detailRow = detail && typeof detail === 'object' ? detail : {};
+        return {
+          index: detailRow.index === undefined || detailRow.index === null ? (detailIndex + 1) : detailRow.index,
+          id: detailRow.id === undefined || detailRow.id === null ? '' : String(detailRow.id),
+          text: detailRow.text === undefined || detailRow.text === null ? '' : String(detailRow.text),
+          status: detailRow.status === undefined || detailRow.status === null ? '' : String(detailRow.status),
+          note: detailRow.note === undefined || detailRow.note === null ? '' : String(detailRow.note),
+        };
+      });
+      return {
+        index: index + 1,
+        id: row.id === undefined || row.id === null ? '' : String(row.id),
+        module: row.module === undefined || row.module === null ? '' : String(row.module),
+        title: row.title === undefined || row.title === null ? '' : String(row.title),
+        priority: row.priority === undefined || row.priority === null ? '' : String(row.priority),
+        remark: row.remark === undefined || row.remark === null ? '' : String(row.remark),
+        actual: row.actual === undefined || row.actual === null ? '' : String(row.actual),
+        status: row.status === undefined || row.status === null ? '' : String(row.status),
+        result: row.result === undefined || row.result === null ? '' : String(row.result),
+        executionResult: resolveCaseExecutionResult(row),
+        isReuseCase: isAssistantReuseCaseItem(row),
+        reuseDetailCount: details.length,
+        reuseDetails: details,
+      };
+    });
+    return {
+      contextSource: 'tempexec-live',
+      scope: 'editor',
+      total: items.length,
+      totalAll: items.length,
+      truncated: false,
+      caseFile: {
+        id: fileId,
+        name: fileName,
+        reuseEnabled: file.reuseEnabled === true,
+        hasReuseCases: isTempExecFileWithReuseCasesForAssistant(file),
+      },
+      items: items,
+    };
+  }
+
+  function readTempExecStateIndexList(source, fileId) {
+    if (!source || !fileId) return [];
+    var raw = source[fileId];
+    var list = [];
+    if (!raw) return list;
+    if (typeof raw.size === 'number' && typeof raw.forEach === 'function') {
+      raw.forEach(function(value) { list.push(Number(value)); });
+    } else if (Array.isArray(raw)) {
+      list = raw.slice();
+    } else if (typeof raw === 'object') {
+      Object.keys(raw).forEach(function(key) {
+        if (raw[key]) list.push(Number(key));
+      });
+    }
+    return list.filter(function(value) { return Number.isFinite(value) && value >= 0; })
+      .map(function(value) { return Math.floor(value); });
+  }
+
+  function findTempExecReuseTargetFileForAssistant(args) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var list = listTempExecFilesForAssistant();
+    var state = window.app && window.app.state && typeof window.app.state === 'object'
+      ? window.app.state
+      : null;
+    var activeId = state ? String(state.tempExecActiveId || state.tempExecActiveFileId || '').trim() : '';
+    var activeFile = null;
+    var query = assistantReadFirstArgString(payload, ['fileName', 'query', 'keyword', 'file', 'title', 'name']);
+    var normalizedQuery = normalizeExecTransferSelectionText(query || '');
+    var exact = [];
+    var partial = [];
+    var i = 0;
+    if (!list.length) return null;
+    for (i = 0; i < list.length; i += 1) {
+      var item = list[i] && typeof list[i] === 'object' ? list[i] : null;
+      if (!item) continue;
+      var fileId = item.id === undefined || item.id === null ? '' : String(item.id).trim();
+      var fileName = getTempExecFileDisplayName(item, '');
+      var normalizedName = normalizeExecTransferSelectionText(fileName || '');
+      if (activeId && fileId === activeId) activeFile = item;
+      if (!normalizedQuery || !normalizedName) continue;
+      if (normalizedName === normalizedQuery) exact.push(item);
+      else if (normalizedName.indexOf(normalizedQuery) !== -1 || normalizedQuery.indexOf(normalizedName) !== -1) partial.push(item);
+    }
+    if (exact.length === 1) return exact[0];
+    if (exact.length > 1) return null;
+    if (partial.length === 1) return partial[0];
+    if (partial.length > 1) return null;
+    if (!normalizedQuery && activeFile) return activeFile;
+    if (!normalizedQuery && list.length === 1) return list[0];
+    return null;
+  }
+
+  function shouldPreferTempExecReuseStatusUpdateForAssistant(args) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var file = findTempExecReuseTargetFileForAssistant(payload) || getActiveTempExecFileForAssistant();
+    var scope = '';
+    var explicitCaseIndexes = Array.isArray(payload.caseIndexes) ? payload.caseIndexes : (Array.isArray(payload.indexes) ? payload.indexes : []);
+    var caseIndexes = [];
+    var caseIndex = 0;
+    var i = 0;
+    if (!file || !isTempExecFileWithReuseCasesForAssistant(file)) return false;
+    if (payload.scope !== undefined && payload.scope !== null) scope = String(payload.scope).trim().toLowerCase();
+    if (!scope && payload.target !== undefined && payload.target !== null) scope = String(payload.target).trim().toLowerCase();
+    if (!scope && payload.range !== undefined && payload.range !== null) scope = String(payload.range).trim().toLowerCase();
+    if (scope === 'all' || scope === 'file_all' || scope === 'matched_cases' || scope === 'selected_cases') return true;
+    if (payload.applyAll === true || payload.all === true || payload.batch === true) return true;
+    for (i = 0; i < explicitCaseIndexes.length; i += 1) {
+      var num = toPositiveInt(explicitCaseIndexes[i], 0);
+      if (num > 0) caseIndexes.push(num);
+    }
+    if (caseIndexes.length) {
+      for (i = 0; i < caseIndexes.length; i += 1) {
+        if (Array.isArray(file.cases) && file.cases[caseIndexes[i] - 1] && isAssistantReuseCaseItem(file.cases[caseIndexes[i] - 1])) {
+          return true;
+        }
+      }
+      return false;
+    }
+    caseIndex = resolveTempExecReuseCaseIndexForAssistant(payload, file);
+    if (caseIndex > 0) {
+      return !!(Array.isArray(file.cases) && file.cases[caseIndex - 1] && isAssistantReuseCaseItem(file.cases[caseIndex - 1]));
+    }
+    if (Array.isArray(file.cases) && file.cases.length === 1) {
+      return isAssistantReuseCaseItem(file.cases[0]);
+    }
+    return false;
+  }
+
+  function resolveTempExecReuseCaseIndexForAssistant(args, file) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var index = toPositiveInt(payload.index || payload.caseIndex || payload.itemIndex || payload.seq || payload.row, 0);
+    var caseIndexes = Array.isArray(payload.caseIndexes) ? payload.caseIndexes : [];
+    if (index > 0) return index;
+    if (caseIndexes.length === 1) return toPositiveInt(caseIndexes[0], 0);
+    if (file && Array.isArray(file.cases) && file.cases.length === 1) return 1;
+    var fileId = file && file.id !== undefined && file.id !== null ? String(file.id) : '';
+    var state = window.app && window.app.state && typeof window.app.state === 'object' ? window.app.state : null;
+    if (!state || !fileId) return 0;
+    var selection = readTempExecStateIndexList(state.tempExecSelections, fileId);
+    if (selection.length === 1) return selection[0] + 1;
+    var reuseOpen = readTempExecStateIndexList(state.tempExecReuseOpen, fileId);
+    if (reuseOpen.length === 1) return reuseOpen[0] + 1;
+    var remarkOpen = readTempExecStateIndexList(state.tempExecRemarkOpen, fileId);
+    if (remarkOpen.length === 1) return remarkOpen[0] + 1;
+    var defectOpen = readTempExecStateIndexList(state.tempExecDefectOpen, fileId);
+    if (defectOpen.length === 1) return defectOpen[0] + 1;
+    return 0;
+  }
+
+  function buildTempExecReuseDetailChoiceCandidateLabel(item) {
+    var row = item && typeof item === 'object' ? item : {};
+    if (row.label && String(row.label).trim()) return String(row.label).trim();
+    var name = row.name ? String(row.name) : ('子项' + String(row.detailIndex || row.index || 1));
+    var parts = ['第 ' + String(row.detailIndex || row.index || 1) + ' 个：' + name];
+    var extra = [];
+    if (row.status) extra.push('执行结果：' + String(row.status));
+    if (row.note) extra.push('备注：' + trimAssistantTaskLabelText(String(row.note), 16));
+    if (extra.length) parts.push('（' + extra.join('，') + '）');
+    return parts.join('');
+  }
+
+  function buildTempExecReuseDetailChoiceCandidates(file, caseIndex) {
+    var sourceIndex = Math.max(0, Number(caseIndex || 1) - 1);
+    var targetCase = file && Array.isArray(file.cases) && file.cases[sourceIndex] ? file.cases[sourceIndex] : null;
+    var details = targetCase && Array.isArray(targetCase.reuseDetails)
+      ? targetCase.reuseDetails.filter(function(detail) {
+          return detail && detail.removed !== true;
+        })
+      : [];
+    return details.map(function(detail, index) {
+      var row = detail && typeof detail === 'object' ? detail : {};
+      var name = row.text ? String(row.text) : ('子项' + String(index + 1));
+      var candidate = {
+        id: row.id ? ('reuse-detail-choice:' + String(row.id)) : ('reuse-detail-choice:index-' + String(index + 1)),
+        name: name,
+        detailId: row.id ? String(row.id) : '',
+        detailIndex: index + 1,
+        status: row.status ? String(row.status) : '',
+        note: row.note ? String(row.note) : '',
+        applyPatch: {
+          index: caseIndex,
+          detailIndex: index + 1,
+        },
+      };
+      if (candidate.detailId) candidate.applyPatch.detailId = candidate.detailId;
+      candidate.applyPatch.detailName = name;
+      candidate.label = buildTempExecReuseDetailChoiceCandidateLabel(candidate);
+      return candidate;
+    });
+  }
+
+  function buildTempExecReuseDetailChoiceActionSummary(args) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var mode = normalizeTempExecReuseModeHint(assistantReadFirstArgString(payload, ['mode', 'action', 'type', 'intent', 'task', 'operationType', 'operateType', 'operate', 'op']));
+    var field = normalizeTempExecReuseFieldName(payload.field || payload.key || payload.column || payload.name || payload.detailField || payload.subField || '');
+    var value = assistantReadFirstArgString(payload, ['value', 'to', 'text', 'content', 'newValue']);
+    if (mode === 'detail_delete') return '准备删除一个复用子项';
+    if (field === 'actual') return value ? ('准备把复用子项执行结果改为' + value) : '准备修改复用子项执行结果';
+    if (field === 'remark') return value ? ('准备修改复用子项备注为：' + trimAssistantTaskLabelText(value, 20)) : '准备修改复用子项备注';
+    if (field === 'text') return value ? ('准备把复用子项名称改为' + trimAssistantTaskLabelText(value, 18)) : '准备修改复用子项名称';
+    return '准备修改复用子项';
+  }
+
+  function buildTempExecReuseDetailChoiceSelectionData(rawText, args, file, caseIndex, items, extraResponse) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var list = Array.isArray(items) ? items : [];
+    var sourceIndex = Math.max(0, Number(caseIndex || 1) - 1);
+    var targetCase = file && Array.isArray(file.cases) && file.cases[sourceIndex] ? file.cases[sourceIndex] : null;
+    var detailName = assistantReadFirstArgString(payload, ['detailName', 'subItemName', 'childName', 'detailText', 'subItemText', 'childText']);
+    var caseTitle = targetCase && targetCase.title ? String(targetCase.title) : '';
+    var caseModule = targetCase && targetCase.module ? String(targetCase.module) : '';
+    var actionSummary = buildTempExecReuseDetailChoiceActionSummary(payload);
+    var actionLabel = normalizeTempExecReuseModeHint(assistantReadFirstArgString(payload, ['mode', 'action', 'type', 'intent', 'task', 'operationType', 'operateType', 'operate', 'op'])) === 'detail_delete'
+      ? '确认要删除的复用子项'
+      : '确认要修改的复用子项';
+    var message = extraResponse ? String(extraResponse).trim() : '';
+    if (!message) {
+      if (detailName) {
+        message = '我还不能稳定判断你说的“' + detailName + '”具体对应哪一个复用子项，请先确认：';
+      } else {
+        message = '当前目标用例里有多个复用子项，请先确认要操作哪一个：';
+      }
+    }
+    if (actionSummary) message += '\n本次操作：' + actionSummary;
+    if (caseTitle) {
+      message += '\n目标用例：第 ' + String(caseIndex) + ' 条';
+      if (caseModule) message += '，模块：' + caseModule;
+      message += '，标题：' + caseTitle;
+    }
+    return {
+      ok: false,
+      reason: 'selection_required',
+      selectionRequired: true,
+      selectionType: 'detail_choice',
+      actionLabel: actionLabel,
+      query: detailName || String(rawText || '').trim(),
+      message: message,
+      items: list,
+      pendingArgs: Object.assign({}, payload, {
+        index: caseIndex,
+      }),
+    };
+  }
+
+  async function prepareTempExecReuseArgsByModel(rawText, parsedArgs) {
+    var args = parsedArgs && typeof parsedArgs === 'object' ? Object.assign({}, parsedArgs) : null;
+    var mode = '';
+    var detailId = '';
+    var file = null;
+    var caseIndex = 0;
+    var caseMetas = [];
+    var items = [];
+    var modelResolved = null;
+    var latestInput = String(rawText || (args && args.sourceUserText ? args.sourceUserText : '') || '').trim();
+    if (!args) return { args: null, selectionData: null };
+    mode = normalizeTempExecReuseModeHint(assistantReadFirstArgString(args, ['mode', 'action', 'type', 'intent', 'task', 'operationType', 'operateType', 'operate', 'op']));
+    if (mode !== 'detail_update' && mode !== 'detail_delete') {
+      return { args: args, selectionData: null };
+    }
+    detailId = assistantReadFirstArgString(args, ['detailId', 'subItemId', 'childId']);
+    if (detailId || toPositiveInt(args.detailIndex || args.subItemIndex || args.childIndex || args.detailSeq, 0) > 0) {
+      return { args: args, selectionData: null };
+    }
+    file = findTempExecReuseTargetFileForAssistant(args);
+    if (!file || file.reuseEnabled !== true) {
+      return { args: args, selectionData: null };
+    }
+    caseIndex = resolveTempExecReuseCaseIndexForAssistant(args, file);
+    if (!(caseIndex > 0)) {
+      caseMetas = file && Array.isArray(file.cases) ? file.cases.map(function(item, idx) {
+        var row = item && typeof item === 'object' ? item : {};
+        var title = row.title ? String(row.title) : ('第 ' + String(idx + 1) + ' 条用例');
+        var moduleName = row.module ? String(row.module) : '';
+        var detailCount = Array.isArray(row.reuseDetails)
+          ? row.reuseDetails.filter(function(detail) { return detail && detail.removed !== true; }).length
+          : 0;
+        return {
+          id: 'reuse-detail-case:' + String(idx + 1),
+          name: title,
+          caseIndex: idx + 1,
+          label: '第 ' + String(idx + 1) + ' 条：' + title + '（' + detailCount + ' 个子项' + (moduleName ? '，模块：' + moduleName : '') + '）',
+          applyPatch: { index: idx + 1 },
+        };
+      }).filter(function(meta) { return meta && meta.label; }) : [];
+      if (caseMetas.length > 1) {
+        return {
+          args: null,
+          selectionData: {
+            ok: false,
+            reason: 'selection_required',
+            selectionRequired: true,
+            selectionType: 'detail_case',
+            actionLabel: '确认要操作的用例条目',
+            query: String(rawText || '').trim(),
+            message: '还需要确认具体要操作哪条用例的子项，请先选择条目：',
+            items: caseMetas,
+            pendingArgs: Object.assign({}, args),
+          },
+        };
+      }
+      if (caseMetas.length === 1) caseIndex = caseMetas[0].caseIndex;
+    }
+    if (!(caseIndex > 0)) {
+      return { args: args, selectionData: null };
+    }
+    items = buildTempExecReuseDetailChoiceCandidates(file, caseIndex);
+    if (!items.length) {
+      return { args: args, selectionData: null };
+    }
+    if (items.length === 1) {
+      args.detailId = items[0].detailId || args.detailId;
+      args.detailIndex = items[0].detailIndex;
+      args.detailName = items[0].name;
+      args.index = caseIndex;
+      return { args: args, selectionData: null };
+    }
+    if (!latestInput) latestInput = assistantReadFirstArgString(args, ['detailName', 'subItemName', 'childName', 'detailText', 'subItemText', 'childText']);
+    modelResolved = latestInput ? await resolveAssistantChoiceByModel({
+      latestUserInput: latestInput,
+      originalUserRequest: args.sourceUserText ? String(args.sourceUserText) : latestInput,
+      entityLabel: '复用子项',
+      allowCreate: false,
+      items: items,
+      labelBuilder: buildTempExecReuseDetailChoiceCandidateLabel,
+    }) : null;
+    if (modelResolved && modelResolved.mode === 'select' && modelResolved.selectedItem) {
+      var selectedItem = modelResolved.selectedItem;
+      args.detailId = selectedItem.detailId || assistantReadFirstArgString(selectedItem, ['detailId', 'id']);
+      args.detailIndex = toPositiveInt(selectedItem.detailIndex || selectedItem.index, 0) || args.detailIndex;
+      args.detailName = selectedItem.name ? String(selectedItem.name) : args.detailName;
+      args.index = caseIndex;
+      return { args: args, selectionData: null };
+    }
+    return {
+      args: null,
+      selectionData: buildTempExecReuseDetailChoiceSelectionData(rawText, args, file, caseIndex, items, modelResolved && modelResolved.response ? String(modelResolved.response) : ''),
+    };
+  }
 
   function buildExecTransferSearchArgsFromModelResult(parsed) {
     var data = parsed && typeof parsed === 'object' ? parsed : {};
@@ -3471,350 +4304,6 @@ return lines.join('\n');
     };
   }
 
-  async function tryHandlePendingExecTransferCreateVersionConfirmIntent(text, options) {
-    var opts = options && typeof options === 'object' ? options : {};
-    if (!pendingExecTransferCreateVersionConfirm || !pendingExecTransferCreateVersionConfirm.requestedVersionName) return null;
-    if (looksLikeExecTransferNegativeReply(text) || containsAny(text, ['取消', '先不', '不用', '算了'])) {
-      var cancelledPending = pendingExecTransferCreateVersionConfirm;
-      clearPendingExecTransferCreateVersionConfirm();
-      return {
-        handled: true,
-        text: '已取消新建版本，你可以继续回复“选第1个”或直接回复现有版本名。',
-        messageOptions: {
-          taskState: buildExecTransferPendingTaskState(cancelledPending, 'waiting', '已取消新建版本，等待你继续选择执行版本。'),
-        },
-      };
-    }
-    if (!looksLikeExecTransferPositiveReply(text)) return null;
-    var pending = pendingExecTransferCreateVersionConfirm;
-    var nextContinuation = consumeAssistantTaskContinuationStep(pending && pending.continuation, 'case_library.transfer_to_exec');
-    var continuedPending = Object.assign({}, pending, {
-      continuation: nextContinuation,
-    });
-    var args = {
-      caseFileId: pending.caseFileId,
-      projectId: pending.projectId,
-      execVersionName: pending.requestedVersionName,
-      createVersionIfMissing: true,
-    };
-    clearPendingExecTransferVersionNameClarify();
-    if (pending.approved === true) args.confirmed = true;
-    setStatus('正在新建版本并转到执行...');
-    var runResult = await callAssistantMcpToolWithApproval('case_library.transfer_to_exec', args, '新建版本并转到当前执行');
-    setStatus('');
-    if (!runResult || runResult.ok !== true) {
-      if (runResult && runResult.cancelled === true) {
-        return {
-          handled: true,
-          text: '已取消，本次版本选择仍保留，你可以继续回复现有版本名。',
-          messageOptions: {
-            taskState: buildExecTransferPendingTaskState(pending, 'waiting', '任务等待你继续选择执行版本。'),
-          },
-        };
-      }
-      return {
-        handled: true,
-        text: '转到执行失败：' + (runResult && runResult.reason ? String(runResult.reason) : '未知错误'),
-        messageOptions: {
-          taskState: buildExecTransferPendingTaskState(pending, 'blocked', '转到执行失败，任务已中断。'),
-        },
-      };
-    }
-    var replyText = handleExecTransferToolData(runResult.data || {}, '', {
-      approved: true,
-      fallbackName: pending.name || '目标用例',
-      taskState: pending.taskState,
-      taskStepIndex: pending.taskStepIndex,
-      continuation: nextContinuation,
-      sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
-      requestedVersionName: pending && pending.requestedVersionName ? String(pending.requestedVersionName) : '',
-    });
-    var followPending = pendingExecTransferVersionNameClarify || pendingExecTransferCreateVersionConfirm || pendingExecTransferVersionSelection;
-    if (followPending) {
-      var followSummary = pendingExecTransferVersionNameClarify
-        ? '等待你确认是否按新版本处理。'
-        : (pendingExecTransferCreateVersionConfirm
-          ? '等待你确认是否新建执行版本。'
-          : '等待你选择执行版本。');
-      return {
-        handled: true,
-        text: replyText,
-        messageOptions: {
-          taskState: buildExecTransferPendingTaskState(followPending, 'waiting', followSummary),
-        },
-      };
-    }
-    return continuePendingExecTransferTask(continuedPending, replyText, {
-      onTaskStateChange: opts.onTaskStateChange,
-    });
-  }
-
-  async function tryHandlePendingExecTransferVersionNameClarifyIntent(text, options) {
-    var opts = options && typeof options === 'object' ? options : {};
-    if (!pendingExecTransferVersionNameClarify || !pendingExecTransferVersionNameClarify.requestedVersionName) return null;
-    var pending = pendingExecTransferVersionNameClarify;
-    var raw = text === undefined || text === null ? '' : String(text).trim();
-    if (!raw) return null;
-    if (!looksLikeExecTransferPositiveReply(raw)
-      && !looksLikeExecTransferNegativeReply(raw)
-      && !containsAny(raw, ['取消', '先不', '不用', '算了'])) {
-      clearPendingExecTransferVersionNameClarify();
-      return null;
-    }
-    if (looksLikeExecTransferPositiveReply(raw)) {
-      clearPendingExecTransferVersionNameClarify();
-      var nextContinuation = consumeAssistantTaskContinuationStep(pending && pending.continuation, 'case_library.transfer_to_exec');
-      var continuedPending = Object.assign({}, pending, {
-        continuation: nextContinuation,
-      });
-      var args = {
-        caseFileId: pending.caseFileId,
-        projectId: pending.projectId,
-        execVersionName: pending.requestedVersionName,
-        createVersionIfMissing: true,
-      };
-      if (pending.approved === true) args.confirmed = true;
-      setStatus('正在按新版本处理并转到执行...');
-      var runResult = await callAssistantMcpToolWithApproval('case_library.transfer_to_exec', args, '按新版本转到当前执行');
-      setStatus('');
-      if (!runResult || runResult.ok !== true) {
-        if (runResult && runResult.cancelled === true) {
-          return {
-            handled: true,
-            text: '已取消，本次执行版本选择仍保留，你可以继续回复现有版本名。',
-            messageOptions: {
-              taskState: buildExecTransferPendingTaskState(pending, 'waiting', '任务等待你继续选择执行版本。'),
-            },
-          };
-        }
-        return {
-          handled: true,
-          text: '转到执行失败：' + (runResult && runResult.reason ? String(runResult.reason) : '未知错误'),
-          messageOptions: {
-            taskState: buildExecTransferPendingTaskState(pending, 'blocked', '转到执行失败，任务已中断。'),
-          },
-        };
-      }
-      var replyText = handleExecTransferToolData(runResult.data || {}, '', {
-        approved: true,
-        fallbackName: pending.name || '目标用例',
-        taskState: pending.taskState,
-        taskStepIndex: pending.taskStepIndex,
-        continuation: nextContinuation,
-        sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
-        requestedVersionName: pending && pending.requestedVersionName ? String(pending.requestedVersionName) : '',
-      });
-      var followPending = pendingExecTransferVersionNameClarify || pendingExecTransferCreateVersionConfirm || pendingExecTransferVersionSelection;
-      if (followPending) {
-        var followSummary = pendingExecTransferVersionNameClarify
-          ? '等待你确认是否按新版本处理。'
-          : (pendingExecTransferCreateVersionConfirm
-            ? '等待你确认是否新建执行版本。'
-            : '等待你选择执行版本。');
-        return {
-          handled: true,
-          text: replyText,
-          messageOptions: {
-            taskState: buildExecTransferPendingTaskState(followPending, 'waiting', followSummary),
-          },
-        };
-      }
-      return continuePendingExecTransferTask(continuedPending, replyText, {
-        onTaskStateChange: opts.onTaskStateChange,
-      });
-    }
-    clearPendingExecTransferVersionNameClarify();
-    var guidance = await interpretExecTransferVersionClarifyNegativeReply(pending);
-    if (!guidance) guidance = buildExecTransferVersionSelectionText(pendingExecTransferVersionSelection || pending);
-    return {
-      handled: true,
-      text: guidance,
-      messageOptions: {
-        taskState: buildExecTransferPendingTaskState(pending, 'waiting', '已回到现有版本选择，等待你继续。'),
-      },
-    };
-  }
-
-  async function tryHandlePendingExecTransferVersionSelectionIntent(text, options) {
-    var opts = options && typeof options === 'object' ? options : {};
-    var pending = pendingExecTransferVersionSelection;
-    var resolved = null;
-    if (!pending) return null;
-    resolved = await resolvePendingExecTransferVersion(text, pending, {
-      sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
-    });
-    if (!resolved) return null;
-    if (resolved.cancelled === true) {
-      var cancelledPending = pendingExecTransferVersionSelection;
-      clearPendingExecTransferManualState();
-      return {
-        handled: true,
-        text: '已取消本次执行版本选择。',
-        messageOptions: {
-          taskState: buildExecTransferPendingTaskState(cancelledPending, 'cancelled', '任务已取消。'),
-        },
-      };
-    }
-    if (!resolved.version) {
-      if (resolved.confirmCreateName) {
-        rememberExecTransferVersionNameClarify(pending, resolved.confirmCreateName, text, {
-          taskState: pending && pending.taskState,
-          taskStepIndex: pending && pending.taskStepIndex,
-          continuation: pending && pending.continuation,
-          sourceUserText: pending && pending.sourceUserText,
-        });
-        return {
-          handled: true,
-          text: buildExecTransferVersionNameClarifyText({
-            name: pending.name || '',
-            projectName: pending.projectName || '',
-            requestedVersionName: resolved.confirmCreateName,
-          }),
-          messageOptions: {
-            taskState: buildExecTransferPendingTaskState(pendingExecTransferVersionSelection || pending, 'waiting', '等待你确认是否按新版本处理。'),
-          },
-        };
-      }
-      if (resolved.createName) {
-        rememberExecTransferCreateVersionConfirm(pending, resolved.createName, {
-          approved: pending && pending.approved === true,
-          taskState: pending && pending.taskState,
-          taskStepIndex: pending && pending.taskStepIndex,
-          continuation: pending && pending.continuation,
-          sourceUserText: pending && pending.sourceUserText,
-        });
-        return {
-          handled: true,
-          text: buildExecTransferCreateVersionConfirmText({
-            name: pending.name || '',
-            projectName: pending.projectName || '',
-            requestedVersionName: resolved.createName,
-          }),
-          messageOptions: {
-            taskState: buildExecTransferPendingTaskState(pendingExecTransferVersionSelection || pending, 'waiting', '等待你确认是否新建执行版本。'),
-          },
-        };
-      }
-      if (!resolved.invalid) return null;
-      return {
-        handled: true,
-        text: resolved.response || buildExecTransferVersionSelectionRetryText(),
-        messageOptions: {
-          taskState: buildExecTransferPendingTaskState(pending, 'waiting', '等待你重新选择执行版本。'),
-        },
-      };
-    }
-    return continueExecTransferWithVersionSelection(pending, resolved.version, {
-      onTaskStateChange: opts.onTaskStateChange,
-      sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
-    });
-  }
-
-  async function tryHandlePendingExecTransferSelectionIntent(text, options) {
-    var opts = options && typeof options === 'object' ? options : {};
-    var pending = null;
-    var resolved = null;
-    var nextContinuation = null;
-    var continuedPending = null;
-    var runResult = null;
-    var replyText = '';
-    var followPending = null;
-    var autoVersionReply = null;
-    var plannedTransferArgs = null;
-    var requestedVersionName = '';
-    if (!pendingExecTransferSelection || !pendingExecTransferSelection.items || !pendingExecTransferSelection.items.length) return null;
-    resolved = resolvePendingExecTransferCandidate(text);
-    if (!resolved) return null;
-    if (resolved.cancelled === true) {
-      var cancelledPending = pendingExecTransferSelection;
-      clearPendingExecTransferSelection();
-      return {
-        handled: true,
-        text: '已取消本次转执行选择。',
-        messageOptions: {
-          taskState: buildExecTransferPendingTaskState(cancelledPending, 'cancelled', '任务已取消。'),
-        },
-      };
-    }
-    if (!resolved.candidate) {
-      if (!resolved.invalid) return null;
-      return {
-        handled: true,
-        text: '未识别到有效候选，请回复“选第1个”或直接回复候选名。',
-        messageOptions: {
-          taskState: buildExecTransferPendingTaskState(pendingExecTransferSelection, 'waiting', '等待你选择目标用例。'),
-        },
-      };
-    }
-    pending = pendingExecTransferSelection;
-    plannedTransferArgs = getPendingExecTransferContinuationStepArgs(pending && pending.continuation, 'case_library.transfer_to_exec');
-    requestedVersionName = plannedTransferArgs && plannedTransferArgs.execVersionName !== undefined && plannedTransferArgs.execVersionName !== null
-      ? String(plannedTransferArgs.execVersionName).trim()
-      : '';
-    nextContinuation = consumeAssistantTaskContinuationStep(pending && pending.continuation, 'case_library.transfer_to_exec');
-    continuedPending = Object.assign({}, pending, {
-      continuation: nextContinuation,
-    });
-    setStatus('正在转到执行...');
-    runResult = await callAssistantMcpToolWithApproval('case_library.transfer_to_exec', {
-      caseFileId: resolved.candidate.id,
-      projectId: resolved.candidate.projectId,
-    }, '转到当前执行');
-    setStatus('');
-    if (!runResult || runResult.ok !== true) {
-      if (runResult && runResult.cancelled === true) {
-        return {
-          handled: true,
-          text: '已取消，本次候选仍保留，你可以继续回复“选第N个”。',
-          messageOptions: {
-            taskState: buildExecTransferPendingTaskState(pending, 'waiting', '任务等待你继续选择目标用例。'),
-          },
-        };
-      }
-      return {
-        handled: true,
-        text: '转到执行失败：' + (runResult && runResult.reason ? String(runResult.reason) : '未知错误'),
-        messageOptions: {
-          taskState: buildExecTransferPendingTaskState(pending, 'blocked', '转到执行失败，任务已中断。'),
-        },
-      };
-    }
-    replyText = handleExecTransferToolData(runResult.data || {}, '', {
-      approved: true,
-      fallbackName: resolved.candidate.name || '目标用例',
-      taskState: pending.taskState,
-      taskStepIndex: pending.taskStepIndex,
-      continuation: nextContinuation,
-      sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
-      requestedVersionName: requestedVersionName,
-    });
-    if (pendingExecTransferVersionSelection) {
-      autoVersionReply = await tryAutoResolvePendingExecTransferVersionFromSource(pendingExecTransferVersionSelection, {
-        onTaskStateChange: opts.onTaskStateChange,
-        sourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
-        requestedVersionName: requestedVersionName,
-      });
-      if (autoVersionReply && autoVersionReply.handled === true) {
-        return autoVersionReply;
-      }
-    }
-    followPending = pendingExecTransferVersionNameClarify || pendingExecTransferCreateVersionConfirm || pendingExecTransferVersionSelection;
-    if (followPending) {
-      return {
-        handled: true,
-        text: replyText,
-        messageOptions: {
-          taskState: buildExecTransferPendingTaskState(followPending, 'waiting', pendingExecTransferVersionNameClarify
-            ? '等待你确认是否按新版本处理。'
-            : (pendingExecTransferCreateVersionConfirm ? '等待你确认是否新建执行版本。' : '等待你选择执行版本。')),
-        },
-      };
-    }
-    return continuePendingExecTransferTask(continuedPending, replyText, {
-      onTaskStateChange: opts.onTaskStateChange,
-    });
-  }
-
   function looksLikeWeatherText(text) {
     var raw = String(text || '').toLowerCase();
     if (!raw) return false;
@@ -4085,18 +4574,6 @@ return lines.join('\n');
     ]);
   }
 
-  function shouldRunIntentClassifier(text) {
-    var raw = String(text || '');
-    if (!raw) return false;
-    var hasNavVerb = containsAny(raw, ['跳转', '打开', '进入', '前往', '去']);
-    var hasQueryVerb = containsAny(raw, ['查看', '查询', '获取', '读取']);
-    var hasQueryTarget = containsAny(raw, ['数据', '状态', '信息', '统计']);
-    if (isCaseListIntent(raw) && isProjectScopedText(raw)) return true;
-    if (hasNavVerb && isProjectScopedText(raw)) return true;
-    if (hasQueryVerb && hasQueryTarget && isProjectScopedText(raw)) return true;
-    return false;
-  }
-
   function getTabLabelById(tabId) {
     var target = tabId === undefined || tabId === null ? '' : String(tabId);
     if (!target) return '';
@@ -4206,6 +4683,7 @@ return lines.join('\n');
     var filterInfo = null;
     var hasFlexibleFilter = false;
     if (!raw) return false;
+    if (parseTempExecReuseUpdateCommand(raw)) return false;
     if (!containsAny(raw, ['用例', 'case'])) return false;
     if (isExplicitExecTransferIntent(raw)) return false;
     if (containsAny(raw, ['用例生成', '生成用例', '删除用例', '修改用例', '编辑用例'])) return false;
@@ -5033,6 +5511,59 @@ return lines.join('\n');
     return text;
   }
 
+  function getVisibleReuseDetailsForAssistantCase(item) {
+    var row = item && typeof item === 'object' ? item : {};
+    return Array.isArray(row.reuseDetails) ? row.reuseDetails.filter(function(detail) {
+      return detail && detail.removed !== true;
+    }) : [];
+  }
+
+  function isAssistantReuseCaseItem(item) {
+    var row = item && typeof item === 'object' ? item : {};
+    if (row.isReuseCase === true) return true;
+    if (Number(row.reuseDetailCount || 0) > 0) return true;
+    return getVisibleReuseDetailsForAssistantCase(row).length > 0;
+  }
+
+  function normalizeAssistantObservedExecutionStatus(rawValue) {
+    var normalized = normalizeCaseActualValueToken(rawValue);
+    if (normalized === '变更重跑' || normalized === '有改动') return '未执行';
+    if (normalized) return normalized;
+    if (rawValue === undefined || rawValue === null) return '';
+    var text = String(rawValue).trim();
+    if (!text) return '';
+    if (text === 'pending') return '未执行';
+    return text;
+  }
+
+  function resolveAssistantReuseAggregateStatus(details) {
+    var visibleDetails = Array.isArray(details) ? details.filter(function(detail) {
+      return detail && detail.removed !== true;
+    }) : [];
+    var passed = 0;
+    var failed = 0;
+    var blocked = 0;
+    var pending = 0;
+    var unspecified = 0;
+    var i = 0;
+    if (!visibleDetails.length) return '未执行';
+    for (i = 0; i < visibleDetails.length; i += 1) {
+      var detail = visibleDetails[i] && typeof visibleDetails[i] === 'object' ? visibleDetails[i] : {};
+      var status = normalizeAssistantObservedExecutionStatus(detail.status);
+      if (status === '通过') passed += 1;
+      else if (status === '失败') failed += 1;
+      else if (status === '阻塞') blocked += 1;
+      else if (status === '不适用') unspecified += 1;
+      else pending += 1;
+    }
+    if (failed) return '失败';
+    if (blocked) return '阻塞';
+    if (pending) return '未执行';
+    if (passed) return '通过';
+    if (unspecified && !passed) return '不适用';
+    return '未执行';
+  }
+
   function resolveCaseExecutionResult(item) {
     var row = item && typeof item === 'object' ? item : {};
     var candidates = [
@@ -5041,10 +5572,13 @@ return lines.join('\n');
       row.status,
       row.result,
     ];
-    for (var i = 0; i < candidates.length; i += 1) {
+    var i = 0;
+    if (isAssistantReuseCaseItem(row)) {
+      return resolveAssistantReuseAggregateStatus(getVisibleReuseDetailsForAssistantCase(row));
+    }
+    for (i = 0; i < candidates.length; i += 1) {
       var value = candidates[i];
-      if (value === undefined || value === null) continue;
-      var text = String(value).trim();
+      var text = normalizeAssistantObservedExecutionStatus(value);
       if (text) return text;
     }
     return '';
@@ -5791,8 +6325,7 @@ return lines.join('\n');
     lines.push(scanLine + '。');
     if (!items.length) {
       if (errorCount > 0) lines.push('另有 ' + errorCount + ' 份用例文件读取失败，结果可能不完整。');
-      return lines.join('\n');
-    }
+  __TMP__    }
     lines.push('命中用例：');
     items.forEach(function(item, index) {
       lines.push(buildCaseLibraryQueryMatchLine(item, index, fullDetail));
@@ -5955,1309 +6488,6 @@ return lines.join('\n');
   }
 
 
-  function normalizeCaseDetailLookupText(value) {
-    return String(value || '').toLowerCase()
-      .replace(/[\s　"'“”‘’《》【】（）()\[\]{}:：,，.。!！?？、;；]/g, '');
-  }
-
-  function extractCaseDetailIdCandidates(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return [];
-    var ids = [];
-    raw.replace(/(?:^|[^a-zA-Z0-9])(?:id|ID)\s*[:：#]?\s*(\d{1,10})/g, function(_, id) {
-      if (ids.indexOf(String(id)) === -1) ids.push(String(id));
-      return _;
-    });
-    return ids;
-  }
-
-  function matchCaseItemsFromReferenceText(items, text) {
-    var list = Array.isArray(items) ? items : [];
-    var raw = String(text || '').trim();
-    if (!raw || !list.length) return [];
-    var ids = extractCaseDetailIdCandidates(raw);
-    if (ids.length) {
-      var byId = list.filter(function(item) {
-        var row = item && typeof item === 'object' ? item : {};
-        var id = row.id === undefined || row.id === null ? '' : String(row.id).trim();
-        return Boolean(id && ids.indexOf(id) !== -1);
-      });
-      if (byId.length) return byId;
-    }
-    var normalizedText = normalizeCaseDetailLookupText(raw);
-    if (!normalizedText) return [];
-    return list.filter(function(item) {
-      var row = item && typeof item === 'object' ? item : {};
-      var title = normalizeCaseDetailLookupText(row.title || '');
-      var moduleTitle = normalizeCaseDetailLookupText((row.module || '') + (row.title || ''));
-      if (!title) return false;
-      if (normalizedText.indexOf(title) !== -1) return true;
-      if (moduleTitle && normalizedText.indexOf(moduleTitle) !== -1) return true;
-      return false;
-    });
-  }
-
-  function shouldRequireSpecificCaseDetailTarget(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return false;
-    if (extractCaseDetailIdCandidates(raw).length) return true;
-    if (containsAny(raw, ['该用例', '这条', '这一条', '这一个用例', '这个用例', '本用例'])) return true;
-    return false;
-  }
-
-  function isCaseDetailClarificationIntent(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return false;
-    if (isCurrentCaseFullDetailIntent(raw)) return false;
-    if (isExplicitExecTransferIntent(raw)) return false;
-    if (isCurrentPageFunctionIntent(raw)) return false;
-    var prevAiText = getLatestAssistantMessageText();
-    if (!prevAiText) return false;
-    if (!containsAny(prevAiText, ['用例 ID', '用例ID', '完整标题', '完整展开', '完整字段', '当前结果里', '前 20 条', 'truncated=true', '请直接给我用例'])) {
-      return false;
-    }
-    if (raw.length > 80) return false;
-    return true;
-  }
-
-  function hasDirectCaseDetailReference(result, userText) {
-    var data = result && typeof result === 'object' ? result : {};
-    var items = Array.isArray(data.items) ? data.items : [];
-    var raw = String(userText || '').trim();
-    var matched = [];
-    if (!raw || !items.length) return false;
-    if (extractCaseDetailIdCandidates(raw).length) return true;
-    if (containsAny(raw, ['该用例', '当前用例', '这个用例', '本用例', '这条', '这一条', '这一个用例'])) return true;
-    matched = matchCaseItemsFromReferenceText(items, raw);
-    return matched.length === 1;
-  }
-
-  function resolveRequestedCaseDetailTarget(result, userText, options) {
-    var data = result && typeof result === 'object' ? result : {};
-    var items = Array.isArray(data.items) ? data.items : [];
-    var opts = options && typeof options === 'object' ? options : {};
-    var texts = [];
-    var currentText = String(userText || '').trim();
-    if (!items.length) return null;
-    if (items.length === 1 && Number(data.total) === 1) {
-      return { item: Object.assign({}, items[0]), reason: 'single-item' };
-    }
-    if (currentText) texts.push(currentText);
-    if (opts.includeConversationContext === true) {
-      var prevUserText = getPreviousUserMessageText(currentText);
-      if (prevUserText) texts.push(prevUserText);
-      var prevAiText = getLatestAssistantMessageText();
-      if (prevAiText) texts.push(prevAiText);
-    }
-    for (var i = 0; i < texts.length; i += 1) {
-      var matched = matchCaseItemsFromReferenceText(items, texts[i]);
-      if (matched.length === 1) {
-        return { item: Object.assign({}, matched[0]), reason: i === 0 ? 'current-text' : (i === 1 ? 'previous-user' : 'previous-ai') };
-      }
-    }
-    return null;
-  }
-
-  function buildCaseDetailTargetMissingText(result, userText) {
-    var data = result && typeof result === 'object' ? result : {};
-    var lines = [];
-    lines.push(buildEditorCaseListTitle(data));
-    var total = Number(data.total);
-    if (!Number.isFinite(total) || total < 0) total = Array.isArray(data.items) ? data.items.length : 0;
-    var raw = String(userText || '').trim();
-    var ids = extractCaseDetailIdCandidates(raw);
-    var label = '';
-    if (ids.length) label = 'ID ' + ids[0];
-    if (!label) {
-      var normalizedText = normalizeCaseDetailLookupText(raw);
-      var items = Array.isArray(data.items) ? data.items : [];
-      for (var i = 0; i < items.length; i += 1) {
-        var row = items[i] && typeof items[i] === 'object' ? items[i] : {};
-        var title = row.title ? String(row.title).trim() : '';
-        if (!title) continue;
-        if (normalizedText && normalizedText.indexOf(normalizeCaseDetailLookupText(title)) !== -1) {
-          label = '标题“' + title + '”';
-          break;
-        }
-      }
-    }
-    if (!label && raw) label = '“' + raw + '”';
-    lines.push('已按当前这份用例的完整条目范围检索' + (label ? ('：' + label) : '') + '。');
-    lines.push('当前同份用例共 ' + total + ' 条，但没有命中目标条目。');
-    lines.push('你可以继续直接发我：1. 用例 ID。2. 完整标题。');
-return lines.join('\n');
-  }
-
-  async function tryHandleCaseDetailClarificationIntent(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return null;
-    if (!isCaseDetailClarificationIntent(raw)) return null;
-    return runModelCaseListAction(raw, {
-      action: 'query_case_list',
-      query: raw,
-      pageScoped: true,
-      scope: 'editor',
-      detailLevel: 'full',
-      limit: 1000,
-    }, '');
-  }
-
-  async function tryHandleCurrentCaseFullDetailIntent(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return null;
-    if (isCaseLibraryContentQueryIntent(raw)) return null;
-    if (!isCurrentCaseFullDetailIntent(raw)) return null;
-    return runModelCaseListAction(raw, {
-      action: 'query_case_list',
-      query: raw,
-      pageScoped: true,
-      scope: 'editor',
-      detailLevel: 'full',
-      limit: 1000,
-    }, '');
-  }
-
-  async function tryHandleCaseLibraryContentQueryIntent(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return null;
-    if (!isCaseLibraryContentQueryIntent(raw)) return null;
-    return runModelCaseLibraryQueryAction(raw, {
-      action: 'query_case_list',
-      query: raw,
-    }, '');
-  }
-
-  async function tryHandleCaseListIntent(text, options) {
-    var raw = String(text || '').trim();
-    var opts = options && typeof options === 'object' ? options : {};
-    if (!raw) return null;
-    if (!opts.force && !isCaseListIntent(raw)) return null;
-    var countOnly = isCaseCountIntent(raw);
-    var filterInfo = extractCaseListFilterInfo(raw);
-    var apis = getApis();
-    if (!apis.assistantApi || typeof apis.assistantApi.listCurrentCases !== 'function') {
-      return '当前环境不支持读取用例列表。';
-    }
-    setStatus('正在获取用例列表...');
-    var res = null;
-    var pageScoped = opts.pageScoped === true || (opts.pageScoped !== false && (isCurrentPageCaseIntent(raw) || shouldPreferCurrentPageScopeForCaseQuery(raw)));
-    var queryLimit = filterInfo && filterInfo.hasFilter ? 1000 : 20;
-    try {
-      res = await apis.assistantApi.listCurrentCases({
-        limit: queryLimit,
-        scope: pageScoped ? 'editor' : 'project',
-        requireEditor: pageScoped,
-      });
-    } catch (err) {
-      res = { ok: false, reason: err && err.message ? String(err.message) : '读取异常' };
-    }
-    if (!res || res.ok !== true) {
-      setStatus('用例列表获取失败');
-      return '获取用例列表失败：' + (res && res.reason ? res.reason : '未知错误');
-    }
-    setStatus('');
-    if (filterInfo && filterInfo.hasFilter) {
-      var scope = res && res.scope ? String(res.scope) : '';
-      if (scope === 'editor' || (res && res.caseFile && typeof res.caseFile === 'object')) {
-        var sourceItems = Array.isArray(res.items) ? res.items : [];
-        var filteredItems = applyCaseListFilter(sourceItems, filterInfo);
-        if (countOnly) {
-          return formatFilteredEditorCaseCountResponse(res, filteredItems, filterInfo);
-        }
-        return formatFilteredEditorCaseListResponse(res, filteredItems, filterInfo);
-      }
-      return '该问题包含条件筛选，但当前结果仅有项目级用例文件列表。请先打开具体用例后再问我。';
-    }
-    if (countOnly) {
-      return formatCaseCountResponse(res);
-    }
-    return formatCaseListResponse(res);
-  }
-
-  function getSafePageDataSnapshot(tabName) {
-    var apis = getApis();
-    if (!apis.assistantApi || typeof apis.assistantApi.getPageData !== 'function') return {};
-    try {
-      return apis.assistantApi.getPageData(tabName || '') || {};
-    } catch (err) {
-      return {};
-    }
-  }
-
-  async function finalizeRouteReplyByModel(userText, routeName, fallbackText, routeData, options) {
-    var fallback = fallbackText === undefined || fallbackText === null ? '' : String(fallbackText).trim();
-    var name = routeName === undefined || routeName === null ? '' : String(routeName).trim();
-    var data = routeData && typeof routeData === 'object' ? routeData : {};
-    var opts = options && typeof options === 'object' ? options : {};
-    var apis = getApis();
-    var payload = null;
-    var prompt = '';
-    var history = null;
-    var res = null;
-    var text = '';
-    var scaffoldText = '';
-    if (!fallback) return '';
-    if (opts.skipModel === true) return fallback;
-    if (!apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return fallback;
-    payload = {
-      userQuestion: String(userText || ''),
-      routeName: name,
-      routeData: data,
-      fallbackText: fallback,
-    };
-    prompt = [
-      '你是测试助手平台的最终回答整理助手。',
-      '系统已经完成意图识别，并提供了可靠的路由结果与兜底文本。',
-      '请基于用户问题、路由结果和兜底文本，给出最终回答。',
-      '回答规则：',
-      '- 优先保留已有事实，不要编造，不要忽略路由结果。',
-      '- 是否使用列表、表格、说明段落，由你自行判断。',
-      '- 若平台已有合适展示手脚架，可直接输出单个 MCP JSON 调用 assistant.render_scaffold；若没有必要就直接自然语言/Markdown 回答。',
-      '- 不要重复输出同一份列表、表格或结论。',
-      '- 不要把页面功能介绍误判成用例检索，也不要要求用户补充无关的用例 ID 或完整标题。',
-      '- 对写操作类结果，只能复述已执行/已确认的结果，不能假装再次执行。',
-      '- 如果兜底文本已经足够清晰，可以直接沿用或轻微润色。',
-      '- 输出中文自然语言，可用 Markdown；若输出 JSON，必须只输出一个 JSON 对象。',
-    ].join('\n');
-    history = buildConversationHistory(6, userText);
-    try {
-      res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
-        prompt: buildConversationPromptWithPriority(prompt, userText),
-        temperature: 0.1,
-        history: history,
-      });
-    } catch (err) {
-      res = { ok: false, reason: err && err.message ? String(err.message) : '最终整理异常' };
-    }
-    if (!res || res.ok !== true || !res.content) return fallback;
-    text = String(res.content || '').trim();
-    if (!text) return fallback;
-    scaffoldText = await tryExecuteSummaryScaffoldReply(userText, text, '', {}, data, fallback);
-    if (scaffoldText) return scaffoldText;
-    if (parseJsonObjectFromText(text)) return fallback;
-    return text;
-  }
-
-  function buildCurrentPageFunctionFallbackText(pageData) {
-    var data = pageData && typeof pageData === 'object' ? pageData : {};
-    var tab = data.tab ? String(data.tab) : '';
-    var tabLabel = getTabLabelById(tab);
-    var hints = getTabOperationHints(tab);
-    var fileName = getPageFileName();
-    var lines = [];
-    var currentCaseContext = data.currentCaseContext && typeof data.currentCaseContext === 'object'
-      ? data.currentCaseContext
-      : null;
-    if (tabLabel && tab) lines.push('当前页面是“' + tabLabel + '”（' + tab + '）。');
-    else if (tabLabel) lines.push('当前页面是“' + tabLabel + '”。');
-    else if (tab) lines.push('当前页面标识：' + tab + '。');
-    else lines.push('当前页面信息暂不可用。');
-    if (fileName) lines.push('页面文件：' + fileName + '。');
-    if (Array.isArray(hints) && hints.length) {
-      lines.push('这个页面主要支持：');
-      for (var i = 0; i < hints.length; i += 1) {
-        lines.push((i + 1) + '. ' + hints[i]);
-      }
-    }
-    if (currentCaseContext && currentCaseContext.fileName) {
-      var contextLine = currentCaseContext.contextSource === 'tempexec' ? '当前正在查看执行用例：' : '当前正在编辑用例：';
-      contextLine += '《' + String(currentCaseContext.fileName) + '》';
-      if (Number(currentCaseContext.totalAll) > 0) {
-        contextLine += '，共 ' + Number(currentCaseContext.totalAll) + ' 条';
-      }
-      lines.push(contextLine + '。');
-    }
-return lines.join('\n');
-  }
-
-  async function tryHandleCurrentPageFunctionIntent(text) {
-    var raw = String(text || '').trim();
-    var pageData = null;
-    var fallback = '';
-    if (!raw) return null;
-    if (!isCurrentPageFunctionIntent(raw)) return null;
-    pageData = getSafePageDataSnapshot('');
-    fallback = buildCurrentPageFunctionFallbackText(pageData);
-    return finalizeRouteReplyByModel(raw, 'current_page_function', fallback, {
-      pageData: pageData,
-      pageFileName: getPageFileName(),
-      operationHints: getTabOperationHints(pageData && pageData.tab ? String(pageData.tab) : ''),
-    }, {});
-  }
-
-  function tryHandleCurrentPageIntent(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return null;
-    if (isCurrentPageFunctionIntent(raw)) return null;
-    if (isCaseListIntent(raw)) return null;
-    if (containsAny(raw, ['用例']) && containsAny(raw, ['有什么', '有啥', '什么', '哪些', '有哪些', '列表', '清单', '多少'])) return null;
-    var askCurrentPage = containsAny(raw, [
-      '什么页面',
-      '哪个页面',
-      '当前页面',
-      '现在页面',
-      '当前页签',
-      '现在页签',
-      '在哪个页面',
-      '在哪个页签',
-    ]);
-    if (!askCurrentPage) {
-      if (!containsAny(raw, ['当前', '现在', '在哪'])) return null;
-      if (!containsAny(raw, ['页面', '页签', 'tab'])) return null;
-    }
-    var apis = getApis();
-    var data = null;
-    if (apis.assistantApi && typeof apis.assistantApi.getPageData === 'function') {
-      data = apis.assistantApi.getPageData('');
-    }
-    var tab = data && data.tab ? String(data.tab) : '';
-    var tabLabel = getTabLabelById(tab);
-    var fileName = getPageFileName();
-    var askOperations = containsAny(raw, [
-      '能做什么',
-      '可以做什么',
-      '可做什么',
-      '有什么操作',
-      '能做什么操作',
-      '可执行',
-      '支持什么',
-    ]);
-    var lines = [];
-    if (tabLabel && tab) {
-      lines.push('当前页面是：' + tabLabel + '（' + tab + '）');
-    } else if (tabLabel) {
-      lines.push('当前页面是：' + tabLabel);
-    } else if (tab) {
-      lines.push('当前页面是：' + tab);
-    } else {
-      lines.push('当前页面信息暂不可用。');
-    }
-    if (fileName) {
-      lines.push('页面文件：' + fileName);
-    }
-    if (askOperations) {
-      var hints = getTabOperationHints(tab);
-      lines.push('当前页面可执行操作：');
-      for (var i = 0; i < hints.length; i += 1) {
-        lines.push((i + 1) + '. ' + hints[i]);
-      }
-    }
-return lines.join('\n');
-  }
-
-  function tryHandleNavigationIntent(text) {
-    var raw = String(text || '');
-    if (!containsAny(raw, ['跳转', '打开', '进入', '前往', '去'])) return null;
-    var tab = parseTabFromText(raw);
-    if (!tab) return null;
-    var apis = getApis();
-    if (apis.assistantApi && typeof apis.assistantApi.switchTab === 'function') {
-      apis.assistantApi.switchTab(tab);
-      return '已跳转到页面：' + tab;
-    }
-    return '页面跳转能力暂不可用';
-  }
-
-  function tryHandleQueryIntent(text) {
-    var raw = String(text || '');
-    if (!containsAny(raw, ['查看', '查询', '获取', '读取'])) return null;
-    if (!containsAny(raw, ['数据', '状态', '信息', '统计'])) return null;
-    if (!isProjectScopedText(raw)) return null;
-    var tab = parseTabFromText(raw);
-    var apis = getApis();
-    if (!apis.assistantApi || typeof apis.assistantApi.getPageData !== 'function') {
-      return '页面数据查询能力暂不可用';
-    }
-    var data = apis.assistantApi.getPageData(tab || '');
-    return '页面数据如下：\n' + formatJsonCompact(data);
-  }
-
-  async function tryHandleTempExecFileIntent(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return null;
-    if (!isTempExecNextFileIntent(raw)) return null;
-    var snapshot = getTempExecNextFileSnapshot();
-    if (!snapshot || snapshot.ok !== true) {
-      return snapshot && snapshot.reason ? String(snapshot.reason) : '当前没有执行用例文件。';
-    }
-
-    var isCheck = isTempExecNextFileCheckIntent(raw);
-    var hasSwitchVerb = containsAny(raw, ['切换', '切到', '跳到', '打开', '前往', '进入', '去', '换到']);
-    var shouldSwitch = hasSwitchVerb || !isCheck;
-    if (!shouldSwitch) {
-      if (!snapshot.hasNext) {
-        return '没有下一份执行用例。当前仅有 1 份：' + snapshot.currentName + '。';
-      }
-      return '有下一份执行用例：' + snapshot.nextName + '（共 ' + snapshot.total + ' 份，当前第 ' + (snapshot.currentIndex + 1) + ' 份）。';
-    }
-
-    if (!snapshot.hasNext) {
-      return '没有下一份执行用例可切换，当前仅有 1 份：' + snapshot.currentName + '。';
-    }
-
-    var apis = getApis();
-    if (apis.assistantMcpApi && typeof apis.assistantMcpApi.callTool === 'function') {
-      var mcpRes = null;
-      try {
-        mcpRes = await apis.assistantMcpApi.callTool('tempexec.next_file', {});
-      } catch (err) {
-        mcpRes = { ok: false, reason: err && err.message ? String(err.message) : '切换异常' };
-      }
-      if (!mcpRes || mcpRes.ok !== true) {
-        return '切换下一份执行用例失败：' + (mcpRes && mcpRes.reason ? String(mcpRes.reason) : '未知错误');
-      }
-      var data = mcpRes.data && typeof mcpRes.data === 'object' ? mcpRes.data : {};
-      var switchedName = data.fileName ? String(data.fileName) : '';
-      return '已切换到下一份用例：' + (switchedName || snapshot.nextName || '目标用例');
-    }
-
-    var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
-    if (tempApi && typeof tempApi.setTempExecActive === 'function') {
-      try {
-        tempApi.setTempExecActive(snapshot.nextId);
-      } catch (err2) {
-        return '切换下一份执行用例失败：' + (err2 && err2.message ? String(err2.message) : '未知错误');
-      }
-      return '已切换到下一份用例：' + (snapshot.nextName || '目标用例');
-    }
-
-    return '当前页面不支持切换执行用例。';
-  }
-
-  async function tryHandleCaseHistoryIntent(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return null;
-    if (!looksLikeCaseHistoryIntent(raw)) return null;
-    var apis = getApis();
-    if (!apis.assistantApi || typeof apis.assistantApi.getPageData !== 'function') {
-      return '当前环境不支持读取页面变更内容。';
-    }
-    var pageData = null;
-    try {
-      pageData = apis.assistantApi.getPageData('');
-    } catch (err) {
-      pageData = null;
-    }
-    var summarized = await summarizeCaseChangePageData(raw, pageData || {}, '');
-    if (summarized) return summarized;
-    return buildCaseChangeNoContextText(pageData || {});
-  }
-
-  function extractMemoText(raw) {
-    var text = String(raw || '').trim();
-    var match = text.match(/(?:新增|添加|记录|记下)\s*备忘[:：]?\s*(.+)$/);
-    if (!match) {
-      match = text.match(/备忘(?:新增|添加|记录|记下)?[:：]?\s*(.+)$/);
-    }
-    if (!match) return '';
-    return match[1] ? String(match[1]).trim() : '';
-  }
-
-  function toPositiveInt(value, fallback) {
-    var num = Number(value);
-    if (!Number.isFinite(num) || num <= 0) {
-      num = Number(fallback);
-    }
-    if (!Number.isFinite(num) || num <= 0) num = 1;
-    return Math.max(1, Math.floor(num));
-  }
-
-  function formatMemoListText(tabs) {
-    var list = Array.isArray(tabs) ? tabs : [];
-    if (!list.length) return '当前没有备忘内容。';
-    var lines = [];
-    list.forEach(function(tab) {
-      var section = tab && typeof tab === 'object' ? tab : {};
-      var prefix = section.isActive ? '[当前页签]' : '[页签]';
-      lines.push(prefix + (section.name || '未命名'));
-      var items = Array.isArray(section.items) ? section.items : [];
-      items.forEach(function(item) {
-        var row = item && typeof item === 'object' ? item : {};
-        var mark = row.done ? '已完成' : '待办';
-        lines.push('  ' + (row.index || 1) + '. (' + mark + ') ' + (row.text || ''));
-      });
-    });
-return lines.join('\n');
-  }
-
-  function getMutationActionLabel(actionName, meta) {
-    var action = String(actionName || '').trim();
-    var payload = meta && typeof meta === 'object' ? meta : {};
-    if (action === 'memo_add') return '新增备忘';
-    if (action === 'memo_toggle') return '更新备忘完成状态';
-    if (action === 'memo_remove') return '删除备忘';
-    if (action === 'settings_patch') return '修改设置';
-    if (action === 'update_case' || action === 'case.update' || action === 'case_update') return '修改用例';
-    if (action === 'case_library.batch_update_exec_results') return '修改用例执行结果（批量）';
-    if (action === 'case_library.batch_archive_exec_cases') return '归档当前执行用例';
-    if (action === 'tempexec.remove_files') return '移出执行用例';
-    if (action === 'ui.click_control') {
-      var inspectText = [
-        payload.controlId,
-        payload.controlText,
-        payload.text,
-        payload.label,
-        payload.name,
-        payload.query,
-      ].join(' ');
-      if (containsAny(inspectText, ['归档', 'archive'])) return '归档当前执行用例';
-      return '点击控件';
-    }
-    if (action === 'run_case_generation') return '触发用例生成';
-    if (action === 'run_missing_recommendation') return '触发漏测推荐';
-    if (action === 'delete_case') {
-      var idx = toPositiveInt(payload.index, 1);
-      return '删除第 ' + idx + ' 条用例';
-    }
-    return '执行写操作';
-  }
-
-  async function requireDoubleConfirmForAction(actionName, meta) {
-    var action = String(actionName || '').trim();
-    if (!action) return true;
-    var label = getMutationActionLabel(action, meta);
-    return requestAssistantOperationApproval(label, {
-      reason: '当前请求涉及数据写入或状态变更。',
-    });
-  }
-
-  async function tryHandleMemoIntent(text) {
-    var raw = String(text || '').trim();
-    if (raw.indexOf('备忘') === -1) return null;
-    var apis = getApis();
-    if (!apis.assistantApi) return '备忘能力暂不可用';
-
-    if (containsAny(raw, ['查看', '列表', '列出'])) {
-      if (typeof apis.assistantApi.memoList !== 'function') return '备忘能力暂不可用';
-      return formatMemoListText(apis.assistantApi.memoList() || []);
-    }
-
-    if (containsAny(raw, ['完成', '勾选']) && /\d+/.test(raw)) {
-      if (typeof apis.assistantApi.memoToggle !== 'function') return '备忘能力暂不可用';
-      var doneIndex = Number((raw.match(/\d+/) || [0])[0]);
-      if (!await requireDoubleConfirmForAction('memo_toggle', { index: doneIndex })) return '已取消。';
-      var doneRes = apis.assistantApi.memoToggle('', doneIndex, true);
-      return doneRes && doneRes.ok ? ('已将备忘第 ' + doneIndex + ' 条标记为完成。') : (doneRes.reason || '标记失败');
-    }
-
-    if (containsAny(raw, ['删除', '移除']) && /\d+/.test(raw)) {
-      if (typeof apis.assistantApi.memoRemove !== 'function') return '备忘能力暂不可用';
-      var removeIndex = Number((raw.match(/\d+/) || [0])[0]);
-      if (!await requireDoubleConfirmForAction('memo_remove', { index: removeIndex })) return '已取消。';
-      var removeRes = apis.assistantApi.memoRemove('', removeIndex);
-      return removeRes && removeRes.ok ? ('已删除第 ' + removeIndex + ' 条备忘。') : (removeRes.reason || '删除失败');
-    }
-
-    if (containsAny(raw, ['新增', '添加', '记录', '记下'])) {
-      if (typeof apis.assistantApi.memoAdd !== 'function') return '备忘能力暂不可用';
-      var content = extractMemoText(raw);
-      if (!content) return '请在“新增备忘”后补充具体内容。';
-      if (!await requireDoubleConfirmForAction('memo_add', { text: content })) return '已取消。';
-      var addRes = apis.assistantApi.memoAdd(content, '');
-      return addRes && addRes.ok ? ('已新增备忘：' + content) : (addRes.reason || '新增失败');
-    }
-
-    return '你可以让我：新增备忘、列出备忘、完成备忘、删除备忘。';
-  }
-
-  function normalizeCaseUpdateFieldName(rawField) {
-    var text = rawField === undefined || rawField === null ? '' : String(rawField).trim().toLowerCase();
-    text = text.replace(/\s+/g, '');
-    if (!text) return '';
-    if (text === 'priority' || text === 'level' || text === '优先级') return 'priority';
-    if (text === 'module' || text === '模块') return 'module';
-    if (text === 'title' || text === 'name' || text === '标题' || text === '用例标题') return 'title';
-    if (text === 'precondition' || text === 'preconditions' || text === '前置条件' || text === '前提条件' || text === '前置') return 'precondition';
-    if (text === 'steps' || text === 'step' || text === '步骤' || text === '操作步骤') return 'steps';
-    if (text === 'expected' || text === 'expect' || text === '预期' || text === '预期结果') return 'expected';
-    if (text === 'remark' || text === 'remarks' || text === 'note' || text === 'comment' || text === '备注') return 'remark';
-    if (text === 'actual' || text === 'result' || text === 'status' || text === '执行结果' || text === '状态') return 'actual';
-    return '';
-  }
-
-  function getCaseUpdateFieldAliases(rawField) {
-    var field = normalizeCaseUpdateFieldName(rawField);
-    if (!field) return [];
-    if (field === 'priority') return ['优先级', 'priority', 'level'];
-    if (field === 'module') return ['模块', 'module'];
-    if (field === 'title') return ['标题', '用例标题', 'title', 'name'];
-    if (field === 'precondition') return ['前置条件', '前提条件', '前置', 'precondition', 'preconditions'];
-    if (field === 'steps') return ['步骤', '操作步骤', 'steps'];
-    if (field === 'expected') return ['预期结果', '预期', 'expected'];
-    if (field === 'remark') return ['备注', 'remark', 'note', 'comment'];
-    if (field === 'actual') return ['执行结果', '状态', 'actual', 'result', 'status'];
-    return [];
-  }
-
-  function isCaseUpdateClearableField(rawField) {
-    var field = normalizeCaseUpdateFieldName(rawField);
-    return field === 'module'
-      || field === 'title'
-      || field === 'precondition'
-      || field === 'preconditions'
-      || field === 'steps'
-      || field === 'expected'
-      || field === 'remark';
-  }
-
-  function detectCaseUpdateClearIntent(raw, field) {
-    var text = String(raw || '');
-    if (!text) return false;
-    if (!/(?:清空|清除|移除|删除|去掉|取消|置空)/.test(text)) return false;
-    var aliases = getCaseUpdateFieldAliases(field);
-    if (!aliases.length) return false;
-    for (var i = 0; i < aliases.length; i += 1) {
-      var alias = String(aliases[i] || '');
-      if (alias && text.toLowerCase().indexOf(alias.toLowerCase()) !== -1) return true;
-    }
-    return false;
-  }
-
-  function normalizeCaseActualValueToken(rawValue) {
-    var raw = rawValue === undefined || rawValue === null ? '' : String(rawValue).trim();
-    if (!raw) return '';
-    var compact = raw.toLowerCase().replace(/\s+/g, '');
-    var map = {
-      '未执行': '未执行',
-      '待执行': '未执行',
-      'pending': '未执行',
-      'notrun': '未执行',
-      '未测': '未执行',
-      '通过': '通过',
-      '成功': '通过',
-      'pass': '通过',
-      'passed': '通过',
-      'ok': '通过',
-      '失败': '失败',
-      '不通过': '失败',
-      'fail': '失败',
-      'failed': '失败',
-      'error': '失败',
-      '阻塞': '阻塞',
-      'blocked': '阻塞',
-      'block': '阻塞',
-      '不适用': '不适用',
-      'na': '不适用',
-      'n/a': '不适用',
-      'skip': '不适用',
-      'skipped': '不适用',
-      '变更重跑': '变更重跑',
-      '有改动': '有改动',
-    };
-    if (Object.prototype.hasOwnProperty.call(map, compact)) return map[compact];
-    return '';
-  }
-
-  function detectCaseUpdateFieldFromText(raw) {
-    var text = String(raw || '');
-    var map = [
-      { keys: ['优先级', 'priority', 'level'], field: 'priority' },
-      { keys: ['模块', 'module'], field: 'module' },
-      { keys: ['标题', '用例标题', 'title', 'name'], field: 'title' },
-      { keys: ['前置条件', '前提条件', '前置', 'precondition', 'preconditions'], field: 'precondition' },
-      { keys: ['步骤', '操作步骤', 'steps'], field: 'steps' },
-      { keys: ['预期结果', '预期', 'expected'], field: 'expected' },
-      { keys: ['执行结果', '状态', 'actual', 'result', 'status'], field: 'actual' },
-      { keys: ['备注', 'remark', 'note', 'comment'], field: 'remark' },
-    ];
-    for (var i = 0; i < map.length; i += 1) {
-      var item = map[i];
-      for (var j = 0; j < item.keys.length; j += 1) {
-        var key = item.keys[j];
-        if (String(text).toLowerCase().indexOf(String(key).toLowerCase()) !== -1) return item.field;
-      }
-    }
-    return '';
-  }
-
-  function extractCaseUpdateTargetIndex(raw) {
-    var text = String(raw || '');
-    var m = text.match(/第\s*(\d+)\s*条/);
-    if (!m) return 0;
-    var n = Number(m[1]);
-    if (!Number.isFinite(n) || n <= 0) return 0;
-    return Math.floor(n);
-  }
-
-  function stripWrappedQuotes(text) {
-    var value = String(text || '').trim();
-    if (!value) return '';
-    value = value.replace(/^[“"'`]+/, '').replace(/[”"'`]+$/, '').trim();
-    return value;
-  }
-
-  function escapeRegexToken(raw) {
-    var text = raw === undefined || raw === null ? '' : String(raw);
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  function extractCaseUpdateValue(raw, field) {
-    var text = String(raw || '').trim();
-    var normalizedField = normalizeCaseUpdateFieldName(field);
-    if (!text || !normalizedField) return '';
-    if (normalizedField === 'priority') {
-      var pm = text.match(/优先级\s*(?:改成|修改为|改为|设为|设成|设置为|更新为|更新成|调成|调为|调整为|调整成|变为|变成|改到|切到|为|是)\s*([Pp]\s*\d{1,2})/i);
-      if (!pm) pm = text.match(/\b([Pp]\s*\d{1,2})\b/i);
-      if (pm && pm[1]) {
-        var pn = String(pm[1]).toUpperCase().replace(/[^P0-9]/g, '');
-        if (/^P[0-9]{1,2}$/.test(pn)) return pn;
-      }
-    }
-    if (normalizedField === 'actual') {
-      var am = text.match(/(?:执行结果|状态)\s*(?:改成|修改为|改为|改回|设为|设成|设置为|更新为|更新成|变回|变为|变成|切到|调成|调为|调回|调整为|调整成|为|是)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i);
-      if (!am) am = text.match(/(?:变回|变成|变为|设为|设成|改为|改成|改回|调整为|调整成|更新为|更新成|切到|调回|置为|置成|置)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)(?:状态|结果)?/i);
-      if (!am) am = text.match(/(?:全部|所有|全都|批量|统一)(?:的执行结果|执行结果|结果|状态)?[^\n。；;，,]{0,12}?(?:置为|置成|置|改为|改成|改回|设为|设成|设置为|更新为|更新成|变回|变为|变成|切到|调成|调为|调回|调整为|调整成)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i);
-      if (!am) am = text.match(/\b(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)\b/i);
-      if (am && am[1]) {
-        var actualValue = normalizeCaseActualValueToken(am[1]);
-        if (actualValue) return actualValue;
-      }
-    }
-    var connector = text.match(/(?:改成|修改为|改为|改回|设为|设成|设置为|更新为|更新成|改到|调成|调为|调回|调整为|调整成|变为|变成|切到|为|是)\s*([^\n。；;，,]+)$/);
-    if (connector && connector[1]) {
-      var candidate = stripWrappedQuotes(connector[1]);
-      if (normalizedField === 'priority') {
-        var p = candidate.toUpperCase().replace(/[^P0-9]/g, '');
-        if (/^P[0-9]{1,2}$/.test(p)) return p;
-      } else if (candidate) {
-        return candidate;
-      }
-    }
-    var appendConnector = text.match(/(?:拼接上|拼接成|拼接为|拼接|追加上|追加成|追加为|追加|后缀加上|后缀加|后面加上|后面加|前缀加上|前缀加|前面加上|前面加|开头加上|开头加|末尾加上|末尾加|结尾加上|结尾加)\s*([^\n。；;，,]+)$/);
-    if (appendConnector && appendConnector[1]) {
-      var appendValue = stripWrappedQuotes(appendConnector[1]);
-      if (appendValue) return appendValue;
-    }
-    var fieldAliases = getCaseUpdateFieldAliases(normalizedField);
-    if (fieldAliases.length) {
-      var escapedAliases = [];
-      for (var i = 0; i < fieldAliases.length; i += 1) {
-        escapedAliases.push(escapeRegexToken(fieldAliases[i]));
-      }
-      var aliasGroup = escapedAliases.join('|');
-      if (aliasGroup) {
-        var fieldAnchored = text.match(new RegExp(
-          '(?:^|\\s|，|,|。|；|;|并且|而且|然后|再|同时|另外|顺便)(?:把|将)?\\s*(?:' + aliasGroup + ')(?:这一栏|这栏|字段|栏位|列|项|上|里|中)?\\s*(?:[:：]|[，,]|是|为|写成|写为|写|填成|填为|填|加上|加|追加|补充|改成|改为|设为|设成|更新为|更新成)?\\s*([^\\n。；;]+)$',
-          'i'
-        ));
-        if (fieldAnchored && fieldAnchored[1]) {
-          var anchoredValue = stripWrappedQuotes(fieldAnchored[1]);
-          anchoredValue = anchoredValue.replace(/^(?:是|为|写成|写为|写|填成|填为|填|加上|加|追加|补充|改成|改为|改回|设为|设成|更新为|更新成|调回)\s*/i, '').trim();
-          if (normalizedField === 'priority') {
-            var p2 = anchoredValue.toUpperCase().replace(/[^P0-9]/g, '');
-            if (/^P[0-9]{1,2}$/.test(p2)) return p2;
-          } else if (anchoredValue) {
-            return anchoredValue;
-          }
-        }
-      }
-    }
-    if (normalizedField === 'actual') {
-      var compactActual = normalizeCaseActualValueToken(text);
-      if (compactActual) return compactActual;
-    }
-    var quoted = text.match(/[“"']([^“”"']+)[”"']/);
-    if (quoted && quoted[1]) return String(quoted[1]).trim();
-    return '';
-  }
-
-  function detectCaseUpdateOperationFromText(raw) {
-    var text = String(raw || '');
-    if (!text) return 'replace';
-    if (containsAny(text, ['拼接', '追加', '后缀', '后面加', '后面拼', '末尾加', '结尾加', '尾部加'])) return 'append';
-    if (containsAny(text, ['前缀', '前面加', '前面拼', '开头加', '头部加'])) return 'prepend';
-    return 'replace';
-  }
-
-  function detectCaseUpdateScopeFromText(raw) {
-    var text = String(raw || '');
-    if (!text) return '';
-    if (containsAny(text, ['全部用例', '所有用例', '全部条目', '所有条目', '全部记录', '所有记录', '全量用例', '全部都'])) return 'all';
-    if (containsAny(text, ['全部', '所有', '全都']) && containsAny(text, ['用例', '条目', '记录'])) return 'all';
-    if (/(?:把|将).*(?:都改|都设|都更新|全改|全设|全部改|全部设)/.test(text)) return 'all';
-    return '';
-  }
-
-  function containsCaseUpdateActionVerb(raw) {
-    var text = String(raw || '').trim();
-    if (!text) return false;
-    return containsAny(text, [
-      '改成', '修改为', '改为', '改回', '设为', '设成', '设置为', '更新为', '更新成',
-      '修改', '编辑', '调成', '调为', '调回', '调整为', '调整成', '变为', '变成', '变回',
-      '改到', '切到', '切回', '恢复为', '恢复成', '恢复到',
-      '拼接', '追加', '后缀', '前缀', '后面加', '前面加', '开头加', '末尾加', '结尾加',
-      '清空', '清除', '删除', '移除', '去掉', '置空'
-    ]);
-  }
-
-  function isLikelyCaseUpdateIntent(raw) {
-    var text = String(raw || '').trim();
-    var field = '';
-    var hasCaseContextWord = false;
-    var hasRecognizableValue = false;
-    var index = 0;
-    var scope = '';
-    var apis = null;
-    var tab = '';
-    if (!text) return false;
-    if (!containsCaseUpdateActionVerb(text)) return false;
-    if (containsAny(text, ['怎么改', '如何改', '怎么修改', '如何修改', '修改步骤', '修改方法', '编辑方法', '怎么编辑', '如何编辑'])) return false;
-    field = detectCaseUpdateFieldFromText(text);
-    hasCaseContextWord = containsAny(text, ['用例', '该用例', '当前用例', '这条', '当前行', '本条']);
-    hasRecognizableValue = /\b[Pp]\s*\d{1,2}\b/.test(text)
-      || /(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i.test(text);
-    index = extractCaseUpdateTargetIndex(text);
-    scope = detectCaseUpdateScopeFromText(text);
-    if (!field && !hasRecognizableValue && index <= 0 && !scope) return false;
-    if (hasCaseContextWord) return true;
-    apis = getApis();
-    if (apis.assistantApi && typeof apis.assistantApi.getPageData === 'function') {
-      var pageData = apis.assistantApi.getPageData('');
-      tab = pageData && pageData.tab ? String(pageData.tab) : '';
-    }
-    return tab === 'case-library' || tab === 'tempexec';
-  }
-
-  function shouldPreferModelDrivenCaseUpdateRoute(raw) {
-    var text = String(raw || '').trim();
-    var parsed = null;
-    if (!isLikelyCaseUpdateIntent(text)) return false;
-    parsed = parseCaseUpdateCommand(text);
-    if (!parsed) return true;
-    if (containsAny(text, ['改回', '调回', '变回', '切回', '恢复为', '恢复成', '恢复到'])) return true;
-    if (!parsed.value && parsed.clear !== true) return true;
-    return false;
-  }
-
-  function parseCaseUpdateCommand(raw) {
-    var text = String(raw || '').trim();
-    if (!text) return null;
-    if (!containsCaseUpdateActionVerb(text)) return null;
-    var field = detectCaseUpdateFieldFromText(text);
-    if (!field) return null;
-    var hasCaseContextWord = containsAny(text, ['用例', '该用例', '当前用例', '这条', '当前行', '本条']);
-    if (!hasCaseContextWord) {
-      var apis = getApis();
-      var tab = '';
-      if (apis.assistantApi && typeof apis.assistantApi.getPageData === 'function') {
-        var pageData = apis.assistantApi.getPageData('');
-        tab = pageData && pageData.tab ? String(pageData.tab) : '';
-      }
-      if (tab !== 'case-library' && tab !== 'tempexec') return null;
-    }
-    var clearIntent = detectCaseUpdateClearIntent(text, field) && isCaseUpdateClearableField(field);
-    var value = extractCaseUpdateValue(text, field);
-    if (!value && !clearIntent) return null;
-    var index = extractCaseUpdateTargetIndex(text);
-    var operation = detectCaseUpdateOperationFromText(text);
-    var scope = detectCaseUpdateScopeFromText(text);
-    if (index > 0) scope = 'single';
-    return {
-      field: field,
-      value: value,
-      index: index,
-      operation: operation,
-      scope: scope || 'single',
-      clear: clearIntent === true,
-    };
-  }
-
-  function collectAssistantTaskIntentDomains(text) {
-    var raw = String(text || '').trim();
-    var domains = [];
-    var caseUpdate = null;
-    function pushDomain(name) {
-      if (!name) return;
-      if (domains.indexOf(name) !== -1) return;
-      domains.push(name);
-    }
-    if (!raw) return domains;
-    if (isExplicitExecTransferIntent(raw)) pushDomain('exec_transfer');
-    caseUpdate = parseCaseUpdateCommand(raw);
-    if (caseUpdate || isLikelyCaseUpdateIntent(raw)) pushDomain('case_update');
-    if (isExecArchiveIntent(raw)) pushDomain('archive');
-    if (isCaseLibraryContentQueryIntent(raw)) pushDomain('case_library_query');
-    return domains;
-  }
-
-  function hasCompositeTaskConnector(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return false;
-    if (containsAny(raw, ['并把', '并将', '并且', '而且', '同时', '然后', '接着', '顺便', '另外', '之后', '后再'])) return true;
-    if (containsAny(raw, ['且']) && (containsAny(raw, ['用例', '执行', '归档', '版本']) || raw.indexOf('，') !== -1 || raw.indexOf(',') !== -1)) return true;
-    if (/先.+再/.test(raw)) return true;
-    if (/(?:转到|转入|加入|添加到|放到|放入|导入到|移到|同步到).+(?:改成|修改为|改为|设为|设成|更新为|更新成|归档)/.test(raw)) return true;
-    if (/(?:改成|修改为|改为|设为|设成|更新为|更新成).+归档/.test(raw)) return true;
-    return false;
-  }
-
-  function shouldPreferModelDrivenTaskRoute(text) {
-    var domains = collectAssistantTaskIntentDomains(text);
-    if (domains.length < 2) return false;
-    return hasCompositeTaskConnector(text);
-  }
-
-  function detectImplicitActualBulkUpdate(raw) {
-    var text = String(raw || '').trim();
-    var actualValue = '';
-    if (!text) return null;
-    if (!containsAny(text, ['全部', '所有', '全都', '批量', '统一'])) return null;
-    if (!containsAny(text, ['置', '改', '设', '更新', '调整', '变', '切'])) return null;
-    actualValue = extractCaseUpdateValue(text, 'actual');
-    if (!actualValue) return null;
-    return {
-      field: 'actual',
-      value: actualValue,
-      scope: 'all',
-    };
-  }
-
-  function inferCaseUpdateArgsFromText(baseArgs, rawText) {
-    var args = baseArgs && typeof baseArgs === 'object' ? Object.assign({}, baseArgs) : {};
-    var raw = String(rawText || '');
-    var fieldRaw = '';
-    if (args.field !== undefined && args.field !== null) fieldRaw = String(args.field);
-    if (!fieldRaw && args.key !== undefined && args.key !== null) fieldRaw = String(args.key);
-    if (!fieldRaw && args.column !== undefined && args.column !== null) fieldRaw = String(args.column);
-    if (!fieldRaw && args.name !== undefined && args.name !== null) fieldRaw = String(args.name);
-    var field = normalizeCaseUpdateFieldName(fieldRaw);
-    var implicitActual = null;
-    if (!field) field = detectCaseUpdateFieldFromText(raw);
-    if (!field) {
-      implicitActual = detectImplicitActualBulkUpdate(raw);
-      if (implicitActual && implicitActual.field) field = implicitActual.field;
-    }
-    if (field) args.field = field;
-    var clearIntent = field && detectCaseUpdateClearIntent(raw, field) && isCaseUpdateClearableField(field);
-    if (!clearIntent && field && isCaseUpdateClearableField(field) && (args.clear === true || String(args.mode || '').toLowerCase() === 'clear')) {
-      clearIntent = true;
-    }
-
-    var valueRaw = args.value;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && args.to !== undefined && args.to !== null) valueRaw = args.to;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && args.text !== undefined && args.text !== null) valueRaw = args.text;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && args.content !== undefined && args.content !== null) valueRaw = args.content;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && args.newValue !== undefined && args.newValue !== null) valueRaw = args.newValue;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && field) {
-      valueRaw = extractCaseUpdateValue(raw, field);
-    }
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && implicitActual && implicitActual.value) {
-      valueRaw = implicitActual.value;
-    }
-    if (valueRaw !== undefined && valueRaw !== null && String(valueRaw).trim() !== '') {
-      args.value = String(valueRaw).trim();
-    } else if (clearIntent) {
-      args.value = '';
-      args.clear = true;
-    }
-
-    var index = extractCaseUpdateTargetIndex(raw);
-    var indexRaw = args.index;
-    if ((indexRaw === undefined || indexRaw === null) && args.itemIndex !== undefined && args.itemIndex !== null) indexRaw = args.itemIndex;
-    if ((indexRaw === undefined || indexRaw === null) && args.seq !== undefined && args.seq !== null) indexRaw = args.seq;
-    var hasIndex = Number(indexRaw);
-    if ((!Number.isFinite(hasIndex) || hasIndex <= 0) && index > 0) {
-      args.index = index;
-    }
-
-    var scopeRaw = '';
-    if (args.scope !== undefined && args.scope !== null) scopeRaw = String(args.scope).trim().toLowerCase();
-    if (!scopeRaw && args.target !== undefined && args.target !== null) scopeRaw = String(args.target).trim().toLowerCase();
-    if (!scopeRaw && args.range !== undefined && args.range !== null) scopeRaw = String(args.range).trim().toLowerCase();
-    if (!scopeRaw && (args.all === true || args.applyAll === true || args.batch === true)) scopeRaw = 'all';
-    if (scopeRaw !== 'all' && scopeRaw !== 'single') {
-      scopeRaw = detectCaseUpdateScopeFromText(raw) || '';
-    }
-    if (!scopeRaw && implicitActual && implicitActual.scope) scopeRaw = implicitActual.scope;
-    if (Number.isFinite(hasIndex) && hasIndex > 0) scopeRaw = 'single';
-    if (scopeRaw === 'all') {
-      args.scope = 'all';
-      if (Object.prototype.hasOwnProperty.call(args, 'index')) delete args.index;
-    } else if (scopeRaw === 'single') {
-      args.scope = 'single';
-    }
-
-    var contextRaw = '';
-    if (args.context !== undefined && args.context !== null) contextRaw = String(args.context).trim().toLowerCase();
-    if (!contextRaw && args.pageContext !== undefined && args.pageContext !== null) contextRaw = String(args.pageContext).trim().toLowerCase();
-    if (!contextRaw && args.tab !== undefined && args.tab !== null) {
-      var tabContext = String(args.tab).trim().toLowerCase();
-      if (tabContext === 'tempexec' || tabContext === 'case-library') contextRaw = tabContext;
-    }
-    if (!contextRaw) {
-      if (scopeRaw === 'all' && (field === 'actual' || field === 'remark')) {
-        contextRaw = 'tempexec';
-      } else if (field === 'actual' && containsAny(raw, ['执行', '执行页', '执行用例', '执行列表'])) {
-        contextRaw = 'tempexec';
-      }
-    }
-    if (contextRaw === 'tempexec' || contextRaw === 'case-library') {
-      args.context = contextRaw;
-    }
-
-    var operationRaw = '';
-    if (args.operation !== undefined && args.operation !== null) operationRaw = String(args.operation).trim().toLowerCase();
-    if (!operationRaw && args.mode !== undefined && args.mode !== null) operationRaw = String(args.mode).trim().toLowerCase();
-    if (!operationRaw && args.action !== undefined && args.action !== null) operationRaw = String(args.action).trim().toLowerCase();
-    if (operationRaw !== 'append' && operationRaw !== 'prepend' && operationRaw !== 'replace') {
-      operationRaw = detectCaseUpdateOperationFromText(raw);
-    }
-    if (operationRaw === 'append' || operationRaw === 'prepend' || operationRaw === 'replace') {
-      args.operation = operationRaw;
-    }
-
-    return args;
-  }
-
-  function normalizeCaseUpdateOperationFromArgs(args) {
-    var payload = args && typeof args === 'object' ? args : {};
-    var raw = '';
-    if (payload.operation !== undefined && payload.operation !== null) raw = String(payload.operation).trim().toLowerCase();
-    if (!raw && payload.mode !== undefined && payload.mode !== null) raw = String(payload.mode).trim().toLowerCase();
-    if (!raw && payload.action !== undefined && payload.action !== null) raw = String(payload.action).trim().toLowerCase();
-    if (raw === 'append' || raw === 'prepend' || raw === 'replace') return raw;
-    return '';
-  }
-
-  function rewriteUiFillAsCaseUpdateIfNeeded(tool, args, userText) {
-    if (tool !== 'ui.fill_input') return { tool: tool, args: args, rewritten: false };
-    var source = args && typeof args === 'object' ? Object.assign({}, args) : {};
-    var parsed = parseCaseUpdateCommand(userText);
-    var candidate = {};
-
-    if (parsed && parsed.field) candidate.field = parsed.field;
-    if (parsed && parsed.value !== undefined && parsed.value !== null && String(parsed.value).trim() !== '') {
-      candidate.value = String(parsed.value).trim();
-    }
-    if (parsed && parsed.clear === true) candidate.clear = true;
-    if (parsed && Number(parsed.index) > 0) candidate.index = Number(parsed.index);
-    if (parsed && parsed.operation) candidate.operation = String(parsed.operation);
-    if (parsed && parsed.scope) candidate.scope = String(parsed.scope);
-
-    var fieldRaw = '';
-    if (!candidate.field && source.field !== undefined && source.field !== null) fieldRaw = String(source.field);
-    if (!candidate.field && !fieldRaw && source.key !== undefined && source.key !== null) fieldRaw = String(source.key);
-    if (!candidate.field && !fieldRaw && source.column !== undefined && source.column !== null) fieldRaw = String(source.column);
-    if (!candidate.field && !fieldRaw && source.name !== undefined && source.name !== null) fieldRaw = String(source.name);
-    var normalizedField = normalizeCaseUpdateFieldName(fieldRaw);
-    if (normalizedField) candidate.field = normalizedField;
-
-    var valueRaw = source.value;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.input !== undefined && source.input !== null) valueRaw = source.input;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.content !== undefined && source.content !== null) valueRaw = source.content;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.keyword !== undefined && source.keyword !== null) valueRaw = source.keyword;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.term !== undefined && source.term !== null) valueRaw = source.term;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.query !== undefined && source.query !== null) valueRaw = source.query;
-    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.text !== undefined && source.text !== null) valueRaw = source.text;
-    if ((candidate.value === undefined || candidate.value === null || String(candidate.value).trim() === '') && valueRaw !== undefined && valueRaw !== null && String(valueRaw).trim() !== '') {
-      candidate.value = String(valueRaw).trim();
-    }
-
-    if (candidate.index === undefined || candidate.index === null || Number(candidate.index) <= 0) {
-      var idxRaw = source.index;
-      if ((idxRaw === undefined || idxRaw === null) && source.itemIndex !== undefined && source.itemIndex !== null) idxRaw = source.itemIndex;
-      if ((idxRaw === undefined || idxRaw === null) && source.seq !== undefined && source.seq !== null) idxRaw = source.seq;
-      if ((idxRaw === undefined || idxRaw === null) && source.row !== undefined && source.row !== null) idxRaw = source.row;
-      if ((idxRaw === undefined || idxRaw === null) && source.sourceIndex !== undefined && source.sourceIndex !== null) idxRaw = source.sourceIndex;
-      var idx = Number(idxRaw);
-      if (Number.isFinite(idx) && idx > 0) candidate.index = Math.floor(idx);
-    }
-
-    var op = normalizeCaseUpdateOperationFromArgs(source);
-    if (!op && parsed && parsed.operation) op = String(parsed.operation);
-    if (op) candidate.operation = op;
-
-    if (!candidate.scope) {
-      var sourceScope = '';
-      if (source.scope !== undefined && source.scope !== null) sourceScope = String(source.scope).trim().toLowerCase();
-      if (!sourceScope && source.target !== undefined && source.target !== null) sourceScope = String(source.target).trim().toLowerCase();
-      if (!sourceScope && source.range !== undefined && source.range !== null) sourceScope = String(source.range).trim().toLowerCase();
-      if (!sourceScope && (source.all === true || source.applyAll === true || source.batch === true)) sourceScope = 'all';
-      if (sourceScope === 'all' || sourceScope === 'single') candidate.scope = sourceScope;
-    }
-
-    if (source.context !== undefined && source.context !== null && String(source.context).trim()) {
-      candidate.context = String(source.context).trim();
-    }
-    if (source.fileId !== undefined && source.fileId !== null && String(source.fileId).trim()) {
-      candidate.fileId = String(source.fileId).trim();
-    }
-    if (source.caseFileId !== undefined && source.caseFileId !== null && String(source.caseFileId).trim()) {
-      candidate.fileId = String(source.caseFileId).trim();
-    }
-    if (source.caseId !== undefined && source.caseId !== null && String(source.caseId).trim()) {
-      candidate.fileId = String(source.caseId).trim();
-    }
-
-    candidate = inferCaseUpdateArgsFromText(candidate, userText);
-    if (!candidate.field) return { tool: tool, args: args, rewritten: false };
-    if ((candidate.value === undefined || candidate.value === null || String(candidate.value).trim() === '') && candidate.clear !== true) {
-      return { tool: tool, args: args, rewritten: false };
-    }
-    return { tool: 'case.update', args: candidate, rewritten: true };
-  }
-
-  function rewriteLegacyExecBatchToolIfNeeded(tool, args, userText) {
-    var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
-    var value = '';
-    if (tool === 'case_library.batch_update_exec_results') {
-      if (payload.value !== undefined && payload.value !== null && String(payload.value).trim()) value = String(payload.value).trim();
-      if (!value && payload.result !== undefined && payload.result !== null && String(payload.result).trim()) value = String(payload.result).trim();
-      if (!value && payload.status !== undefined && payload.status !== null && String(payload.status).trim()) value = String(payload.status).trim();
-      if (!value && payload.to !== undefined && payload.to !== null && String(payload.to).trim()) value = String(payload.to).trim();
-      return {
-        tool: 'case.update',
-        args: inferCaseUpdateArgsFromText(Object.assign({
-          context: 'tempexec',
-          scope: 'all',
-          field: 'actual'
-        }, value ? { value: value } : {}, payload), userText),
-        rewritten: true,
-      };
-    }
-    if (tool === 'case_library.batch_archive_exec_cases') {
-      return {
-        tool: tool,
-        args: payload,
-        rewritten: false,
-      };
-    }
-    return { tool: tool, args: payload, rewritten: false };
-  }
-
-  function isAssistantArchiveControlArgs(args) {
-    var payload = args && typeof args === 'object' ? args : {};
-    var inspectText = [
-      payload.controlId,
-      payload.controlText,
-      payload.text,
-      payload.label,
-      payload.name,
-      payload.query,
-    ].join(' ');
-    return containsAny(inspectText, ['归档', 'archive']);
-  }
-
-  function buildAssistantFriendlyTaskLabel(tool, args) {
-    var payload = args && typeof args === 'object' ? args : {};
-    var normalizedField = normalizeCaseUpdateFieldName(payload.field || payload.key || payload.column || payload.name || '');
-    var value = payload.value !== undefined && payload.value !== null ? String(payload.value).trim() : '';
-    var versionText = payload.execVersionName !== undefined && payload.execVersionName !== null && String(payload.execVersionName).trim()
-      ? String(payload.execVersionName).trim()
-      : (payload.versionName !== undefined && payload.versionName !== null && String(payload.versionName).trim()
-        ? String(payload.versionName).trim()
-        : (payload.execVersionId !== undefined && payload.execVersionId !== null && String(payload.execVersionId).trim()
-          ? ('版本 ' + String(payload.execVersionId).trim())
-          : ''));
-    if (tool === 'cases.list_current') {
-      return payload.countOnly === true || payload.count === true
-        ? '统计当前用例数量'
-        : '读取当前用例列表';
-    }
-    if (tool === 'case_library.search_exec_candidates') {
-      return payload.query !== undefined && payload.query !== null && String(payload.query).trim()
-        ? ('搜索要转执行的用例：' + trimAssistantTaskLabelText(String(payload.query).trim(), 24))
-        : '搜索要转执行的用例';
-    }
-    if (tool === 'case_library.transfer_to_exec') {
-      return versionText ? ('把选中的用例转到执行版本：' + trimAssistantTaskLabelText(versionText, 18)) : '把选中的用例转到执行版本';
-    }
-    if (tool === 'case_library.batch_update_exec_results') {
-      return value ? ('把全部执行结果改为' + trimAssistantTaskLabelText(value, 12)) : '批量修改执行结果';
-    }
-    if (tool === 'case_library.batch_archive_exec_cases') {
-      return '归档当前执行用例';
-    }
-    if (tool === 'tempexec.remove_files') {
-      var queryText = payload.query !== undefined && payload.query !== null && String(payload.query).trim()
-        ? String(payload.query).trim()
-        : (payload.keyword !== undefined && payload.keyword !== null && String(payload.keyword).trim()
-          ? String(payload.keyword).trim()
-          : '');
-      return queryText
-        ? ('把匹配“' + trimAssistantTaskLabelText(queryText, 18) + '”的执行用例移出执行')
-        : '移出当前执行用例';
-    }
-    if (tool === 'case.update') {
-      var context = payload.context === undefined || payload.context === null ? '' : String(payload.context).trim().toLowerCase();
-      var scope = payload.scope === undefined || payload.scope === null ? '' : String(payload.scope).trim().toLowerCase();
-      if (scope === 'all' && normalizedField === 'actual') {
-        return value ? ('把全部执行结果改为' + trimAssistantTaskLabelText(value, 12)) : '批量修改执行结果';
-      }
-      if (scope === 'all' && normalizedField === 'remark') {
-        return '批量修改执行备注';
-      }
-      if (scope === 'all' && normalizedField) return '批量修改用例' + buildCaseUpdateFieldLabel(normalizedField);
-      if (context === 'tempexec' && normalizedField === 'actual') {
-        return value ? ('修改用例执行结果为' + trimAssistantTaskLabelText(value, 12)) : '修改用例执行结果';
-      }
-      if (normalizedField) return '修改用例' + buildCaseUpdateFieldLabel(normalizedField);
-      return '修改用例';
-    }
-    if (tool === 'ui.click_control' && isAssistantArchiveControlArgs(payload)) {
-      return '归档当前执行用例';
-    }
-    return '';
-  }
-
-  function buildCaseUpdateFieldLabel(field) {
-    var fieldLabelMap = {
-      module: '模块',
-      title: '标题',
-      priority: '优先级',
-      precondition: '前置条件',
-      preconditions: '前置条件',
-      steps: '步骤',
-      expected: '预期结果',
-      remark: '备注',
-      actual: '执行结果',
-    };
-    return fieldLabelMap[field] || field || '字段';
-  }
-
-  function formatCaseUpdateSuccessText(updateData, fallbackParsed) {
-    var parsed = fallbackParsed && typeof fallbackParsed === 'object' ? fallbackParsed : {};
-    var data = updateData && typeof updateData === 'object' ? updateData : {};
-    var field = data.field ? String(data.field) : (parsed.field ? String(parsed.field) : '');
-    var fieldLabel = buildCaseUpdateFieldLabel(field);
-    var valueRaw = data.value;
-    if (valueRaw === undefined) valueRaw = parsed.value;
-    var value = valueRaw === undefined || valueRaw === null ? '' : String(valueRaw);
-    var idx = toPositiveInt(data.index || parsed.index || 1, 1);
-    var count = Number(data.count);
-    var scope = data.scope ? String(data.scope).toLowerCase() : (parsed.scope ? String(parsed.scope).toLowerCase() : '');
-    var isClear = data.cleared === true || (isCaseUpdateClearableField(field) && value === '');
-    if ((scope === 'all') || (Number.isFinite(count) && count > 1)) {
-      var total = Number.isFinite(count) && count > 0 ? Math.floor(count) : 1;
-      if (isClear) return '已批量修改用例：共 ' + total + ' 条，已清空' + fieldLabel;
-      return '已批量修改用例：共 ' + total + ' 条，' + fieldLabel + ' = ' + value;
-    }
-    if (isClear) return '已修改用例：第 ' + idx + ' 条，已清空' + fieldLabel;
-    return '已修改用例：第 ' + idx + ' 条，' + fieldLabel + ' = ' + value;
-  }
-
-  function formatTempExecRemoveSuccessText(removeData) {
-    var data = removeData && typeof removeData === 'object' ? removeData : {};
-    var count = Number(data.count);
-    var fileLabels = Array.isArray(data.fileLabels) ? data.fileLabels : [];
-    var fileNames = fileLabels.length ? fileLabels : (Array.isArray(data.fileNames) ? data.fileNames : []);
-    var names = fileNames.map(function(item) { return item === undefined || item === null ? '' : String(item).trim(); }).filter(Boolean);
-    var summary = names.slice(0, 3).join('、');
-    if (names.length > 3) summary += ' 等 ' + names.length + ' 份';
-    if (!Number.isFinite(count) || count <= 0) count = names.length || 1;
-    if (!summary && data.query) summary = '关键词“' + String(data.query) + '”';
-    return '已从当前执行移除用例：共 ' + count + ' 份' + (summary ? '，' + summary : '') + '。';
-  }
-
-  function normalizeTempExecRemoveSelectionText(value) {
-    return String(value === undefined || value === null ? '' : value)
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, '')
-      .replace(/[_\-—－]+/g, '')
-      .replace(/[()（）\[\]【】“”"'`]/g, '');
-  }
-
   function buildTempExecRemoveSelectionCandidateLabel(item) {
     var row = item && typeof item === 'object' ? item : {};
     if (row.label && String(row.label).trim()) return String(row.label).trim();
@@ -7270,6 +6500,22 @@ return lines.join('\n');
     else if (versionId) parts.push('版本ID：' + versionId);
     else if (row.id) parts.push('执行ID：' + String(row.id));
     return parts.join('，');
+  }
+
+  function buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType) {
+    var type = selectionType === undefined || selectionType === null ? '' : String(selectionType);
+    if (type === 'detail_choice') return buildTempExecReuseDetailChoiceCandidateLabel(item);
+    return buildTempExecRemoveSelectionCandidateLabel(item);
+  }
+
+  function hasTempExecReuseDetailCaseAggregateOption(items) {
+    var list = Array.isArray(items) ? items : [];
+    return list.some(function(item) {
+      var id = item && item.id ? String(item.id) : '';
+      return id === 'reuse-detail-case:matched_cases'
+        || id === 'reuse-detail-case:selected_cases'
+        || id === 'reuse-detail-case:file_all';
+    });
   }
 
   function rememberTempExecRemoveSelection(result, options) {
@@ -7446,72 +6692,439 @@ return lines.join('\n');
     };
   }
 
-  async function tryHandlePendingTempExecRemoveSelectionIntent(text, options) {
+  function rememberTempExecReuseTargetSelection(result, options) {
+    var data = result && typeof result === 'object' ? result : {};
     var opts = options && typeof options === 'object' ? options : {};
-    var pending = pendingTempExecRemoveSelection;
-    var resolved = null;
-    var selectedItems = [];
-    var removeArgs = null;
-    var nextContinuation = null;
-    var continuedPending = null;
-    var runResult = null;
-    if (!pending || !Array.isArray(pending.items) || !pending.items.length) return null;
-    resolved = resolvePendingTempExecRemoveCandidate(text);
-    if (!resolved) return null;
-    if (resolved.cancelled === true) {
-      var cancelledPending = pendingTempExecRemoveSelection;
-      clearPendingTempExecRemoveSelection();
-      return {
-        handled: true,
-        text: '已取消本次移出执行选择。',
-        messageOptions: {
-          taskState: buildTempExecRemovePendingTaskState(cancelledPending, 'cancelled', '任务已取消。'),
-        },
-      };
+    var items = Array.isArray(data.items) ? data.items : [];
+    var taskStepIndex = Number(opts.taskStepIndex);
+    if (!Number.isFinite(taskStepIndex)) taskStepIndex = -1;
+    if (!items.length || data.selectionRequired !== true) {
+      clearPendingTempExecReuseTargetSelection();
+      return;
     }
-    if (!resolved.items || !resolved.items.length) {
-      if (!resolved.invalid) return null;
-      return {
-        handled: true,
-        text: buildTempExecRemoveSelectionRetryText(),
-        messageOptions: {
-          taskState: buildTempExecRemovePendingTaskState(pending, 'waiting', '等待你确认要移出哪个版本的执行用例。'),
-        },
-      };
-    }
-    selectedItems = resolved.items.slice();
-    removeArgs = resolved.all === true
-      ? { fileIds: selectedItems.map(function(item) { return item.id; }), allowMultiple: true }
-      : { fileId: selectedItems[0].id };
-    nextContinuation = consumeAssistantTaskContinuationStep(pending && pending.continuation, 'tempexec.remove_files');
-    continuedPending = Object.assign({}, pending, {
-      continuation: nextContinuation,
-    });
-    setStatus('正在移出执行...');
-    runResult = await callAssistantMcpToolWithApproval('tempexec.remove_files', removeArgs, selectedItems.length > 1 ? '批量移出执行用例' : '移出执行用例');
-    setStatus('');
-    if (!runResult || runResult.ok !== true) {
-      if (runResult && runResult.cancelled === true) {
+    pendingTempExecReuseTargetSelection = {
+      createdAt: Date.now(),
+      query: data.query ? String(data.query) : '',
+      selectionType: data.selectionType ? String(data.selectionType) : '',
+      actionLabel: data.actionLabel ? String(data.actionLabel) : '复用子项操作',
+      message: data.message ? String(data.message) : '',
+      pendingArgs: data.pendingArgs && typeof data.pendingArgs === 'object' ? Object.assign({}, data.pendingArgs) : {},
+      sourceUserText: opts.sourceUserText !== undefined && opts.sourceUserText !== null ? String(opts.sourceUserText) : '',
+      taskState: cloneAssistantTaskState(opts.taskState),
+      taskStepIndex: taskStepIndex,
+      continuation: cloneAssistantTaskContinuation(opts.continuation),
+      items: items.map(function(item, index) {
+        var row = item && typeof item === 'object' ? item : {};
         return {
-          handled: true,
-          text: '已取消，本次候选仍保留，你可以继续回复“选第1个”或“两份都移除”。',
-          messageOptions: {
-            taskState: buildTempExecRemovePendingTaskState(pending, 'waiting', '任务等待你继续确认要移出的执行用例。'),
-          },
+          index: index + 1,
+          id: row.id ? String(row.id) : '',
+          name: row.name ? String(row.name) : '',
+          label: buildTempExecReuseTargetSelectionCandidateLabel(row, data.selectionType),
+          versionId: row.versionId ? String(row.versionId) : '',
+          versionName: row.versionName ? String(row.versionName) : '',
+          projectName: row.projectName ? String(row.projectName) : '',
+          detailId: row.detailId ? String(row.detailId) : '',
+          detailIndex: toPositiveInt(row.detailIndex || row.index, 0),
+          status: row.status ? String(row.status) : '',
+          note: row.note ? String(row.note) : '',
+          applyPatch: row.applyPatch && typeof row.applyPatch === 'object' ? Object.assign({}, row.applyPatch) : null,
+        };
+      }).filter(function(item) { return item.id; }),
+    };
+    if (!pendingTempExecReuseTargetSelection.items.length) clearPendingTempExecReuseTargetSelection();
+  }
+
+  function buildTempExecReuseTargetSelectionText(result) {
+    var data = result && typeof result === 'object' ? result : {};
+    var items = Array.isArray(data.items) ? data.items : [];
+    var message = data.message ? String(data.message).trim() : '';
+    var selectionType = data.selectionType ? String(data.selectionType) : '';
+    var lines = [];
+    if (selectionType === 'delete_scope') {
+      lines.push(message || '删除范围还不够明确，请先确认你要删除哪一层范围的全部子项：');
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType));
+      });
+      lines.push('请回复“选第1个”、“整份都删”，或“只删第2条”。');
+  __TMP__    }
+    if (selectionType === 'rename_scope') {
+      lines.push(message || '名称修改范围还不够明确，请先确认你要改整份预设，还是只改某条用例里的子项：');
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType));
+      });
+      lines.push('请回复“全部都改”、“只改单条”，或“只改第2条”。');
+  __TMP__    }
+    if (selectionType === 'rename_case') {
+      lines.push(message || '还需要确认具体要修改哪条用例，请从下面选择：');
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType));
+      });
+      lines.push('请回复“选第1个”或“只改第2条”。');
+  __TMP__    }
+    if (selectionType === 'preset_scope') {
+      lines.push(message || '新增范围还不够明确，请先确认你要更新整份执行用例的预设子项，还是只处理某条用例：');
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType));
+      });
+      lines.push('请回复“整份都加”、“只加某条”，或“只加第2条”。');
+  __TMP__    }
+    if (selectionType === 'preset_case') {
+      lines.push(message || '还需要确认具体要处理哪条用例，请从下面选择：');
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType));
+      });
+      lines.push('请回复“选第1个”或“只加第2条”。');
+  __TMP__    }
+    if (selectionType === 'detail_case') {
+      var canChooseAll = hasTempExecReuseDetailCaseAggregateOption(items);
+      lines.push(message || '还需要确认具体要操作哪条用例的子项，请从下面选择：');
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType));
+      });
+      lines.push(canChooseAll
+        ? '请回复“选第1个”、“操作第2条”，或直接回复“全部”。'
+        : '请回复“选第1个”或“操作第2条”。');
+  __TMP__    }
+    if (selectionType === 'detail_choice') {
+      lines.push(message || '还需要确认具体要操作哪一个复用子项，请从下面选择：');
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType));
+      });
+      lines.push('请回复“选第1个”、“第2个子项”，或直接说更具体的子项名。');
+  __TMP__    }
+    if (message) return message;
+    lines.push('找到多份可能匹配的复用执行用例，请先确认要操作哪一份：');
+    items.forEach(function(item, idx) {
+      lines.push((idx + 1) + '. ' + buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType));
+    });
+    lines.push('请回复“选第1个”、“游侠那个”，或直接说具体版本名。');
+    return lines.join('\n');
+  }
+
+  function buildTempExecReuseTargetSelectionRetryText(extraText, selectionType) {
+    var prefix = extraText === undefined || extraText === null ? '' : String(extraText).trim();
+    var type = selectionType === undefined || selectionType === null ? '' : String(selectionType);
+    var base = '还没确定你要操作哪一份复用执行用例，请回复“选第1个”、“游侠那个”，或直接说具体版本名。';
+    if (type === 'delete_scope') {
+      base = '还没确定你要删除哪一层范围的全部子项，请回复“选第1个”、“整份都删”，或“只删第2条”。';
+    } else if (type === 'rename_scope') {
+      base = '还没确定你是要改整份预设，还是只改某条用例的子项名称，请回复“全部都改”、“只改单条”，或“只改第2条”。';
+    } else if (type === 'rename_case') {
+      base = '还没确定你要修改哪一条用例的子项名称，请回复“选第1个”或“只改第2条”。';
+    } else if (type === 'preset_scope') {
+      base = '还没确定你是要更新整份预设，还是只处理某条用例，请回复“整份都加”、“只加某条”，或“只加第2条”。';
+    } else if (type === 'preset_case') {
+      base = '还没确定你要处理哪一条用例，请回复“选第1个”或“只加第2条”。';
+    } else if (type === 'detail_case') {
+      base = hasTempExecReuseDetailCaseAggregateOption(pendingTempExecReuseTargetSelection && pendingTempExecReuseTargetSelection.items)
+        ? '还没确定你要操作哪一条用例的子项，请回复“选第1个”、“操作第2条”，或直接回复“全部”。'
+        : '还没确定你要操作哪一条用例的子项，请回复“选第1个”或“操作第2条”。';
+    } else if (type === 'detail_choice') {
+      base = '还没确定你要操作哪一个复用子项，请回复“选第1个”、“第2个子项”，或直接说更具体的子项名。';
+    }
+    return prefix ? (prefix + '\n' + base) : base;
+  }
+
+  async function resolvePendingTempExecReuseTargetChoice(text, pendingOverride, options) {
+    var raw = text === undefined || text === null ? '' : String(text).trim();
+    var pending = pendingOverride && typeof pendingOverride === 'object'
+      ? pendingOverride
+      : (pendingTempExecReuseTargetSelection && typeof pendingTempExecReuseTargetSelection === 'object' ? pendingTempExecReuseTargetSelection : null);
+    var opts = options && typeof options === 'object' ? options : {};
+    var index = 0;
+    var modelResolved = null;
+    var modelChecked = false;
+    var normalized = '';
+    var matched = [];
+    var selectionType = pending && pending.selectionType ? String(pending.selectionType) : '';
+    if (!pending || !Array.isArray(pending.items) || !pending.items.length || !raw) {
+      return { item: null, invalid: false, cancelled: false, response: '' };
+    }
+    if (containsAny(raw, ['取消', '先不', '不用', '算了'])) {
+      return { item: null, invalid: false, cancelled: true, response: '' };
+    }
+    if (selectionType === 'delete_scope') {
+      var directScopeItem = null;
+      var rowIndex = extractCaseUpdateTargetIndex(raw);
+      if (containsAny(raw, ['整份都删', '整份删除', '删整份', '整个都删', '整个删除', '整份执行用例'])) {
+        directScopeItem = pending.items.find(function(item) {
+          return item && String(item.id || '') === 'reuse-delete-scope:file-all';
+        }) || null;
+      }
+      if (!directScopeItem && rowIndex > 0) {
+        directScopeItem = pending.items.find(function(item) {
+          return item && String(item.id || '') === ('reuse-delete-scope:case-' + rowIndex);
+        }) || null;
+      }
+      if (!directScopeItem && containsAny(raw, ['匹配的都删', '匹配项都删', '匹配这些都删', '匹配范围都删'])) {
+        directScopeItem = pending.items.find(function(item) {
+          return item && String(item.id || '') === 'reuse-delete-scope:matched-all';
+        }) || null;
+      }
+      if (directScopeItem) {
+        return {
+          item: directScopeItem,
+          invalid: false,
+          cancelled: false,
+          response: '',
         };
       }
+    }
+    if (selectionType === 'rename_scope') {
+      var directRenameScopeItem = null;
+      var renameRowIndex = extractCaseUpdateTargetIndex(raw);
+      if (containsAny(raw, ['全部都改', '整份都改', '整份修改', '改整份', '预设都改', '预设子项都改'])) {
+        directRenameScopeItem = pending.items.find(function(item) {
+          return item && String(item.id || '') === 'reuse-rename-scope:preset';
+        }) || null;
+      }
+      if (!directRenameScopeItem && (containsAny(raw, ['只改单条', '只改某条', '只改一条', '改单条']) || renameRowIndex > 0)) {
+        directRenameScopeItem = pending.items.find(function(item) {
+          return item && String(item.id || '') === 'reuse-rename-scope:single-case';
+        }) || null;
+        if (directRenameScopeItem && renameRowIndex > 0) {
+          directRenameScopeItem = Object.assign({}, directRenameScopeItem, {
+            applyPatch: Object.assign({}, directRenameScopeItem.applyPatch || {}, {
+              index: renameRowIndex,
+              caseIndexes: [renameRowIndex],
+            }),
+          });
+        }
+      }
+      if (directRenameScopeItem) {
+        return {
+          item: directRenameScopeItem,
+          invalid: false,
+          cancelled: false,
+          response: '',
+        };
+      }
+    }
+    if (selectionType === 'rename_case') {
+      var renameCaseIndex = extractCaseUpdateTargetIndex(raw);
+      if (renameCaseIndex > 0) {
+        var directRenameCaseItem = pending.items.find(function(item) {
+          return item && String(item.id || '') === ('reuse-rename-case:' + renameCaseIndex);
+        }) || null;
+        if (directRenameCaseItem) {
+          return {
+            item: directRenameCaseItem,
+            invalid: false,
+            cancelled: false,
+            response: '',
+          };
+        }
+      }
+    }
+    if (selectionType === 'preset_scope') {
+      var directPresetScopeItem = null;
+      var presetRowIndex = extractCaseUpdateTargetIndex(raw);
+      if (containsAny(raw, ['整份都加', '整份添加', '整份增加', '整份都设', '整份设置', '全都加', '全部都加', '全部设置'])) {
+        directPresetScopeItem = pending.items.find(function(item) {
+          return item && String(item.id || '') === 'reuse-preset-scope:file-all';
+        }) || null;
+      }
+      if (!directPresetScopeItem && (containsAny(raw, ['只加某条', '只加一条', '只处理某条', '只处理一条', '只给某条', '只给一条', '改单条']) || presetRowIndex > 0)) {
+        directPresetScopeItem = pending.items.find(function(item) {
+          return item && String(item.id || '') === 'reuse-preset-scope:single-case';
+        }) || null;
+        if (directPresetScopeItem && presetRowIndex > 0) {
+          directPresetScopeItem = Object.assign({}, directPresetScopeItem, {
+            applyPatch: Object.assign({}, directPresetScopeItem.applyPatch || {}, {
+              index: presetRowIndex,
+              caseIndexes: [presetRowIndex],
+            }),
+          });
+        }
+      }
+      if (directPresetScopeItem) {
+        return {
+          item: directPresetScopeItem,
+          invalid: false,
+          cancelled: false,
+          response: '',
+        };
+      }
+    }
+    if (selectionType === 'preset_case') {
+      var presetCaseIndex = extractCaseUpdateTargetIndex(raw);
+      if (presetCaseIndex > 0) {
+        var directPresetCaseItem = pending.items.find(function(item) {
+          return item && String(item.id || '') === ('reuse-preset-case:' + presetCaseIndex);
+        }) || null;
+        if (directPresetCaseItem) {
+          return {
+            item: directPresetCaseItem,
+            invalid: false,
+            cancelled: false,
+            response: '',
+          };
+        }
+      }
+    }
+    if (selectionType === 'detail_case') {
+      var detailCaseIndex = extractCaseUpdateTargetIndex(raw);
+      if (detailCaseIndex > 0) {
+        var directDetailCaseItem = pending.items.find(function(item) {
+          return item && (String(item.id || '') === ('reuse-detail-case:' + detailCaseIndex)
+            || String(item.id || '') === ('reuse-detail-case:' + String(detailCaseIndex)));
+        }) || null;
+        if (directDetailCaseItem) {
+          return {
+            item: directDetailCaseItem,
+            invalid: false,
+            cancelled: false,
+            response: '',
+          };
+        }
+      }
+      if (hasTempExecReuseDetailCaseAggregateOption(pending.items) && containsAny(raw, ['全部', '全都', '全部处理', '都处理', '全部改', '全都改'])) {
+        modelChecked = true;
+        modelResolved = await resolveExecTransferChoiceByModel({
+          latestUserInput: raw,
+          originalUserRequest: opts.sourceUserText || (pending.sourceUserText ? String(pending.sourceUserText) : ''),
+          entityLabel: '待操作的用例条目',
+          allowCreate: false,
+          items: pending.items || [],
+          labelBuilder: function(item) {
+            return buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType);
+          },
+        });
+        if (modelResolved && modelResolved.mode === 'select' && modelResolved.selectedItem) {
+          return { item: modelResolved.selectedItem, invalid: false, cancelled: false, response: modelResolved.response || '' };
+        }
+      }
+    }
+    index = resolveAssistantChoiceIndexFromText(raw);
+    if (index > 0) {
+      return {
+        item: pending.items[index - 1] ? pending.items[index - 1] : null,
+        invalid: !(pending.items[index - 1]),
+        cancelled: false,
+        response: '',
+      };
+    }
+    var entityLabel = '复用执行用例';
+    if (selectionType === 'delete_scope') entityLabel = '复用子项删除范围';
+    else if (selectionType === 'rename_scope') entityLabel = '复用子项名称修改范围';
+    else if (selectionType === 'rename_case') entityLabel = '待修改的用例';
+    else if (selectionType === 'preset_scope') entityLabel = '复用预设处理范围';
+    else if (selectionType === 'preset_case') entityLabel = '待处理的用例';
+    else if (selectionType === 'detail_case') entityLabel = '待操作的用例条目';
+    else if (selectionType === 'detail_choice') entityLabel = '待操作的复用子项';
+    if (!modelChecked) {
+      modelResolved = await resolveExecTransferChoiceByModel({
+        latestUserInput: raw,
+        originalUserRequest: opts.sourceUserText || (pending.sourceUserText ? String(pending.sourceUserText) : ''),
+        entityLabel: entityLabel,
+        allowCreate: false,
+        items: pending.items || [],
+        labelBuilder: function(item) {
+          return buildTempExecReuseTargetSelectionCandidateLabel(item, selectionType);
+        },
+      });
+    }
+    if (modelResolved && modelResolved.mode === 'select' && modelResolved.selectedItem) {
+      return { item: modelResolved.selectedItem, invalid: false, cancelled: false, response: modelResolved.response || '' };
+    }
+    normalized = normalizeTempExecRemoveSelectionText(raw);
+    if (normalized) {
+      matched = pending.items.filter(function(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        var tokens = selectionType === 'detail_choice'
+          ? [
+              row.label,
+              row.name,
+              row.status,
+              row.note,
+              row.detailId,
+              row.detailIndex ? ('第' + String(row.detailIndex) + '个') : ''
+            ]
+          : [
+              row.label,
+              row.name,
+              row.versionName,
+              row.versionId,
+              row.projectName,
+              row.versionName ? ('版本' + row.versionName) : '',
+              row.versionId ? ('版本' + row.versionId) : ''
+            ];
+        tokens = tokens.map(function(token) {
+          return normalizeTempExecRemoveSelectionText(token || '');
+        }).filter(Boolean);
+        for (var i = 0; i < tokens.length; i += 1) {
+          if (normalized.indexOf(tokens[i]) !== -1 || tokens[i].indexOf(normalized) !== -1) return true;
+        }
+        return false;
+      });
+      if (matched.length === 1) {
+        return { item: matched[0], invalid: false, cancelled: false, response: modelResolved && modelResolved.response ? String(modelResolved.response) : '' };
+      }
+    }
+    return {
+      item: null,
+      invalid: true,
+      cancelled: false,
+      response: modelResolved && modelResolved.response ? String(modelResolved.response) : '',
+    };
+  }
+
+  function buildTempExecReusePendingTaskState(pending, status, summary) {
+    var data = pending && typeof pending === 'object' ? pending : null;
+    var state = cloneAssistantTaskState(data && data.taskState ? data.taskState : null);
+    var stepIndex = data ? Number(data.taskStepIndex) : -1;
+    var stepLabel = data && data.actionLabel ? String(data.actionLabel) : '复用子项操作';
+    if (!Number.isFinite(stepIndex)) stepIndex = -1;
+    if (!state) {
+      state = {
+        title: '当前任务',
+        summary: '',
+        status: normalizeAssistantTaskStatus(status) || 'running',
+        steps: [
+          {
+            label: stepLabel,
+            description: '',
+            status: normalizeAssistantTaskStatus(status) || 'running',
+          }
+        ],
+      };
+      stepIndex = 0;
+    }
+    if (stepIndex >= 0 && Array.isArray(state.steps) && stepIndex < state.steps.length) {
+      setAssistantTaskStateStepStatus(state, stepIndex, status, summary === undefined ? null : summary);
+    } else {
+      setAssistantTaskStateStatus(state, status, summary === undefined ? null : summary);
+    }
+    if (summary !== undefined && summary !== null) state.summary = String(summary);
+    state.status = normalizeAssistantTaskStatus(status) || deriveAssistantTaskStateStatus(state);
+    return state;
+  }
+
+  async function continuePendingTempExecReuseTargetTask(pending, leadingText, options) {
+    var data = pending && typeof pending === 'object' ? pending : null;
+    var opts = options && typeof options === 'object' ? options : {};
+    var taskState = buildTempExecReusePendingTaskState(data, 'completed', data && data.continuation ? '已完成当前选择，继续执行后续步骤。' : '任务已完成。');
+    var continuation = data ? cloneAssistantTaskContinuation(data.continuation) : null;
+    if (!continuation) {
       return {
         handled: true,
-        text: '移出执行失败：' + (runResult && runResult.reason ? String(runResult.reason) : '未知错误'),
+        text: String(leadingText || ''),
         messageOptions: {
-          taskState: buildTempExecRemovePendingTaskState(pending, 'blocked', '移出执行失败，任务已中断。'),
+          taskState: taskState,
         },
       };
     }
-    clearPendingTempExecRemoveSelection();
-    return continuePendingTempExecRemoveTask(continuedPending, formatTempExecRemoveSuccessText(runResult.data || {}), {
+    var continued = await runAssistantTaskContinuation(continuation, {
+      taskState: taskState,
       onTaskStateChange: opts.onTaskStateChange,
     });
+    return {
+      handled: true,
+      text: mergeAssistantReplyTextParts([leadingText, continued && continued.text ? continued.text : '']),
+      messageOptions: {
+        taskState: continued && continued.taskState ? continued.taskState : taskState,
+      },
+    };
   }
 
   function isTempExecRemoveIntent(text) {
@@ -7567,52 +7180,6 @@ return lines.join('\n');
     return query ? { query: query } : {};
   }
 
-  async function tryHandleTempExecRemoveCommand(rawText) {
-    var raw = String(rawText || '').trim();
-    if (!raw) return null;
-    if (!isTempExecRemoveIntent(raw)) return null;
-    clearPendingTempExecRemoveSelection();
-    var apis = getApis();
-    var args = buildTempExecRemoveArgsFromText(raw);
-    var mcpRes = null;
-    if (!apis.assistantMcpApi || typeof apis.assistantMcpApi.callTool !== 'function') {
-      return '当前环境不支持助手移出执行用例。';
-    }
-    try {
-      mcpRes = await apis.assistantMcpApi.callTool('tempexec.remove_files', args);
-    } catch (err0) {
-      mcpRes = { ok: false, reason: err0 && err0.message ? String(err0.message) : '移出执行失败' };
-    }
-    if (mcpRes && mcpRes.ok !== true && String(mcpRes.reason || '') === 'selection_required') {
-      var selectionData = mcpRes.data && typeof mcpRes.data === 'object' ? mcpRes.data : {};
-      rememberTempExecRemoveSelection(selectionData, {
-        sourceUserText: raw,
-      });
-      return buildTempExecRemoveSelectionText(selectionData);
-    }
-    if (mcpRes && mcpRes.ok !== true && String(mcpRes.reason || '') === 'confirm_required') {
-      var confirmData = mcpRes.data && typeof mcpRes.data === 'object' ? mcpRes.data : {};
-      var allowed = await requestAssistantOperationApproval(
-        confirmData.actionLabel ? String(confirmData.actionLabel) : '移出执行用例',
-        {
-          detail: confirmData.message ? String(confirmData.message) : '',
-          reason: '当前操作会把命中的用例从当前执行中移除。',
-        }
-      );
-      if (!allowed) return '已取消。';
-      try {
-        mcpRes = await apis.assistantMcpApi.callTool('tempexec.remove_files', Object.assign({}, args, { confirmed: true }));
-      } catch (err1) {
-        mcpRes = { ok: false, reason: err1 && err1.message ? String(err1.message) : '移出执行失败' };
-      }
-    }
-    if (!mcpRes || mcpRes.ok !== true) {
-      return mcpRes && mcpRes.reason ? String(mcpRes.reason) : '移出执行失败';
-    }
-    clearPendingTempExecRemoveSelection();
-    return formatTempExecRemoveSuccessText(mcpRes.data || {});
-  }
-
   function buildExtraCaseUpdateArgsFromText(rawText, primaryArgs) {
     var text = String(rawText || '');
     if (!text) return [];
@@ -7639,128 +7206,6 @@ return lines.join('\n');
     return extras;
   }
 
-  async function tryHandleCaseUpdateCommand(rawText) {
-    var parsed = parseCaseUpdateCommand(rawText);
-    if (!parsed) return null;
-    var apis = getApis();
-    var args = {
-      field: parsed.field,
-      value: parsed.value,
-    };
-    if (parsed.index > 0) args.index = parsed.index;
-    if (parsed.operation) args.operation = parsed.operation;
-    if (parsed.scope) args.scope = parsed.scope;
-    if (parsed.clear === true) args.clear = true;
-    var updateArgsList = [args];
-    var extraArgs = buildExtraCaseUpdateArgsFromText(rawText, args);
-    if (extraArgs.length) updateArgsList = updateArgsList.concat(extraArgs);
-
-    if (apis.assistantMcpApi && typeof apis.assistantMcpApi.callTool === 'function') {
-      var approved = false;
-      var successLines = [];
-      for (var u = 0; u < updateArgsList.length; u += 1) {
-        var currentArgs = updateArgsList[u];
-        var mcpRes = null;
-        try {
-          mcpRes = await apis.assistantMcpApi.callTool('case.update', approved ? Object.assign({}, currentArgs, { confirmed: true }) : currentArgs);
-        } catch (err0) {
-          mcpRes = { ok: false, reason: err0 && err0.message ? String(err0.message) : '修改失败' };
-        }
-        if (mcpRes && mcpRes.ok !== true && String(mcpRes.reason || '') === 'confirm_required') {
-          if (!approved) {
-            var confirmData = mcpRes.data && typeof mcpRes.data === 'object' ? mcpRes.data : {};
-            var allowed = await requestAssistantOperationApproval(
-              confirmData.actionLabel ? String(confirmData.actionLabel) : '修改用例',
-              {
-                detail: confirmData.message ? String(confirmData.message) : '',
-                reason: '当前操作涉及数据写入或状态变更。',
-              }
-            );
-            if (!allowed) return '已取消。';
-            approved = true;
-          }
-          try {
-            mcpRes = await apis.assistantMcpApi.callTool('case.update', Object.assign({}, currentArgs, { confirmed: true }));
-          } catch (err1) {
-            mcpRes = { ok: false, reason: err1 && err1.message ? String(err1.message) : '修改失败' };
-          }
-        }
-        if (!mcpRes || mcpRes.ok !== true) {
-          return mcpRes && mcpRes.reason ? String(mcpRes.reason) : '修改失败';
-        }
-        var updateData = mcpRes.data && typeof mcpRes.data === 'object' ? mcpRes.data : {};
-        successLines.push(formatCaseUpdateSuccessText(updateData, currentArgs));
-      }
-      if (!successLines.length) return '修改失败';
-      if (successLines.length === 1) return successLines[0];
-      var merged = [];
-      for (var s = 0; s < successLines.length; s += 1) {
-        merged.push(String(s + 1) + '. ' + successLines[s]);
-      }
-      return '已完成以下修改：\n' + merged.join('\n');
-    }
-
-    if (!apis.assistantApi || typeof apis.assistantApi.updateCase !== 'function') {
-      return '当前页面不支持助手修改用例。';
-    }
-    if (!await requireDoubleConfirmForAction('update_case', args)) return '已取消。';
-    var res = apis.assistantApi.updateCase(args);
-    if (!res || res.ok !== true) return res && res.reason ? String(res.reason) : '修改失败';
-    var doneIdx = toPositiveInt(res.index || parsed.index || 1, 1);
-    return '已修改用例：第 ' + doneIdx + ' 条，' + parsed.field + ' = ' + parsed.value;
-  }
-
-  async function tryHandleCaseIntent(text) {
-    var raw = String(text || '');
-    var apis = getApis();
-    if (!apis.assistantApi) return null;
-
-    var directUpdateReply = await tryHandleCaseUpdateCommand(raw);
-    if (directUpdateReply) return directUpdateReply;
-
-    if (raw.indexOf('用例') !== -1 && containsAny(raw, ['怎么改', '如何改', '怎么修改', '如何修改', '修改步骤', '编辑方法'])) {
-      return [
-        '修改用例建议这样操作：',
-        '1. 进入“用例库 -> 查看&编辑”。',
-        '2. 选中目标用例文件后在列表中直接编辑对应字段。',
-        '3. 完成后保存（删除类操作会走确认与撤回机制）。',
-        '你也可以直接让我“跳转到用例库”。',
-      ].join('\n');
-    }
-
-    if (containsAny(raw, ['删除用例', '移除用例'])) {
-      if (typeof apis.assistantApi.deleteCase !== 'function') return '当前页面不支持助手删除用例。';
-      var idxMatch = raw.match(/第\s*(\d+)\s*条/);
-      var idx = idxMatch ? Number(idxMatch[1]) : 1;
-      if (!await requireDoubleConfirmForAction('delete_case', { index: idx })) return '已取消。';
-      var delRes = apis.assistantApi.deleteCase(idx);
-      if (delRes && delRes.ok) {
-        return '删除已触发：第 ' + delRes.index + ' 条。若误删可在8秒内撤回。';
-      }
-      return delRes && delRes.reason ? delRes.reason : '删除触发失败';
-    }
-
-    if (containsAny(raw, ['用例生成']) && containsAny(raw, ['开始', '执行', '触发', '运行', '一键'])) {
-      if (typeof apis.assistantApi.runCaseGeneration !== 'function') return '用例生成能力暂不可用';
-      if (!await requireDoubleConfirmForAction('run_case_generation', {})) return '已取消。';
-      setStatus('正在触发用例生成...');
-      return apis.assistantApi.runCaseGeneration().then(function(res) {
-        return res && res.ok ? '已触发用例生成流程，请查看用例生成页面进度。' : (res.reason || '用例生成触发失败');
-      });
-    }
-
-    if (containsAny(raw, ['漏测', '易漏']) && containsAny(raw, ['推荐', '补全', '执行', '生成', '触发'])) {
-      if (typeof apis.assistantApi.runMissingRecommendation !== 'function') return '漏测推荐能力暂不可用';
-      if (!await requireDoubleConfirmForAction('run_missing_recommendation', {})) return '已取消。';
-      setStatus('正在触发漏测推荐...');
-      return apis.assistantApi.runMissingRecommendation().then(function(res) {
-        return res && res.ok ? '已触发漏测推荐，请在页面确认后再生成。' : (res.reason || '漏测推荐触发失败');
-      });
-    }
-
-    return null;
-  }
-
   function parseSettingKey(raw) {
     if (containsAny(raw, ['助手模型', '聊天模型'])) return 'assistantModelId';
     if (containsAny(raw, ['助手', 'ai助手'])) return 'assistantEnabled';
@@ -7771,88 +7216,152 @@ return lines.join('\n');
     return '';
   }
 
-  async function tryHandleSettingsIntent(text) {
-    var raw = String(text || '');
-    var apis = getApis();
-    if (!apis.assistantSettingsApi) return null;
-
-    if (containsAny(raw, ['作用', '效果', '说明', '是什么意思']) && containsAny(raw, ['设置', '选项', '助手', '主题', '超时', '导航'])) {
-      var explainKey = parseSettingKey(raw);
-      if (!explainKey) return '请告诉我你想了解哪一项设置。';
-      if (typeof apis.assistantSettingsApi.describeSetting === 'function') {
-        return apis.assistantSettingsApi.describeSetting(explainKey);
+  function rewriteLegacyExecBatchToolIfNeeded(tool, args, userText) {
+    var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+    var value = '';
+    var batchArgs = null;
+    if (tool === 'case_library.batch_update_exec_results') {
+      if (payload.value !== undefined && payload.value !== null && String(payload.value).trim()) value = String(payload.value).trim();
+      if (!value && payload.result !== undefined && payload.result !== null && String(payload.result).trim()) value = String(payload.result).trim();
+      if (!value && payload.status !== undefined && payload.status !== null && String(payload.status).trim()) value = String(payload.status).trim();
+      if (!value && payload.to !== undefined && payload.to !== null && String(payload.to).trim()) value = String(payload.to).trim();
+      batchArgs = inferCaseUpdateArgsFromText(Object.assign({
+        context: 'tempexec',
+        scope: 'all',
+        field: 'actual'
+      }, value ? { value: value } : {}, payload), userText);
+      if (shouldPreferTempExecReuseStatusUpdateForAssistant(batchArgs)) {
+        return {
+          tool: 'tempexec.reuse_update',
+          args: Object.assign({}, batchArgs, {
+            mode: 'detail_update',
+            field: 'actual',
+            applyAll: true,
+            scope: 'file_all',
+          }),
+          rewritten: true,
+        };
       }
-      return '该设置项说明暂不可用。';
+      return {
+        tool: 'case.update',
+        args: batchArgs,
+        rewritten: true,
+      };
     }
-
-    if (containsAny(raw, ['关闭助手', '禁用助手'])) {
-      return '安全策略限制：助手不能通过聊天关闭自己，请在设置页手动关闭。';
+    if (tool === 'case_library.batch_archive_exec_cases') {
+      return {
+        tool: tool,
+        args: payload,
+        rewritten: false,
+      };
     }
-
-    if (containsAny(raw, ['开启助手'])) {
-      if (!await requireDoubleConfirmForAction('settings_patch', { patch: { assistantEnabled: true } })) return '已取消。';
-      var onRes = apis.assistantSettingsApi.applyPatch({ assistantEnabled: true }, { source: 'assistant' });
-      return onRes && onRes.ok ? '助手已开启。' : (onRes.reason || '开启失败');
-    }
-
-    if (containsAny(raw, ['开启', '关闭']) && containsAny(raw, ['易漏', '漏测推荐'])) {
-      var aiOn = containsAny(raw, ['开启']);
-      if (!await requireDoubleConfirmForAction('settings_patch', { patch: { missingCaseReminderAiEnabled: aiOn ? 'on' : 'off' } })) return '已取消。';
-      var aiRes = apis.assistantSettingsApi.applyPatch(
-        { missingCaseReminderAiEnabled: aiOn ? 'on' : 'off' },
-        { source: 'assistant' }
-      );
-      return aiRes && aiRes.ok ? ('已' + (aiOn ? '开启' : '关闭') + '易漏用例推荐。') : (aiRes.reason || '设置失败');
-    }
-
-    if (containsAny(raw, ['开启', '关闭']) && containsAny(raw, ['导航', '收起'])) {
-      var collapseOn = containsAny(raw, ['开启']);
-      if (!await requireDoubleConfirmForAction('settings_patch', { patch: { smartTopNavCollapse: collapseOn } })) return '已取消。';
-      var navRes = apis.assistantSettingsApi.applyPatch(
-        { smartTopNavCollapse: collapseOn },
-        { source: 'assistant' }
-      );
-      return navRes && navRes.ok ? ('已' + (collapseOn ? '开启' : '关闭') + '导航智能收起。') : (navRes.reason || '设置失败');
-    }
-
-    if (containsAny(raw, ['深色主题', '黑色主题', '浅色主题', '白色主题', '切换主题'])) {
-      var theme = containsAny(raw, ['深色主题', '黑色主题']) ? 'dark' : 'light';
-      if (!await requireDoubleConfirmForAction('settings_patch', { patch: { theme: theme } })) return '已取消。';
-      var themeRes = apis.assistantSettingsApi.applyPatch({ theme: theme }, { source: 'assistant' });
-      return themeRes && themeRes.ok ? '主题已切换。' : (themeRes.reason || '设置失败');
-    }
-
-    if (containsAny(raw, ['设置模型']) || containsAny(raw, ['切换模型'])) {
-      if (!modelPicker) return '请在助手面板顶部选择模型。';
-      return '可在助手面板顶部下拉框切换模型，或在设置页保存为默认模型。';
-    }
-
-    return null;
+    return { tool: tool, args: payload, rewritten: false };
   }
 
-  async function classifyIntentByModel(text) {
-    var apis = getApis();
-    if (!apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return null;
-    var prompt = [
-      '你是意图分类器。',
-      '判断用户输入主要意图：navigate/query/query_case_list/chat。',
-      '如果是 navigate/query，请尽量给出 tab 字段（例如 settings/assign/models/casesgen/tempexec/case-library/case-archive/exec-overview/auto）。',
-      '当用户明确想看“当前有哪些用例/用例列表/列出用例”时，intent 请选择 query_case_list。',
-      '只输出 JSON：{"intent":"navigate|query|query_case_list|chat","tab":"","reason":""}'
-    ].join('\n');
-    var res = await apis.assistantApi.callModel(String(text || ''), { prompt: prompt, temperature: 0 });
-    if (!res || !res.ok || !res.content) return null;
-    var parsed = null;
-    try {
-      var raw = String(res.content || '').trim();
-      var payloadMatch = raw.match(/\{[\s\S]*\}/);
-      if (!payloadMatch) return null;
-      parsed = JSON.parse(payloadMatch[0]);
-    } catch (err) {
-      parsed = null;
+  function isAssistantArchiveControlArgs(args) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var inspectText = [
+      payload.controlId,
+      payload.controlText,
+      payload.text,
+      payload.label,
+      payload.name,
+      payload.query,
+    ].join(' ');
+    return containsAny(inspectText, ['归档', 'archive']);
+  }
+
+  function buildAssistantFriendlyTaskLabel(tool, args) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var normalizedField = normalizeCaseUpdateFieldName(payload.field || payload.key || payload.column || payload.name || '');
+    var value = payload.value !== undefined && payload.value !== null ? String(payload.value).trim() : '';
+    var versionText = payload.execVersionName !== undefined && payload.execVersionName !== null && String(payload.execVersionName).trim()
+      ? String(payload.execVersionName).trim()
+      : (payload.versionName !== undefined && payload.versionName !== null && String(payload.versionName).trim()
+        ? String(payload.versionName).trim()
+        : (payload.execVersionId !== undefined && payload.execVersionId !== null && String(payload.execVersionId).trim()
+          ? ('版本 ' + String(payload.execVersionId).trim())
+          : ''));
+    if (tool === 'cases.list_current') {
+      if (payload.query !== undefined && payload.query !== null && String(payload.query).trim()) {
+        if (String(payload.detailLevel || '').trim().toLowerCase() === 'full') {
+          return '读取用例详情：' + trimAssistantTaskLabelText(String(payload.query).trim(), 24);
+        }
+        return '定位当前用例：' + trimAssistantTaskLabelText(String(payload.query).trim(), 24);
+      }
+      return payload.countOnly === true || payload.count === true
+        ? '统计当前用例数量'
+        : '读取当前用例列表';
     }
-    if (!parsed || typeof parsed !== 'object') return null;
-    return parsed;
+    if (tool === 'case_library.search_exec_candidates') {
+      return payload.query !== undefined && payload.query !== null && String(payload.query).trim()
+        ? ('搜索要转执行的用例：' + trimAssistantTaskLabelText(String(payload.query).trim(), 24))
+        : '搜索要转执行的用例';
+    }
+    if (tool === 'case_library.transfer_to_exec') {
+      return versionText ? ('把选中的用例转到执行版本：' + trimAssistantTaskLabelText(versionText, 18)) : '把选中的用例转到执行版本';
+    }
+    if (tool === 'case_library.batch_update_exec_results') {
+      return value ? ('把全部执行结果改为' + trimAssistantTaskLabelText(value, 12)) : '批量修改执行结果';
+    }
+    if (tool === 'case_library.batch_archive_exec_cases') {
+      return '归档当前执行用例';
+    }
+    if (tool === 'case.update') {
+      var context = payload.context === undefined || payload.context === null ? '' : String(payload.context).trim().toLowerCase();
+      var scope = payload.scope === undefined || payload.scope === null ? '' : String(payload.scope).trim().toLowerCase();
+      if (scope === 'all' && normalizedField === 'actual') {
+        return value ? ('把全部执行结果改为' + trimAssistantTaskLabelText(value, 12)) : '批量修改执行结果';
+      }
+      if (scope === 'all' && normalizedField === 'remark') {
+        return '批量修改执行备注';
+      }
+      if (scope === 'all' && normalizedField) return '批量修改用例' + buildCaseUpdateFieldLabel(normalizedField);
+      if (context === 'tempexec' && normalizedField === 'actual') {
+        return value ? ('修改用例执行结果为' + trimAssistantTaskLabelText(value, 12)) : '修改用例执行结果';
+      }
+      if (normalizedField) return '修改用例' + buildCaseUpdateFieldLabel(normalizedField);
+      return '修改用例';
+    }
+    if (tool === 'ui.click_control' && isAssistantArchiveControlArgs(payload)) {
+      return '归档当前执行用例';
+    }
+    return '';
+  }
+
+  function buildAssistantUnknownToolTaskLabel(tool, args) {
+    var rawTool = tool === undefined || tool === null ? '' : String(tool).trim();
+    var normalizedTool = normalizeMcpToolName(rawTool);
+    var payload = args && typeof args === 'object' ? args : {};
+    var query = payload.query !== undefined && payload.query !== null ? String(payload.query).trim() : '';
+    var value = payload.value !== undefined && payload.value !== null ? String(payload.value).trim() : '';
+    var toolText = normalizedTool || rawTool;
+    if (!toolText) return '执行任务';
+    if (toolText === 'page.current_info') return '获取当前页面信息';
+    if (toolText === 'page.get_data') return '读取页面数据';
+    if (toolText === 'nav.switch_tab') return '切换页面';
+    if (toolText === 'web.search') return query ? ('联网搜索：' + trimAssistantTaskLabelText(query, 24)) : '联网搜索';
+    if (toolText === 'settings.patch') return '修改设置';
+    if (toolText === 'settings.describe') return '查看设置说明';
+    if (toolText === 'case.delete') return '删除用例';
+    if (toolText === 'tempexec.remove_files') return query ? ('移出执行用例：' + trimAssistantTaskLabelText(query, 24)) : '移出执行用例';
+    if (toolText === 'tempexec.reuse_update') {
+      if (payload.field === 'delete') return '删除全部复用子项';
+      if (String(payload.field || '').trim().toLowerCase() === 'actual' && value) return '修改复用子项执行结果为' + trimAssistantTaskLabelText(value, 12);
+      return '修改复用子项';
+    }
+    if (toolText === 'cases.list_current') {
+      if (query) return '定位当前用例：' + trimAssistantTaskLabelText(query, 24);
+      return '读取当前用例列表';
+    }
+    if (containsAny(toolText, ['archive'])) return '归档内容';
+    if (containsAny(toolText, ['delete', 'remove'])) return '删除内容';
+    if (containsAny(toolText, ['update', 'patch', 'edit'])) return value ? ('更新内容为' + trimAssistantTaskLabelText(value, 12)) : '更新内容';
+    if (containsAny(toolText, ['list', 'query', 'get', 'read', 'search'])) {
+      return query ? ('查询内容：' + trimAssistantTaskLabelText(query, 24)) : '查询内容';
+    }
+    if (containsAny(toolText, ['create', 'add', 'new'])) return '新建内容';
+    return '执行任务';
   }
 
   function normalizeModelActionName(actionRaw) {
@@ -7902,12 +7411,13 @@ return lines.join('\n');
       { name: 'page.current_info', mode: 'read', description: '获取当前页面名称与标识' },
       { name: 'page.get_data', mode: 'read', description: '读取页面数据快照' },
       { name: 'nav.switch_tab', mode: 'write', description: '切换目标页签' },
-      { name: 'cases.list_current', mode: 'read', description: '读取当前页面或项目用例列表' },
+      { name: 'cases.list_current', mode: 'read', description: '读取当前页面或项目用例列表；在 tempexec 可返回当前执行文件、caseFile.hasReuseCases、caseFile.reusePresetNames、行级 isReuseCase、聚合后的 executionResult、reuseDetails 子项明细，用于先判断是否为复用型用例及现状是否已符合要求' },
       { name: 'case_library.query_cases', mode: 'read', description: '跨页面查询用例库内容，并在大数据量时自动拆分子任务并发检索' },
       { name: 'case_library.search_exec_candidates', mode: 'read', description: '按项目/名称搜索可转到当前执行的用例文件候选' },
       { name: 'case_library.transfer_to_exec', mode: 'write', description: '将指定用例文件转到当前执行，并切换到执行页' },
       { name: 'tempexec.remove_files', mode: 'write', description: '按名称或关键词移出当前执行中的用例文件' },
-      { name: 'case_library.batch_update_exec_results', mode: 'write', description: '批量修改当前执行用例的执行结果' },
+      { name: 'tempexec.reuse_update', mode: 'write', description: '管理当前执行中复用型用例的预设子项，或按子项名 / applyAll 修改子项执行结果 / 备注 / 名称 / 删除子项；复用型用例状态写入优先走这里' },
+      { name: 'case_library.batch_update_exec_results', mode: 'write', description: '批量修改当前执行用例的普通执行结果字段；若目标是复用型用例，应优先改子项状态而不是只改顶层结果字段' },
       { name: 'case_library.batch_archive_exec_cases', mode: 'write', description: '归档当前执行中的用例' },
       { name: 'missing_library.list_current', mode: 'read', description: '读取当前项目的漏测/易漏用例库，可跨页面查询' },
       { name: 'cross_page.match_missing_cases', mode: 'read', description: '将当前页面用例与当前项目漏测用例库做跨页面匹配' },
@@ -7928,7 +7438,7 @@ return lines.join('\n');
       { name: 'settings.patch', mode: 'write', description: '修改设置' },
       { name: 'assistant.list_scaffolds', mode: 'read', description: '查看可调用的标准展示手脚架清单' },
       { name: 'assistant.render_scaffold', mode: 'read', description: '渲染标准展示手脚架（如 case_table、markdown_table、numbered_list、bullet_list、key_value_table）' },
-      { name: 'case.update', mode: 'write', description: '修改当前可见用例字段（优先级/标题/步骤等）' },
+      { name: 'case.update', mode: 'write', description: '修改当前可见用例字段（含执行结果/备注/优先级/标题/步骤等）；在 tempexec 支持用 scope=all 批量修改普通用例执行结果或备注，复用型用例执行结果应优先改子项状态' },
       { name: 'case.delete', mode: 'write', description: '删除用例条目' },
       { name: 'casegen.run', mode: 'write', description: '触发用例生成' },
       { name: 'missing_recommend.run', mode: 'write', description: '触发漏测推荐' },
@@ -7948,15 +7458,2427 @@ return lines.join('\n');
     return getFallbackMcpToolCatalog();
   }
 
-  function getAvailableMcpToolsForUserText(userText) {
-    var tools = getAvailableMcpTools();
-    if (!isExplicitExecTransferIntent(userText)) return tools;
-    return tools.filter(function(item) {
-      var row = item && typeof item === 'object' ? item : {};
-      var name = normalizeMcpToolName(row.name || '');
-      if (name === 'tempexec.switch_file' || name === 'tempexec.next_file') return false;
-      return true;
+  function normalizeAssistantCapability(capability, fallbackIndex) {
+    var item = capability && typeof capability === 'object' ? capability : {};
+    var id = normalizeMcpToolName(item.id || item.name || item.capability || '');
+    var index = Number(fallbackIndex);
+    if (!Number.isFinite(index) || index < 0) index = 0;
+    if (!id) return null;
+    return {
+      id: id,
+      sourceType: item.sourceType !== undefined && item.sourceType !== null ? String(item.sourceType).trim().toLowerCase() : 'mcp',
+      backedBy: item.backedBy !== undefined && item.backedBy !== null ? String(item.backedBy).trim() : ('assistantMcpApi.callTool(' + id + ')'),
+      mode: item.mode !== undefined && item.mode !== null ? String(item.mode).trim().toLowerCase() : getMcpToolMode(id),
+      description: item.description !== undefined && item.description !== null ? String(item.description).trim() : '',
+      argsHint: Array.isArray(item.argsHint) ? item.argsHint.map(function(entry) {
+        var row = entry && typeof entry === 'object' ? entry : {};
+        return {
+          name: row.name !== undefined && row.name !== null ? String(row.name).trim() : '',
+          description: row.description !== undefined && row.description !== null ? String(row.description).trim() : '',
+        };
+      }).filter(function(entry) { return !!entry.name; }) : [],
+      approvalPolicy: item.approvalPolicy !== undefined && item.approvalPolicy !== null ? String(item.approvalPolicy).trim().toLowerCase() : 'none',
+      available: item.available !== false,
+      index: index + 1,
+    };
+  }
+
+  function getAvailableCapabilities() {
+    var apis = getApis();
+    var list = [];
+    var tools = [];
+    if (apis.assistantCapabilityApi && typeof apis.assistantCapabilityApi.listCapabilities === 'function') {
+      try {
+        tools = apis.assistantCapabilityApi.listCapabilities() || [];
+      } catch (err) {
+        tools = [];
+      }
+    }
+    if (!Array.isArray(tools) || !tools.length) {
+      tools = getAvailableMcpTools().map(function(tool) {
+        return {
+          id: tool && tool.name ? String(tool.name) : '',
+          sourceType: tool && tool.name && String(tool.name).indexOf('assistant.') === 0 ? 'render' : 'mcp',
+          backedBy: tool && tool.name ? ('assistantMcpApi.callTool(' + String(tool.name) + ')') : '',
+          mode: tool && tool.mode ? String(tool.mode) : '',
+          description: tool && tool.description ? String(tool.description) : '',
+          argsHint: [],
+          approvalPolicy: tool && tool.mode === 'write' ? 'tool_managed' : 'none',
+          available: true,
+        };
+      });
+    }
+    list = tools.map(function(item, index) {
+      return normalizeAssistantCapability(item, index);
+    }).filter(function(item) { return !!item; });
+    list.sort(function(left, right) {
+      return Number(left.index || 0) - Number(right.index || 0);
     });
+    return list;
+  }
+
+  function getAssistantCapabilityById(capabilityId) {
+    var id = normalizeMcpToolName(capabilityId);
+    var list = getAvailableCapabilities();
+    var i = 0;
+    if (!id) return null;
+    for (i = 0; i < list.length; i += 1) {
+      if (normalizeMcpToolName(list[i] && list[i].id) === id) return list[i];
+    }
+    return null;
+  }
+
+  function buildAssistantCapabilityArgsHintText(argsHint) {
+    var list = Array.isArray(argsHint) ? argsHint : [];
+    if (!list.length) return '无';
+    return list.map(function(entry) {
+      var row = entry && typeof entry === 'object' ? entry : {};
+      var name = row.name ? String(row.name) : '';
+      var description = row.description ? String(row.description) : '';
+      return name + (description ? ('：' + description) : '');
+    }).join('；');
+  }
+
+  function buildAssistantCapabilityCatalogLines() {
+    return getAvailableCapabilities().map(function(capability) {
+      var item = capability && typeof capability === 'object' ? capability : {};
+      return '- ' + (item.id || '')
+        + ' | source=' + (item.sourceType || 'mcp')
+        + ' | mode=' + (item.mode || 'read')
+        + ' | approval=' + (item.approvalPolicy || 'none')
+        + ' | backedBy=' + (item.backedBy || '')
+        + ' | args=' + buildAssistantCapabilityArgsHintText(item.argsHint)
+        + (item.description ? (' | 说明=' + item.description) : '');
+    });
+  }
+
+  function buildAssistantPlatformContextFallbackMarkdown() {
+    return [
+      '# 测试助手平台固定上下文',
+      '',
+      '## 平台定位',
+      '- 这是一个围绕测试需求、用例生成、用例库、执行、归档和设置管理的测试助手平台。',
+      '- AI 助手应基于平台提供的结构化上下文、自身模型判断和 capability 目录完成理解、拆任务、执行和总结。',
+      '',
+      '## 页面职责',
+      '- auto：一键执行主流程，通常用于从导入到生成的串联操作。',
+      '- clean：功能流程整理与清洗。',
+      '- casesgen：用例生成。',
+      '- assign：功能指派。',
+      '- models：模型管理。',
+      '- tempexec：用例执行，处理当前执行文件、执行结果、复用子项、备注、XMind 等。',
+      '- case-library：用例库，处理当前编辑用例、历史详情、跨项目查询。',
+      '- case-archive：用例归档。',
+      '- exec-overview：执行总览。',
+      '- settings：通用设置。',
+      '- project-admin / user-admin / ops-log：管理后台页面。',
+      '',
+      '## 上下文约定',
+      '- 每轮都会同时提供固定上下文和动态上下文。',
+      '- `platformContextMarkdown`：本固定文档，描述平台定位、页面职责和上下文契约。',
+      '- `currentPage`：当前页面标识和当前页面原始结构化数据。',
+      '- `runtimeContext`：当前页面摘要、当前页可用重点能力、可见页签等动态环境信息。',
+      '- `capabilities`：当前全部可用 capability 目录，AI 只能从这里选能力。',
+      '',
+      '## 动态字段含义',
+      '- `currentPage.tab` / `currentPage.tabLabel`：当前页签标识和展示名称。',
+      '- `currentPage.pageData`：当前页面结构化数据快照。',
+      '- `currentPage.pageData.currentCaseContext`：当前页核心用例上下文，常见于用例库编辑页和执行页。',
+      '- `currentPage.pageData.currentCaseContext.total` / `totalAll`：当前可见条数 / 当前总条数。',
+      '- `currentPage.pageData.currentCaseContext.hasReuseCases` / `reusePresetNames`：当前范围是否含复用用例及其预设子项名。',
+      '- `runtimeContext.currentPage.knownFacts`：当前页面关键事实的摘要，优先可直接使用。',
+      '- `runtimeContext.currentPage.currentPageCapabilities`：当前页面最常用的重点能力摘要。',
+      '',
+      '## 使用规则',
+      '- 对于“当前在哪个页面、当前页面有什么数据、当前页能做什么”这类问题，优先使用已提供的 `currentPage` 和 `runtimeContext`，不要重复向用户确认。',
+      '- 只有在相关动态字段缺失、为空、明显过期，或与用户目标冲突时，才进行澄清或补充读取。',
+      '- 写操作是否执行，仍以后续 capability 执行结果和运行时确认门禁为准。',
+    ].join('\n');
+  }
+
+  async function loadAssistantPlatformContextMarkdown() {
+    if (assistantPlatformContextMarkdownCache) return assistantPlatformContextMarkdownCache;
+    if (assistantPlatformContextMarkdownPromise) return assistantPlatformContextMarkdownPromise;
+    assistantPlatformContextMarkdownPromise = fetch(assistantPlatformContextMarkdownUrl, {
+      method: 'GET',
+      credentials: 'same-origin',
+      cache: 'default',
+    }).then(function(res) {
+      if (!res || res.ok !== true) return '';
+      return res.text();
+    }).catch(function() {
+      return '';
+    }).then(function(text) {
+      assistantPlatformContextMarkdownCache = String(text || '').trim() || buildAssistantPlatformContextFallbackMarkdown();
+      assistantPlatformContextMarkdownPromise = null;
+      return assistantPlatformContextMarkdownCache;
+    }).catch(function() {
+      assistantPlatformContextMarkdownCache = buildAssistantPlatformContextFallbackMarkdown();
+      assistantPlatformContextMarkdownPromise = null;
+      return assistantPlatformContextMarkdownCache;
+    });
+    return assistantPlatformContextMarkdownPromise;
+  }
+
+  function buildAssistantRuntimeContextCapabilityIds(tabId) {
+    var normalizedTab = tabId === undefined || tabId === null ? '' : String(tabId).trim().toLowerCase();
+    var ids = ['page.current_info', 'page.get_data', 'ui.list_controls'];
+    if (normalizedTab === 'settings') ids = ids.concat(['settings.describe', 'settings.patch']);
+    if (normalizedTab === 'case-library') ids = ids.concat(['cases.list_current', 'case_library.query_cases', 'missing_library.list_current', 'cross_page.match_missing_cases']);
+    if (normalizedTab === 'tempexec') ids = ids.concat(['cases.list_current', 'case.update', 'tempexec.reuse_update', 'tempexec.remove_files', 'tempexec.switch_file', 'tempexec.export_xmind']);
+    return ids;
+  }
+
+  function buildAssistantRuntimeContextCurrentPageCapabilities(tabId, capabilities) {
+    var ids = buildAssistantRuntimeContextCapabilityIds(tabId);
+    var list = Array.isArray(capabilities) ? capabilities : [];
+    return list.filter(function(item) {
+      var id = normalizeMcpToolName(item && item.id ? item.id : '');
+      return !!id && ids.indexOf(id) !== -1 && item.available !== false;
+    }).map(function(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      return {
+        id: row.id ? String(row.id) : '',
+        mode: row.mode ? String(row.mode) : '',
+        approvalPolicy: row.approvalPolicy ? String(row.approvalPolicy) : '',
+        description: row.description ? String(row.description) : '',
+      };
+    });
+  }
+
+  function buildAssistantRuntimeContextKnownFacts(currentPage) {
+    var page = currentPage && typeof currentPage === 'object' ? currentPage : {};
+    var pageData = page.pageData && typeof page.pageData === 'object' ? page.pageData : {};
+    var caseContext = pageData.currentCaseContext && typeof pageData.currentCaseContext === 'object' ? pageData.currentCaseContext : null;
+    var facts = [];
+    var total = 0;
+    var totalAll = 0;
+    if (page.tab) {
+      facts.push('当前页签：' + String(page.tab) + (page.tabLabel ? ('（' + String(page.tabLabel) + '）') : ''));
+    }
+    if (page.pageFileName) {
+      facts.push('当前页面文件：' + String(page.pageFileName));
+    }
+    if (pageData.requirementLabel) {
+      facts.push('当前需求：' + String(pageData.requirementLabel));
+    }
+    if (caseContext && caseContext.fileName) {
+      total = Number(caseContext.total);
+      totalAll = Number(caseContext.totalAll);
+      if (!Number.isFinite(total) || total < 0) total = 0;
+      if (!Number.isFinite(totalAll) || totalAll < 0) totalAll = total;
+      facts.push('当前用例上下文：' + String(caseContext.fileName) + '（可见 ' + total + ' 条，总计 ' + totalAll + ' 条）');
+      if (caseContext.hasReuseCases === true) {
+        facts.push('当前用例上下文包含复用用例');
+      }
+      if (Array.isArray(caseContext.reusePresetNames) && caseContext.reusePresetNames.length) {
+        facts.push('当前复用预设子项：' + caseContext.reusePresetNames.join('、'));
+      }
+    }
+    if (pageData.tab === 'tempexec' && pageData.tempExecFileCount !== undefined && pageData.tempExecFileCount !== null) {
+      facts.push('当前执行文件数：' + String(pageData.tempExecFileCount));
+    }
+    if (pageData.caseLibraryHistoryDetail && pageData.caseLibraryHistoryDetail.hasContext === true) {
+      facts.push('当前页已提供用例库历史详情上下文');
+    }
+    if (pageData.missingCaseLibraryView && pageData.missingCaseLibraryView.hasContext === true) {
+      facts.push('当前页已提供漏测用例视图上下文');
+    }
+    if (pageData.tempExecCaseLibraryDiffDetail && pageData.tempExecCaseLibraryDiffDetail.hasContext === true) {
+      facts.push('当前页已提供执行与用例库差异上下文');
+    }
+    return facts;
+  }
+
+  function buildAssistantRuntimeContext(currentPage, capabilities) {
+    var page = currentPage && typeof currentPage === 'object' ? currentPage : {};
+    var apis = getApis();
+    var tabs = [];
+    if (apis.assistantApi && typeof apis.assistantApi.listTabs === 'function') {
+      try {
+        tabs = apis.assistantApi.listTabs() || [];
+      } catch (err) {
+        tabs = [];
+      }
+    }
+    return {
+      generatedAt: new Date().toISOString(),
+      availableTabs: Array.isArray(tabs) ? tabs.map(function(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        return {
+          tab: row.tab ? String(row.tab) : '',
+          label: row.label ? String(row.label) : '',
+        };
+      }).filter(function(item) { return !!item.tab; }) : [],
+      currentPage: {
+        tab: page.tab ? String(page.tab) : '',
+        tabLabel: page.tabLabel ? String(page.tabLabel) : '',
+        pageFileName: page.pageFileName ? String(page.pageFileName) : '',
+        knownFacts: buildAssistantRuntimeContextKnownFacts(page),
+        currentPageCapabilities: buildAssistantRuntimeContextCurrentPageCapabilities(page.tab || '', capabilities),
+      },
+    };
+  }
+
+  function buildAssistantProtocolBlockedCallLines(calls) {
+    var list = Array.isArray(calls) ? calls : [];
+    return list.map(function(call, index) {
+      var row = call && typeof call === 'object' ? call : {};
+      var capability = normalizeMcpToolName(row.capability || row.tool || row.name || '');
+      var args = row.args && typeof row.args === 'object' ? row.args : {};
+      return '- ' + (capability || ('call-' + (index + 1))) + ' ' + formatJsonCompact(args);
+    }).filter(function(line) { return !!line; });
+  }
+
+  function getPreviousUserMessageText(currentText) {
+    var latest = String(currentText || '').trim();
+    var skippedCurrent = false;
+    for (var i = chatHistory.length - 1; i >= 0; i -= 1) {
+      var msg = chatHistory[i];
+      if (!msg || msg.role !== 'user') continue;
+      var text = msg.text === undefined || msg.text === null ? '' : String(msg.text).trim();
+      if (!text) continue;
+      if (!skippedCurrent && latest && text === latest) {
+        skippedCurrent = true;
+        continue;
+      }
+      return text;
+    }
+    return '';
+  }
+
+  function getLatestAssistantMessageText() {
+    for (var i = chatHistory.length - 1; i >= 0; i -= 1) {
+      var msg = chatHistory[i];
+      if (!msg || msg.role !== 'ai') continue;
+      var text = msg.text === undefined || msg.text === null ? '' : String(msg.text).trim();
+      if (!text) continue;
+      return text;
+    }
+    return '';
+  }
+
+  function normalizeCaseDetailLookupText(value) {
+    return String(value === undefined || value === null ? '' : value).trim().toLowerCase().replace(/\s+/g, '');
+  }
+
+  function toPositiveInt(value, fallback) {
+    var n = Number(value);
+    var defaultValue = Number(fallback);
+    if (!Number.isFinite(n) || n <= 0) {
+      if (!Number.isFinite(defaultValue) || defaultValue <= 0) return 0;
+      return Math.floor(defaultValue);
+    }
+    return Math.floor(n);
+  }
+
+  function normalizeTempExecRemoveSelectionText(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[“”"'`]/g, '');
+  }
+
+  function formatTempExecRemoveSuccessText(result) {
+    var data = result && typeof result === 'object' ? result : {};
+    var labels = Array.isArray(data.fileLabels) && data.fileLabels.length ? data.fileLabels : (Array.isArray(data.fileNames) ? data.fileNames : []);
+    var count = toPositiveInt(data.count || labels.length, 0);
+    var summary = '';
+    if (labels.length > 0) {
+      summary = labels.slice(0, 3).map(function(item) {
+        return item === undefined || item === null ? '' : String(item).trim();
+      }).filter(Boolean).join('、');
+      if (labels.length > 3) summary += ' 等 ' + labels.length + ' 份';
+    }
+    if (count > 1) {
+      return '已移出执行用例：共 ' + count + ' 份' + (summary ? ('，包括 ' + summary) : '') + '。';
+    }
+    return '已移出执行用例：' + (summary || '目标用例') + '。';
+  }
+
+  function extractCaseDetailIdCandidates(text) {
+    var raw = String(text || '');
+    var matches = raw.match(/(?:^|D)(d{1,6})(?:D|$)/g) || [];
+    return matches.map(function(part) {
+      var found = String(part || '').match(/d{1,6}/);
+      return found && found[0] ? String(found[0]) : '';
+    }).filter(Boolean);
+  }
+
+  function matchCaseItemsFromReferenceText(items, text) {
+    var list = Array.isArray(items) ? items : [];
+    var raw = String(text || '').trim();
+    var normalized = normalizeCaseDetailLookupText(raw);
+    var ids = extractCaseDetailIdCandidates(raw);
+    return list.filter(function(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      var itemId = row.id === undefined || row.id === null ? '' : String(row.id).trim();
+      var title = row.title === undefined || row.title === null ? '' : String(row.title).trim();
+      var normalizedTitle = normalizeCaseDetailLookupText(title);
+      if (itemId && ids.indexOf(itemId) !== -1) return true;
+      if (normalized && normalizedTitle && (normalized.indexOf(normalizedTitle) !== -1 || normalizedTitle.indexOf(normalized) !== -1)) return true;
+      return false;
+    });
+  }
+
+  function shouldRequireSpecificCaseDetailTarget(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    if (extractCaseDetailIdCandidates(raw).length) return true;
+    if (containsAny(raw, ['该用例', '这条', '这一条', '这一个用例', '这个用例', '本用例'])) return true;
+    return false;
+  }
+
+  function isCaseDetailClarificationIntent(text) {
+    var raw = String(text || '').trim();
+    if (!raw) return false;
+    if (isCurrentCaseFullDetailIntent(raw)) return false;
+    if (isExplicitExecTransferIntent(raw)) return false;
+    var prevAiText = getLatestAssistantMessageText();
+    if (!prevAiText) return false;
+    if (!containsAny(prevAiText, ['用例 ID', '用例ID', '完整标题', '完整展开', '完整字段', '当前结果里', '前 20 条', 'truncated=true', '请直接给我用例'])) {
+      return false;
+    }
+    if (raw.length > 80) return false;
+    return true;
+  }
+
+  function hasDirectCaseDetailReference(result, userText) {
+    var data = result && typeof result === 'object' ? result : {};
+    var items = Array.isArray(data.items) ? data.items : [];
+    var raw = String(userText || '').trim();
+    if (!raw || !items.length) return false;
+    if (extractCaseDetailIdCandidates(raw).length) return true;
+    if (containsAny(raw, ['该用例', '当前用例', '这个用例', '本用例', '这条', '这一条', '这一个用例'])) return true;
+    return matchCaseItemsFromReferenceText(items, raw).length === 1;
+  }
+
+  function resolveRequestedCaseDetailTarget(result, userText, options) {
+    var data = result && typeof result === 'object' ? result : {};
+    var items = Array.isArray(data.items) ? data.items : [];
+    var opts = options && typeof options === 'object' ? options : {};
+    var texts = [];
+    var currentText = String(userText || '').trim();
+    if (!items.length) return null;
+    if (items.length === 1 && Number(data.total) === 1) {
+      return { item: Object.assign({}, items[0]), reason: 'single-item' };
+    }
+    if (currentText) texts.push(currentText);
+    if (opts.includeConversationContext === true) {
+      var prevUserText = getPreviousUserMessageText(currentText);
+      if (prevUserText) texts.push(prevUserText);
+      var prevAiText = getLatestAssistantMessageText();
+      if (prevAiText) texts.push(prevAiText);
+    }
+    for (var i = 0; i < texts.length; i += 1) {
+      var matched = matchCaseItemsFromReferenceText(items, texts[i]);
+      if (matched.length === 1) {
+        return { item: Object.assign({}, matched[0]), reason: i === 0 ? 'current-text' : (i === 1 ? 'previous-user' : 'previous-ai') };
+      }
+    }
+    return null;
+  }
+
+  function buildCaseDetailTargetMissingText(result, userText) {
+    var data = result && typeof result === 'object' ? result : {};
+    var total = Number(data.total);
+    var query = String(userText || '').trim();
+    if (!Number.isFinite(total) || total <= 1) return '没有定位到需要完整展示的目标用例。';
+    return '当前结果里匹配到多条用例，请补充用例 ID 或更完整的标题，我再为你完整展开。' + (query ? ('（当前问题：' + query + '）') : '');
+  }
+
+  function assistantReadFirstArgString(args, keys) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var list = Array.isArray(keys) ? keys : [];
+    var i = 0;
+    for (i = 0; i < list.length; i += 1) {
+      var key = String(list[i] || '').trim();
+      if (!key) continue;
+      if (payload[key] === undefined || payload[key] === null) continue;
+      var text = String(payload[key]).trim();
+      if (text) return text;
+    }
+    return '';
+  }
+
+  function normalizeTempExecReuseFieldName(rawField) {
+    var text = rawField === undefined || rawField === null ? '' : String(rawField).trim().toLowerCase();
+    text = text.replace(/\s+/g, '');
+    if (!text) return '';
+    if (text === 'actual' || text === 'result' || text === 'status' || text === '执行结果' || text === '状态' || text === '子项执行结果' || text === '子项状态') return 'actual';
+    if (text === 'remark' || text === 'remarks' || text === 'note' || text === 'comment' || text === '备注' || text === '子项备注' || text === '说明') return 'remark';
+    if (text === 'text' || text === 'name' || text === 'title' || text === '子项' || text === '子项名称' || text === '子项标题' || text === '测试项' || text === '测试项名称') return 'text';
+    return '';
+  }
+
+  function normalizeTempExecReuseModeHint(rawMode) {
+    var text = rawMode === undefined || rawMode === null ? '' : String(rawMode).trim().toLowerCase();
+    text = text.replace(/\s+/g, '_').replace(/-/g, '_');
+    if (!text) return '';
+    if (text === 'preset_set' || text === 'set_presets' || text === 'preset_replace' || text === 'replace_presets' || text === 'set_preset_items') return 'preset_set';
+    if (text === 'preset_add' || text === 'add_presets' || text === 'append_presets' || text === 'add_preset_items') return 'preset_add';
+    if (text === 'preset_rename' || text === 'rename_preset' || text === 'rename_presets' || text === 'rename_preset_item' || text === 'rename_preset_items' || text === 'update_preset_name' || text === 'modify_preset_name' || text === 'edit_preset_name') return 'preset_rename';
+    if (text === 'detail_delete' || text === 'delete_detail' || text === 'detail_remove' || text === 'remove_detail' || text === 'delete_sub_item' || text === 'delete_sub_items' || text === 'remove_sub_item' || text === 'remove_sub_items' || text === 'delete' || text === 'remove' || text === 'delete_all' || text === 'remove_all' || text === 'batch_delete' || text === 'batch_remove' || text === 'delete_reuse_sub_items' || text === 'remove_reuse_sub_items') return 'detail_delete';
+    if (text === 'detail_update' || text === 'update_detail' || text === 'detail_set' || text === 'update_sub_item' || text === 'update_sub_items' || text === 'modify_sub_item' || text === 'modify_sub_items' || text === 'edit_sub_item' || text === 'edit_sub_items' || text === 'update' || text === 'modify' || text === 'edit' || text === 'set' || text === 'replace') return 'detail_update';
+    return text;
+  }
+
+  function stripWrappedQuotes(text) {
+    var value = String(text || '').trim();
+    if (!value) return '';
+    value = value.replace(/^[“"'`]+/, '').replace(/[”"'`]+$/, '').trim();
+    return value;
+  }
+
+  function escapeRegexToken(raw) {
+    var text = raw === undefined || raw === null ? '' : String(raw);
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function detectCaseUpdateFieldFromText(raw) {
+    var text = String(raw || '');
+    var map = [
+      { keys: ['优先级', 'priority', 'level'], field: 'priority' },
+      { keys: ['模块', 'module'], field: 'module' },
+      { keys: ['标题', '用例标题', 'title', 'name'], field: 'title' },
+      { keys: ['前置条件', '前提条件', '前置', 'precondition', 'preconditions'], field: 'precondition' },
+      { keys: ['步骤', '操作步骤', 'steps'], field: 'steps' },
+      { keys: ['预期结果', '预期', 'expected'], field: 'expected' },
+      { keys: ['执行结果', '状态', 'actual', 'result', 'status'], field: 'actual' },
+      { keys: ['备注', 'remark', 'note', 'comment'], field: 'remark' },
+    ];
+    var i = 0;
+    var j = 0;
+    for (i = 0; i < map.length; i += 1) {
+      var item = map[i];
+      for (j = 0; j < item.keys.length; j += 1) {
+        var key = item.keys[j];
+        if (String(text).toLowerCase().indexOf(String(key).toLowerCase()) !== -1) return item.field;
+      }
+    }
+    return '';
+  }
+
+  function extractCaseUpdateTargetIndex(raw) {
+    var text = String(raw || '');
+    var m = text.match(/第\s*(\d+)\s*条/);
+    var chineseMatch = null;
+    var n = 0;
+    if (!m) {
+      chineseMatch = text.match(/第\s*([一二两三四五六七八九十]+)\s*条/);
+      if (!chineseMatch || !chineseMatch[1]) return 0;
+      n = parseSimpleChinesePositiveInt(chineseMatch[1]);
+    } else {
+      n = Number(m[1]);
+    }
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.floor(n);
+  }
+
+  function extractCaseUpdateValue(raw, field) {
+    var text = String(raw || '').trim();
+    var normalizedField = normalizeCaseUpdateFieldName(field);
+    var pm = null;
+    var am = null;
+    var connector = null;
+    var appendConnector = null;
+    var fieldAliases = [];
+    var escapedAliases = [];
+    var aliasGroup = '';
+    var fieldAnchored = null;
+    var compactActual = '';
+    var quoted = null;
+    var i = 0;
+    if (!text || !normalizedField) return '';
+    if (normalizedField === 'priority') {
+      pm = text.match(/优先级\s*(?:改成|修改为|改为|设为|设成|设置为|更新为|更新成|调成|调为|调整为|调整成|变为|变成|改到|切到|为|是)\s*([Pp]\s*\d{1,2})/i);
+      if (!pm) pm = text.match(/\b([Pp]\s*\d{1,2})\b/i);
+      if (pm && pm[1]) {
+        var pn = String(pm[1]).toUpperCase().replace(/[^P0-9]/g, '');
+        if (/^P[0-9]{1,2}$/.test(pn)) return pn;
+      }
+    }
+    if (normalizedField === 'actual') {
+      am = text.match(/(?:执行结果|状态)\s*(?:改成|修改为|改为|改回|设为|设成|设置为|更新为|更新成|变回|变为|变成|切到|调成|调为|调回|调整为|调整成|为|是)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i);
+      if (!am) am = text.match(/(?:变回|变成|变为|设为|设成|改为|改成|改回|调整为|调整成|更新为|更新成|切到|调回|置为|置成|置)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)(?:状态|结果)?/i);
+      if (!am) am = text.match(/(?:全部|所有|全都|批量|统一)(?:的执行结果|执行结果|结果|状态)?[^\n。；;，,]{0,12}?(?:置为|置成|置|改为|改成|改回|设为|设成|设置为|更新为|更新成|变回|变为|变成|切到|调成|调为|调回|调整为|调整成)\s*(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i);
+      if (!am) am = text.match(/\b(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)\b/i);
+      if (am && am[1]) {
+        var actualValue = normalizeCaseActualValueToken(am[1]);
+        if (actualValue) return actualValue;
+      }
+    }
+    connector = text.match(/(?:改成|修改为|改为|改回|设为|设成|设置为|更新为|更新成|改到|调成|调为|调回|调整为|调整成|变为|变成|切到|为|是)\s*([^\n。；;，,]+)$/);
+    if (connector && connector[1]) {
+      var candidate = stripWrappedQuotes(connector[1]);
+      if (normalizedField === 'priority') {
+        var p = candidate.toUpperCase().replace(/[^P0-9]/g, '');
+        if (/^P[0-9]{1,2}$/.test(p)) return p;
+      } else if (candidate) {
+        return candidate;
+      }
+    }
+    appendConnector = text.match(/(?:拼接上|拼接成|拼接为|拼接|追加上|追加成|追加为|追加|后缀加上|后缀加|后面加上|后面加|前缀加上|前缀加|前面加上|前面加|开头加上|开头加|末尾加上|末尾加|结尾加上|结尾加)\s*([^\n。；;，,]+)$/);
+    if (appendConnector && appendConnector[1]) {
+      var appendValue = stripWrappedQuotes(appendConnector[1]);
+      if (appendValue) return appendValue;
+    }
+    fieldAliases = getCaseUpdateFieldAliases(normalizedField);
+    if (fieldAliases.length) {
+      for (i = 0; i < fieldAliases.length; i += 1) {
+        escapedAliases.push(escapeRegexToken(fieldAliases[i]));
+      }
+      aliasGroup = escapedAliases.join('|');
+      if (aliasGroup) {
+        fieldAnchored = text.match(new RegExp(
+          '(?:^|\\s|，|,|。|；|;|并且|而且|然后|再|同时|另外|顺便)(?:把|将)?\\s*(?:' + aliasGroup + ')(?:这一栏|这栏|字段|栏位|列|项|上|里|中)?\\s*(?:[:：]|[，,]|是|为|写成|写为|写|填成|填为|填|加上|加|追加|补充|改成|改为|设为|设成|更新为|更新成)?\\s*([^\\n。；;]+)$',
+          'i'
+        ));
+        if (fieldAnchored && fieldAnchored[1]) {
+          var anchoredValue = stripWrappedQuotes(fieldAnchored[1]);
+          anchoredValue = anchoredValue.replace(/^(?:是|为|写成|写为|写|填成|填为|填|加上|加|追加|补充|改成|改为|改回|设为|设成|更新为|更新成|调回)\s*/i, '').trim();
+          if (normalizedField === 'priority') {
+            var p2 = anchoredValue.toUpperCase().replace(/[^P0-9]/g, '');
+            if (/^P[0-9]{1,2}$/.test(p2)) return p2;
+          } else if (anchoredValue) {
+            return anchoredValue;
+          }
+        }
+      }
+    }
+    if (normalizedField === 'actual') {
+      compactActual = normalizeCaseActualValueToken(text);
+      if (compactActual) return compactActual;
+    }
+    quoted = text.match(/[“"']([^“”"']+)[”"']/);
+    if (quoted && quoted[1]) return String(quoted[1]).trim();
+    return '';
+  }
+
+  function detectCaseUpdateOperationFromText(raw) {
+    var text = String(raw || '');
+    if (!text) return 'replace';
+    if (containsAny(text, ['拼接', '追加', '后缀', '后面加', '后面拼', '末尾加', '结尾加', '尾部加'])) return 'append';
+    if (containsAny(text, ['前缀', '前面加', '前面拼', '开头加', '头部加'])) return 'prepend';
+    return 'replace';
+  }
+
+  function detectCaseUpdateScopeFromText(raw) {
+    var text = String(raw || '');
+    if (!text) return '';
+    if (containsAny(text, ['全部用例', '所有用例', '全部条目', '所有条目', '全部记录', '所有记录', '全量用例', '全部都'])) return 'all';
+    if (containsAny(text, ['全部', '所有', '全都']) && containsAny(text, ['用例', '条目', '记录'])) return 'all';
+    if (/(?:把|将).*(?:都改|都设|都更新|全改|全设|全部改|全部设)/.test(text)) return 'all';
+    return '';
+  }
+
+  function containsCaseUpdateActionVerb(raw) {
+    var text = String(raw || '').trim();
+    if (!text) return false;
+    return containsAny(text, [
+      '改成', '修改为', '改为', '改回', '设为', '设成', '设置为', '更新为', '更新成',
+      '修改', '编辑', '调成', '调为', '调回', '调整为', '调整成', '变为', '变成', '变回',
+      '改到', '切到', '切回', '恢复为', '恢复成', '恢复到',
+      '拼接', '追加', '后缀', '前缀', '后面加', '前面加', '开头加', '末尾加', '结尾加',
+      '清空', '清除', '删除', '移除', '去掉', '置空'
+    ]);
+  }
+
+  function isLikelyCaseUpdateIntent(raw) {
+    var text = String(raw || '').trim();
+    var field = '';
+    var hasCaseContextWord = false;
+    var hasRecognizableValue = false;
+    var index = 0;
+    var scope = '';
+    var apis = null;
+    var tab = '';
+    if (!text) return false;
+    if (!containsCaseUpdateActionVerb(text)) return false;
+    if (containsAny(text, ['怎么改', '如何改', '怎么修改', '如何修改', '修改步骤', '修改方法', '编辑方法', '怎么编辑', '如何编辑'])) return false;
+    field = detectCaseUpdateFieldFromText(text);
+    hasCaseContextWord = containsAny(text, ['用例', '该用例', '当前用例', '这条', '当前行', '本条']);
+    hasRecognizableValue = /\b[Pp]\s*\d{1,2}\b/.test(text)
+      || /(未执行|通过|失败|阻塞|不适用|变更重跑|有改动|pending|pass(?:ed)?|fail(?:ed)?|blocked?|na|n\/a|skip(?:ped)?)/i.test(text);
+    index = extractCaseUpdateTargetIndex(text);
+    scope = detectCaseUpdateScopeFromText(text);
+    if (!field && !hasRecognizableValue && index <= 0 && !scope) return false;
+    if (hasCaseContextWord) return true;
+    apis = getApis();
+    if (apis.assistantApi && typeof apis.assistantApi.getPageData === 'function') {
+      var pageData = apis.assistantApi.getPageData('');
+      tab = pageData && pageData.tab ? String(pageData.tab) : '';
+    }
+    return tab === 'case-library' || tab === 'tempexec';
+  }
+
+  function parseCaseUpdateCommand(raw) {
+    var text = String(raw || '').trim();
+    var field = '';
+    var hasCaseContextWord = false;
+    var clearIntent = false;
+    var value = '';
+    var index = 0;
+    var operation = '';
+    var scope = '';
+    if (!text) return null;
+    if (!containsCaseUpdateActionVerb(text)) return null;
+    field = detectCaseUpdateFieldFromText(text);
+    if (!field) return null;
+    hasCaseContextWord = containsAny(text, ['用例', '该用例', '当前用例', '这条', '当前行', '本条']);
+    if (!hasCaseContextWord) {
+      var apis = getApis();
+      var tab = '';
+      if (apis.assistantApi && typeof apis.assistantApi.getPageData === 'function') {
+        var pageData = apis.assistantApi.getPageData('');
+        tab = pageData && pageData.tab ? String(pageData.tab) : '';
+      }
+      if (tab !== 'case-library' && tab !== 'tempexec') return null;
+    }
+    clearIntent = detectCaseUpdateClearIntent(text, field) && isCaseUpdateClearableField(field);
+    value = extractCaseUpdateValue(text, field);
+    if (!value && !clearIntent) return null;
+    index = extractCaseUpdateTargetIndex(text);
+    operation = detectCaseUpdateOperationFromText(text);
+    scope = detectCaseUpdateScopeFromText(text);
+    if (index > 0) scope = 'single';
+    return {
+      field: field,
+      value: value,
+      index: index,
+      operation: operation,
+      scope: scope || 'single',
+      clear: clearIntent === true,
+    };
+  }
+
+  function detectImplicitActualBulkUpdate(raw) {
+    var text = String(raw || '').trim();
+    var actualValue = '';
+    if (!text) return null;
+    if (!containsAny(text, ['全部', '所有', '全都', '批量', '统一'])) return null;
+    if (!containsAny(text, ['置', '改', '设', '更新', '调整', '变', '切'])) return null;
+    actualValue = extractCaseUpdateValue(text, 'actual');
+    if (!actualValue) return null;
+    return {
+      field: 'actual',
+      value: actualValue,
+      scope: 'all',
+    };
+  }
+
+  function inferCaseUpdateArgsFromText(baseArgs, rawText) {
+    var args = baseArgs && typeof baseArgs === 'object' ? Object.assign({}, baseArgs) : {};
+    var raw = String(rawText || '');
+    var fieldRaw = '';
+    var field = '';
+    var implicitActual = null;
+    var clearIntent = false;
+    var valueRaw = args.value;
+    var index = 0;
+    var indexRaw = args.index;
+    var hasIndex = 0;
+    var scopeRaw = '';
+    var contextRaw = '';
+    var operationRaw = '';
+    if (args.field !== undefined && args.field !== null) fieldRaw = String(args.field);
+    if (!fieldRaw && args.key !== undefined && args.key !== null) fieldRaw = String(args.key);
+    if (!fieldRaw && args.column !== undefined && args.column !== null) fieldRaw = String(args.column);
+    if (!fieldRaw && args.name !== undefined && args.name !== null) fieldRaw = String(args.name);
+    field = normalizeCaseUpdateFieldName(fieldRaw);
+    if (!field) field = detectCaseUpdateFieldFromText(raw);
+    if (!field) {
+      implicitActual = detectImplicitActualBulkUpdate(raw);
+      if (implicitActual && implicitActual.field) field = implicitActual.field;
+    }
+    if (field) args.field = field;
+    clearIntent = field && detectCaseUpdateClearIntent(raw, field) && isCaseUpdateClearableField(field);
+    if (!clearIntent && field && isCaseUpdateClearableField(field) && (args.clear === true || String(args.mode || '').toLowerCase() === 'clear')) {
+      clearIntent = true;
+    }
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && args.to !== undefined && args.to !== null) valueRaw = args.to;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && args.text !== undefined && args.text !== null) valueRaw = args.text;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && args.content !== undefined && args.content !== null) valueRaw = args.content;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && args.newValue !== undefined && args.newValue !== null) valueRaw = args.newValue;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && field) {
+      valueRaw = extractCaseUpdateValue(raw, field);
+    }
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && implicitActual && implicitActual.value) {
+      valueRaw = implicitActual.value;
+    }
+    if (valueRaw !== undefined && valueRaw !== null && String(valueRaw).trim() !== '') {
+      args.value = String(valueRaw).trim();
+    } else if (clearIntent) {
+      args.value = '';
+      args.clear = true;
+    }
+    index = extractCaseUpdateTargetIndex(raw);
+    if ((indexRaw === undefined || indexRaw === null) && args.itemIndex !== undefined && args.itemIndex !== null) indexRaw = args.itemIndex;
+    if ((indexRaw === undefined || indexRaw === null) && args.seq !== undefined && args.seq !== null) indexRaw = args.seq;
+    hasIndex = Number(indexRaw);
+    if ((!Number.isFinite(hasIndex) || hasIndex <= 0) && index > 0) {
+      args.index = index;
+    }
+    if (args.scope !== undefined && args.scope !== null) scopeRaw = String(args.scope).trim().toLowerCase();
+    if (!scopeRaw && args.target !== undefined && args.target !== null) scopeRaw = String(args.target).trim().toLowerCase();
+    if (!scopeRaw && args.range !== undefined && args.range !== null) scopeRaw = String(args.range).trim().toLowerCase();
+    if (!scopeRaw && (args.all === true || args.applyAll === true || args.batch === true)) scopeRaw = 'all';
+    if (scopeRaw !== 'all' && scopeRaw !== 'single') {
+      scopeRaw = detectCaseUpdateScopeFromText(raw) || '';
+    }
+    if (!scopeRaw && implicitActual && implicitActual.scope) scopeRaw = implicitActual.scope;
+    if (Number.isFinite(hasIndex) && hasIndex > 0) scopeRaw = 'single';
+    if (scopeRaw === 'all') {
+      args.scope = 'all';
+      if (Object.prototype.hasOwnProperty.call(args, 'index')) delete args.index;
+    } else if (scopeRaw === 'single') {
+      args.scope = 'single';
+    }
+    if (args.context !== undefined && args.context !== null) contextRaw = String(args.context).trim().toLowerCase();
+    if (!contextRaw && args.pageContext !== undefined && args.pageContext !== null) contextRaw = String(args.pageContext).trim().toLowerCase();
+    if (!contextRaw && args.tab !== undefined && args.tab !== null) {
+      var tabContext = String(args.tab).trim().toLowerCase();
+      if (tabContext === 'tempexec' || tabContext === 'case-library') contextRaw = tabContext;
+    }
+    if (!contextRaw) {
+      if (scopeRaw === 'all' && (field === 'actual' || field === 'remark')) {
+        contextRaw = 'tempexec';
+      } else if (field === 'actual' && containsAny(raw, ['执行', '执行页', '执行用例', '执行列表'])) {
+        contextRaw = 'tempexec';
+      }
+    }
+    if (contextRaw === 'tempexec' || contextRaw === 'case-library') {
+      args.context = contextRaw;
+    }
+    if (args.operation !== undefined && args.operation !== null) operationRaw = String(args.operation).trim().toLowerCase();
+    if (!operationRaw && args.mode !== undefined && args.mode !== null) operationRaw = String(args.mode).trim().toLowerCase();
+    if (!operationRaw && args.action !== undefined && args.action !== null) operationRaw = String(args.action).trim().toLowerCase();
+    if (operationRaw !== 'append' && operationRaw !== 'prepend' && operationRaw !== 'replace') {
+      operationRaw = detectCaseUpdateOperationFromText(raw);
+    }
+    if (operationRaw === 'append' || operationRaw === 'prepend' || operationRaw === 'replace') {
+      args.operation = operationRaw;
+    }
+    return args;
+  }
+
+  function normalizeCaseUpdateOperationFromArgs(args) {
+    var payload = args && typeof args === 'object' ? args : {};
+    var raw = '';
+    if (payload.operation !== undefined && payload.operation !== null) raw = String(payload.operation).trim().toLowerCase();
+    if (!raw && payload.mode !== undefined && payload.mode !== null) raw = String(payload.mode).trim().toLowerCase();
+    if (!raw && payload.action !== undefined && payload.action !== null) raw = String(payload.action).trim().toLowerCase();
+    if (raw === 'append' || raw === 'prepend' || raw === 'replace') return raw;
+    return '';
+  }
+
+  function extractTempExecReuseFileName(raw) {
+    var text = String(raw || '').trim();
+    var patterns = [];
+    var i = 0;
+    var matched = null;
+    var candidate = '';
+    if (!text) return '';
+    patterns.push(/执行用例[【“"'`]?([^】”"'`\n]+?)[】”"'`]/);
+    patterns.push(/([^\s，。,；;“”"'`]+用例)(?:里|中的|内的|的).*(?:复用子项|子项)/);
+    for (i = 0; i < patterns.length; i += 1) {
+      matched = text.match(patterns[i]);
+      if (!matched || !matched[1]) continue;
+      candidate = stripWrappedQuotes(matched[1]);
+      if (!candidate) continue;
+      if (/^第\s*\d+\s*条(?:用例)?$/i.test(candidate)) continue;
+      if (containsAny(candidate, ['当前用例', '全部用例', '所有用例', '当前执行用例'])) continue;
+      return candidate;
+    }
+    return '';
+  }
+
+  function extractTempExecReuseDetailName(raw) {
+    var text = String(raw || '').trim();
+    var patterns = [];
+    var i = 0;
+    var matched = null;
+    var candidate = '';
+    if (!text) return '';
+    patterns.push(/(?:复用子项|子项)(?:名称|名字|名)?(?:为|是|叫)\s*[“"'`]?([^“”"'`，。,；;\n]+)[”"'`]?/i);
+    patterns.push(/名为\s*[“"'`]?([^“”"'`，。,；;\n]+)[”"'`]?(?:的(?:复用子项|子项))/i);
+    patterns.push(/[“"']([^“”"']+)[”"']\s*(?:复用子项|子项)/i);
+    patterns.push(/(?:复用子项|子项)\s*([^\s，。,；;\n]+?)(?=(?:执行结果|状态)?\s*(?:改成|修改为|改为|改回|设为|设成|设置为|更新为|更新成|变回|变为|变成|切到|调成|调为|调回|调整为|调整成|为|是))/i);
+    for (i = 0; i < patterns.length; i += 1) {
+      matched = text.match(patterns[i]);
+      if (!matched || !matched[1]) continue;
+      candidate = stripWrappedQuotes(matched[1]);
+      if (!candidate) continue;
+      candidate = candidate.replace(/的(?:执行结果|状态|备注|名称|名字|标题).*$/i, '').trim();
+      if (!candidate) continue;
+      if (containsAny(candidate, ['全部', '所有', '当前'])) continue;
+      return candidate;
+    }
+    return '';
+  }
+
+  function extractTempExecReuseDetailIndex(raw) {
+    var text = String(raw || '');
+    var matched = text.match(/第\s*(\d+)\s*个(?:复用)?子项/);
+    var value = 0;
+    if (!matched || !matched[1]) return 0;
+    value = Number(matched[1]);
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    return Math.floor(value);
+  }
+
+  function parseTempExecReuseUpdateCommand(raw, seedArgs) {
+    var text = String(raw || '').trim();
+    var source = seedArgs && typeof seedArgs === 'object' ? Object.assign({}, seedArgs) : {};
+    var explicitMode = normalizeTempExecReuseModeHint(assistantReadFirstArgString(source, ['mode', 'action', 'type', 'intent', 'task', 'operationType', 'operateType', 'operate', 'op']));
+    var explicitField = normalizeTempExecReuseFieldName(source.field || source.key || source.column || source.name || source.detailField || source.subField || '');
+    var explicitDetailName = assistantReadFirstArgString(source, ['detailName', 'subItemName', 'childName', 'detailText', 'subItemText', 'childText']);
+    var explicitDetailId = assistantReadFirstArgString(source, ['detailId', 'subItemId', 'childId']);
+    var explicitFileName = assistantReadFirstArgString(source, ['fileName']);
+    var explicitDetailIndex = toPositiveInt(source.detailIndex || source.subItemIndex || source.childIndex || source.detailSeq, 0);
+    var reuseMentioned = containsAny(text, ['复用子项', '子项', '复用']);
+    var args = {};
+    var mode = '';
+    var field = '';
+    var value = '';
+    var genericValue = '';
+    var detailName = '';
+    var detailIndex = 0;
+    var caseIndex = 0;
+    var fileName = '';
+    if (!explicitMode && !explicitField && !explicitDetailName && !explicitDetailId && !explicitDetailIndex && !explicitFileName && !reuseMentioned) return null;
+    args = Object.assign({}, source);
+    mode = explicitMode;
+    if (!mode) {
+      if (containsAny(text, ['删除', '移除', '去掉']) && reuseMentioned) mode = 'detail_delete';
+      else if (reuseMentioned) mode = 'detail_update';
+    }
+    field = explicitField;
+    if (!field && reuseMentioned) {
+      if (containsAny(text, ['执行结果', '状态'])) field = 'actual';
+      else if (containsAny(text, ['改', '设', '置', '更新', '调整', '变', '切', '调'])
+        && normalizeCaseActualValueToken(extractCaseUpdateValue(text, 'actual'))) field = 'actual';
+      else if (containsAny(text, ['备注', '说明'])) field = 'remark';
+      else if (containsAny(text, ['名称', '名字', '标题'])) field = 'text';
+    }
+    if (mode) args.mode = mode;
+    if (field) args.field = field;
+    detailName = explicitDetailName || extractTempExecReuseDetailName(text);
+    detailIndex = explicitDetailIndex || extractTempExecReuseDetailIndex(text);
+    caseIndex = toPositiveInt(args.index || args.itemIndex || args.seq || args.row, 0) || extractCaseUpdateTargetIndex(text);
+    fileName = explicitFileName || extractTempExecReuseFileName(text);
+    if (detailName && !assistantReadFirstArgString(args, ['detailName', 'subItemName', 'childName', 'detailText', 'subItemText', 'childText'])) {
+      args.detailName = detailName;
+    }
+    if (detailIndex > 0 && !(toPositiveInt(args.detailIndex || args.subItemIndex || args.childIndex || args.detailSeq, 0) > 0)) {
+      args.detailIndex = detailIndex;
+    }
+    if (caseIndex > 0 && !(toPositiveInt(args.index || args.itemIndex || args.seq || args.row, 0) > 0)) {
+      args.index = caseIndex;
+    }
+    if (fileName && !assistantReadFirstArgString(args, ['fileName'])) {
+      args.fileName = fileName;
+    }
+    if (!args.operation) {
+      var op = normalizeCaseUpdateOperationFromArgs(args) || detectCaseUpdateOperationFromText(text);
+      if (op) args.operation = op;
+    }
+    if (!args.scope && containsAny(text, ['全部', '所有', '全都', '统一']) && reuseMentioned) {
+      args.scope = 'all';
+    }
+    if ((args.deleteAll !== true && args.removeAll !== true && args.delete !== true && args.remove !== true) && normalizeTempExecReuseModeHint(args.mode) === 'detail_delete') {
+      if (!detailName && detailIndex <= 0 && containsAny(text, ['全部子项', '所有子项', '全部复用子项', '所有复用子项'])) {
+        args.deleteAll = true;
+      }
+    }
+    value = assistantReadFirstArgString(args, ['value', 'to', 'text', 'content', 'newValue']);
+    if (!value && normalizeTempExecReuseFieldName(args.field || '') === 'actual') {
+      value = extractCaseUpdateValue(text, 'actual');
+    }
+    if (!value && normalizeTempExecReuseFieldName(args.field || '') !== 'actual') {
+      genericValue = extractCaseUpdateValue(text, 'title');
+      if (genericValue) value = genericValue;
+    }
+    if (value && !assistantReadFirstArgString(args, ['value', 'to', 'text', 'content', 'newValue'])) {
+      args.value = value;
+    }
+    if (!args.sourceUserText && text) args.sourceUserText = text;
+    return args;
+  }
+
+  function rewriteUiFillAsCaseUpdateIfNeeded(tool, args, userText) {
+    var source = null;
+    var parsed = null;
+    var candidate = {};
+    var fieldRaw = '';
+    var normalizedField = '';
+    var valueRaw = undefined;
+    var idxRaw = undefined;
+    var idx = 0;
+    var op = '';
+    var sourceScope = '';
+    if (tool !== 'ui.fill_input') return { tool: tool, args: args, rewritten: false };
+    source = args && typeof args === 'object' ? Object.assign({}, args) : {};
+    parsed = parseCaseUpdateCommand(userText);
+    if (parsed && parsed.field) candidate.field = parsed.field;
+    if (parsed && parsed.value !== undefined && parsed.value !== null && String(parsed.value).trim() !== '') {
+      candidate.value = String(parsed.value).trim();
+    }
+    if (parsed && parsed.clear === true) candidate.clear = true;
+    if (parsed && Number(parsed.index) > 0) candidate.index = Number(parsed.index);
+    if (parsed && parsed.operation) candidate.operation = String(parsed.operation);
+    if (parsed && parsed.scope) candidate.scope = String(parsed.scope);
+    if (!candidate.field && source.field !== undefined && source.field !== null) fieldRaw = String(source.field);
+    if (!candidate.field && !fieldRaw && source.key !== undefined && source.key !== null) fieldRaw = String(source.key);
+    if (!candidate.field && !fieldRaw && source.column !== undefined && source.column !== null) fieldRaw = String(source.column);
+    if (!candidate.field && !fieldRaw && source.name !== undefined && source.name !== null) fieldRaw = String(source.name);
+    normalizedField = normalizeCaseUpdateFieldName(fieldRaw);
+    if (normalizedField) candidate.field = normalizedField;
+    valueRaw = source.value;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.input !== undefined && source.input !== null) valueRaw = source.input;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.content !== undefined && source.content !== null) valueRaw = source.content;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.keyword !== undefined && source.keyword !== null) valueRaw = source.keyword;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.term !== undefined && source.term !== null) valueRaw = source.term;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.query !== undefined && source.query !== null) valueRaw = source.query;
+    if ((valueRaw === undefined || valueRaw === null || String(valueRaw).trim() === '') && source.text !== undefined && source.text !== null) valueRaw = source.text;
+    if ((candidate.value === undefined || candidate.value === null || String(candidate.value).trim() === '') && valueRaw !== undefined && valueRaw !== null && String(valueRaw).trim() !== '') {
+      candidate.value = String(valueRaw).trim();
+    }
+    if (candidate.index === undefined || candidate.index === null || Number(candidate.index) <= 0) {
+      idxRaw = source.index;
+      if ((idxRaw === undefined || idxRaw === null) && source.itemIndex !== undefined && source.itemIndex !== null) idxRaw = source.itemIndex;
+      if ((idxRaw === undefined || idxRaw === null) && source.seq !== undefined && source.seq !== null) idxRaw = source.seq;
+      if ((idxRaw === undefined || idxRaw === null) && source.row !== undefined && source.row !== null) idxRaw = source.row;
+      if ((idxRaw === undefined || idxRaw === null) && source.sourceIndex !== undefined && source.sourceIndex !== null) idxRaw = source.sourceIndex;
+      idx = Number(idxRaw);
+      if (Number.isFinite(idx) && idx > 0) candidate.index = Math.floor(idx);
+    }
+    op = normalizeCaseUpdateOperationFromArgs(source);
+    if (!op && parsed && parsed.operation) op = String(parsed.operation);
+    if (op) candidate.operation = op;
+    if (!candidate.scope) {
+      if (source.scope !== undefined && source.scope !== null) sourceScope = String(source.scope).trim().toLowerCase();
+      if (!sourceScope && source.target !== undefined && source.target !== null) sourceScope = String(source.target).trim().toLowerCase();
+      if (!sourceScope && source.range !== undefined && source.range !== null) sourceScope = String(source.range).trim().toLowerCase();
+      if (!sourceScope && (source.all === true || source.applyAll === true || source.batch === true)) sourceScope = 'all';
+      if (sourceScope === 'all' || sourceScope === 'single') candidate.scope = sourceScope;
+    }
+    if (source.context !== undefined && source.context !== null && String(source.context).trim()) {
+      candidate.context = String(source.context).trim();
+    }
+    if (source.fileId !== undefined && source.fileId !== null && String(source.fileId).trim()) {
+      candidate.fileId = String(source.fileId).trim();
+    }
+    if (source.caseFileId !== undefined && source.caseFileId !== null && String(source.caseFileId).trim()) {
+      candidate.fileId = String(source.caseFileId).trim();
+    }
+    if (source.caseId !== undefined && source.caseId !== null && String(source.caseId).trim()) {
+      candidate.fileId = String(source.caseId).trim();
+    }
+    candidate = inferCaseUpdateArgsFromText(candidate, userText);
+    if (!candidate.field) return { tool: tool, args: args, rewritten: false };
+    if ((candidate.value === undefined || candidate.value === null || String(candidate.value).trim() === '') && candidate.clear !== true) {
+      return { tool: tool, args: args, rewritten: false };
+    }
+    return { tool: 'case.update', args: candidate, rewritten: true };
+  }
+
+  function rewriteCaseUpdateAsTempExecReuseUpdateIfNeeded(tool, args, userText) {
+    var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+    var rawText = String(userText || payload.sourceUserText || '').trim();
+    var detailName = assistantReadFirstArgString(payload, ['detailName', 'subItemName', 'childName', 'detailText', 'subItemText', 'childText']);
+    var detailId = assistantReadFirstArgString(payload, ['detailId', 'subItemId', 'childId']);
+    var detailIndex = toPositiveInt(payload.detailIndex || payload.subItemIndex || payload.childIndex || payload.detailSeq, 0);
+    var caseField = normalizeCaseUpdateFieldName(payload.field || payload.key || payload.column || payload.name || '');
+    var reuseField = normalizeTempExecReuseFieldName(payload.field || payload.key || payload.column || payload.name || '');
+    var parsed = null;
+    var shouldRewriteOverallStatus = false;
+    var explicitCaseIndexes = Array.isArray(payload.caseIndexes) ? payload.caseIndexes : [];
+    var resolvedCaseIndex = 0;
+    if (tool !== 'case.update') return { tool: tool, args: payload, rewritten: false };
+    if (!reuseField) {
+      if (caseField === 'actual' || caseField === 'remark') reuseField = caseField;
+      else if (caseField === 'title') reuseField = 'text';
+    }
+    shouldRewriteOverallStatus = reuseField === 'actual' && shouldPreferTempExecReuseStatusUpdateForAssistant(payload);
+    if (!detailName && !detailId && !(detailIndex > 0) && !containsAny(rawText, ['复用子项', '子项', '复用']) && !shouldRewriteOverallStatus) {
+      return { tool: tool, args: payload, rewritten: false };
+    }
+    parsed = parseTempExecReuseUpdateCommand(rawText, payload) || payload;
+    if (!parsed || typeof parsed !== 'object') parsed = payload;
+    if (!parsed.field && reuseField) parsed.field = reuseField;
+    if (!parsed.mode) parsed.mode = 'detail_update';
+    if (shouldRewriteOverallStatus && normalizeTempExecReuseFieldName(parsed.field || '') === 'actual') {
+      resolvedCaseIndex = toPositiveInt(parsed.index || parsed.itemIndex || parsed.seq || parsed.row, 0);
+      parsed.applyAll = true;
+      if (!parsed.scope || String(parsed.scope).trim().toLowerCase() === 'all') {
+        if (explicitCaseIndexes.length > 1) parsed.scope = 'selected_cases';
+        else if (resolvedCaseIndex > 0 || explicitCaseIndexes.length === 1) parsed.scope = 'single_case';
+        else parsed.scope = 'file_all';
+      }
+    }
+    if (!parsed.field) return { tool: tool, args: payload, rewritten: false };
+    return {
+      tool: 'tempexec.reuse_update',
+      args: parsed,
+      rewritten: true,
+    };
+  }
+
+  function rewriteTempExecReuseUpdateAsCaseUpdateIfNeeded(tool, args, userText) {
+    var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+    var rawText = String(userText || payload.sourceUserText || '').trim();
+    var field = normalizeTempExecReuseFieldName(payload.field || payload.key || payload.column || payload.name || '');
+    var detailName = assistantReadFirstArgString(payload, ['detailName', 'subItemName', 'childName', 'detailText', 'subItemText', 'childText']);
+    var detailId = assistantReadFirstArgString(payload, ['detailId', 'subItemId', 'childId']);
+    var detailIndex = toPositiveInt(payload.detailIndex || payload.subItemIndex || payload.childIndex || payload.detailSeq, 0);
+    var keepAsReuse = false;
+    if (tool !== 'tempexec.reuse_update') return { tool: tool, args: payload, rewritten: false };
+    keepAsReuse = field === 'actual' && (payload.applyAll === true || payload.all === true || payload.batch === true || shouldPreferTempExecReuseStatusUpdateForAssistant(payload));
+    if (keepAsReuse) {
+      return { tool: tool, args: payload, rewritten: false };
+    }
+    if (detailName || detailId || detailIndex > 0 || containsAny(rawText, ['复用子项', '子项', '复用'])) {
+      return { tool: tool, args: payload, rewritten: false };
+    }
+    if (field !== 'actual' && field !== 'remark') return { tool: tool, args: payload, rewritten: false };
+    return {
+      tool: 'case.update',
+      args: inferCaseUpdateArgsFromText(Object.assign({}, payload, {
+        field: field,
+      }), rawText),
+      rewritten: true,
+    };
+  }
+
+  function formatTempExecReuseUpdateSuccessText(result) {
+    var data = result && typeof result === 'object' ? result : {};
+    var mode = normalizeTempExecReuseModeHint(assistantReadFirstArgString(data, ['mode', 'action', 'type']));
+    var field = normalizeTempExecReuseFieldName(data.field || data.key || data.column || data.name || '');
+    var fileName = assistantReadFirstArgString(data, ['fileName']) || '当前执行用例';
+    var detailName = assistantReadFirstArgString(data, ['detailName']) || '';
+    var value = assistantReadFirstArgString(data, ['value']) || '';
+    var previousValue = assistantReadFirstArgString(data, ['previousValue']) || '';
+    var index = toPositiveInt(data.index, 0);
+    var detailIndex = toPositiveInt(data.detailIndex, 0);
+    var selectedCaseCount = toPositiveInt(data.selectedCaseCount, 0);
+    var updatedCount = toPositiveInt(data.updatedCount || data.count, 0);
+    var deletedCount = toPositiveInt(data.deletedCount, 0);
+    var affectedCaseCount = toPositiveInt(data.affectedCaseCount, 0);
+    var all = data.all === true || data.deleteAll === true || String(data.scope || '').toLowerCase() === 'all' || String(data.scope || '').toLowerCase() === 'file_all';
+    if (mode === 'preset_set' || mode === 'preset_add') {
+      if (selectedCaseCount > 1) {
+        return '已更新复用预设子项：执行用例“' + fileName + '”，共 ' + selectedCaseCount + ' 条用例，当前预设 ' + (updatedCount || toPositiveInt(data.count, 0) || 0) + ' 项。';
+      }
+      return '已更新复用预设子项：执行用例“' + fileName + '”。';
+    }
+    if (mode === 'preset_rename') {
+      if (affectedCaseCount > 0) {
+        return '已重命名复用预设子项：执行用例“' + fileName + '”中的“' + (previousValue || detailName || '目标子项') + '”已改为“' + (value || detailName || '新名称') + '”，同步影响 ' + affectedCaseCount + ' 条用例。';
+      }
+      return '已重命名复用预设子项：执行用例“' + fileName + '”中的“' + (previousValue || detailName || '目标子项') + '”已改为“' + (value || detailName || '新名称') + '”。';
+    }
+    if (mode === 'detail_delete') {
+      if (all || deletedCount > 1 || selectedCaseCount > 1) {
+        return '已删除复用子项：执行用例“' + fileName + '”，共 ' + (selectedCaseCount || 1) + ' 条用例，' + (deletedCount || updatedCount || 0) + ' 项，已统一处理。';
+      }
+      return '已删除复用子项：执行用例“' + fileName + '”第 ' + (index || 1) + ' 条的子项“' + (detailName || ('子项' + String(detailIndex || 1))) + '”。';
+    }
+    if (field === 'actual') {
+      if (all || updatedCount > 1 || selectedCaseCount > 1) {
+        return '已将复用子项执行结果改为“' + (value || '目标状态') + '”：执行用例“' + fileName + '”，共 ' + (selectedCaseCount || 1) + ' 条用例，' + (updatedCount || 0) + ' 项，已统一处理。';
+      }
+      return '已将复用子项执行结果改为“' + (value || '目标状态') + '”：执行用例“' + fileName + '”第 ' + (index || 1) + ' 条的子项“' + (detailName || ('子项' + String(detailIndex || 1))) + '”。';
+    }
+    if (field === 'remark') {
+      if (all || updatedCount > 1 || selectedCaseCount > 1) {
+        return '已更新复用子项备注：执行用例“' + fileName + '”，共 ' + (selectedCaseCount || 1) + ' 条用例，' + (updatedCount || 0) + ' 项，已统一处理。';
+      }
+      return '已更新复用子项备注：执行用例“' + fileName + '”第 ' + (index || 1) + ' 条的子项“' + (detailName || ('子项' + String(detailIndex || 1))) + '”。';
+    }
+    if (field === 'text') {
+      return '已更新复用子项名称：执行用例“' + fileName + '”第 ' + (index || 1) + ' 条的子项已改为“' + (detailName || value || ('子项' + String(detailIndex || 1))) + '”。';
+    }
+    return '已完成复用子项操作：执行用例“' + fileName + '”。';
+  }
+
+  function normalizeCaseUpdateFieldName(rawField) {
+    var text = rawField === undefined || rawField === null ? '' : String(rawField).trim().toLowerCase();
+    text = text.replace(/\s+/g, '');
+    if (!text) return '';
+    if (text === 'priority' || text === 'level' || text === '优先级') return 'priority';
+    if (text === 'module' || text === '模块') return 'module';
+    if (text === 'title' || text === 'name' || text === '标题' || text === '用例标题') return 'title';
+    if (text === 'precondition' || text === 'preconditions' || text === '前置条件' || text === '前提条件' || text === '前置') return 'precondition';
+    if (text === 'steps' || text === 'step' || text === '步骤' || text === '操作步骤') return 'steps';
+    if (text === 'expected' || text === 'expect' || text === '预期' || text === '预期结果') return 'expected';
+    if (text === 'remark' || text === 'remarks' || text === 'note' || text === 'comment' || text === '备注') return 'remark';
+    if (text === 'actual' || text === 'result' || text === 'status' || text === '执行结果' || text === '状态') return 'actual';
+    return '';
+  }
+
+  function getCaseUpdateFieldAliases(rawField) {
+    var field = normalizeCaseUpdateFieldName(rawField);
+    if (!field) return [];
+    if (field === 'priority') return ['优先级', 'priority', 'level'];
+    if (field === 'module') return ['模块', 'module'];
+    if (field === 'title') return ['标题', '用例标题', 'title', 'name'];
+    if (field === 'precondition') return ['前置条件', '前提条件', '前置', 'precondition', 'preconditions'];
+    if (field === 'steps') return ['步骤', '操作步骤', 'steps'];
+    if (field === 'expected') return ['预期结果', '预期', 'expected'];
+    if (field === 'remark') return ['备注', 'remark', 'note', 'comment'];
+    if (field === 'actual') return ['执行结果', '状态', 'actual', 'result', 'status'];
+    return [];
+  }
+
+  function isCaseUpdateClearableField(rawField) {
+    var field = normalizeCaseUpdateFieldName(rawField);
+    return field === 'module'
+      || field === 'title'
+      || field === 'precondition'
+      || field === 'preconditions'
+      || field === 'steps'
+      || field === 'expected'
+      || field === 'remark';
+  }
+
+  function detectCaseUpdateClearIntent(raw, field) {
+    var text = String(raw || '');
+    if (!text) return false;
+    if (!/(?:清空|清除|移除|删除|去掉|取消|置空)/.test(text)) return false;
+    var aliases = getCaseUpdateFieldAliases(field);
+    if (!aliases.length) return false;
+    for (var i = 0; i < aliases.length; i += 1) {
+      var alias = String(aliases[i] || '');
+      if (alias && text.toLowerCase().indexOf(alias.toLowerCase()) !== -1) return true;
+    }
+    return false;
+  }
+
+  function normalizeCaseActualValueToken(rawValue) {
+    var raw = rawValue === undefined || rawValue === null ? '' : String(rawValue).trim();
+    if (!raw) return '';
+    var compact = raw.toLowerCase().replace(/\s+/g, '');
+    var map = {
+      '未执行': '未执行',
+      '待执行': '未执行',
+      'pending': '未执行',
+      'notrun': '未执行',
+      '未测': '未执行',
+      '通过': '通过',
+      '成功': '通过',
+      'pass': '通过',
+      'passed': '通过',
+      'ok': '通过',
+      '失败': '失败',
+      '不通过': '失败',
+      'fail': '失败',
+      'failed': '失败',
+      'error': '失败',
+      '阻塞': '阻塞',
+      'blocked': '阻塞',
+      'block': '阻塞',
+      '不适用': '不适用',
+      'na': '不适用',
+      'n/a': '不适用',
+      'skip': '不适用',
+      'skipped': '不适用',
+      '变更重跑': '变更重跑',
+      '有改动': '有改动'
+    };
+    if (Object.prototype.hasOwnProperty.call(map, compact)) return map[compact];
+    return '';
+  }
+
+  function buildCaseUpdateFieldLabel(field) {
+    var fieldLabelMap = {
+      module: '模块',
+      title: '标题',
+      priority: '优先级',
+      precondition: '前置条件',
+      preconditions: '前置条件',
+      steps: '步骤',
+      expected: '预期结果',
+      remark: '备注',
+      actual: '执行结果'
+    };
+    return fieldLabelMap[field] || field || '字段';
+  }
+
+  function formatMemoListText(tabs) {
+    var list = Array.isArray(tabs) ? tabs : [];
+    if (!list.length) return '当前没有备忘内容。';
+    var lines = [];
+    list.forEach(function(tab) {
+      var section = tab && typeof tab === 'object' ? tab : {};
+      var prefix = section.isActive ? '[当前页签]' : '[页签]';
+      lines.push(prefix + (section.name || '未命名'));
+      var items = Array.isArray(section.items) ? section.items : [];
+      items.forEach(function(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        var mark = row.done ? '已完成' : '待办';
+        lines.push('  ' + (row.index || 1) + '. (' + mark + ') ' + (row.text || ''));
+      });
+    });
+    return lines.join('\n');
+  }
+
+  function getMutationActionLabel(actionName, meta) {
+    var action = String(actionName || '').trim();
+    var payload = meta && typeof meta === 'object' ? meta : {};
+    if (action === 'memo_add') return '新增备忘';
+    if (action === 'memo_toggle') return '更新备忘完成状态';
+    if (action === 'memo_remove') return '删除备忘';
+    if (action === 'settings_patch') return '修改设置';
+    if (action === 'update_case' || action === 'case.update' || action === 'case_update') return '修改用例';
+    if (action === 'case_library.batch_update_exec_results') return '修改用例执行结果（批量）';
+    if (action === 'case_library.batch_archive_exec_cases') return '归档当前执行用例';
+    if (action === 'tempexec.remove_files') return '移出执行用例';
+    if (action === 'ui.click_control') {
+      var inspectText = [payload.controlId, payload.controlText, payload.text, payload.label, payload.name, payload.query].join(' ');
+      if (containsAny(inspectText, ['归档', 'archive'])) return '归档当前执行用例';
+      return '点击控件';
+    }
+    if (action === 'run_case_generation') return '触发用例生成';
+    if (action === 'run_missing_recommendation') return '触发漏测推荐';
+    if (action === 'delete_case') {
+      var idx = toPositiveInt(payload.index, 1);
+      return '删除第 ' + idx + ' 条用例';
+    }
+    return '执行写操作';
+  }
+
+  function normalizePendingInteractionChoices(choices) {
+    var list = Array.isArray(choices) ? choices : [];
+    return list.map(function(choice, index) {
+      var item = choice && typeof choice === 'object' ? choice : {};
+      var label = item.label !== undefined && item.label !== null
+        ? String(item.label).trim()
+        : (item.name !== undefined && item.name !== null ? String(item.name).trim() : '');
+      if (!label) label = '选项 ' + (index + 1);
+      return {
+        id: item.id !== undefined && item.id !== null ? String(item.id) : ('pending-choice-' + (index + 1)),
+        label: label,
+        description: item.description !== undefined && item.description !== null ? String(item.description).trim() : '',
+        replyText: item.replyText !== undefined && item.replyText !== null ? String(item.replyText).trim() : ('选第' + (index + 1) + '个'),
+        suggestedCapability: item.suggestedCapability !== undefined && item.suggestedCapability !== null ? normalizeMcpToolName(item.suggestedCapability) : '',
+        argsPatch: item.argsPatch && typeof item.argsPatch === 'object' ? JSON.parse(JSON.stringify(item.argsPatch)) : {},
+        data: item.data && typeof item.data === 'object' ? JSON.parse(JSON.stringify(item.data)) : {},
+      };
+    }).filter(function(item) { return !!(item && item.label); });
+  }
+
+  function clonePendingInteraction(source) {
+    var item = source && typeof source === 'object' ? source : null;
+    if (!item) return null;
+    return {
+      kind: item.kind !== undefined && item.kind !== null ? String(item.kind) : '',
+      prompt: item.prompt !== undefined && item.prompt !== null ? String(item.prompt) : '',
+      sourceUserText: item.sourceUserText !== undefined && item.sourceUserText !== null ? String(item.sourceUserText) : '',
+      sourceCapability: item.sourceCapability !== undefined && item.sourceCapability !== null ? normalizeMcpToolName(item.sourceCapability) : '',
+      baseArgs: item.baseArgs && typeof item.baseArgs === 'object' ? JSON.parse(JSON.stringify(item.baseArgs)) : {},
+      choices: normalizePendingInteractionChoices(item.choices),
+      observation: item.observation && typeof item.observation === 'object' ? JSON.parse(JSON.stringify(item.observation)) : null,
+      taskState: cloneAssistantTaskState(item.taskState),
+      taskStepId: item.taskStepId !== undefined && item.taskStepId !== null ? String(item.taskStepId) : '',
+      selectedChoice: item.selectedChoice && typeof item.selectedChoice === 'object' ? JSON.parse(JSON.stringify(item.selectedChoice)) : null,
+    };
+  }
+
+  function clearPendingInteraction() {
+    pendingInteraction = null;
+  }
+
+  function rememberPendingInteraction(interaction) {
+    pendingInteraction = clonePendingInteraction(interaction);
+    return pendingInteraction;
+  }
+
+  function normalizePendingInteractionChoiceText(value) {
+    return String(value === undefined || value === null ? '' : value)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[“”"'`]/g, '')
+      .replace(/[()（）\[\]【】]/g, '');
+  }
+
+  function resolvePendingInteractionChoice(pending, text) {
+    var data = clonePendingInteraction(pending);
+    var raw = String(text === undefined || text === null ? '' : text).trim();
+    var compact = normalizePendingInteractionChoiceText(raw);
+    var match = null;
+    var items = [];
+    var i = 0;
+    var idx = 0;
+    if (!data || !compact) return null;
+    items = Array.isArray(data.choices) ? data.choices : [];
+    match = compact.match(/(?:选|第)?(\d+)(?:个|项|条)?$/);
+    if (match && match[1]) {
+      idx = Number(match[1]);
+      if (Number.isFinite(idx) && idx > 0 && idx <= items.length) return JSON.parse(JSON.stringify(items[idx - 1]));
+    }
+    for (i = 0; i < items.length; i += 1) {
+      var choice = items[i] && typeof items[i] === 'object' ? items[i] : {};
+      var label = normalizePendingInteractionChoiceText(choice.label || '');
+      var replyText = normalizePendingInteractionChoiceText(choice.replyText || '');
+      if (compact === label || compact === replyText) return JSON.parse(JSON.stringify(choice));
+      if (label && (label.indexOf(compact) !== -1 || compact.indexOf(label) !== -1)) return JSON.parse(JSON.stringify(choice));
+    }
+    return null;
+  }
+
+  function buildPendingInteractionChoiceBlock(interaction) {
+    var pending = clonePendingInteraction(interaction);
+    if (!pending || !pending.choices || !pending.choices.length) return null;
+    return {
+      type: 'choice_list',
+      title: '待你选择',
+      prompt: pending.prompt || '请从下列选项中选择。',
+      items: pending.choices.map(function(choice) {
+        return {
+          id: choice.id || '',
+          label: choice.label || '',
+          description: choice.description || '',
+          replyText: choice.replyText || '',
+        };
+      }),
+    };
+  }
+
+  function buildAssistantProtocolTaskStepId(value, fallbackIndex) {
+    var text = value === undefined || value === null ? '' : String(value).trim();
+    if (text) return text;
+    return 'step-' + (fallbackIndex + 1);
+  }
+
+  function normalizeAssistantProtocolTask(task) {
+    var item = task && typeof task === 'object' ? task : null;
+    var steps = [];
+    if (!item) return null;
+    if (Array.isArray(item.steps)) {
+      steps = item.steps.map(function(step, index) {
+        var row = step && typeof step === 'object' ? step : {};
+        var label = row.label !== undefined && row.label !== null ? String(row.label).trim() : '';
+        if (!label) return null;
+        return {
+          id: buildAssistantProtocolTaskStepId(row.id || row.stepId, index),
+          label: label,
+          description: row.description !== undefined && row.description !== null ? String(row.description).trim() : '',
+        };
+      }).filter(function(step) { return !!step; });
+    }
+    return {
+      title: item.title !== undefined && item.title !== null ? String(item.title).trim() : '',
+      summary: item.summary !== undefined && item.summary !== null ? String(item.summary).trim() : '',
+      steps: steps,
+    };
+  }
+
+  function mapLegacyActionToCapability(actionPayload) {
+    var item = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
+    var action = normalizeModelActionName(item.action || item.name || '');
+    var capability = '';
+    var args = {};
+    if (action === 'navigate') {
+      capability = 'nav.switch_tab';
+      if (item.tab) args.tab = item.tab;
+    } else if (action === 'query_case_list') {
+      capability = 'cases.list_current';
+      if (item.query) args.query = item.query;
+    } else if (action === 'query_page_data') {
+      capability = 'page.get_data';
+      if (item.tab) args.tab = item.tab;
+    } else if (action === 'current_page_info') {
+      capability = 'page.current_info';
+    } else if (action === 'web_search') {
+      capability = 'web.search';
+      if (item.query) args.query = item.query;
+    } else if (action === 'memo_list') {
+      capability = 'memo.list';
+    } else if (action === 'memo_add') {
+      capability = 'memo.add';
+      if (item.text) args.text = item.text;
+      if (item.tab) args.tab = item.tab;
+    } else if (action === 'memo_toggle') {
+      capability = 'memo.toggle';
+      if (item.index !== undefined && item.index !== null) args.index = item.index;
+      if (item.done !== undefined && item.done !== null) args.done = item.done;
+    } else if (action === 'memo_remove') {
+      capability = 'memo.remove';
+      if (item.index !== undefined && item.index !== null) args.index = item.index;
+    } else if (action === 'settings_patch') {
+      capability = 'settings.patch';
+      if (item.patch && typeof item.patch === 'object') args.patch = item.patch;
+    } else if (action === 'settings_describe') {
+      capability = 'settings.describe';
+      if (item.key) args.key = item.key;
+    } else if (action === 'update_case') {
+      capability = 'case.update';
+      args = Object.assign({}, item);
+    } else if (action === 'delete_case') {
+      capability = 'case.delete';
+      if (item.index !== undefined && item.index !== null) args.index = item.index;
+    } else if (action === 'run_case_generation') {
+      capability = 'casegen.run';
+    } else if (action === 'run_missing_recommendation') {
+      capability = 'missing_recommend.run';
+    }
+    if (!capability) return null;
+    return {
+      stepId: buildAssistantProtocolTaskStepId(item.stepId || item.id || capability, 0),
+      capability: capability,
+      args: args,
+    };
+  }
+
+  function normalizeAssistantProtocolCalls(parsed) {
+    var payload = parsed && typeof parsed === 'object' ? parsed : {};
+    var list = [];
+    var rawCalls = [];
+    if (Array.isArray(payload.calls)) rawCalls = payload.calls;
+    else if (Array.isArray(payload.mcp && payload.mcp.calls ? payload.mcp.calls : null)) rawCalls = payload.mcp.calls;
+    else if (payload.mcp && typeof payload.mcp === 'object' && (payload.mcp.tool || payload.mcp.name)) rawCalls = [payload.mcp];
+    else if (payload.call && typeof payload.call === 'object') rawCalls = [payload.call];
+    rawCalls.forEach(function(call, index) {
+      var item = call && typeof call === 'object' ? call : {};
+      var capability = normalizeMcpToolName(item.capability || item.tool || item.name || '');
+      var args = item.args && typeof item.args === 'object'
+        ? JSON.parse(JSON.stringify(item.args))
+        : (item.params && typeof item.params === 'object' ? JSON.parse(JSON.stringify(item.params)) : {});
+      if (!capability) return;
+      list.push({
+        stepId: buildAssistantProtocolTaskStepId(item.stepId || item.id || capability, index),
+        capability: capability,
+        args: args,
+      });
+    });
+    if (!list.length) {
+      var legacyActions = extractModelActionList(payload);
+      legacyActions.forEach(function(action) {
+        var mapped = mapLegacyActionToCapability(action);
+        if (mapped) list.push(mapped);
+      });
+    }
+    return list;
+  }
+
+  function normalizeAssistantProtocolResponse(text, userText) {
+    var raw = text === undefined || text === null ? '' : String(text).trim();
+    var parsed = parseJsonObjectFromText(raw);
+    var calls = [];
+    var task = null;
+    if (!raw) {
+      return { protocolVersion: 'assistant_v2', message: '', blocks: [], task: null, calls: [] };
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      return { protocolVersion: 'assistant_v2', message: raw, blocks: [], task: null, calls: [] };
+    }
+    calls = normalizeAssistantProtocolCalls(parsed);
+    task = normalizeAssistantProtocolTask(parsed.task || parsed.plan || null);
+    if (!task && calls.length) {
+      task = {
+        title: parsed.title !== undefined && parsed.title !== null ? String(parsed.title).trim() : '当前任务',
+        summary: parsed.summary !== undefined && parsed.summary !== null ? String(parsed.summary).trim() : '',
+        steps: calls.map(function(call, index) {
+          return {
+            id: call.stepId || ('step-' + (index + 1)),
+            label: buildAssistantTaskStepLabelFromMcpCall({ tool: call.capability, args: call.args }, userText || ''),
+            description: '',
+          };
+        }),
+      };
+    }
+    return {
+      protocolVersion: parsed.protocolVersion && String(parsed.protocolVersion).trim() ? String(parsed.protocolVersion).trim() : 'assistant_v2',
+      message: parsed.message !== undefined && parsed.message !== null
+        ? String(parsed.message).trim()
+        : (parsed.response !== undefined && parsed.response !== null ? String(parsed.response).trim() : ''),
+      blocks: normalizeAssistantBlocks(parsed.blocks),
+      task: task,
+      calls: calls,
+    };
+  }
+
+  function assistantBlockIsClarificationNotice(block) {
+    var item = block && typeof block === 'object' ? block : {};
+    var type = normalizeAssistantBlockType(item.type || item.blockType || item.kind);
+    var title = item.title !== undefined && item.title !== null ? String(item.title).trim() : '';
+    var text = item.text !== undefined && item.text !== null ? String(item.text).trim() : '';
+    if (type !== 'notice') return false;
+    if (title === '需要补充信息' || title === '需要确认信息' || title === '需要确认') return true;
+    return containsAny(text, ['请先确认', '请确认', '请补充', '请告诉我', '请说明', '还需要你确认']);
+  }
+
+  function assistantMessageLooksLikeClarification(text) {
+    var raw = text === undefined || text === null ? '' : String(text).trim();
+    if (!raw) return false;
+    if (/[？?]$/.test(raw)) return true;
+    return containsAny(raw, [
+      '请先确认',
+      '请确认',
+      '请补充',
+      '请告诉我',
+      '请说明',
+      '还需要你确认',
+      '你是指',
+      '是指',
+      '我需要先确认',
+      '我还需要确认'
+    ]);
+  }
+
+  function buildAssistantProtocolClarificationPendingInteraction(protocol, taskRuntime, sourceUserText) {
+    var item = protocol && typeof protocol === 'object' ? protocol : null;
+    var blocks = [];
+    var promptText = '';
+    var sourceText = sourceUserText === undefined || sourceUserText === null ? '' : String(sourceUserText).trim();
+    if (!item || (Array.isArray(item.calls) && item.calls.length)) return null;
+    blocks = normalizeAssistantBlocks(item.blocks);
+    promptText = buildAssistantProtocolResultText(item.message, blocks);
+    if (!promptText) return null;
+    if (!blocks.some(assistantBlockIsClarificationNotice) && !assistantMessageLooksLikeClarification(promptText)) return null;
+    return {
+      kind: 'model_clarify',
+      prompt: promptText,
+      sourceUserText: sourceText,
+      sourceCapability: 'assistant.runtime.model_clarify',
+      baseArgs: {},
+      choices: [],
+      observation: {
+        capability: 'assistant.runtime.model_clarify',
+        status: 'waiting',
+        message: promptText,
+        data: { source: 'model_clarify' },
+        choices: [],
+      },
+      taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+      taskStepId: '',
+      selectedChoice: null,
+    };
+  }
+
+  function markAssistantTaskRuntimeWaiting(taskRuntime, summary) {
+    var runtime = taskRuntime && typeof taskRuntime === 'object' ? taskRuntime : null;
+    var text = summary === undefined || summary === null ? '等待你补充信息后继续。' : String(summary);
+    var i = 0;
+    var fallbackIndex = -1;
+    if (!runtime || !runtime.taskState || !Array.isArray(runtime.taskState.steps)) return;
+    for (i = 0; i < runtime.taskState.steps.length; i += 1) {
+      var step = runtime.taskState.steps[i] && typeof runtime.taskState.steps[i] === 'object' ? runtime.taskState.steps[i] : {};
+      if (step.status === 'running') {
+        setAssistantTaskStateStepStatus(runtime.taskState, i, 'waiting', text);
+        setAssistantTaskStateStatus(runtime.taskState, 'waiting', text);
+        return;
+      }
+      if (fallbackIndex < 0 && step.status !== 'completed' && step.status !== 'cancelled' && step.status !== 'blocked') {
+        fallbackIndex = i;
+      }
+    }
+    if (fallbackIndex >= 0) {
+      setAssistantTaskStateStepStatus(runtime.taskState, fallbackIndex, 'waiting', text);
+    }
+    setAssistantTaskStateStatus(runtime.taskState, 'waiting', text);
+  }
+
+  function buildAssistantProtocolTaskRuntimeFromTaskState(taskState) {
+    var runtime = { taskState: null, stepIndexById: {} };
+    var normalized = normalizeAssistantTaskState(taskState);
+    var i = 0;
+    if (!normalized) return runtime;
+    runtime.taskState = normalized;
+    for (i = 0; i < runtime.taskState.steps.length; i += 1) {
+      runtime.stepIndexById[runtime.taskState.steps[i].id || ('step-' + (i + 1))] = i;
+    }
+    return runtime;
+  }
+
+  function shouldUseAssistantProtocolTaskFallbackLabel(label) {
+    var text = label === undefined || label === null ? '' : String(label).trim();
+    if (!text) return true;
+    if (text === '执行任务' || text === '执行步骤' || text === '处理任务') return true;
+    if (/^步骤\s*\d+$/i.test(text) || /^step[-_\s]*\d+$/i.test(text)) return true;
+    return false;
+  }
+
+  function shouldPreferAssistantProtocolCallSteps(task, calls) {
+    var taskObj = task && typeof task === 'object' ? task : null;
+    var steps = taskObj && Array.isArray(taskObj.steps) ? taskObj.steps : [];
+    var callList = Array.isArray(calls) ? calls : [];
+    var genericCount = 0;
+    var i = 0;
+    if (!steps.length || !callList.length) return false;
+    for (i = 0; i < steps.length; i += 1) {
+      var step = steps[i] && typeof steps[i] === 'object' ? steps[i] : {};
+      var label = sanitizeAssistantTaskStepLabel(step.label !== undefined && step.label !== null ? String(step.label).trim() : '');
+      if (shouldUseAssistantProtocolTaskFallbackLabel(label)) genericCount += 1;
+    }
+    if (!genericCount) return false;
+    if (genericCount >= steps.length) return true;
+    return false;
+  }
+
+  function findAssistantProtocolCallForStep(calls, stepId, index) {
+    var list = Array.isArray(calls) ? calls : [];
+    var i = 0;
+    if (stepId) {
+      for (i = 0; i < list.length; i += 1) {
+        if (buildAssistantProtocolTaskStepId(list[i] && list[i].stepId, i) === stepId) return list[i];
+      }
+    }
+    if (index >= 0 && index < list.length) return list[index];
+    return null;
+  }
+
+  function buildAssistantProtocolTaskStepLabel(step, call, index, userText) {
+    var row = step && typeof step === 'object' ? step : {};
+    var rawLabel = row.label !== undefined && row.label !== null ? String(row.label).trim() : '';
+    var label = sanitizeAssistantTaskStepLabel(rawLabel);
+    var currentCall = call && typeof call === 'object' ? call : null;
+    var fallbackLabel = '';
+    if (!shouldUseAssistantProtocolTaskFallbackLabel(label)) return label;
+    if (currentCall) {
+      fallbackLabel = buildAssistantTaskStepLabelFromMcpCall({
+        tool: currentCall.capability || currentCall.tool || currentCall.name || '',
+        args: currentCall.args && typeof currentCall.args === 'object' ? currentCall.args : {},
+      }, userText || '');
+    }
+    return fallbackLabel || label || ('步骤 ' + (index + 1));
+  }
+
+  function buildAssistantProtocolCallSignature(calls) {
+    var list = Array.isArray(calls) ? calls : [];
+    return buildPlanSignature('mcp', list.map(function(call) {
+      var row = call && typeof call === 'object' ? call : {};
+      return {
+        tool: row.capability || row.tool || row.name || '',
+        args: row.args && typeof row.args === 'object' ? row.args : {},
+      };
+    }));
+  }
+
+  function normalizeAssistantCapabilityArgsForSignature(capabilityId, args) {
+    var id = normalizeMcpToolName(capabilityId);
+    var payload = args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : {};
+    function buildStableValue(value) {
+      if (value === undefined || value === null) return null;
+      if (Array.isArray(value)) {
+        return value.map(function(item) {
+          return buildStableValue(item);
+        }).filter(function(item) {
+          return item !== undefined && item !== null && !(typeof item === 'string' && item === '');
+        });
+      }
+      if (typeof value !== 'object') return value;
+      var out = {};
+      Object.keys(value).sort().forEach(function(key) {
+        var item = buildStableValue(value[key]);
+        if (item === undefined || item === null) return;
+        if (typeof item === 'string' && item === '') return;
+        if (Array.isArray(item) && !item.length) return;
+        out[key] = item;
+      });
+      return out;
+    }
+    if (!payload || typeof payload !== 'object') payload = {};
+    delete payload.confirmed;
+    delete payload.sourceUserText;
+    delete payload.userText;
+    if (id === 'tempexec.reuse_update') {
+      var canonical = {};
+      ['fileId', 'fileName', 'mode', 'field', 'detailId', 'detailName', 'detailIndex', 'value', 'index', 'applyAll', 'scope', 'operation', 'renameScope', 'context', 'deleteAll', 'caseQuery', 'caseName', 'caseTitle', 'rowQuery'].forEach(function(key) {
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) return;
+        canonical[key] = payload[key];
+      });
+      if (Array.isArray(payload.caseIndexes)) {
+        canonical.caseIndexes = payload.caseIndexes.map(function(item) {
+          return Math.floor(Number(item));
+        }).filter(function(item) {
+          return Number.isFinite(item) && item > 0;
+        }).sort(function(a, b) { return a - b; });
+      }
+      if (Array.isArray(payload.presetItems)) {
+        canonical.presetItems = payload.presetItems.map(function(item) {
+          return item === undefined || item === null ? '' : String(item).trim();
+        }).filter(Boolean);
+      }
+      return buildStableValue(canonical);
+    }
+    return buildStableValue(payload);
+  }
+
+  function buildAssistantCapabilityExecutionSignature(capabilityId, args) {
+    var id = normalizeMcpToolName(capabilityId);
+    if (!id) return '';
+    return id + '::' + formatJsonCompact(normalizeAssistantCapabilityArgsForSignature(id, args));
+  }
+
+  function getAssistantProtocolFinalizeStepId() {
+    return '__assistant_final_reply__';
+  }
+
+  function isAssistantProtocolFinalizeLikeStep(step) {
+    var row = step && typeof step === 'object' ? step : {};
+    var stepId = row.id !== undefined && row.id !== null ? String(row.id).trim() : '';
+    var label = row.label !== undefined && row.label !== null ? String(row.label).trim() : '';
+    var description = row.description !== undefined && row.description !== null ? String(row.description).trim() : '';
+    if (stepId === getAssistantProtocolFinalizeStepId()) return true;
+    if (label === '整理结果并回复用户' || label === '整理结果' || label === '输出最终答复' || label === '最终回复用户') return true;
+    if (description === '基于已执行步骤整理最终答复。') return true;
+    return false;
+  }
+
+  function findAssistantProtocolFinalizeStep(steps) {
+    var list = Array.isArray(steps) ? steps : [];
+    var i = 0;
+    for (i = 0; i < list.length; i += 1) {
+      if (isAssistantProtocolFinalizeLikeStep(list[i])) return list[i];
+    }
+    return null;
+  }
+
+  function shouldAppendAssistantProtocolFinalizeStep(task, calls) {
+    var taskObj = task && typeof task === 'object' ? task : null;
+    var steps = taskObj && Array.isArray(taskObj.steps) ? taskObj.steps : [];
+    var callList = Array.isArray(calls) ? calls : [];
+    if (!callList.length) return false;
+    return !findAssistantProtocolFinalizeStep(steps);
+  }
+
+  function appendAssistantProtocolFinalizeStep(steps, existingFinalizeStep) {
+    var list = Array.isArray(steps) ? steps : [];
+    var finalizeStepId = getAssistantProtocolFinalizeStepId();
+    var preserved = existingFinalizeStep && typeof existingFinalizeStep === 'object' ? existingFinalizeStep : null;
+    var exists = list.some(function(step) {
+      return isAssistantProtocolFinalizeLikeStep(step) || (step && String(step.id || '') === finalizeStepId);
+    });
+    if (exists) return list;
+    list.push({
+      id: finalizeStepId,
+      label: preserved && preserved.label ? String(preserved.label) : '整理结果并回复用户',
+      description: preserved && preserved.description ? String(preserved.description) : '基于已执行步骤整理最终答复。',
+      status: preserved && preserved.status ? String(preserved.status) : 'waiting',
+      capabilityId: preserved && preserved.capabilityId ? String(preserved.capabilityId) : '',
+      capabilityArgs: preserved && preserved.capabilityArgs && typeof preserved.capabilityArgs === 'object' ? JSON.parse(JSON.stringify(preserved.capabilityArgs)) : {},
+    });
+    return list;
+  }
+
+  function getAssistantProtocolFinalizeStepIndex(taskRuntime) {
+    var runtime = taskRuntime && typeof taskRuntime === 'object' ? taskRuntime : null;
+    var finalizeStepId = getAssistantProtocolFinalizeStepId();
+    if (!runtime || !runtime.stepIndexById || !Object.prototype.hasOwnProperty.call(runtime.stepIndexById, finalizeStepId)) return -1;
+    return Number(runtime.stepIndexById[finalizeStepId]);
+  }
+
+  function syncAssistantProtocolFinalizeStep(taskRuntime, status, summary) {
+    var runtime = taskRuntime && typeof taskRuntime === 'object' ? taskRuntime : null;
+    var stepIndex = getAssistantProtocolFinalizeStepIndex(runtime);
+    if (!runtime || !runtime.taskState || stepIndex < 0) return;
+    setAssistantTaskStateStepStatus(runtime.taskState, stepIndex, status, summary === undefined ? null : summary);
+  }
+
+  function primeAssistantProtocolRunningStep(taskRuntime, calls) {
+    var runtime = taskRuntime && typeof taskRuntime === 'object' ? taskRuntime : null;
+    var list = Array.isArray(calls) ? calls : [];
+    var i = 0;
+    if (!runtime || !runtime.taskState || !runtime.stepIndexById || !list.length) return -1;
+    for (i = 0; i < list.length; i += 1) {
+      var stepId = buildAssistantProtocolTaskStepId(list[i] && (list[i].stepId || list[i].id), i);
+      if (!Object.prototype.hasOwnProperty.call(runtime.stepIndexById, stepId)) continue;
+      var stepIndex = Number(runtime.stepIndexById[stepId]);
+      var step = runtime.taskState.steps && runtime.taskState.steps[stepIndex] ? runtime.taskState.steps[stepIndex] : null;
+      if (!step || step.status === 'completed' || step.status === 'blocked' || step.status === 'cancelled') continue;
+      setAssistantTaskStateStepStatus(runtime.taskState, stepIndex, 'running', '正在执行：' + (step.label || ('步骤 ' + (stepIndex + 1))));
+      return stepIndex;
+    }
+    return -1;
+  }
+
+  function areAssistantProtocolCallsReadOnly(calls) {
+    var list = Array.isArray(calls) ? calls : [];
+    var i = 0;
+    if (!list.length) return false;
+    for (i = 0; i < list.length; i += 1) {
+      var call = list[i] && typeof list[i] === 'object' ? list[i] : {};
+      var tool = normalizeMcpToolName(call.capability || call.tool || call.name || '');
+      var capability = getAssistantCapabilityById(tool);
+      var mode = capability && capability.mode ? String(capability.mode).trim().toLowerCase() : getMcpToolMode(tool);
+      if (mode === 'write') return false;
+    }
+    return true;
+  }
+
+  function buildAssistantProtocolTaskRuntime(protocol, userText) {
+    var data = protocol && typeof protocol === 'object' ? protocol : {};
+    var task = data.task && typeof data.task === 'object' ? data.task : null;
+    var calls = Array.isArray(data.calls) ? data.calls : [];
+    var steps = [];
+    if (task && Array.isArray(task.steps) && task.steps.length && !shouldPreferAssistantProtocolCallSteps(task, calls)) {
+      steps = task.steps.map(function(step, index) {
+        var row = step && typeof step === 'object' ? step : {};
+        var stepId = buildAssistantProtocolTaskStepId(row.id || row.stepId, index);
+        var matchedCall = findAssistantProtocolCallForStep(calls, stepId, index);
+        return {
+          id: stepId,
+          label: buildAssistantProtocolTaskStepLabel(row, matchedCall, index, userText || ''),
+          description: row.description || '',
+          status: 'waiting',
+          capabilityId: matchedCall && (matchedCall.capability || matchedCall.tool || matchedCall.name) ? String(matchedCall.capability || matchedCall.tool || matchedCall.name) : '',
+          capabilityArgs: matchedCall && matchedCall.args && typeof matchedCall.args === 'object' ? JSON.parse(JSON.stringify(matchedCall.args)) : {},
+        };
+      });
+    } else {
+      steps = calls.map(function(call, index) {
+        return {
+          id: buildAssistantProtocolTaskStepId(call.stepId, index),
+          label: buildAssistantTaskStepLabelFromMcpCall({ tool: call.capability, args: call.args }, userText || ''),
+          description: '',
+          status: 'waiting',
+          capabilityId: call.capability || call.tool || call.name || '',
+          capabilityArgs: call.args && typeof call.args === 'object' ? JSON.parse(JSON.stringify(call.args)) : {},
+        };
+      });
+    }
+    if (shouldAppendAssistantProtocolFinalizeStep(task, calls)) {
+      steps = appendAssistantProtocolFinalizeStep(steps);
+    }
+    return buildAssistantProtocolTaskRuntimeFromTaskState({
+      title: task && task.title ? task.title : '当前任务',
+      summary: task && task.summary ? task.summary : (steps.length > 1 ? ('已拆分为 ' + steps.length + ' 个步骤，正在执行。') : '正在执行任务。'),
+      status: 'running',
+      steps: steps,
+    });
+  }
+
+  function ensureAssistantProtocolTaskRuntime(runtime, protocol, userText) {
+    var data = runtime && typeof runtime === 'object' ? runtime : null;
+    var parsed = protocol && typeof protocol === 'object' ? protocol : {};
+    var calls = Array.isArray(parsed.calls) ? parsed.calls : [];
+    var task = parsed.task && typeof parsed.task === 'object' ? parsed.task : null;
+    var existingSteps = data && data.taskState && Array.isArray(data.taskState.steps) ? data.taskState.steps : [];
+    var existingFinalizeStep = findAssistantProtocolFinalizeStep(existingSteps);
+    var existingStepMap = {};
+    var i = 0;
+    if (!data || !data.taskState) return buildAssistantProtocolTaskRuntime(parsed, userText);
+    for (i = 0; i < existingSteps.length; i += 1) {
+      var existingRow = existingSteps[i] && typeof existingSteps[i] === 'object' ? existingSteps[i] : null;
+      if (!existingRow || !existingRow.id) continue;
+      existingStepMap[String(existingRow.id)] = existingRow;
+    }
+    if (task && task.title) data.taskState.title = task.title;
+    if (task && task.summary) data.taskState.summary = task.summary;
+    if (task && Array.isArray(task.steps) && task.steps.length && !shouldPreferAssistantProtocolCallSteps(task, calls)) {
+      data.taskState.steps = task.steps.map(function(step, index) {
+        var row = step && typeof step === 'object' ? step : {};
+        var stepId = buildAssistantProtocolTaskStepId(row.id || row.stepId, index);
+        var matchedCall = findAssistantProtocolCallForStep(calls, stepId, index);
+        var preserved = existingStepMap[stepId] && typeof existingStepMap[stepId] === 'object' ? existingStepMap[stepId] : null;
+        return {
+          id: stepId,
+          label: buildAssistantProtocolTaskStepLabel(row, matchedCall, index, userText || ''),
+          description: row.description || (preserved && preserved.description ? preserved.description : ''),
+          status: preserved && preserved.status ? String(preserved.status) : 'waiting',
+          capabilityId: matchedCall && (matchedCall.capability || matchedCall.tool || matchedCall.name)
+            ? String(matchedCall.capability || matchedCall.tool || matchedCall.name)
+            : (preserved && preserved.capabilityId ? String(preserved.capabilityId) : ''),
+          capabilityArgs: matchedCall && matchedCall.args && typeof matchedCall.args === 'object'
+            ? JSON.parse(JSON.stringify(matchedCall.args))
+            : (preserved && preserved.capabilityArgs && typeof preserved.capabilityArgs === 'object' ? JSON.parse(JSON.stringify(preserved.capabilityArgs)) : {}),
+        };
+      });
+    } else if (shouldPreferAssistantProtocolCallSteps(task, calls)) {
+      data.taskState.steps = calls.map(function(call, index) {
+        var stepId = buildAssistantProtocolTaskStepId(call.stepId, index);
+        var preserved = existingStepMap[stepId] && typeof existingStepMap[stepId] === 'object' ? existingStepMap[stepId] : null;
+        return {
+          id: stepId,
+          label: buildAssistantTaskStepLabelFromMcpCall({ tool: call.capability, args: call.args }, userText || ''),
+          description: preserved && preserved.description ? preserved.description : '',
+          status: preserved && preserved.status ? String(preserved.status) : 'waiting',
+          capabilityId: call.capability || call.tool || call.name || '',
+          capabilityArgs: call.args && typeof call.args === 'object'
+            ? JSON.parse(JSON.stringify(call.args))
+            : (preserved && preserved.capabilityArgs && typeof preserved.capabilityArgs === 'object' ? JSON.parse(JSON.stringify(preserved.capabilityArgs)) : {}),
+        };
+      });
+    }
+    if (!Array.isArray(data.taskState.steps)) data.taskState.steps = [];
+    for (i = 0; i < calls.length; i += 1) {
+      var stepId = buildAssistantProtocolTaskStepId(calls[i].stepId, i);
+      var alreadyExists = data.taskState.steps.some(function(step) {
+        return step && String(step.id || '') === stepId;
+      });
+      if (alreadyExists) continue;
+      var insertIndex = data.taskState.steps.length;
+      var finalizeIndex = -1;
+      var preserved = existingStepMap[stepId] && typeof existingStepMap[stepId] === 'object' ? existingStepMap[stepId] : null;
+      data.taskState.steps.some(function(step, stepIndex) {
+        if (!isAssistantProtocolFinalizeLikeStep(step)) return false;
+        finalizeIndex = stepIndex;
+        return true;
+      });
+      if (finalizeIndex >= 0) insertIndex = finalizeIndex;
+      data.taskState.steps.splice(insertIndex, 0, {
+        id: stepId,
+        label: buildAssistantTaskStepLabelFromMcpCall({ tool: calls[i].capability, args: calls[i].args }, userText || ''),
+        description: preserved && preserved.description ? preserved.description : '',
+        status: preserved && preserved.status ? String(preserved.status) : 'waiting',
+        capabilityId: calls[i].capability || calls[i].tool || calls[i].name || '',
+        capabilityArgs: calls[i].args && typeof calls[i].args === 'object'
+          ? JSON.parse(JSON.stringify(calls[i].args))
+          : (preserved && preserved.capabilityArgs && typeof preserved.capabilityArgs === 'object' ? JSON.parse(JSON.stringify(preserved.capabilityArgs)) : {}),
+      });
+    }
+    var preservedMissingSteps = [];
+    existingSteps.forEach(function(step) {
+      var row = step && typeof step === 'object' ? step : null;
+      var existsNow = false;
+      if (!row || !row.id || isAssistantProtocolFinalizeLikeStep(row)) return;
+      existsNow = data.taskState.steps.some(function(nextStep) {
+        return nextStep && String(nextStep.id || '') === String(row.id || '');
+      });
+      if (existsNow) return;
+      preservedMissingSteps.push({
+        id: String(row.id || ''),
+        label: row.label ? String(row.label) : '',
+        description: row.description ? String(row.description) : '',
+        status: row.status ? String(row.status) : 'waiting',
+        capabilityId: row.capabilityId ? String(row.capabilityId) : '',
+        capabilityArgs: row.capabilityArgs && typeof row.capabilityArgs === 'object' ? JSON.parse(JSON.stringify(row.capabilityArgs)) : {},
+      });
+    });
+    if (preservedMissingSteps.length) {
+      var finalizeInsertIndex = -1;
+      data.taskState.steps.some(function(step, stepIndex) {
+        if (!isAssistantProtocolFinalizeLikeStep(step)) return false;
+        finalizeInsertIndex = stepIndex;
+        return true;
+      });
+      if (finalizeInsertIndex >= 0) {
+        data.taskState.steps = preservedMissingSteps.concat(data.taskState.steps.slice(0, finalizeInsertIndex), data.taskState.steps.slice(finalizeInsertIndex));
+      } else {
+        data.taskState.steps = preservedMissingSteps.concat(data.taskState.steps);
+      }
+    }
+    if (shouldAppendAssistantProtocolFinalizeStep(task, calls)) {
+      data.taskState.steps = appendAssistantProtocolFinalizeStep(data.taskState.steps || [], existingFinalizeStep);
+    }
+    data.taskState = normalizeAssistantTaskState(data.taskState);
+    data.stepIndexById = {};
+    if (data.taskState && Array.isArray(data.taskState.steps)) {
+      for (i = 0; i < data.taskState.steps.length; i += 1) {
+        data.stepIndexById[data.taskState.steps[i].id || ('step-' + (i + 1))] = i;
+      }
+    }
+    return data;
+  }
+
+  function buildAssistantCapabilityObservation(capabilityId, args, result) {
+    var id = normalizeMcpToolName(capabilityId);
+    var data = result && result.data !== undefined ? result.data : null;
+    var compactData = null;
+    try {
+      compactData = buildMcpReasonPayload(id, args || {}, data && typeof data === 'object' ? data : {});
+    } catch (err) {
+      compactData = data && typeof data === 'object' ? JSON.parse(JSON.stringify(data)) : data;
+    }
+    return {
+      capability: id,
+      status: result && result.status ? String(result.status) : '',
+      message: result && result.message ? String(result.message) : '',
+      data: compactData,
+      choices: result && Array.isArray(result.choices) ? normalizePendingInteractionChoices(result.choices) : [],
+    };
+  }
+
+  function normalizeAssistantCapabilityCallArgsForExecution(capabilityId, args, userText) {
+    var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+    if (userText && (!payload.sourceUserText || !String(payload.sourceUserText).trim())) {
+      payload.sourceUserText = String(userText);
+    }
+    return payload;
+  }
+
+  function normalizeAssistantCapabilityCallForExecution(capabilityId, args, userText) {
+    var id = normalizeMcpToolName(capabilityId);
+    var payload = normalizeAssistantCapabilityCallArgsForExecution(id, args, userText);
+    return {
+      capabilityId: id,
+      args: payload,
+    };
+  }
+
+  function isAssistantRuntimeObservationCapability(capabilityId) {
+    var id = normalizeMcpToolName(capabilityId);
+    return id.indexOf('assistant.runtime.') === 0;
+  }
+
+  function findLatestSuccessfulObservationEntryFromList(list, capabilityId) {
+    var rows = Array.isArray(list) ? list : [];
+    var id = normalizeMcpToolName(capabilityId);
+    var i = 0;
+    if (!id) return null;
+    for (i = rows.length - 1; i >= 0; i -= 1) {
+      var row = rows[i] && typeof rows[i] === 'object' ? rows[i] : {};
+      if (normalizeMcpToolName(row.capability || '') !== id) continue;
+      if (String(row.status || '') !== 'ok') continue;
+      return row;
+    }
+    return null;
+  }
+
+  function assistantHasSuccessfulWriteObservation(list) {
+    var rows = Array.isArray(list) ? list : [];
+    var i = 0;
+    for (i = rows.length - 1; i >= 0; i -= 1) {
+      var row = rows[i] && typeof rows[i] === 'object' ? rows[i] : {};
+      var capabilityId = normalizeMcpToolName(row.capability || '');
+      if (!capabilityId || isAssistantRuntimeObservationCapability(capabilityId)) continue;
+      if (String(row.status || '') !== 'ok') continue;
+      if (getMcpToolMode(capabilityId) === 'write') return true;
+    }
+    return false;
+  }
+
+  function assistantBuildObservedCaseExecutionSummary(caseData, targetValue, caseIndex) {
+    var data = caseData && typeof caseData === 'object' ? caseData : {};
+    var items = Array.isArray(data.items) ? data.items : [];
+    var summary = {
+      total: items.length,
+      caseIndex: 0,
+      found: false,
+      satisfiedCount: 0,
+      unmetCount: 0,
+      allMatched: false,
+    };
+    var i = 0;
+    var normalizedIndex = toPositiveInt(caseIndex, 0);
+    if (normalizedIndex > 0) {
+      summary.caseIndex = normalizedIndex;
+      if (items[normalizedIndex - 1] && typeof items[normalizedIndex - 1] === 'object') {
+        summary.found = true;
+        summary.allMatched = resolveCaseExecutionResult(items[normalizedIndex - 1]) === targetValue;
+        summary.satisfiedCount = summary.allMatched ? 1 : 0;
+        summary.unmetCount = summary.allMatched ? 0 : 1;
+      } else {
+        summary.unmetCount = 1;
+      }
+      return summary;
+    }
+    for (i = 0; i < items.length; i += 1) {
+      if (resolveCaseExecutionResult(items[i]) === targetValue) summary.satisfiedCount += 1;
+    }
+    summary.unmetCount = items.length - summary.satisfiedCount;
+    summary.allMatched = items.length > 0 && summary.unmetCount === 0;
+    return summary;
+  }
+
+  function assistantTextIndicatesWriteIntent(text) {
+    var raw = text === undefined || text === null ? '' : String(text).trim();
+    if (!raw) return false;
+    return containsAny(raw, [
+      '修改',
+      '更新',
+      '编辑',
+      '删除',
+      '移除',
+      '新建',
+      '创建',
+      '新增',
+      '写入',
+      '设置',
+      '设为',
+      '改为',
+      '改成',
+      '改回',
+      '调整',
+      '切换',
+      '归档',
+      '补齐',
+      '修正',
+      '清空'
+    ]);
+  }
+
+  function assistantTextExplicitlyResolvesWriteWithoutExecution(text) {
+    var raw = text === undefined || text === null ? '' : String(text).trim();
+    if (!raw) return false;
+    if (containsAny(raw, [
+      '当前还没有实际执行修改',
+      '尚未改为',
+      '还未改为',
+      '任务尚未完成',
+      '未返回必要的写操作',
+      '还没有重新读取结果确认',
+      '仍有',
+      '未继续收敛'
+    ])) return false;
+    return containsAny(raw, [
+      '无需修改',
+      '无需更改',
+      '不用修改',
+      '不需要修改',
+      '原本已符合预期',
+      '原本已经符合预期',
+      '未找到',
+      '不存在',
+      '无法执行',
+      '能力不可用',
+      '缺少',
+      '用户拒绝',
+      '用户取消',
+      '未执行对子项',
+      '未执行修改',
+      '未执行对'
+    ]);
+  }
+
+  function assistantProtocolCallsIncludeWrite(calls) {
+    var list = Array.isArray(calls) ? calls : [];
+    var i = 0;
+    for (i = 0; i < list.length; i += 1) {
+      var row = list[i] && typeof list[i] === 'object' ? list[i] : {};
+      var capabilityId = normalizeMcpToolName(row.capability || row.tool || row.name || '');
+      if (capabilityId && getMcpToolMode(capabilityId) === 'write') return true;
+    }
+    return false;
+  }
+
+  function assistantTaskStateRequiresWrite(taskState) {
+    var state = taskState && typeof taskState === 'object' ? taskState : null;
+    var steps = state && Array.isArray(state.steps) ? state.steps : [];
+    var i = 0;
+    if (!state) return false;
+    if (assistantTextIndicatesWriteIntent(state.title || '')) return true;
+    if (assistantTextIndicatesWriteIntent(state.summary || '')) return true;
+    for (i = 0; i < steps.length; i += 1) {
+      var step = steps[i] && typeof steps[i] === 'object' ? steps[i] : {};
+      if (step.capabilityId && getMcpToolMode(step.capabilityId) === 'write') return true;
+      if (assistantTextIndicatesWriteIntent(step.label || '')) return true;
+      if (assistantTextIndicatesWriteIntent(step.description || '')) return true;
+    }
+    return false;
+  }
+
+  function assistantProtocolRequiresWrite(protocol) {
+    var data = protocol && typeof protocol === 'object' ? protocol : null;
+    var task = data && data.task && typeof data.task === 'object' ? data.task : null;
+    var steps = task && Array.isArray(task.steps) ? task.steps : [];
+    var i = 0;
+    if (!data) return false;
+    if (assistantProtocolCallsIncludeWrite(data.calls)) return true;
+    if (task) {
+      if (assistantTextIndicatesWriteIntent(task.title || '')) return true;
+      if (assistantTextIndicatesWriteIntent(task.summary || '')) return true;
+      for (i = 0; i < steps.length; i += 1) {
+        var step = steps[i] && typeof steps[i] === 'object' ? steps[i] : {};
+        if (assistantTextIndicatesWriteIntent(step.label || '')) return true;
+        if (assistantTextIndicatesWriteIntent(step.description || '')) return true;
+      }
+    }
+    return assistantTextIndicatesWriteIntent(buildAssistantProtocolResultText(data.message, data.blocks));
+  }
+
+  function assistantBuildPendingWriteRequirement(userText, observations, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var requiresWrite = opts.requiresWrite === true;
+    var hasSuccessfulWriteCall = opts.hasSuccessfulWriteCall === true;
+    var protocol = opts.protocol && typeof opts.protocol === 'object' ? opts.protocol : null;
+    var protocolText = protocol ? buildAssistantProtocolResultText(protocol.message, protocol.blocks) : '';
+    var fallbackText = opts.fallbackText === undefined || opts.fallbackText === null ? '' : String(opts.fallbackText).trim();
+    if (!requiresWrite || hasSuccessfulWriteCall) return null;
+    if (assistantTextExplicitlyResolvesWriteWithoutExecution(protocolText)) return null;
+    if (assistantTextExplicitlyResolvesWriteWithoutExecution(fallbackText)) return null;
+    return {
+      instruction: '当前任务属于实际写操作，但现有 observation 里还没有成功的写 capability。若读取后判断原本已符合预期，请直接明确说明“无需修改”；若目标不存在、范围越界或能力缺失，也要明确说明未执行原因；否则必须返回新的写 calls，不能只重复读取或直接结束。',
+    };
+  }
+
+  async function callAssistantProtocolModel(userText, options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var apis = getApis();
+    var content = String(userText || '');
+    var taskUserText = opts.taskUserText === undefined || opts.taskUserText === null ? '' : String(opts.taskUserText).trim();
+    var contentBlocks = normalizeAssistantContentBlocks(opts.contentBlocks);
+    var hasImageInput = assistantContentBlocksHaveImage(contentBlocks);
+    var capabilities = buildAssistantCapabilityCatalogLines();
+    var capabilityList = getAvailableCapabilities();
+    var pageData = null;
+    var platformContextMarkdown = '';
+    var runtimeContext = null;
+    var payload = null;
+    var prompt = '';
+    var res = null;
+    var forceNoCalls = opts.forceNoCalls === true;
+    var blockedCalls = Array.isArray(opts.blockedCalls) ? opts.blockedCalls : [];
+    var pendingWriteRequirement = null;
+    var extraInstructions = Array.isArray(opts.extraInstructions) ? opts.extraInstructions.filter(function(item) { return !!String(item || '').trim(); }) : [];
+    if (!apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return null;
+    if (apis.assistantApi && typeof apis.assistantApi.getPageData === 'function') {
+      try {
+        pageData = apis.assistantApi.getPageData('') || {};
+      } catch (err0) {
+        pageData = {};
+      }
+    }
+    platformContextMarkdown = await loadAssistantPlatformContextMarkdown();
+    payload = {
+      protocolVersion: 'assistant_v2',
+      userText: content,
+      latestUserText: content,
+      taskUserText: taskUserText || content,
+      currentPage: {
+        tab: pageData && pageData.tab ? String(pageData.tab) : '',
+        tabLabel: getTabLabelById(pageData && pageData.tab ? String(pageData.tab) : '') || '',
+        pageFileName: getPageFileName(),
+        pageData: pageData && typeof pageData === 'object' ? pageData : {},
+      },
+      capabilities: capabilityList,
+      pendingInteraction: clonePendingInteraction(opts.pendingInteraction),
+      selectedChoice: opts.selectedChoice && typeof opts.selectedChoice === 'object' ? JSON.parse(JSON.stringify(opts.selectedChoice)) : null,
+      observations: Array.isArray(opts.observations) ? opts.observations : [],
+      forceNoCalls: forceNoCalls,
+      blockedCalls: blockedCalls.map(function(call) {
+        var row = call && typeof call === 'object' ? call : {};
+        return {
+          capability: normalizeMcpToolName(row.capability || row.tool || row.name || ''),
+          args: row.args && typeof row.args === 'object' ? JSON.parse(JSON.stringify(row.args)) : {},
+        };
+      }),
+    };
+    runtimeContext = buildAssistantRuntimeContext(payload.currentPage, capabilityList);
+    payload.platformContextMarkdown = platformContextMarkdown;
+    payload.runtimeContext = runtimeContext;
+    pendingWriteRequirement = assistantBuildPendingWriteRequirement(content, payload.observations, {
+      taskUserText: taskUserText || content,
+    });
+    if (pendingWriteRequirement && pendingWriteRequirement.instruction) {
+      extraInstructions.push(pendingWriteRequirement.instruction);
+      payload.pendingWriteRequirement = {
+        targetValue: pendingWriteRequirement.targetValue,
+        caseIndex: pendingWriteRequirement.caseIndex,
+        unmetCount: pendingWriteRequirement.unmetCount,
+      };
+    }
+    prompt = [
+      '你是测试助手平台内置 AI 助手，采用 assistant_v2 协议工作。',
+      '原则：由你自己理解用户意图、判断是否直接回答、是否拆任务、选择哪项能力执行。不要依赖平台预设流程。',
+      '你只能使用能力清单里出现的 capability；不要编造新的 capability 名称。',
+      '若不需要执行能力，直接返回单个 JSON：{"protocolVersion":"assistant_v2","message":"...","blocks":[]}',
+      '若需要执行能力，返回单个 JSON：{"protocolVersion":"assistant_v2","message":"...","task":{"title":"...","summary":"...","steps":[{"id":"step-1","label":"中文步骤"}]},"calls":[{"stepId":"step-1","capability":"...","args":{}}]}',
+      'blocks 仅支持：notice、choice_list、content_list、code_block。',
+      '所有步骤标题必须是中文任务描述，不能直接把 capability 名当作步骤标题。',
+      '若返回 task.steps，每个 step.label 都必须是可直接展示给用户的中文任务，如“获取当前页面信息”“读取当前页面用例列表”；不要输出“执行任务”“步骤1”“step-1”这类泛化标题。',
+      '如果用户意图、目标对象、目标范围、目标值或前置条件仍不明确，不要猜测，不要自行补默认值；先向用户提出最小必要的澄清问题。',
+      '澄清时不要返回 calls，也不要开始执行；直接返回 message，并附带一个 notice block，title 固定为“需要补充信息”，text 写清楚你缺少什么信息、需要用户确认什么。',
+      '如果一次澄清后信息仍不够，继续追问，直到可以准确回答或准确执行；禁止在信息不足时自行假设目标对象、范围或参数。',
+      '任何新建、编辑、删除类操作都会被运行时拦截并要求用户确认；你不需要伪造“已执行成功”。',
+      '平台每轮都会提供两类上下文：`platformContextMarkdown` 是固定平台说明，`runtimeContext` 是当前页面、当前页关键数据、当前页重点能力和可见页签摘要。你必须优先使用这些上下文，不要重复向用户确认其中已经明确给出的事实。',
+      '若 `runtimeContext.currentPage.tab` 非空，不要再问“当前在哪个页面”或“是否在执行页”；只有该字段缺失、为空、明显失真，或用户明确要求切换页面时，才可以澄清或调用 page.current_info / nav.switch_tab。',
+      '若 `currentPage.pageData.currentCaseContext` 或 `runtimeContext.currentPage.knownFacts` 已提供当前文件名、可见条数、总条数、是否含复用用例等事实，不要再向用户重复确认这些信息；只有字段缺失时，才进一步读取或澄清。',
+      '平台已经把 currentPage 提供给你；除非用户明确要求确认当前页，或你确实缺少关键页面事实，否则不要把 page.current_info 当作默认第一步，更不要重复调用它。',
+      '当用户要求修改当前执行用例的执行结果、状态、备注等写操作，且 currentPage.tab 已是 tempexec 时，优先直接规划 cases.list_current（如需先判断现状）和 case.update / case_library.batch_update_exec_results；不要只读取页面名称。',
+      '当 cases.list_current 返回 caseFile.reuseEnabled、caseFile.hasReuseCases、caseFile.reusePresetCount、caseFile.reusePresetNames、hasReuseCases、items[].isReuseCase、items[].reuseDetailCount、items[].reuseDetails 时，你必须先判断当前目标是否为复用型用例。',
+      '复用型用例不要只看原始 actual/status/result 字段；要以 items[].reuseDetails[].status 聚合判断执行结果。items[].executionResult 是平台按子项聚合后的快捷结果，但你在解释原因、判断是否已符合要求、以及选择写能力时，仍应以 reuseDetails 为准。',
+      '复用型用例中，每条用例的 reuseDetailCount 和 reuseDetails 长度可能不同；你必须检查目标范围内每一条用例的全部子项，不能只看第一个子项。',
+      '如需判断当前复用文件有哪些预设子项，可结合 caseFile.reusePresetNames 与各条用例的 items[].reuseDetails[].text 一起判断。',
+      '复用型用例执行结果聚合规则：任一子项为“失败”则整条为失败；否则任一子项为“阻塞”则整条为阻塞；否则任一子项为“未执行”或空则整条为未执行；否则只要有通过则整条为通过；否则若仅剩不适用则整条为不适用。',
+      '如果当前执行文件或命中的用例包含复用子项，而用户要修改执行结果，优先使用 tempexec.reuse_update；整份复用文件或全部匹配项改状态时，常用参数是 {"field":"actual","applyAll":true,"value":"目标状态"}。不要只改 case.update / case_library.batch_update_exec_results 的顶层结果字段。',
+      '如果用户指定的是某一条复用用例，但没有直接给出序号，可以在 tempexec.reuse_update 里传 caseQuery 或 caseTitle 缩小到该条用例，再配合 detailName / detailIndex 执行，不要强行退回整份文件批量修改。',
+      '当 observations 非空时，表示前面步骤刚执行完，请基于观察继续决定下一步或输出最终答复。',
+      '如果 observations 里的 read 能力结果已经足够回答用户，就直接输出最终答复，并明确写出关键事实；不要只说“我已了解当前页面情况”这类空话。',
+      '如果用户明确指定第 N 条用例或第 N 个目标，而 observations 已显示当前总数小于 N，直接明确说明“当前只有 X 条，未找到第 N 条，因此未执行修改”，不要继续重复读取，也不要伪造已完成。',
+      '对于“先检查当前状态再决定是否修改”的请求，你的最终答复必须明确给出三种结果之一：1）原本已符合预期，无需更改；2）已按要求全部更改完成；3）只对不符合要求的部分完成了补齐或修正。不要只写笼统的“已处理”或“执行完成”。',
+      '如果 observations 同时包含读取现状和写入结果，要基于读取前后的事实自己判断属于哪一种结果，并在 message 中直接告诉用户。',
+      '若写入 observation 里已有 selectedCaseCount、updatedCount、scope、detailName、value 等字段，请用这些事实总结“全部改完”还是“只补齐了部分”。',
+      '不要重复返回已经成功执行过的相同 capability 和参数；若 observations 已包含结果，请直接汇总，或只返回尚未执行的新 calls。',
+      blockedCalls.length ? '以下 calls 刚刚已经执行过，禁止原样再次返回；你必须改为返回新的 calls，或直接输出最终答复：\n' + buildAssistantProtocolBlockedCallLines(blockedCalls).join('\n') : '',
+      '当 pendingInteraction 存在时，说明流程正在等待用户选择或补充信息；优先结合 selectedChoice、pendingInteraction.kind、pendingInteraction.prompt 继续，不要忽略它。',
+      '当 pendingInteraction.kind === "model_clarify" 时，优先把最新用户消息理解为对上一轮澄清问题的回答；只有在用户明显开启新话题时，才忽略这轮澄清上下文。',
+      '当 pendingInteraction.kind === "model_clarify" 且 pendingInteraction.sourceUserText 存在时，要把它视为当前续跑的原始任务；若最新用户消息只是“当前页面的”“全部的”“第2条”“就改222”这类范围补充，不要把这句短回复改写成新的无关请求。',
+      '当 taskUserText 存在时，它表示当前这轮在原始请求基础上结合补充信息后的任务语义；如果 latestUserText 只是短回复、范围限定或确认语，请结合 taskUserText 决定下一步，不要只盯着 latestUserText 单独行动。',
+      '若能力缺失或执行受阻，可输出 notice block 解释原因，并改为澄清、备选方案或最终答复。',
+      forceNoCalls ? '当前这一轮禁止再返回 calls；你必须直接基于 observations 输出最终答复，明确写出你已得到的事实，并明确归类为：无需更改 / 已全部更改完成 / 已补齐部分缺漏 之一。' : '',
+      extraInstructions.length ? ('运行时附加要求：\n' + extraInstructions.map(function(item) { return '- ' + String(item); }).join('\n')) : '',
+      platformContextMarkdown ? '固定平台上下文已通过 payload.platformContextMarkdown 提供。' : '',
+      runtimeContext && runtimeContext.currentPage && Array.isArray(runtimeContext.currentPage.knownFacts) && runtimeContext.currentPage.knownFacts.length
+        ? ('当前页面动态事实摘要：\n' + runtimeContext.currentPage.knownFacts.map(function(item) { return '- ' + String(item); }).join('\n'))
+        : '',
+      '可用能力目录：',
+      capabilities.join('\n'),
+      hasImageInput ? '用户附带图片，请先理解图片内容，再决定是否调用能力。' : '',
+      '只输出一个 JSON 对象，不要代码块。',
+    ].filter(function(line) { return !!line; }).join('\n');
+    try {
+      res = await apis.assistantApi.callModel(JSON.stringify(payload, null, 2), {
+        prompt: buildConversationPromptWithPriority(prompt, content, {
+          pendingInteraction: opts.pendingInteraction,
+        }),
+        temperature: 0.1,
+        history: opts.history || buildConversationHistory(conversationHistoryLimit, content),
+        contentBlocks: contentBlocks,
+      });
+    } catch (err) {
+      res = null;
+    }
+    if (!res || res.ok !== true || !res.content) return null;
+    return normalizeAssistantProtocolResponse(String(res.content || ''), content);
+  }
+
+  function buildAssistantCapabilityApprovalLabel(capabilityId) {
+    var capability = getAssistantCapabilityById(capabilityId);
+    if (capability && capability.description) return capability.description;
+    return capabilityId || '操作';
+  }
+
+  async function executeAssistantCapabilityWithRuntimeGate(capabilityId, args) {
+    var apis = getApis();
+    var id = normalizeMcpToolName(capabilityId);
+    var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+    var result = null;
+    var approvedArgs = null;
+    if (!apis.assistantCapabilityApi || typeof apis.assistantCapabilityApi.executeCapability !== 'function') {
+      return {
+        ok: false,
+        status: 'missing_capability',
+        message: '能力执行器暂不可用：' + id,
+        data: null,
+        choices: [],
+        approvedArgs: null,
+      };
+    }
+    result = await apis.assistantCapabilityApi.executeCapability(id, payload);
+    while (result && result.status === 'confirm_required') {
+      approvedArgs = result.approvedArgs && typeof result.approvedArgs === 'object' ? Object.assign({}, result.approvedArgs) : Object.assign({}, payload, { confirmed: true });
+      var approvalLabel = result.data && result.data.actionLabel ? String(result.data.actionLabel) : buildAssistantCapabilityApprovalLabel(id);
+      var allowed = await requestAssistantOperationApproval(approvalLabel, {
+        detail: result.message || '',
+        reason: '当前操作涉及新建、编辑、删除或其它写入行为。',
+      });
+      if (!allowed) {
+        return {
+          ok: false,
+          status: 'blocked',
+          message: '用户拒绝了本次操作。',
+          data: result.data || null,
+          choices: [],
+          approvedArgs: approvedArgs,
+        };
+      }
+      payload = approvedArgs;
+      result = await apis.assistantCapabilityApi.executeCapability(id, payload);
+    }
+    return result;
+  }
+
+  function buildAssistantProtocolResultText(message, blocks) {
+    var text = message === undefined || message === null ? '' : String(message).trim();
+    var normalizedBlocks = normalizeAssistantBlocks(blocks);
+    if (text) return text;
+    if (normalizedBlocks.length && normalizedBlocks[0].type === 'notice' && normalizedBlocks[0].text) return String(normalizedBlocks[0].text);
+    if (normalizedBlocks.length && normalizedBlocks[0].type === 'choice_list' && normalizedBlocks[0].prompt) return String(normalizedBlocks[0].prompt);
+    return '';
   }
 
   function normalizeMcpToolName(rawName) {
@@ -7966,13 +9888,14 @@ return lines.join('\n');
     if (raw === 'page.current_info' || raw === 'current_page_info' || raw === 'page.info') return 'page.current_info';
     if (raw === 'page.get_data' || raw === 'query_page_data' || raw === 'page_data') return 'page.get_data';
     if (raw === 'nav.switch_tab' || raw === 'navigate' || raw === 'switch_tab') return 'nav.switch_tab';
-    if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list' || raw === 'case_library.query_exec_cases' || raw === 'case_library_query_exec_cases' || raw === 'query_exec_cases' || raw === 'list_exec_cases' || raw === 'case_library.list_exec_cases' || raw === 'case_library_list_exec_cases') return 'cases.list_current';
+    if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list' || raw === 'case_library.query_exec_cases' || raw === 'case_library_query_exec_cases' || raw === 'query_exec_cases' || raw === 'list_exec_cases' || raw === 'case_library.list_exec_cases' || raw === 'case_library_list_exec_cases' || raw === 'case_library.search_case_candidates' || raw === 'case_library_search_case_candidates' || raw === 'search_case_candidates' || raw === 'search_case_candidate' || raw === 'case_library.get_case_detail' || raw === 'case_library_get_case_detail' || raw === 'get_case_detail' || raw === 'query_case_detail') return 'cases.list_current';
     if (raw === 'case_library.query_cases' || raw === 'case_library_query_cases' || raw === 'query_case_library_cases' || raw === 'search_case_library_cases' || raw === 'case_library_search_case_content' || raw === 'search_case_content') return 'case_library.query_cases';
     if (raw === 'missing_library.list_current' || raw === 'missing_library_list_current' || raw === 'list_missing_library' || raw === 'missing_case_library_list') return 'missing_library.list_current';
     if (raw === 'cross_page.match_missing_cases' || raw === 'cross_page_match_missing_cases' || raw === 'match_missing_cases' || raw === 'match_case_missing_library') return 'cross_page.match_missing_cases';
     if (raw === 'case_library.search_exec_candidates' || raw === 'case_library_search_exec_candidates' || raw === 'search_case_files_for_exec' || raw === 'search_exec_candidates' || raw === 'case_library.search_exec_cases' || raw === 'case_library_search_exec_cases' || raw === 'search_exec_cases') return 'case_library.search_exec_candidates';
     if (raw === 'case_library.transfer_to_exec' || raw === 'case_library_transfer_to_exec' || raw === 'transfer_to_exec' || raw === 'transfer_case_to_exec' || raw === 'exec_case_file') return 'case_library.transfer_to_exec';
     if (raw === 'tempexec.remove_files' || raw === 'tempexec_remove_files' || raw === 'remove_exec_files' || raw === 'remove_from_exec' || raw === 'remove_current_exec_files' || raw === 'case_library.remove_exec_files' || raw === 'case_library_remove_exec_files' || raw === 'case_library.batch_remove_exec_cases' || raw === 'case_library_batch_remove_exec_cases' || raw === 'batch_remove_exec_cases') return 'tempexec.remove_files';
+    if (raw === 'tempexec.reuse_update' || raw === 'tempexec_reuse_update' || raw === 'update_reuse_case' || raw === 'reuse_update' || raw === 'reuse_case_update' || raw === 'tempexec.update_reuse' || raw === 'case_library.batch_operate_reuse_sub_items' || raw === 'case_library_batch_operate_reuse_sub_items' || raw === 'batch_operate_reuse_sub_items' || raw === 'case_library.operate_reuse_sub_items' || raw === 'case_library_operate_reuse_sub_items' || raw === 'operate_reuse_sub_items' || raw === 'batch_operate_reuse_sub_item' || raw === 'operate_reuse_sub_item') return 'tempexec.reuse_update';
     if (raw === 'case_library.batch_update_exec_results' || raw === 'case_library_batch_update_exec_results' || raw === 'batch_update_exec_results' || raw === 'update_exec_results' || raw === 'case_library.batch_set_exec_results' || raw === 'case_library_batch_set_exec_results' || raw === 'batch_set_exec_results' || raw === 'set_exec_results' || raw === 'set_exec_result') return 'case_library.batch_update_exec_results';
     if (raw === 'case_library.batch_archive_exec_cases' || raw === 'case_library_batch_archive_exec_cases' || raw === 'batch_archive_exec_cases' || raw === 'archive_exec_cases' || raw === 'case_library.batch_archive_cases' || raw === 'case_library_batch_archive_cases' || raw === 'batch_archive_cases' || raw === 'archive_cases') return 'case_library.batch_archive_exec_cases';
     if (raw === 'ui.list_controls' || raw === 'list_controls' || raw === 'list_ui_controls') return 'ui.list_controls';
@@ -8035,7 +9958,7 @@ return lines.join('\n');
         if (mode) return mode;
       }
     }
-    if (containsAny(tool, ['nav.switch_tab', 'ui.click_control', 'ui.fill_input', 'tempexec.export_xmind', 'tempexec.remove_files', 'settings.patch', 'case.update', 'case.delete', 'casegen.run', 'missing_recommend.run', 'memo.add', 'memo.toggle', 'memo.remove', 'case_library.batch_update_exec_results', 'case_library.batch_archive_exec_cases'])) {
+    if (containsAny(tool, ['nav.switch_tab', 'ui.click_control', 'ui.fill_input', 'tempexec.export_xmind', 'tempexec.remove_files', 'tempexec.reuse_update', 'settings.patch', 'case.update', 'case.delete', 'casegen.run', 'missing_recommend.run', 'memo.add', 'memo.toggle', 'memo.remove', 'case_library.batch_update_exec_results', 'case_library.batch_archive_exec_cases'])) {
       return 'write';
     }
     return 'read';
@@ -8081,7 +10004,7 @@ return lines.join('\n');
     for (var i = 0; i < calls.length; i += 1) {
       var call = calls[i] && typeof calls[i] === 'object' ? calls[i] : {};
       var tool = normalizeMcpToolName(call.tool || call.name || '');
-      if (tool === 'case.update' || tool === 'case_library.batch_update_exec_results') return true;
+      if (tool === 'case.update' || tool === 'tempexec.reuse_update' || tool === 'case_library.batch_update_exec_results') return true;
     }
     return false;
   }
@@ -8106,158 +10029,6 @@ return lines.join('\n');
     return false;
   }
 
-  function hasCaseUpdateAction(actions) {
-    var list = Array.isArray(actions) ? actions : [];
-    for (var i = 0; i < list.length; i += 1) {
-      var action = list[i] && typeof list[i] === 'object' ? list[i] : {};
-      var normalized = normalizeModelActionName(action.action || action.name || '');
-      if (normalized === 'update_case') return true;
-    }
-    return false;
-  }
-
-  function buildExecTransferRepairPrompt(basePrompt, traceEntries, lastOutputText) {
-    var traces = Array.isArray(traceEntries) ? traceEntries : [];
-    var latest = lastOutputText === undefined || lastOutputText === null ? '' : String(lastOutputText).trim();
-    var lines = [
-      basePrompt || '',
-      '',
-      '纠正要求：当前用户要的是“把指定用例从用例库转到当前执行”。',
-      '- 这不等于切换当前执行文件，也不等于只切到用例执行页。',
-      '- 不要只回答“已切换到某执行文件”或“当前已在某执行文件中”。',
-      '- 必须先调用 case_library.search_exec_candidates 搜索候选。',
-      '- 只有唯一明确候选时，才能继续调用 case_library.transfer_to_exec。',
-      '- 如果有多个候选，直接列出编号让用户选择，不要继续切页。',
-      '- 如果 transfer_to_exec 返回需要选择执行版本，必须先询问用户要转入哪个执行版本。',
-      '- 如果用户指定的执行版本不存在，必须先询问是否新建，确认后再继续转执行。',
-      '- 若输出 JSON，仍然只能输出一个 JSON 对象。',
-    ];
-    if (latest) lines.push('', '你上一轮输出/观察到的结果：', latest);
-    if (traces.length) lines.push('', '已发生的工具/动作结果：', traces.join('\n\n'));
-return lines.join('\n');
-  }
-
-  function buildExecTransferNotCompletedText() {
-    return '我还没有真正把目标用例转到当前执行。需要先搜索用例库候选，再确认转入；请再给我一次机会按这个链路执行。';
-  }
-
-  function shouldContinueMcpReasoning(userText, mcpCalls, mcpOutputs) {
-    var calls = Array.isArray(mcpCalls) ? mcpCalls : [];
-    var outputs = Array.isArray(mcpOutputs) ? mcpOutputs : [];
-    var requestedDomains = collectAssistantTaskIntentDomains(userText);
-    var expectsExecTransfer = requestedDomains.indexOf('exec_transfer') !== -1;
-    var needsCaseUpdate = requestedDomains.indexOf('case_update') !== -1;
-    var needsArchive = requestedDomains.indexOf('archive') !== -1;
-    if (!calls.length) return false;
-    var hasRead = false;
-    var hasWrite = false;
-    var hasUiFillInput = false;
-    var hasListControls = false;
-    var hasPageData = false;
-    var hasCaseList = false;
-    var hasCaseLibraryQuery = false;
-    var hasCaseLibraryExecSearch = false;
-    var hasCurrentPage = false;
-    var hasWebSearch = false;
-    var hasTempExecSearch = false;
-    var hasTransferToExecTool = false;
-    var hasCaseUpdateTool = hasCaseUpdateMcpCall(calls);
-    var hasArchiveTool = hasArchiveMcpCall(calls);
-    for (var i = 0; i < calls.length; i += 1) {
-      var call = calls[i] && typeof calls[i] === 'object' ? calls[i] : {};
-      var tool = normalizeMcpToolName(call.tool || call.name || '');
-      if (!tool) continue;
-      var mode = getMcpToolMode(tool);
-      if (mode === 'write') hasWrite = true;
-      else hasRead = true;
-      if (tool === 'ui.fill_input') hasUiFillInput = true;
-      if (tool === 'ui.list_controls') hasListControls = true;
-      if (tool === 'page.get_data') hasPageData = true;
-      if (tool === 'cases.list_current') hasCaseList = true;
-      if (tool === 'case_library.query_cases') hasCaseLibraryQuery = true;
-      if (tool === 'case_library.search_exec_candidates') {
-        hasCaseLibraryExecSearch = true;
-      }
-      if (tool === 'case_library.transfer_to_exec') hasTransferToExecTool = true;
-      if (tool === 'page.current_info') hasCurrentPage = true;
-      if (tool === 'web.search') hasWebSearch = true;
-      if (tool === 'tempexec.search_cases') hasTempExecSearch = true;
-    }
-    if (hasListControls && !isUiControlListingIntent(userText)) return true;
-    if (hasPageData && !isPageDataListingIntent(userText)) return true;
-    if (expectsExecTransfer && !hasTransferToExecTool) return true;
-    if (needsCaseUpdate && !hasCaseUpdateTool) return true;
-    if (needsArchive && !hasArchiveTool) return true;
-    var outText = outputs.join('\n');
-    if (hasCaseLibraryExecSearch) {
-      if (!hasTransferToExecTool && containsAny(outText, ['可继续调用 case_library.transfer_to_exec', '可继续调用case_library.transfer_to_exec'])) return true;
-      return false;
-    }
-    if (hasCaseList || hasCaseLibraryQuery || hasCurrentPage || hasWebSearch || hasTempExecSearch) return false;
-    if (hasWrite && !hasRead) {
-      if (hasUiFillInput && isSearchListDisplayIntent(userText)) return true;
-      return false;
-    }
-    if (containsAny(outText, ['当前可操作控件：']) && !isUiControlListingIntent(userText)) return true;
-    if (containsAny(outText, ['按你的意图返回页面数据']) && !isPageDataListingIntent(userText)) return true;
-    return false;
-  }
-
-  function shouldContinueActionReasoning(userText, actions, actionOutputs) {
-    var list = Array.isArray(actions) ? actions : [];
-    var requestedDomains = collectAssistantTaskIntentDomains(userText);
-    var expectsExecTransfer = requestedDomains.indexOf('exec_transfer') !== -1;
-    var needsCaseUpdate = requestedDomains.indexOf('case_update') !== -1;
-    var needsArchive = requestedDomains.indexOf('archive') !== -1;
-    if (!list.length) return false;
-    if (expectsExecTransfer) return true;
-    if (needsArchive) return true;
-    if (needsCaseUpdate && !hasCaseUpdateAction(list)) return true;
-    var hasQueryPageData = false;
-    var hasCaseList = false;
-    var hasCurrentPage = false;
-    for (var i = 0; i < list.length; i += 1) {
-      var action = list[i] && typeof list[i] === 'object' ? list[i] : {};
-      var normalized = normalizeModelActionName(action.action || action.name || '');
-      if (normalized === 'query_page_data') hasQueryPageData = true;
-      if (normalized === 'query_case_list') hasCaseList = true;
-      if (normalized === 'current_page_info') hasCurrentPage = true;
-    }
-    if (hasCaseList || hasCurrentPage) return false;
-    if (hasQueryPageData && !isPageDataListingIntent(userText)) return true;
-    var text = Array.isArray(actionOutputs) ? actionOutputs.join('\n') : '';
-    if (containsAny(text, ['按你的意图返回页面数据']) && !isPageDataListingIntent(userText)) return true;
-    return false;
-  }
-
-  function formatReasoningTraceEntry(round, type, plans, outputs) {
-    var list = Array.isArray(plans) ? plans : [];
-    var out = Array.isArray(outputs) ? outputs : [];
-    var lines = [];
-    lines.push('第 ' + round + ' 轮' + (type === 'action' ? '动作执行结果' : 'MCP 工具执行结果') + '：');
-    list.forEach(function(plan, idx) {
-      if (!plan || typeof plan !== 'object') return;
-      if (type === 'action') {
-        var actionName = normalizeModelActionName(plan.action || plan.name || '');
-        lines.push('- 动作' + (idx + 1) + '：' + (actionName || 'unknown'));
-        return;
-      }
-      var tool = normalizeMcpToolName(plan.tool || plan.name || '');
-      lines.push('- 工具' + (idx + 1) + '：' + (tool || 'unknown'));
-    });
-    if (out.length) {
-      lines.push('观察：');
-      out.forEach(function(text, idx) {
-        var content = String(text || '').trim();
-        if (!content) return;
-        lines.push((idx + 1) + '. ' + content);
-      });
-    } else {
-      lines.push('观察：无有效输出');
-    }
-return lines.join('\n');
-  }
-
   function buildPlanSignature(type, plans) {
     var list = Array.isArray(plans) ? plans : [];
     var parts = [];
@@ -8277,76 +10048,35 @@ return lines.join('\n');
     return type + '|' + parts.join('|');
   }
 
-  async function buildAssistantTaskPreviewByModel(assistantApi, userText, options) {
-    var api = assistantApi && typeof assistantApi.callModel === 'function' ? assistantApi : null;
-    var rawText = userText === undefined || userText === null ? '' : String(userText).trim();
-    var opts = options && typeof options === 'object' ? options : {};
-    var res = null;
-    var parsed = null;
-    var mcpCalls = [];
-    var actions = [];
-    var type = '';
-    var preview = null;
-    if (!api || !rawText) return null;
-    try {
-      res = await api.callModel(JSON.stringify({
-        task: 'plan_task_preview',
-        userText: rawText,
-        domains: collectAssistantTaskIntentDomains(rawText),
-        initialPlan: opts.initialPlan || '',
-      }, null, 2), {
-        prompt: buildConversationPromptWithPriority([
-          '你是测试助手平台内置 AI 助手。',
-          '当前任务：先为用户请求生成一份完整的执行计划预览，供任务态展示和后续续跑使用。',
-          '如果用户请求是多步骤任务，必须输出完整步骤，不要只输出第一步。',
-          '优先输出 MCP JSON；只有无法用 MCP 表达时才输出旧 actions。',
-          '如果后续步骤依赖前一步的搜索结果，也要先把后续步骤规划出来；允许在 args 中保留占位或只填已知字段。',
-          '像“搜索候选 -> 转到执行 -> 修改用例 -> 归档”这种复合任务，必须一次给出完整顺序。',
-          '规划 case_library.search_exec_candidates 时，优先保留用户原话里的完整用例短语，例如“皮肤用例”不要无依据缩成“皮肤”。',
-          '若用户原话里已经指定了执行版本（如 912），后续 transfer_to_exec 的 args 中尽量保留 execVersionName。',
-          '任务预览里只使用当前支持的标准工具名；读取当前执行时优先用 cases.list_current，批量改执行结果时优先用 case.update，归档时优先用 case_library.batch_archive_exec_cases。不要输出旧别名，如 case_library.search_exec_cases / case_library.query_exec_cases / case_library.batch_set_exec_results / case_library.batch_archive_cases。',
-          '输出格式只能是一个 JSON 对象，可包含 title、summary，以及 mcp.calls 或 actions。不要代码块。'
-        ].join('\n'), rawText),
-        temperature: 0.1,
-        history: opts.history || buildConversationHistory(3, rawText),
-        contentBlocks: opts.contentBlocks,
-      });
-    } catch (err) {
-      res = null;
+  function buildAssistantPlanArgSignature(value) {
+    if (value === undefined) return 'undefined';
+    if (value === null) return 'null';
+    if (Array.isArray(value)) {
+      return '[' + value.map(function(item) { return buildAssistantPlanArgSignature(item); }).join(',') + ']';
     }
-    if (!res || res.ok !== true || !res.content) return null;
-    parsed = parseJsonObjectFromText(String(res.content || '').trim());
-    if (!parsed || typeof parsed !== 'object') return null;
-    mcpCalls = extractModelMcpCallList(parsed);
-    actions = extractModelActionList(parsed);
-    if (mcpCalls.length >= actions.length && mcpCalls.length >= 2) type = 'mcp';
-    else if (actions.length >= 2) type = 'action';
-    if (!type) return null;
-    preview = buildAssistantTaskPreviewState(type, type === 'mcp' ? mcpCalls : actions, {
-      title: parsed.title,
-      summary: parsed.summary,
-      userText: rawText,
-      responseHint: parsed.response && String(parsed.response).trim() ? String(parsed.response).trim() : '',
-    });
-    if (!preview || !preview.taskState || !preview.continuation) return null;
-    return preview;
+    if (typeof value === 'object') {
+      var keys = Object.keys(value).sort();
+      return '{' + keys.map(function(key) {
+        return JSON.stringify(key) + ':' + buildAssistantPlanArgSignature(value[key]);
+      }).join(',') + '}';
+    }
+    return JSON.stringify(value);
   }
 
-  function buildMcpReasoningPrompt(basePrompt, traceEntries) {
-    var traces = Array.isArray(traceEntries) ? traceEntries : [];
-    var text = traces.join('\n\n');
-    return [
-      basePrompt || '',
-      '',
-      '你刚刚调用工具得到如下结果：',
-      text || '（无可用结果）',
-      '',
-      '请继续决策：',
-      '- 如果信息已经足够，直接给用户最终自然语言答复。',
-      '- 如果还需要下一步页面操作，继续输出 MCP JSON。',
-      '- 不要机械复读工具输出；除非用户明确要求查看控件清单，否则不要只返回控件列表。',
-      '- 非必要不要重复调用完全相同的工具和参数。',
-    ].join('\n');
+  function dedupeAssistantMcpCalls(calls) {
+    var list = Array.isArray(calls) ? calls : [];
+    var seen = {};
+    var out = [];
+    list.forEach(function(item) {
+      var row = item && typeof item === 'object' ? item : null;
+      var key = '';
+      if (!row) return;
+      key = normalizeMcpToolName(row.tool || row.name || '') + '|' + buildAssistantPlanArgSignature(row.args && typeof row.args === 'object' ? row.args : {});
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(row);
+    });
+    return out;
   }
 
   function extractModelMcpCallList(parsed) {
@@ -8386,7 +10116,7 @@ return lines.join('\n');
     if (!calls.length && (payload.tool || payload.name)) {
       pushCall(payload);
     }
-    return calls;
+    return dedupeAssistantMcpCalls(calls);
   }
 
   function mapMcpToolToActionPayload(tool, args, responseHint, userText) {
@@ -8558,6 +10288,19 @@ return lines.join('\n');
       var compactFilterInfo = buildCompactCaseListFilterInfo(sourceData.filterInfo);
       var includeFullFields = detailLevel === 'full' || Boolean(compactFilterInfo);
       var maxItems = includeFullFields ? 200 : 80;
+      var isReuseFile = sourceData.caseFile && (sourceData.caseFile.reuseEnabled === true || sourceData.caseFile.hasReuseCases === true);
+      var reusePresetNames = sourceData.caseFile && Array.isArray(sourceData.caseFile.reusePresetNames)
+        ? sourceData.caseFile.reusePresetNames.map(function(item) {
+            return item === undefined || item === null ? '' : String(item).trim();
+          }).filter(Boolean)
+        : [];
+      var reuseCaseCount = 0;
+      items.forEach(function(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        if (row.isReuseCase === true || isReuseFile || Number(row.reuseDetailCount || 0) > 0 || (Array.isArray(row.reuseDetails) && row.reuseDetails.length > 0)) {
+          reuseCaseCount += 1;
+        }
+      });
       var compactItems = items.slice(0, maxItems).map(function(item, idx) {
         var row = item && typeof item === 'object' ? item : {};
         var normalized = {
@@ -8567,12 +10310,26 @@ return lines.join('\n');
           title: trimMcpReasonField(row.title, 100),
           priority: row.priority === undefined || row.priority === null ? '' : String(row.priority),
           executionResult: trimMcpReasonField(resolveCaseExecutionResult(row), 60),
+          isReuseCase: row.isReuseCase === true || isReuseFile || Number(row.reuseDetailCount || 0) > 0 || (Array.isArray(row.reuseDetails) && row.reuseDetails.length > 0),
+          reuseDetailCount: Number(row.reuseDetailCount) || (Array.isArray(row.reuseDetails) ? row.reuseDetails.length : 0),
         };
         if (includeFullFields) {
           normalized.precondition = trimMcpReasonField(row.precondition !== undefined && row.precondition !== null ? row.precondition : row.preconditions, 120);
           normalized.steps = trimMcpReasonField(row.steps, 200);
           normalized.expected = trimMcpReasonField(row.expected, 200);
           normalized.remark = trimMcpReasonField(row.remark, 120);
+          if (normalized.reuseDetailCount > 0) {
+            normalized.reuseDetails = (Array.isArray(row.reuseDetails) ? row.reuseDetails : []).slice(0, 40).map(function(detail, detailIndex) {
+              var detailRow = detail && typeof detail === 'object' ? detail : {};
+              return {
+                index: detailRow.index === undefined || detailRow.index === null ? (detailIndex + 1) : detailRow.index,
+                id: detailRow.id === undefined || detailRow.id === null ? '' : String(detailRow.id),
+                text: trimMcpReasonField(detailRow.text, 60),
+                status: detailRow.status === undefined || detailRow.status === null ? '' : String(detailRow.status),
+                note: trimMcpReasonField(detailRow.note, 80),
+              };
+            });
+          }
         }
         return normalized;
       });
@@ -8588,7 +10345,14 @@ return lines.join('\n');
         caseFile: sourceData.caseFile && typeof sourceData.caseFile === 'object' ? {
           id: sourceData.caseFile.id || '',
           name: sourceData.caseFile.name || '',
+          reuseEnabled: sourceData.caseFile.reuseEnabled === true,
+          hasReuseCases: sourceData.caseFile.hasReuseCases === true || isReuseFile,
+          reusePresetCount: Number(sourceData.caseFile.reusePresetCount) || reusePresetNames.length,
+          reusePresetNames: reusePresetNames.slice(0, 40),
         } : null,
+        isReuseFile: isReuseFile,
+        hasReuseCases: isReuseFile || reuseCaseCount > 0,
+        reuseCaseCount: reuseCaseCount,
         items: compactItems,
       };
     }
@@ -8701,6 +10465,26 @@ return lines.join('\n');
         }),
       };
     }
+    if (name === 'tempexec.reuse_update') {
+      return {
+        tool: name,
+        args: payloadArgs,
+        mode: sourceData.mode || '',
+        field: sourceData.field || '',
+        fileName: sourceData.fileName || '',
+        detailName: sourceData.detailName || '',
+        detailIndex: sourceData.detailIndex === undefined || sourceData.detailIndex === null ? 0 : Number(sourceData.detailIndex),
+        value: sourceData.value || '',
+        scope: sourceData.scope || '',
+        query: sourceData.query || '',
+        all: sourceData.all === true,
+        selectedCaseCount: Number(sourceData.selectedCaseCount) || 0,
+        updatedCount: Number(sourceData.updatedCount) || 0,
+        caseIndexes: Array.isArray(sourceData.caseIndexes) ? sourceData.caseIndexes.slice(0, 80) : [],
+        detailNames: Array.isArray(sourceData.detailNames) ? sourceData.detailNames.slice(0, 40) : [],
+        caseLabels: Array.isArray(sourceData.caseLabels) ? sourceData.caseLabels.slice(0, 40) : [],
+      };
+    }
     return {
       tool: name,
       args: payloadArgs,
@@ -8710,6 +10494,7 @@ return lines.join('\n');
 
 
   async function summarizeMcpToolResultByModel(userText, tool, args, data, fallbackText) {
+
     var apis = getApis();
     if (!apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return '';
     var payload = {
@@ -8782,23 +10567,16 @@ return lines.join('\n');
 
   function buildAssistantTaskStepLabelFromMcpCall(call, userText) {
     var item = call && typeof call === 'object' ? call : {};
-    var tool = normalizeMcpToolName(item.tool || item.name || '');
+    var tool = normalizeMcpToolName(item.tool || item.name || item.capability || '');
     var args = item.args && typeof item.args === 'object' ? Object.assign({}, item.args) : {};
     var def = getAssistantMcpToolDefinition(tool);
-    if (tool === 'case.update' && userText) {
-      args = inferCaseUpdateArgsFromText(args, userText);
-      if (!args.field) {
-        var implicitActual = detectImplicitActualBulkUpdate(userText);
-        if (implicitActual) {
-          args.field = implicitActual.field;
-          args.value = implicitActual.value;
-          args.scope = implicitActual.scope;
-          if (!args.context) args.context = 'tempexec';
-        }
-      }
-    }
+    var capability = getAssistantCapabilityById(tool);
+    var description = capability && capability.description
+      ? String(capability.description)
+      : (def && def.description ? String(def.description) : '');
     var friendlyLabel = buildAssistantFriendlyTaskLabel(tool, args);
-    var label = friendlyLabel || (def && def.description ? String(def.description) : (tool || '执行工具'));
+    var fallbackLabel = !description ? buildAssistantUnknownToolTaskLabel(tool, args) : '';
+    var label = friendlyLabel || description || fallbackLabel || '执行任务';
     var detail = '';
     if (!friendlyLabel) {
       if (args.query !== undefined && args.query !== null && String(args.query).trim()) detail = trimAssistantTaskLabelText(args.query, 24);
@@ -9058,8 +10836,24 @@ return lines.join('\n');
       tool = rewritten.tool;
       args = rewritten.args && typeof rewritten.args === 'object' ? Object.assign({}, rewritten.args) : {};
     }
+    var rewrittenReuse = rewriteCaseUpdateAsTempExecReuseUpdateIfNeeded(tool, args, userText);
+    if (rewrittenReuse && rewrittenReuse.rewritten === true) {
+      tool = rewrittenReuse.tool;
+      args = rewrittenReuse.args && typeof rewrittenReuse.args === 'object' ? Object.assign({}, rewrittenReuse.args) : {};
+    }
     if (tool === 'case.update') {
       args = inferCaseUpdateArgsFromText(args, userText);
+    }
+    if (tool === 'tempexec.reuse_update') {
+      args = parseTempExecReuseUpdateCommand(userText, args) || args;
+      var preparedReuseArgs = await prepareTempExecReuseArgsByModel(userText, args);
+      if (preparedReuseArgs && preparedReuseArgs.selectionData) {
+        rememberTempExecReuseTargetSelection(preparedReuseArgs.selectionData, {
+          sourceUserText: userText,
+        });
+        return { handled: true, text: buildTempExecReuseTargetSelectionText(preparedReuseArgs.selectionData) };
+      }
+      if (preparedReuseArgs && preparedReuseArgs.args) args = preparedReuseArgs.args;
     }
     if (tool === 'case_library.query_cases') {
       args = await buildCaseLibraryQueryArgsFromUserText(args, userText);
@@ -9082,9 +10876,7 @@ return lines.join('\n');
 
     var apis = getApis();
     if (!apis.assistantMcpApi || typeof apis.assistantMcpApi.callTool !== 'function') {
-      if (!actionPayload) return { handled: true, text: '当前环境暂不支持 MCP 工具：' + tool };
-      actionPayload._mcpUnavailable = true;
-      return executeModelPlannedAction(actionPayload, userText, responseHint);
+      return { handled: true, text: '当前环境暂不支持 MCP 工具：' + tool };
     }
 
     async function callMcpOnce(payload) {
@@ -9124,6 +10916,13 @@ return lines.join('\n');
       });
       return { handled: true, text: buildTempExecRemoveSelectionText(removeSelectionData) };
     }
+    if (tool === 'tempexec.reuse_update' && callResult && callResult.ok !== true && String(callResult.reason || '') === 'selection_required') {
+      var reuseSelectionData = callResult.data && typeof callResult.data === 'object' ? callResult.data : {};
+      rememberTempExecReuseTargetSelection(reuseSelectionData, {
+        sourceUserText: userText,
+      });
+      return { handled: true, text: buildTempExecReuseTargetSelectionText(reuseSelectionData) };
+    }
     if (!callResult || callResult.ok !== true) {
       var failedReason = callResult && callResult.reason ? String(callResult.reason) : '未知错误';
       var toolMode = getMcpToolMode(tool);
@@ -9131,11 +10930,7 @@ return lines.join('\n');
       if (confirmedRetryTried || toolMode === 'write' || failedReason === 'confirm_required') {
         return { handled: true, text: 'MCP 工具执行失败：' + failedReason };
       }
-      if (actionPayload) {
-        // MCP 失败时回退到旧动作执行链路，保持可用性。
-        actionPayload._mcpUnavailable = true;
-        return executeModelPlannedAction(actionPayload, userText, responseHint);
-      }
+
       return { handled: true, text: 'MCP 工具执行失败：' + failedReason };
     }
     var toolData = callResult.data;
@@ -9201,6 +10996,10 @@ return lines.join('\n');
     if (tool === 'tempexec.switch_file') {
       var switchedName = toolData && toolData.fileName ? String(toolData.fileName) : '';
       return { handled: true, text: responseHint || ('已切换用例：' + (switchedName || '目标用例')) };
+    }
+    if (tool === 'tempexec.reuse_update') {
+      if (responseHint) return { handled: true, text: responseHint };
+      return { handled: true, text: formatTempExecReuseUpdateSuccessText(toolData || {}) };
     }
 
     if (tool === 'page.current_info') {
@@ -9398,10 +11197,7 @@ return lines.join('\n');
       return { handled: true, text: responseHint || '已触发漏测推荐，请在页面确认后再生成。' };
     }
 
-    if (actionPayload) {
-      // MCP 失败时回退到旧动作执行链路，保持可用性。
-      return executeModelPlannedAction(actionPayload, userText, responseHint);
-    }
+
     if (responseHint) return { handled: true, text: responseHint };
     return { handled: true, text: '工具已执行：' + tool + '\n' + formatJsonCompact(toolData || {}) };
   }
@@ -9524,934 +11320,1143 @@ return lines.join('\n');
   }
 
 
-  async function runModelMissingLibraryAction(userText, actionPayload, defaultResponse, options) {
-    var payload = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
-    var responseHint = payload.response && String(payload.response).trim()
-      ? String(payload.response).trim()
-      : (defaultResponse ? String(defaultResponse).trim() : '');
-    var queryText = payload.query && String(payload.query).trim()
-      ? String(payload.query).trim()
-      : String(userText || '').trim();
-    var compareWithCurrent = payload.compareWithCurrent === true || payload.matchCurrent === true || isCrossPageCaseMissingMatchIntent(queryText || userText);
-    var tool = compareWithCurrent ? 'cross_page.match_missing_cases' : 'missing_library.list_current';
-    var limit = toPositiveInt(payload.limit, compareWithCurrent ? 60 : 200);
-    if (compareWithCurrent && limit > 500) limit = 500;
-    if (!compareWithCurrent && limit > 1000) limit = 1000;
-    var toolArgs = { limit: limit };
-    if (payload.projectId !== undefined && payload.projectId !== null && String(payload.projectId).trim()) {
-      toolArgs.projectId = String(payload.projectId).trim();
-    }
-    if (compareWithCurrent) {
-      toolArgs.caseLimit = toPositiveInt(payload.caseLimit, 1000);
-    } else if (payload.scope !== undefined && payload.scope !== null && String(payload.scope).trim()) {
-      toolArgs.scope = String(payload.scope).trim();
-    }
-    var opts = options && typeof options === 'object' ? options : {};
-    var apis = getApis();
-    var res = null;
-    setStatus(compareWithCurrent ? '正在跨页面比对漏测用例库...' : '正在读取漏测用例库...');
-    if (!opts.skipMcp && apis.assistantMcpApi && typeof apis.assistantMcpApi.callTool === 'function') {
-      try {
-        var mcpRes = await apis.assistantMcpApi.callTool(tool, toolArgs);
-        if (mcpRes && mcpRes.ok === true && mcpRes.data && typeof mcpRes.data === 'object') {
-          res = mcpRes.data;
-        }
-      } catch (err) {
-        res = null;
-      }
-    }
-    if (!res) {
-      setStatus(compareWithCurrent ? '跨页面比对失败' : '漏测用例库读取失败');
-      return { handled: true, text: compareWithCurrent ? '当前环境不支持跨页面漏测用例库匹配。' : '当前环境不支持读取漏测用例库。' };
-    }
-    if (res.ok !== true) {
-      setStatus(compareWithCurrent ? '跨页面比对失败' : '漏测用例库读取失败');
-      return { handled: true, text: (compareWithCurrent ? '跨页面漏测用例库匹配失败：' : '读取漏测用例库失败：') + (res.reason ? String(res.reason) : '未知错误') };
-    }
-    setStatus('');
-    var fallbackText = compareWithCurrent ? formatCrossPageMissingCaseMatchResponse(res) : formatMissingLibraryListResponse(res);
-    var summarized = await summarizeMcpToolResultByModel(userText, tool, toolArgs, res, fallbackText);
-    if (summarized) return { handled: true, text: summarized };
-    if (responseHint && responseHint !== fallbackText) {
-      return { handled: true, text: responseHint + '\n' + fallbackText };
-    }
-    return { handled: true, text: fallbackText };
-  }
-
-  async function runModelCaseLibraryQueryAction(userText, actionPayload, defaultResponse, options) {
-    var payload = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
-    var opts = options && typeof options === 'object' ? options : {};
-    var apis = getApis();
-    var queryText = payload.query !== undefined && payload.query !== null ? String(payload.query).trim() : String(userText || '').trim();
-    var responseHint = payload.response && String(payload.response).trim()
-      ? String(payload.response).trim()
-      : (defaultResponse ? String(defaultResponse).trim() : '');
-    var countOnly = payload.countOnly === true || payload.count === true || isCaseCountIntent(queryText || userText);
-    var toolName = 'case_library.query_cases';
-    var mcpArgs = null;
-    var res = null;
-    var libraryData = null;
-    var fallbackText = '';
-    var summarized = '';
-    var fullDetail = false;
-    var clarificationIntent = false;
-    var allCaseDisplayIntent = false;
-    var targetRequired = false;
-    var shouldResolveTarget = false;
-    if (!apis.assistantMcpApi || typeof apis.assistantMcpApi.callTool !== 'function') {
-      return { handled: true, text: '当前环境不支持跨页面查询用例库内容。' };
-    }
-    mcpArgs = await buildCaseLibraryQueryArgsFromUserText(Object.assign({}, payload, {
-      query: queryText || String(userText || '').trim(),
-      countOnly: countOnly,
-    }), queryText || userText);
-    mcpArgs.countOnly = countOnly;
-    if (opts.projectId !== undefined && opts.projectId !== null && String(opts.projectId).trim()) {
-      mcpArgs.projectId = String(opts.projectId).trim();
-    }
-    try {
-      res = await apis.assistantMcpApi.callTool(toolName, mcpArgs);
-    } catch (err) {
-      res = { ok: false, reason: err && err.message ? String(err.message) : '查询异常' };
-    }
-    if (!res || res.ok !== true) {
-      return { handled: true, text: '查询用例库失败：' + (res && res.reason ? String(res.reason) : '未知错误') };
-    }
-    libraryData = Object.assign({}, res.data && typeof res.data === 'object' ? res.data : {}, {
-      detailLevel: mcpArgs.detailLevel || '',
-    });
-    fullDetail = mcpArgs.detailLevel === 'full' || isCurrentCaseFullDetailIntent(queryText || userText) || isCaseDetailClarificationIntent(queryText || userText);
-    clarificationIntent = isCaseDetailClarificationIntent(queryText || userText);
-    allCaseDisplayIntent = isExplicitAllCaseDisplayIntent(queryText || userText);
-    targetRequired = shouldRequireSpecificCaseDetailTarget(queryText || userText) || clarificationIntent;
-    shouldResolveTarget = !allCaseDisplayIntent && (clarificationIntent || hasDirectCaseDetailReference(libraryData, queryText || userText));
-    if (!countOnly && fullDetail && shouldResolveTarget) {
-      var resolvedTarget = resolveRequestedCaseDetailTarget(libraryData, queryText || userText, {
-        includeConversationContext: clarificationIntent,
-      });
-      if (resolvedTarget && resolvedTarget.item) {
-        libraryData = Object.assign({}, libraryData, {
-          items: [Object.assign({}, resolvedTarget.item)],
-          total: 1,
-          truncated: false,
-        });
-      } else if (targetRequired) {
-        return { handled: true, text: buildCaseDetailTargetMissingText(libraryData, queryText || userText) };
-      }
-    }
-    fallbackText = countOnly
-      ? formatCaseLibraryQueryCountResponse(libraryData)
-      : formatCaseLibraryQueryResponse(libraryData);
-    summarized = await summarizeMcpToolResultByModel(userText, toolName, mcpArgs, libraryData, fallbackText);
-    if (summarized) return { handled: true, text: summarized };
-    if (responseHint && responseHint !== fallbackText) {
-      return { handled: true, text: responseHint + '\n' + fallbackText };
-    }
-    return { handled: true, text: fallbackText };
-  }
-
-  async function runModelCaseListAction(userText, actionPayload, defaultResponse, options) {
-    var payload = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
-    var queryTextForLibrary = payload.query !== undefined && payload.query !== null ? String(payload.query).trim() : String(userText || '').trim();
-    if (isCaseLibraryContentQueryIntent(queryTextForLibrary || userText)) {
-      return runModelCaseLibraryQueryAction(userText, actionPayload, defaultResponse, options);
-    }
-    var opts = options && typeof options === 'object' ? options : {};
-    var responseHint = payload.response && String(payload.response).trim()
-      ? String(payload.response).trim()
-      : (defaultResponse ? String(defaultResponse).trim() : '');
-    var queryText = payload.query && String(payload.query).trim()
-      ? String(payload.query).trim()
-      : String(userText || '').trim();
-    if (isMissingLibraryIntent(queryText || userText)) {
-      return runModelMissingLibraryAction(userText, Object.assign({}, payload, {
-        compareWithCurrent: payload.compareWithCurrent === true || payload.matchCurrent === true || isCrossPageCaseMissingMatchIntent(queryText || userText),
-      }), defaultResponse, options);
-    }
-    var scopeRaw = payload.scope === undefined || payload.scope === null ? '' : String(payload.scope).trim().toLowerCase();
-    var pageScoped = payload.pageScoped === true
-      || isEditorScopedCaseListQuery(scopeRaw)
-      || isCurrentPageCaseIntent(queryText || userText)
-      || shouldPreferCurrentPageScopeForCaseQuery(queryText || userText);
-    var countOnly = payload.countOnly === true
-      || payload.count === true
-      || String(payload.mode || '').trim().toLowerCase() === 'count'
-      || isCaseCountIntent(queryText || userText);
-    var detailLevel = payload.detailLevel === undefined || payload.detailLevel === null
-      ? ''
-      : String(payload.detailLevel).trim().toLowerCase();
-    var fullDetail = detailLevel === 'full' || isCurrentCaseFullDetailIntent(queryText || userText) || isCaseDetailClarificationIntent(queryText || userText);
-    var modelFilterPlan = await planCaseListFilterByModel(queryText || userText);
-    var filterInfo = modelFilterPlan && modelFilterPlan.planned === true && modelFilterPlan.filterInfo
-      ? modelFilterPlan.filterInfo
-      : extractCaseListFilterInfo(queryText || userText);
-    var hasFilter = filterInfo && filterInfo.hasFilter === true;
-    var maxQueryLimit = (fullDetail || hasFilter) ? 1000 : 100;
-    var defaultLimit = hasFilter ? maxQueryLimit : (countOnly ? 20 : maxQueryLimit);
-    var queryLimit = toPositiveInt(payload.limit, defaultLimit);
-    if (!Number.isFinite(queryLimit) || queryLimit <= 0) queryLimit = defaultLimit;
-    if (queryLimit > maxQueryLimit) queryLimit = maxQueryLimit;
-    await syncCaseSearchStateToPage(queryText || userText, filterInfo, { pageScoped: pageScoped });
-    var mcpArgs = {
-      limit: queryLimit,
-      scope: pageScoped ? 'editor' : 'project',
-      requireEditor: pageScoped,
-      countOnly: countOnly,
-      detailLevel: fullDetail ? 'full' : 'summary',
-      query: queryText,
-    };
-
-    var apis = getApis();
-    var res = null;
-    setStatus('正在获取用例数据...');
-    if (!opts.skipMcp && apis.assistantMcpApi && typeof apis.assistantMcpApi.callTool === 'function') {
-      try {
-        var mcpRes = await apis.assistantMcpApi.callTool('cases.list_current', mcpArgs);
-        if (mcpRes && mcpRes.ok === true && mcpRes.data && typeof mcpRes.data === 'object') {
-          res = mcpRes.data;
-        }
-      } catch (err) {
-        res = null;
-      }
-    }
-    if (!res && apis.assistantApi && typeof apis.assistantApi.listCurrentCases === 'function') {
-      try {
-        res = await apis.assistantApi.listCurrentCases({
-          limit: mcpArgs.limit,
-          scope: mcpArgs.scope,
-          requireEditor: mcpArgs.requireEditor,
-          detailLevel: mcpArgs.detailLevel,
-        });
-      } catch (err2) {
-        res = { ok: false, reason: err2 && err2.message ? String(err2.message) : '读取异常' };
-      }
-    }
-    if (!res) {
-      setStatus('用例数据获取失败');
-      return { handled: true, text: '当前环境不支持读取用例列表。' };
-    }
-    if (res.ok !== true) {
-      setStatus('用例数据获取失败');
-      return { handled: true, text: '获取用例列表失败：' + (res.reason ? String(res.reason) : '未知错误') };
-    }
-    setStatus('');
-    var scope = res.scope === undefined || res.scope === null ? '' : String(res.scope).trim();
-    var isEditorScope = scope === 'editor' || (res.caseFile && typeof res.caseFile === 'object');
-    var sourceItems = Array.isArray(res.items) ? res.items : [];
-    var filteredItems = null;
-    if (hasFilter && isEditorScope) {
-      filteredItems = applyCaseListFilter(sourceItems, filterInfo);
-    }
-    var fallbackCasesText = '';
-    if (countOnly) {
-      if (filteredItems) {
-        fallbackCasesText = formatFilteredEditorCaseCountResponse(res, filteredItems, filterInfo);
-      } else {
-        fallbackCasesText = formatCaseCountResponse(res);
-      }
-    } else {
-      if (filteredItems) {
-        fallbackCasesText = formatFilteredEditorCaseListResponse(res, filteredItems, filterInfo);
-      } else {
-        fallbackCasesText = formatCaseListResponse(res);
-      }
-    }
-    var modelCaseData = res;
-    if (filteredItems) {
-      var totalAllRaw = Number(res.totalAll);
-      if (!Number.isFinite(totalAllRaw) || totalAllRaw < 0) totalAllRaw = sourceItems.length;
-      modelCaseData = Object.assign({}, res, {
-        items: filteredItems,
-        total: filteredItems.length,
-        totalAll: totalAllRaw,
-        filterInfo: filterInfo,
-      });
-    }
-    var clarificationIntent = isCaseDetailClarificationIntent(queryText || userText);
-    var allCaseDisplayIntent = isExplicitAllCaseDisplayIntent(queryText || userText);
-    var targetRequired = shouldRequireSpecificCaseDetailTarget(queryText || userText) || clarificationIntent;
-    var shouldResolveTarget = !allCaseDisplayIntent && (clarificationIntent || hasDirectCaseDetailReference(modelCaseData, queryText || userText));
-    if (!countOnly && fullDetail && shouldResolveTarget) {
-      var resolvedTarget = resolveRequestedCaseDetailTarget(modelCaseData, queryText || userText, {
-        includeConversationContext: clarificationIntent,
-      });
-      if (resolvedTarget && resolvedTarget.item) {
-        modelCaseData = Object.assign({}, modelCaseData, {
-          items: [Object.assign({}, resolvedTarget.item)],
-          total: 1,
-          truncated: false,
-          targetReason: resolvedTarget.reason,
-        });
-        fallbackCasesText = formatCaseListResponse(modelCaseData);
-      } else if (targetRequired) {
-        return { handled: true, text: buildCaseDetailTargetMissingText(modelCaseData, queryText || userText) };
-      }
-    }
-    var summarizedCases = await summarizeMcpToolResultByModel(userText, 'cases.list_current', mcpArgs, modelCaseData, fallbackCasesText);
-    if (summarizedCases) return { handled: true, text: summarizedCases };
-    if (responseHint && responseHint !== fallbackCasesText) {
-      return { handled: true, text: responseHint + '\n' + fallbackCasesText };
-    }
-    return { handled: true, text: fallbackCasesText };
-  }
-
-  async function executeModelPlannedAction(actionPayload, userText, defaultResponse) {
-    var payload = actionPayload && typeof actionPayload === 'object' ? actionPayload : {};
-    var action = normalizeModelActionName(payload.action || payload.name || '');
-    var responseText = payload.response && String(payload.response).trim()
-      ? String(payload.response).trim()
-      : (defaultResponse ? String(defaultResponse).trim() : '');
-    var apis = getApis();
-
-    if (!action || action === 'reply') {
-      if (responseText) return { handled: true, text: responseText };
-      if (payload.text && String(payload.text).trim()) return { handled: true, text: String(payload.text).trim() };
-      return null;
-    }
-
-    if (action === 'query_case_list') {
-      var caseActionRes = await runModelCaseListAction(userText, payload, responseText, {
-        skipMcp: payload._mcpUnavailable === true,
-      });
-      if (caseActionRes && caseActionRes.handled === true) return caseActionRes;
-      return null;
-    }
-
-    if (action === 'current_page_info') {
-      var currentPageReply = tryHandleCurrentPageIntent(payload.query || userText);
-      if (currentPageReply) return { handled: true, text: currentPageReply };
-      return null;
-    }
-
-    if (action === 'navigate') {
-      var targetTabRaw = payload.tab ? String(payload.tab) : '';
-      var targetTab = targetTabRaw && isKnownTabId(targetTabRaw) ? targetTabRaw : parseTabFromText(payload.query || userText);
-      if (!targetTab) return null;
-      if (apis.assistantApi && typeof apis.assistantApi.switchTab === 'function') {
-        apis.assistantApi.switchTab(targetTab);
-        if (responseText) return { handled: true, text: responseText };
-        return { handled: true, text: '已按你的意图跳转到：' + targetTab };
-      }
-      return null;
-    }
-
-    if (action === 'query_page_data') {
-      if (isCaseListIntent(userText)) {
-        var casePayloadByQuery = {
-          action: 'query_case_list',
-          scope: payload.scope || '',
-          query: payload.query || userText,
-          countOnly: payload.countOnly === true || payload.count === true,
-          response: responseText,
-        };
-        var caseListByQuery = await runModelCaseListAction(userText, casePayloadByQuery, responseText, {
-          skipMcp: payload._mcpUnavailable === true,
-        });
-        if (caseListByQuery && caseListByQuery.handled === true) {
-          return caseListByQuery;
-        }
-      }
-      var queryTabRaw = payload.tab ? String(payload.tab) : '';
-      var queryTab = queryTabRaw && isKnownTabId(queryTabRaw) ? queryTabRaw : parseTabFromText(payload.query || userText);
-      if (!queryTab && !isProjectScopedText(payload.query || userText)) return null;
-      if (apis.assistantApi && typeof apis.assistantApi.getPageData === 'function') {
-        var data = apis.assistantApi.getPageData(queryTab || '');
-        var pageQueryText = payload.query || userText;
-        if (looksLikeCaseHistoryIntent(pageQueryText)) {
-          var summarizedChangeData = await summarizeCaseChangePageData(pageQueryText, data || {}, responseText || '');
-          if (summarizedChangeData) {
-            return { handled: true, text: summarizedChangeData };
-          }
-        }
-        if (responseText) {
-          return { handled: true, text: responseText + '\n' + formatJsonCompact(data) };
-        }
-        return { handled: true, text: '按你的意图返回页面数据：\n' + formatJsonCompact(data) };
-      }
-      return null;
-    }
-
-    if (action === 'web_search') {
-      return runModelWebSearchAction(userText, payload, responseText || '');
-    }
-
-    if (action === 'memo_list') {
-      if (!apis.assistantApi || typeof apis.assistantApi.memoList !== 'function') return { handled: true, text: '备忘能力暂不可用' };
-      return { handled: true, text: formatMemoListText(apis.assistantApi.memoList() || []) };
-    }
-
-    if (action === 'memo_add') {
-      if (!apis.assistantApi || typeof apis.assistantApi.memoAdd !== 'function') return { handled: true, text: '备忘能力暂不可用' };
-      var memoText = payload.text && String(payload.text).trim()
-        ? String(payload.text).trim()
-        : (payload.content && String(payload.content).trim() ? String(payload.content).trim() : '');
-      if (!memoText) return { handled: true, text: '请提供要新增的备忘内容。' };
-      if (!await requireDoubleConfirmForAction('memo_add', { text: memoText })) return { handled: true, text: '已取消。' };
-      var addRes = apis.assistantApi.memoAdd(memoText, payload.tab || '');
-      if (!addRes || addRes.ok !== true) return { handled: true, text: addRes && addRes.reason ? addRes.reason : '新增失败' };
-      return { handled: true, text: '已新增备忘：' + memoText };
-    }
-
-    if (action === 'memo_toggle') {
-      if (!apis.assistantApi || typeof apis.assistantApi.memoToggle !== 'function') return { handled: true, text: '备忘能力暂不可用' };
-      var doneIndex = toPositiveInt(payload.index, 1);
-      var doneValue = payload.done === undefined ? true : payload.done === true || String(payload.done).toLowerCase() === 'true' || String(payload.done) === '1';
-      if (!await requireDoubleConfirmForAction('memo_toggle', { index: doneIndex, done: doneValue })) return { handled: true, text: '已取消。' };
-      var toggleRes = apis.assistantApi.memoToggle(payload.tab || '', doneIndex, doneValue);
-      if (!toggleRes || toggleRes.ok !== true) return { handled: true, text: toggleRes && toggleRes.reason ? toggleRes.reason : '更新失败' };
-      return { handled: true, text: doneValue ? ('已将备忘第 ' + doneIndex + ' 条标记为完成。') : ('已将备忘第 ' + doneIndex + ' 条标记为未完成。') };
-    }
-
-    if (action === 'memo_remove') {
-      if (!apis.assistantApi || typeof apis.assistantApi.memoRemove !== 'function') return { handled: true, text: '备忘能力暂不可用' };
-      var removeIndex = toPositiveInt(payload.index, 1);
-      if (!await requireDoubleConfirmForAction('memo_remove', { index: removeIndex })) return { handled: true, text: '已取消。' };
-      var removeRes = apis.assistantApi.memoRemove(payload.tab || '', removeIndex);
-      if (!removeRes || removeRes.ok !== true) return { handled: true, text: removeRes && removeRes.reason ? removeRes.reason : '删除失败' };
-      return { handled: true, text: '已删除第 ' + removeIndex + ' 条备忘。' };
-    }
-
-    if (action === 'settings_describe') {
-      if (!apis.assistantSettingsApi || typeof apis.assistantSettingsApi.describeSetting !== 'function') return { handled: true, text: '设置能力暂不可用。' };
-      var explainKey = payload.key ? String(payload.key).trim() : parseSettingKey(userText || '');
-      if (!explainKey) return { handled: true, text: '请先告诉我要查看哪一个设置项。' };
-      return { handled: true, text: apis.assistantSettingsApi.describeSetting(explainKey) };
-    }
-
-    if (action === 'settings_patch') {
-      if (!apis.assistantSettingsApi || typeof apis.assistantSettingsApi.applyPatch !== 'function') return { handled: true, text: '设置能力暂不可用。' };
-      var patch = sanitizeSettingsPatchFromModel(payload.patch || payload.settings || {});
-      var patchKeys = Object.keys(patch);
-      if (!patchKeys.length) return { handled: true, text: '未提供可应用的设置项。' };
-      if (Object.prototype.hasOwnProperty.call(patch, 'assistantEnabled') && patch.assistantEnabled === false) {
-        return { handled: true, text: '安全策略限制：助手不能通过聊天关闭自己，请在设置页手动关闭。' };
-      }
-      if (!await requireDoubleConfirmForAction('settings_patch', { patch: patch })) return { handled: true, text: '已取消。' };
-      var patchRes = apis.assistantSettingsApi.applyPatch(patch, { source: 'assistant-model-planner' });
-      if (!patchRes || patchRes.ok !== true) {
-        return { handled: true, text: patchRes && patchRes.reason ? patchRes.reason : '设置失败' };
-      }
-      if (responseText) return { handled: true, text: responseText };
-      return { handled: true, text: '设置已更新：' + patchKeys.join('、') };
-    }
-
-    if (action === 'update_case') {
-      var updateArgs = {};
-      if (payload.patch && typeof payload.patch === 'object') updateArgs.patch = payload.patch;
-      if (payload.field !== undefined && payload.field !== null) updateArgs.field = payload.field;
-      if (payload.key !== undefined && payload.key !== null) updateArgs.key = payload.key;
-      if (payload.value !== undefined && payload.value !== null) updateArgs.value = payload.value;
-      if (payload.to !== undefined && payload.to !== null) updateArgs.to = payload.to;
-      if (payload.index !== undefined && payload.index !== null) updateArgs.index = payload.index;
-      if (payload.itemIndex !== undefined && payload.itemIndex !== null) updateArgs.itemIndex = payload.itemIndex;
-
-      if (apis.assistantMcpApi && typeof apis.assistantMcpApi.callTool === 'function') {
-        var mcpUpdateRes = null;
-        try {
-          mcpUpdateRes = await apis.assistantMcpApi.callTool('case.update', updateArgs);
-        } catch (err0) {
-          mcpUpdateRes = { ok: false, reason: err0 && err0.message ? String(err0.message) : '修改失败' };
-        }
-        if (mcpUpdateRes && mcpUpdateRes.ok !== true && String(mcpUpdateRes.reason || '') === 'confirm_required') {
-          var confirmData = mcpUpdateRes.data && typeof mcpUpdateRes.data === 'object' ? mcpUpdateRes.data : {};
-          var allowed = await requestAssistantOperationApproval(
-            confirmData.actionLabel ? String(confirmData.actionLabel) : '修改用例',
-            {
-              detail: confirmData.message ? String(confirmData.message) : '',
-              reason: '当前操作涉及数据写入或状态变更。',
-            }
-          );
-          if (!allowed) return { handled: true, text: '已取消。' };
-          try {
-            mcpUpdateRes = await apis.assistantMcpApi.callTool('case.update', Object.assign({}, updateArgs, { confirmed: true }));
-          } catch (err1) {
-            mcpUpdateRes = { ok: false, reason: err1 && err1.message ? String(err1.message) : '修改失败' };
-          }
-        }
-        if (!mcpUpdateRes || mcpUpdateRes.ok !== true) {
-          return { handled: true, text: mcpUpdateRes && mcpUpdateRes.reason ? String(mcpUpdateRes.reason) : '修改失败' };
-        }
-        var updateData = mcpUpdateRes.data && typeof mcpUpdateRes.data === 'object' ? mcpUpdateRes.data : {};
-        var idx = toPositiveInt(updateData.index || updateArgs.index || 1, 1);
-        var field = updateData.field ? String(updateData.field) : (updateArgs.field ? String(updateArgs.field) : '');
-        var val = updateData.value !== undefined && updateData.value !== null ? String(updateData.value) : (updateArgs.value !== undefined && updateArgs.value !== null ? String(updateArgs.value) : '');
-        if (responseText) return { handled: true, text: responseText };
-        return { handled: true, text: '已修改用例：第 ' + idx + ' 条，' + field + ' = ' + val };
-      }
-
-      if (!apis.assistantApi || typeof apis.assistantApi.updateCase !== 'function') return { handled: true, text: '当前页面不支持助手修改用例。' };
-      if (!await requireDoubleConfirmForAction('update_case', updateArgs)) return { handled: true, text: '已取消。' };
-      var updateRes = apis.assistantApi.updateCase(updateArgs);
-      if (!updateRes || updateRes.ok !== true) return { handled: true, text: updateRes && updateRes.reason ? String(updateRes.reason) : '修改失败' };
-      if (responseText) return { handled: true, text: responseText };
-      var updateIdx = toPositiveInt(updateRes.index || updateArgs.index || 1, 1);
-      var updateField = updateRes.field ? String(updateRes.field) : (updateArgs.field ? String(updateArgs.field) : '');
-      var updateVal = updateRes.value !== undefined && updateRes.value !== null ? String(updateRes.value) : (updateArgs.value !== undefined && updateArgs.value !== null ? String(updateArgs.value) : '');
-      return { handled: true, text: '已修改用例：第 ' + updateIdx + ' 条，' + updateField + ' = ' + updateVal };
-    }
-
-    if (action === 'delete_case') {
-      if (!apis.assistantApi || typeof apis.assistantApi.deleteCase !== 'function') return { handled: true, text: '当前页面不支持助手删除用例。' };
-      var idx = toPositiveInt(payload.index, 1);
-      if (!await requireDoubleConfirmForAction('delete_case', { index: idx })) return { handled: true, text: '已取消。' };
-      var delRes = apis.assistantApi.deleteCase(idx);
-      if (!delRes || delRes.ok !== true) return { handled: true, text: delRes && delRes.reason ? delRes.reason : '删除触发失败' };
-      return { handled: true, text: '删除已触发：第 ' + delRes.index + ' 条。若误删可在8秒内撤回。' };
-    }
-
-    if (action === 'run_case_generation') {
-      if (!apis.assistantApi || typeof apis.assistantApi.runCaseGeneration !== 'function') return { handled: true, text: '用例生成能力暂不可用' };
-      if (!await requireDoubleConfirmForAction('run_case_generation', {})) return { handled: true, text: '已取消。' };
-      setStatus('正在触发用例生成...');
-      var caseGenRes = await apis.assistantApi.runCaseGeneration();
-      if (!caseGenRes || caseGenRes.ok !== true) {
-        return { handled: true, text: caseGenRes && caseGenRes.reason ? caseGenRes.reason : '用例生成触发失败' };
-      }
-      return { handled: true, text: responseText || '已触发用例生成流程，请查看用例生成页面进度。' };
-    }
-
-    if (action === 'run_missing_recommendation') {
-      if (!apis.assistantApi || typeof apis.assistantApi.runMissingRecommendation !== 'function') return { handled: true, text: '漏测推荐能力暂不可用' };
-      if (!await requireDoubleConfirmForAction('run_missing_recommendation', {})) return { handled: true, text: '已取消。' };
-      setStatus('正在触发漏测推荐...');
-      var missRes = await apis.assistantApi.runMissingRecommendation();
-      if (!missRes || missRes.ok !== true) {
-        return { handled: true, text: missRes && missRes.reason ? missRes.reason : '漏测推荐触发失败' };
-      }
-      return { handled: true, text: responseText || '已触发漏测推荐，请在页面确认后再生成。' };
-    }
-
-    if (responseText) return { handled: true, text: responseText };
-    return null;
-  }
-
-  async function tryHandleModelDrivenReply(text, options) {
+  async function tryHandleAssistantProtocolV2(text, options) {
     var opts = options && typeof options === 'object' ? options : {};
     var attachments = normalizeAssistantMessageAttachments(opts.attachments);
     var contentBlocks = normalizeAssistantContentBlocks(opts.contentBlocks);
     var hasImageInput = assistantContentBlocksHaveImage(contentBlocks) || attachments.length > 0;
     var content = composeAssistantConversationContent(text, attachments);
-    var expectsExecTransfer = isExplicitExecTransferIntent(text);
-    var prefersCaseUpdateModel = shouldPreferModelDrivenCaseUpdateRoute(text);
-    var prefersTaskState = shouldPreferModelDrivenTaskRoute(text) || prefersCaseUpdateModel;
-    var execTransferRepairCount = 0;
     var onTaskStateChange = typeof opts.onTaskStateChange === 'function' ? opts.onTaskStateChange : null;
-    var taskStateSession = null;
-    var taskPreviewContinuation = null;
-    var taskPreviewPrepared = false;
+    var pendingSnapshot = clonePendingInteraction(pendingInteraction);
+    var taskUserText = buildAssistantContinuationTaskUserText(content, pendingSnapshot);
+    var selectedChoice = pendingSnapshot ? resolvePendingInteractionChoice(pendingSnapshot, text) : null;
+    var activeSelectedChoice = selectedChoice && typeof selectedChoice === 'object' ? JSON.parse(JSON.stringify(selectedChoice)) : null;
+    var observations = [];
+    var selectedChoiceTaskStepId = pendingSnapshot && pendingSnapshot.taskStepId ? String(pendingSnapshot.taskStepId) : '';
+    var taskRuntime = pendingSnapshot && pendingSnapshot.taskState
+      ? buildAssistantProtocolTaskRuntimeFromTaskState(pendingSnapshot.taskState)
+      : null;
+    var round = 0;
+    var maxRounds = 6;
+    var executedCalls = 0;
+    var maxExecutedCalls = 12;
+    var successfulCallSignatures = {};
+    var successfulCapabilityExecutionObservations = {};
+    var repeatedCallGuardCount = 0;
+    var pendingWriteRecoveryCount = 0;
+    var hasSuccessfulWriteCall = false;
+    var modelDeclaredWriteTask = assistantTaskStateRequiresWrite(taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null);
+    var protocolRetryOverride = null;
     if (!content && !hasImageInput) return null;
-    var apis = getApis();
-    if (!apis.assistantApi || typeof apis.assistantApi.callModel !== 'function') return null;
-    var mcpTools = getAvailableMcpToolsForUserText(text);
-    var mcpToolLines = [];
-    if (Array.isArray(mcpTools)) {
-      for (var i = 0; i < mcpTools.length; i += 1) {
-        var tool = mcpTools[i] && typeof mcpTools[i] === 'object' ? mcpTools[i] : {};
-        var name = tool.name ? String(tool.name).trim() : '';
-        if (!name) continue;
-        var mode = tool.mode ? String(tool.mode).trim() : '';
-        var desc = tool.description ? String(tool.description).trim() : '';
-        mcpToolLines.push('- ' + name + (mode ? (' [' + mode + ']') : '') + (desc ? ('：' + desc) : ''));
+    if (pendingSnapshot) {
+      pendingSnapshot.selectedChoice = selectedChoice ? JSON.parse(JSON.stringify(selectedChoice)) : null;
+      if (pendingSnapshot.observation && typeof pendingSnapshot.observation === 'object') {
+        observations.push(JSON.parse(JSON.stringify(pendingSnapshot.observation)));
       }
-    }
-    if (!mcpToolLines.length) {
-      mcpToolLines = [
-        '- page.current_info [read]',
-        '- page.get_data [read]',
-        '- nav.switch_tab [write]',
-        '- cases.list_current [read]',
-        '- case_library.query_cases [read]',
-        '- web.search [read]',
-      ];
-    }
-
-    var prompt = [
-      '你是测试助手平台内置 AI 助手。',
-      '默认根据用户问题自由判断最合适回答方式；只有在需要调用页面工具时才输出 JSON。',
-      '输出规则：',
-      '1) 直接回答时：输出自然语言，可使用 Markdown（含列表/表格/代码块）。',
-      '2) 需要调用工具时：优先输出 MCP 工具调用 JSON，不要代码块。',
-      'MCP 工具列表：',
-      mcpToolLines.join('\n'),
-      '如果平台已有合适的展示手脚架，可调用 assistant.render_scaffold；当不确定有哪些手脚架时，可先调用 assistant.list_scaffolds。',
-      hasImageInput ? '若用户附带图片，先理解图片内容，再决定是否需要调用工具；图片理解必须由模型完成。' : '',
-      prefersTaskState ? '当前请求包含多个需要连续执行的动作。请优先输出 MCP JSON 任务计划；若有多个步骤，优先使用 mcp.calls 一次列出完整步骤，让平台进入任务状态；不要只口头回答“我来处理”。' : '',
-      prefersCaseUpdateModel ? '当用户是在修改当前/执行用例字段，尤其是“改回/调回/恢复为”这类自然语言表达时，优先输出 case.update 的 MCP JSON，并直接根据用户原话补齐 field/value/scope；不要把这类表达遗漏成空 value。' : '',
-      isExecArchiveIntent(text) ? '若用户还要求归档，优先继续规划 case_library.batch_archive_exec_cases；若当前执行里仍有未通过项，优先在 args 中补 reason；只有缺少专用能力时，才退回 ui.list_controls / ui.click_control 定位归档入口。' : '',
-      '当用户要求“完整展示/完整列出当前或该用例”时，优先使用 cases.list_current 读取完整字段；若需要标准横向用例表，优先调用 assistant.render_scaffold 的 case_table。',
-      '当用户明确要“跨页面查询用例库内容”、在“用例库/全库/跨页”范围内按内容、关键词、模糊条件查用例时，优先调用 case_library.query_cases；不要误用 cases.list_current。若用例库数据量大，允许调用 case_library.query_cases 触发主 agent 拆分子任务并发检索。',
-      '当用户想把某份用例转到当前执行时，先调用 case_library.search_exec_candidates 搜索候选；只有 1 个明确候选时再调用 case_library.transfer_to_exec；若有多个候选，明确列出编号让用户选择；若 transfer_to_exec 返回需要选择执行版本，则明确列出版本让用户选择；若用户给的版本不存在，先征求是否新建，确认后再继续。',
-      '当用户想把当前执行中的某份用例移出执行时，优先调用 tempexec.remove_files；args 中尽量保留 query/keyword，工具会按当前执行中的用例名称匹配并在确认后支持批量移出。',
-      '为 case_library.search_exec_candidates 填 args 时，必须优先根据用户原话自行判断，优先保留完整用例短语，不要把“皮肤用例”“联机死亡用例”裁成“皮肤”“死亡这些关键字”。',
-      '用户给出的 912 这类值通常是目标执行版本；除非用户明确在查用例库版本，否则不要把它误塞进搜索条件。',
-      '不要输出缺少 caseFileId 的 case_library.transfer_to_exec。',
-      expectsExecTransfer ? '当前这轮请求属于“转到当前执行”；不要改成 tempexec.switch_file、tempexec.next_file 或单纯 nav.switch_tab。' : '',
-      '当问题涉及当前页面/当前执行用例与漏测/易漏用例库的跨页面查询、匹配或补充时，优先调用 cross_page.match_missing_cases；若用户想看漏测库原始明细，再调用 missing_library.list_current。',
-      'MCP JSON 格式支持：',
-      '{"mcp":{"tool":"tool.name","args":{}},"response":""}',
-      '{"mcp":{"calls":[{"tool":"tool.name","args":{}}]},"response":""}',
-      '兼容旧动作格式：',
-      '{"action":"xxx","tab":"","query":"","response":""}',
-      '{"actions":[{"action":"xxx"}],"response":""}',
-      '约束：',
-      '- 若输出 JSON，必须只输出一个 JSON 对象；不要连续输出多个 JSON 对象。',
-      '- 当用户询问当前页面用例/数量时，优先使用 cases.list_current（或兼容动作 query_case_list）。',
-      '- 当用户询问当前用例改动历史、执行页“用例变更”或变更内容时，优先使用 page.get_data 读取当前页面对应的变更快照后再整理回答。',
-      '- 当用户追问“中文名/中文名称”且上文在问当前页面时，直接返回 current_page_info 或直接回答，不要让用户改问法。',
-      '- 当问题依赖实时信息（天气/新闻/最新版本）时，优先使用 web_search。',
-      '- 若需要展示图片，可直接使用 Markdown 图片语法输出，界面会自动渲染。',
-      '- 写入、编辑、删除类动作会在聊天区展示“允许操作/不允许”确认按钮；不要伪造执行结果。',
-      '- 项目外问题正常回答，不要强行返回页面数据。',
-    ].join('\n');
-    var conversationHistory = buildConversationHistory(conversationHistoryLimit, content);
-    var mcpReasoningMaxRounds = 4;
-    var reasoningTrace = [];
-    var seenPlanSignatures = {};
-
-    function pushTaskStateUpdate() {
-      if (!onTaskStateChange || !taskStateSession) return;
-      onTaskStateChange(cloneAssistantTaskState(taskStateSession), '已进入任务状态，正在执行。');
-    }
-
-    function syncPendingExecTransferTaskState(stepIndex) {
-      var snapshot = cloneAssistantTaskState(taskStateSession);
-      var targets = [
-        pendingExecTransferSelection,
-        pendingExecTransferVersionSelection,
-        pendingExecTransferCreateVersionConfirm,
-        pendingExecTransferVersionNameClarify,
-      ];
-      var i = 0;
-      if (!snapshot) return;
-      for (i = 0; i < targets.length; i += 1) {
-        if (!targets[i] || typeof targets[i] !== 'object') continue;
-        targets[i].taskState = cloneAssistantTaskState(snapshot);
-        targets[i].taskStepIndex = stepIndex;
+      if (taskRuntime && taskRuntime.taskState && selectedChoice && pendingSnapshot.taskStepId) {
+        var pendingStepIndex = Object.prototype.hasOwnProperty.call(taskRuntime.stepIndexById, pendingSnapshot.taskStepId)
+          ? Number(taskRuntime.stepIndexById[pendingSnapshot.taskStepId])
+          : -1;
+        if (pendingStepIndex >= 0) {
+          setAssistantTaskStateStepStatus(taskRuntime.taskState, pendingStepIndex, 'completed', '已确认你的选择，继续执行后续步骤。');
+        }
       }
+      clearPendingInteraction();
     }
 
-    function finalizeTaskReply(replyText, fallbackStatus, fallbackSummary) {
-      var messageOptions = {};
-      var finalTask = cloneAssistantTaskState(taskStateSession);
-      var status = '';
-      if (finalTask) {
-        status = normalizeAssistantTaskStatus(fallbackStatus) || deriveAssistantTaskStateStatus(finalTask);
-        if (status === 'running') status = 'completed';
-        finalTask.status = status || 'completed';
-        if (fallbackSummary !== undefined && fallbackSummary !== null) finalTask.summary = String(fallbackSummary);
-        else if (!finalTask.summary && finalTask.status === 'completed') finalTask.summary = '任务已完成。';
-        messageOptions.taskState = finalTask;
-      }
-      return { handled: true, text: replyText, messageOptions: messageOptions };
+    function pushTaskUpdate(taskText) {
+      if (!onTaskStateChange || !taskRuntime || !taskRuntime.taskState) return;
+      onTaskStateChange(cloneAssistantTaskState(taskRuntime.taskState), taskText || '已进入任务状态，正在执行。');
     }
 
-    async function callModelWithPrompt(promptText) {
-      var res = null;
-      try {
-        res = await apis.assistantApi.callModel(content, {
-          prompt: buildConversationPromptWithPriority(promptText, content),
-          temperature: 0.2,
-          history: conversationHistory,
-          contentBlocks: contentBlocks,
-        });
-      } catch (err) {
-        res = { ok: false, reason: err && err.message ? String(err.message) : '模型调用异常' };
-      }
-      return res;
+    function syncSelectedChoiceTaskStep(summary) {
+      if (!activeSelectedChoice || !selectedChoiceTaskStepId || !taskRuntime || !taskRuntime.taskState || !taskRuntime.stepIndexById) return;
+      if (!Object.prototype.hasOwnProperty.call(taskRuntime.stepIndexById, selectedChoiceTaskStepId)) return;
+      var selectedStepIndex = Number(taskRuntime.stepIndexById[selectedChoiceTaskStepId]);
+      if (selectedStepIndex < 0 || selectedStepIndex >= taskRuntime.taskState.steps.length) return;
+      if (taskRuntime.taskState.steps[selectedStepIndex].status === 'completed') return;
+      setAssistantTaskStateStepStatus(taskRuntime.taskState, selectedStepIndex, 'completed', summary || '已确认你的选择，继续执行后续步骤。');
     }
 
-    async function tryRepairExecTransfer(latestText) {
-      var repairedRes = null;
-      if (!expectsExecTransfer || execTransferRepairCount >= 2) return '';
-      execTransferRepairCount += 1;
-      repairedRes = await callModelWithPrompt(buildExecTransferRepairPrompt(prompt, reasoningTrace, latestText || ''));
-      if (!repairedRes || repairedRes.ok !== true || !repairedRes.content) return '';
-      return String(repairedRes.content || '').trim();
+    function markTaskRuntimeAwaitingModel(summary) {
+      var nextSummary = summary === undefined || summary === null ? '本轮步骤已完成，正在整理结果。' : String(summary);
+      if (!taskRuntime || !taskRuntime.taskState) return;
+      syncAssistantProtocolFinalizeStep(taskRuntime, 'running', nextSummary);
+      setAssistantTaskStateStatus(taskRuntime.taskState, 'running', nextSummary);
+      pushTaskUpdate(nextSummary);
     }
 
-    async function ensureTaskPreviewSession(parsed) {
-      var previewPlanCount = 0;
-      var preview = null;
-      if (taskPreviewPrepared || !prefersTaskState || !parsed || typeof parsed !== 'object') return;
-      taskPreviewPrepared = true;
-      previewPlanCount = extractModelMcpCallList(parsed).length + extractModelActionList(parsed).length;
-      if (previewPlanCount >= 2) return;
-      preview = await buildAssistantTaskPreviewByModel(apis.assistantApi, content, {
-        history: conversationHistory,
-        contentBlocks: contentBlocks,
-        initialPlan: String(currentRaw || ''),
+    function waitForAssistantUiRender() {
+      return new Promise(function(resolve) {
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(function() {
+            setTimeout(resolve, 0);
+          });
+          return;
+        }
+        setTimeout(resolve, 0);
       });
-      if (!preview || !preview.taskState || !preview.continuation) return;
-      taskStateSession = preview.taskState;
-      taskPreviewContinuation = preview.continuation;
-      pushTaskStateUpdate();
     }
 
-    var initialRes = await callModelWithPrompt(prompt);
-    if (!initialRes || initialRes.ok !== true || !initialRes.content) return null;
-    var currentRaw = String(initialRes.content || '').trim();
-    if (!currentRaw) return null;
+    function isSoftBlockedObservation(observation) {
+      var row = observation && typeof observation === 'object' ? observation : {};
+      var capability = normalizeMcpToolName(row.capability || '');
+      return capability.indexOf('assistant.runtime.') === 0;
+    }
 
-    for (var round = 1; round <= mcpReasoningMaxRounds; round += 1) {
-      var parsed = parseJsonObjectFromText(currentRaw);
-      if (!parsed || typeof parsed !== 'object') {
-        if (expectsExecTransfer) {
-          var repairedRaw = await tryRepairExecTransfer(currentRaw);
-          if (repairedRaw) {
-            currentRaw = repairedRaw;
-            continue;
-          }
-          return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
-        }
-        return finalizeTaskReply(currentRaw);
+    function hasHardBlockedObservation(list) {
+      var rows = Array.isArray(list) ? list : [];
+      var i = 0;
+      for (i = 0; i < rows.length; i += 1) {
+        var row = rows[i] && typeof rows[i] === 'object' ? rows[i] : {};
+        if (String(row.status || '') !== 'blocked') continue;
+        if (isSoftBlockedObservation(row)) continue;
+        return true;
       }
-      var topLevelResponse = parsed.response && String(parsed.response).trim() ? String(parsed.response).trim() : '';
-      await ensureTaskPreviewSession(parsed);
+      return false;
+    }
 
-      var mcpCalls = extractModelMcpCallList(parsed);
-      if (mcpCalls.length) {
-        if (hasIncompleteExecTransferMcpPlan(mcpCalls)) {
-          var invalidExecTransferPlanText = '检测到 case_library.transfer_to_exec 缺少 caseFileId，必须先搜索候选并在拿到明确目标后再转执行。';
-          var repairedIncompleteRes = null;
-          var repairedIncompletePlan = '';
-          reasoningTrace.push(formatReasoningTraceEntry(round, 'mcp', mcpCalls, [invalidExecTransferPlanText]));
-          if (execTransferRepairCount >= 2) {
-            return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+    function buildObservationFallbackText() {
+      function findLatestObservationEntry(capabilityId, predicate) {
+        var ids = Array.isArray(capabilityId)
+          ? capabilityId.map(function(item) { return normalizeMcpToolName(item); }).filter(Boolean)
+          : [normalizeMcpToolName(capabilityId)];
+        var i = 0;
+        for (i = observations.length - 1; i >= 0; i -= 1) {
+          var item = observations[i] && typeof observations[i] === 'object' ? observations[i] : {};
+          var itemId = normalizeMcpToolName(item.capability || '');
+          if (ids.length && ids.indexOf(itemId) === -1) continue;
+          if (predicate && predicate(item, i) !== true) continue;
+          return {
+            index: i,
+            item: item,
+          };
+        }
+        return null;
+      }
+
+      function findLatestObservation(capabilityId) {
+        var entry = findLatestObservationEntry(capabilityId);
+        return entry ? entry.item : null;
+      }
+
+      function findLatestSuccessfulObservation(capabilityId) {
+        return findLatestObservationEntry(capabilityId, function(item) {
+          return String(item.status || '') === 'ok';
+        });
+      }
+
+      function pickLaterObservationEntry(first, second) {
+        if (first && second) return first.index >= second.index ? first : second;
+        return first || second || null;
+      }
+
+      function readObservationArgs(entry) {
+        var row = entry && entry.item && typeof entry.item === 'object' ? entry.item : null;
+        var data = row && row.data && typeof row.data === 'object' ? row.data : null;
+        var args = data && data.args && typeof data.args === 'object' ? data.args : null;
+        return args ? Object.assign({}, args) : {};
+      }
+
+      function readCaseItemExecutionStatus(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        var resolved = resolveCaseExecutionResult(row);
+        var normalized = normalizeCaseActualValueToken(resolved || row.executionResult || row.actual || row.status || row.result || '');
+        if (normalized) return normalized;
+        if (resolved !== undefined && resolved !== null && String(resolved).trim()) return String(resolved).trim();
+        if (row.executionResult !== undefined && row.executionResult !== null && String(row.executionResult).trim()) return String(row.executionResult).trim();
+        if (row.actual !== undefined && row.actual !== null && String(row.actual).trim()) return String(row.actual).trim();
+        if (row.status !== undefined && row.status !== null && String(row.status).trim()) return String(row.status).trim();
+        if (row.result !== undefined && row.result !== null && String(row.result).trim()) return String(row.result).trim();
+        return '未设置';
+      }
+
+      function buildCaseExecutionSummary(caseData, targetValue, caseIndex) {
+        var data = caseData && typeof caseData === 'object' ? caseData : {};
+        var items = Array.isArray(data.items) ? data.items : [];
+        var summary = {
+          total: items.length,
+          fileName: data.caseFile && data.caseFile.name ? String(data.caseFile.name) : '',
+          caseIndex: 0,
+          found: false,
+          label: '',
+          status: '',
+          satisfiedCount: 0,
+          unmetCount: 0,
+          allMatched: false,
+          unmatchedExamples: [],
+        };
+        var i = 0;
+        var normalizedIndex = Number(caseIndex);
+        if (Number.isFinite(normalizedIndex) && normalizedIndex > 0) {
+          normalizedIndex = Math.floor(normalizedIndex);
+          summary.caseIndex = normalizedIndex;
+          if (items[normalizedIndex - 1] && typeof items[normalizedIndex - 1] === 'object') {
+            var targetItem = items[normalizedIndex - 1];
+            summary.found = true;
+            summary.label = targetItem.title ? String(targetItem.title).trim() : ('第 ' + normalizedIndex + ' 条用例');
+            summary.status = readCaseItemExecutionStatus(targetItem);
+            summary.allMatched = summary.status === targetValue;
+            summary.satisfiedCount = summary.allMatched ? 1 : 0;
+            summary.unmetCount = summary.allMatched ? 0 : 1;
+          } else {
+            summary.unmetCount = 1;
           }
-          execTransferRepairCount += 1;
-          repairedIncompleteRes = await callModelWithPrompt(buildExecTransferRepairPrompt(prompt, reasoningTrace, invalidExecTransferPlanText));
-          if (repairedIncompleteRes && repairedIncompleteRes.ok === true && repairedIncompleteRes.content) {
-            repairedIncompletePlan = String(repairedIncompleteRes.content || '').trim();
+          return summary;
+        }
+        for (i = 0; i < items.length; i += 1) {
+          var row = items[i] && typeof items[i] === 'object' ? items[i] : {};
+          var status = readCaseItemExecutionStatus(row);
+          var label = row.title ? String(row.title).trim() : ('第 ' + String(row.index || (i + 1)) + ' 条');
+          if (status === targetValue) {
+            summary.satisfiedCount += 1;
+          } else if (summary.unmatchedExamples.length < 3) {
+            summary.unmatchedExamples.push(label + '（当前：' + status + '）');
           }
-          if (repairedIncompletePlan && repairedIncompletePlan !== currentRaw) {
-            currentRaw = repairedIncompletePlan;
+        }
+        summary.unmetCount = items.length - summary.satisfiedCount;
+        summary.allMatched = items.length > 0 && summary.unmetCount === 0;
+        return summary;
+      }
+
+      function buildCaseExecutionResultText(summary, previousSummary, hasWrite, writeData, hasFreshReadAfterWrite, targetValue) {
+        var prefix = summary && summary.fileName ? ('当前执行文件“' + summary.fileName + '”中，') : '';
+        var writeCount = Number(writeData && (writeData.count || writeData.updatedCount || writeData.selectedCaseCount)) || 0;
+        if (summary && summary.caseIndex > 0) {
+          if (!summary.found) {
+            if (summary.total > 0) return prefix + '当前共 ' + summary.total + ' 条用例，未找到第 ' + summary.caseIndex + ' 条用例，未执行修改。';
+            return prefix + '未找到第 ' + summary.caseIndex + ' 条用例。';
+          }
+          if (summary.allMatched) {
+            if (previousSummary && previousSummary.found && previousSummary.allMatched) {
+              return prefix + summary.label + '已为' + targetValue + '，无需修改，原本已符合预期。';
+            }
+            if (!hasWrite) return prefix + summary.label + '已为' + targetValue + '，无需修改。';
+            return prefix + summary.label + '已改为' + targetValue + '。';
+          }
+          if (hasWrite) {
+            if (!hasFreshReadAfterWrite) {
+              return prefix + summary.label + '已发起修改'
+                + (writeCount > 0 ? ('（本次处理 ' + writeCount + ' 条）') : '')
+                + '，但当前还没有重新读取结果确认。';
+            }
+            return prefix + summary.label + '当前为' + summary.status + '，尚未改为' + targetValue + '。';
+          }
+          return prefix + summary.label + '当前为' + summary.status + '，还未改为' + targetValue + '。当前还没有实际执行修改。';
+        }
+        if (!summary || summary.total <= 0) {
+          if (hasWrite) {
+            return '已执行批量修改'
+              + (writeCount > 0 ? ('，本次处理 ' + writeCount + ' 条用例') : '')
+              + '，但当前没有读取到可核对的用例。';
+          }
+          return '';
+        }
+        if (summary.allMatched) {
+          if (previousSummary && previousSummary.total === summary.total && previousSummary.allMatched) {
+            return prefix + '当前全部用例已为' + targetValue + '，无需修改，原本已符合预期。';
+          }
+          if (!hasWrite) return prefix + '当前全部用例已为' + targetValue + '，无需修改。';
+          return prefix + '已按要求把全部 ' + summary.total + ' 条用例改为' + targetValue + '。';
+        }
+        if (hasWrite) {
+          if (!hasFreshReadAfterWrite) {
+            return prefix + '已执行批量修改'
+              + (writeCount > 0 ? ('，本次处理 ' + writeCount + ' 条用例') : '')
+              + '，但当前还没有重新读取列表确认。';
+          }
+          var improvedCount = previousSummary && previousSummary.total === summary.total
+            ? (summary.satisfiedCount - previousSummary.satisfiedCount)
+            : 0;
+          var message = improvedCount > 0
+            ? ('已补齐部分缺漏，当前 ' + summary.total + ' 条用例中已有 ' + summary.satisfiedCount + ' 条为' + targetValue + '，仍有 ' + summary.unmetCount + ' 条未达标。')
+            : ('已尝试修改，当前 ' + summary.total + ' 条用例中已有 ' + summary.satisfiedCount + ' 条为' + targetValue + '，仍有 ' + summary.unmetCount + ' 条未达标。');
+          return prefix + message + (summary.unmatchedExamples.length ? ('例如：' + summary.unmatchedExamples.join('、') + '。') : '');
+        }
+        return prefix + '当前共 ' + summary.total + ' 条用例，已为' + targetValue + '的有 ' + summary.satisfiedCount + ' 条，仍有 ' + summary.unmetCount + ' 条未达标。'
+          + (summary.unmatchedExamples.length ? ('例如：' + summary.unmatchedExamples.join('、') + '。') : '')
+          + '当前还没有实际执行修改。';
+      }
+
+      function buildObservedPageDataLines(pageData) {
+        var data = pageData && typeof pageData === 'object' ? pageData : {};
+        var lines = [];
+        var currentCaseContext = data.currentCaseContext && typeof data.currentCaseContext === 'object' ? data.currentCaseContext : null;
+        if (data.requirementLabel) lines.push('- 当前需求：' + String(data.requirementLabel));
+        lines.push('- 已配置模型数：' + (Number(data.modelsCount) || 0));
+        lines.push('- 已导入用例数：' + (Number(data.importedCasesCount) || 0));
+        lines.push('- 用例生成模块数：' + (Number(data.caseGenModuleCount) || 0));
+        lines.push('- 当前执行文件数：' + (Number(data.tempExecFileCount) || 0));
+        if (currentCaseContext && currentCaseContext.fileName) {
+          lines.push('- 当前用例文件：' + String(currentCaseContext.fileName) + '（可见 ' + (Number(currentCaseContext.total) || 0) + ' 条，总计 ' + (Number(currentCaseContext.totalAll) || Number(currentCaseContext.total) || 0) + ' 条）');
+        }
+        if (data.caseLibraryHistoryDetail && data.caseLibraryHistoryDetail.hasContext === true) lines.push('- 已读取当前用例库历史详情上下文');
+        if (data.missingCaseLibraryView && data.missingCaseLibraryView.hasContext === true) lines.push('- 已读取易漏用例视图上下文');
+        if (data.tempExecCaseLibraryDiffDetail && data.tempExecCaseLibraryDiffDetail.hasContext === true) lines.push('- 已读取当前执行与用例库差异上下文');
+        return lines;
+      }
+
+      function buildPageCapabilitySummaryLines(tab) {
+        var capabilityIds = ['page.current_info', 'page.get_data', 'ui.list_controls'];
+        var normalizedTab = tab === undefined || tab === null ? '' : String(tab).trim().toLowerCase();
+        var seen = {};
+        var lines = [];
+        var i = 0;
+        if (normalizedTab === 'settings') capabilityIds = capabilityIds.concat(['settings.describe', 'settings.patch']);
+        if (normalizedTab === 'case-library') capabilityIds = capabilityIds.concat(['cases.list_current', 'case_library.query_cases', 'missing_library.list_current', 'cross_page.match_missing_cases']);
+        if (normalizedTab === 'tempexec') capabilityIds = capabilityIds.concat(['cases.list_current', 'case.update', 'tempexec.reuse_update', 'tempexec.remove_files', 'tempexec.switch_file', 'tempexec.export_xmind']);
+        for (i = 0; i < capabilityIds.length; i += 1) {
+          var capability = getAssistantCapabilityById(capabilityIds[i]);
+          var description = capability && capability.description ? String(capability.description).trim() : '';
+          var line = '';
+          if (!capability || capability.available === false || !description) continue;
+          line = '- ' + description;
+          if (capability.approvalPolicy === 'user_confirm' || capability.approvalPolicy === 'tool_managed' || capability.mode === 'write') line += '（写操作会先征求你的同意）';
+          if (seen[line]) continue;
+          seen[line] = true;
+          lines.push(line);
+        }
+        return lines.slice(0, 6);
+      }
+
+      function buildObservedCaseListFallback() {
+        var latestCaseWriteEntry = findLatestSuccessfulObservation(['case.update', 'case_library.batch_update_exec_results']);
+        var latestReuseWriteEntry = findLatestSuccessfulObservation('tempexec.reuse_update');
+        var latestAnyWriteEntry = findLatestObservationEntry([], function(item) {
+          var capability = normalizeMcpToolName(item && item.capability ? item.capability : '');
+          if (!capability || isSoftBlockedObservation(item)) return false;
+          if (String(item.status || '') !== 'ok') return false;
+          return getMcpToolMode(capability) === 'write';
+        });
+        var latestRelevantWriteEntry = pickLaterObservationEntry(pickLaterObservationEntry(latestCaseWriteEntry, latestReuseWriteEntry), latestAnyWriteEntry);
+        var latestCaseListEntry = findLatestSuccessfulObservation('cases.list_current');
+        var currentCaseListEntry = latestCaseListEntry;
+        var previousCaseListEntry = null;
+        var currentCaseData = null;
+        var previousCaseData = null;
+        var hasFreshReadAfterWrite = false;
+        var latestCaseWriteArgs = readObservationArgs(latestCaseWriteEntry);
+        var latestReuseWriteArgs = readObservationArgs(latestReuseWriteEntry);
+        var latestAnyWriteArgs = readObservationArgs(latestAnyWriteEntry);
+        var taskHintText = '';
+        var parsedReuse = latestReuseWriteArgs && Object.keys(latestReuseWriteArgs).length
+          ? Object.assign({}, latestReuseWriteArgs)
+          : {};
+        var inferredCaseUpdate = latestCaseWriteArgs && Object.keys(latestCaseWriteArgs).length
+          ? Object.assign({}, latestCaseWriteArgs)
+          : {};
+        var currentItems = [];
+        var previousItems = [];
+        var fileName = '';
+        var total = 0;
+        if (taskRuntime && taskRuntime.taskState) {
+          var taskState = taskRuntime.taskState;
+          var taskSteps = Array.isArray(taskState.steps) ? taskState.steps : [];
+          taskHintText = [
+            taskState.title || '',
+            taskState.summary || '',
+          ].concat(taskSteps.map(function(step) {
+            var row = step && typeof step === 'object' ? step : {};
+            return [row.label || '', row.description || ''].join(' ').trim();
+          })).filter(function(item) {
+            return !!String(item || '').trim();
+          }).join('\n');
+        }
+        if (taskHintText) {
+          if (!parsedReuse || !Object.keys(parsedReuse).length) {
+            parsedReuse = parseTempExecReuseUpdateCommand(taskHintText, parsedReuse) || parsedReuse;
+          }
+          if (!inferredCaseUpdate || !Object.keys(inferredCaseUpdate).length) {
+            inferredCaseUpdate = inferCaseUpdateArgsFromText(Object.assign({}, inferredCaseUpdate), taskHintText);
+          }
+        }
+        if (latestRelevantWriteEntry) {
+          currentCaseListEntry = findLatestObservationEntry('cases.list_current', function(item, index) {
+            return String(item.status || '') === 'ok' && index > latestRelevantWriteEntry.index;
+          }) || latestCaseListEntry;
+          previousCaseListEntry = findLatestObservationEntry('cases.list_current', function(item, index) {
+            return String(item.status || '') === 'ok' && index < latestRelevantWriteEntry.index;
+          });
+          hasFreshReadAfterWrite = Boolean(currentCaseListEntry && currentCaseListEntry.index > latestRelevantWriteEntry.index);
+        }
+        currentCaseData = currentCaseListEntry && currentCaseListEntry.item && currentCaseListEntry.item.data && typeof currentCaseListEntry.item.data === 'object'
+          ? currentCaseListEntry.item.data
+          : null;
+        previousCaseData = previousCaseListEntry && previousCaseListEntry.item && previousCaseListEntry.item.data && typeof previousCaseListEntry.item.data === 'object'
+          ? previousCaseListEntry.item.data
+          : null;
+        if (latestRelevantWriteEntry && !hasFreshReadAfterWrite) {
+          var liveCaseData = buildLiveTempExecCaseDataForAssistant();
+          var liveFileId = liveCaseData && liveCaseData.caseFile && liveCaseData.caseFile.id ? String(liveCaseData.caseFile.id) : '';
+          var currentFileId = currentCaseData && currentCaseData.caseFile && currentCaseData.caseFile.id ? String(currentCaseData.caseFile.id) : '';
+          var sameLiveFile = !currentFileId || !liveFileId || currentFileId === liveFileId;
+          if (liveCaseData && sameLiveFile) {
+            currentCaseData = liveCaseData;
+            hasFreshReadAfterWrite = true;
+          }
+        }
+        currentItems = currentCaseData && Array.isArray(currentCaseData.items) ? currentCaseData.items : [];
+        previousItems = previousCaseData && Array.isArray(previousCaseData.items) ? previousCaseData.items : [];
+        fileName = currentCaseData && currentCaseData.caseFile && currentCaseData.caseFile.name ? String(currentCaseData.caseFile.name) : '';
+        total = currentCaseData && Number(currentCaseData.total) > 0 ? Number(currentCaseData.total) : currentItems.length;
+        if (!currentCaseData) return { text: '', priority: 'none' };
+        if (parsedReuse && parsedReuse.detailName && normalizeTempExecReuseFieldName(parsedReuse.field || '') === 'actual') {
+          var detailName = String(parsedReuse.detailName || '').trim();
+          var targetValue = normalizeCaseActualValueToken(parsedReuse.value || parsedReuse.to || '');
+          var caseIndex = Number(parsedReuse.index);
+          var totalAll = currentCaseData && Number(currentCaseData.totalAll) > 0 ? Number(currentCaseData.totalAll) : total;
+          if (!Number.isFinite(caseIndex) || caseIndex <= 0) caseIndex = 0;
+          else caseIndex = Math.floor(caseIndex);
+          var matched = [];
+          var unmatched = [];
+          var i = 0;
+          if (detailName && targetValue) {
+            if (caseIndex > 0 && totalAll > 0 && caseIndex > totalAll) {
+              var outOfRangePrefix = fileName ? ('当前执行文件“' + fileName + '”中，') : '';
+              return {
+                text: outOfRangePrefix + '当前共 ' + totalAll + ' 条用例，未找到第 ' + caseIndex + ' 条用例，未执行对子项“' + detailName + '”改为' + targetValue + '的修改。',
+                priority: 'specific',
+              };
+            }
+            if (caseIndex > 0 && currentItems[caseIndex - 1] && typeof currentItems[caseIndex - 1] === 'object') {
+              var singleItem = currentItems[caseIndex - 1];
+              var singleDetails = Array.isArray(singleItem.reuseDetails) ? singleItem.reuseDetails : [];
+              var singleTargetDetail = null;
+              var singleJ = 0;
+              for (singleJ = 0; singleJ < singleDetails.length; singleJ += 1) {
+                var singleDetail = singleDetails[singleJ] && typeof singleDetails[singleJ] === 'object' ? singleDetails[singleJ] : {};
+                if (String(singleDetail.text || '').trim() === detailName) {
+                  singleTargetDetail = singleDetail;
+                  break;
+                }
+              }
+              if (singleTargetDetail) {
+                var singleStatus = normalizeCaseActualValueToken(singleTargetDetail.status || '') || String(singleTargetDetail.status || '').trim() || '未设置';
+                var singlePrefix = fileName ? ('当前执行文件“' + fileName + '”中，') : '';
+                if (singleStatus === targetValue) {
+                  var previousSingleDetailStatus = '';
+                  if (latestReuseWriteEntry && previousItems[caseIndex - 1] && typeof previousItems[caseIndex - 1] === 'object') {
+                    var previousSingleDetails = Array.isArray(previousItems[caseIndex - 1].reuseDetails) ? previousItems[caseIndex - 1].reuseDetails : [];
+                    for (singleJ = 0; singleJ < previousSingleDetails.length; singleJ += 1) {
+                      var previousSingleDetail = previousSingleDetails[singleJ] && typeof previousSingleDetails[singleJ] === 'object' ? previousSingleDetails[singleJ] : {};
+                      if (String(previousSingleDetail.text || '').trim() === detailName) {
+                        previousSingleDetailStatus = normalizeCaseActualValueToken(previousSingleDetail.status || '') || String(previousSingleDetail.status || '').trim() || '';
+                        break;
+                      }
+                    }
+                  }
+                  if (latestReuseWriteEntry && previousSingleDetailStatus && previousSingleDetailStatus !== targetValue) {
+                    return { text: singlePrefix + '第 ' + caseIndex + ' 条用例的子项“' + detailName + '”已改为' + targetValue + '。', priority: 'specific' };
+                  }
+                  if (latestReuseWriteEntry && previousSingleDetailStatus === targetValue) {
+                    return { text: singlePrefix + '第 ' + caseIndex + ' 条用例的子项“' + detailName + '”已为' + targetValue + '，无需修改，原本已符合预期。', priority: 'specific' };
+                  }
+                  return { text: singlePrefix + '第 ' + caseIndex + ' 条用例的子项“' + detailName + '”已为' + targetValue + '，无需修改。', priority: 'specific' };
+                }
+                if (latestReuseWriteEntry) {
+                  if (!hasFreshReadAfterWrite) {
+                    return { text: singlePrefix + '第 ' + caseIndex + ' 条用例的子项“' + detailName + '”已发起修改，但当前还没有重新读取结果确认。', priority: 'specific' };
+                  }
+                  return { text: singlePrefix + '第 ' + caseIndex + ' 条用例的子项“' + detailName + '”当前为' + singleStatus + '，尚未改为' + targetValue + '。', priority: 'specific' };
+                }
+                return { text: singlePrefix + '第 ' + caseIndex + ' 条用例的子项“' + detailName + '”当前为' + singleStatus + '，还未改为' + targetValue + '。当前还没有实际执行修改。', priority: 'specific' };
+              }
+            }
+            for (i = 0; i < currentItems.length; i += 1) {
+              var item = currentItems[i] && typeof currentItems[i] === 'object' ? currentItems[i] : {};
+              var details = Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+              var targetDetail = null;
+              var j = 0;
+              for (j = 0; j < details.length; j += 1) {
+                var detail = details[j] && typeof details[j] === 'object' ? details[j] : {};
+                if (String(detail.text || '').trim() === detailName) {
+                  targetDetail = detail;
+                  break;
+                }
+              }
+              if (!targetDetail) continue;
+              var currentStatus = normalizeCaseActualValueToken(targetDetail.status || '') || String(targetDetail.status || '').trim() || '未设置';
+              var caseLabel = item.title ? String(item.title).trim() : ('第 ' + String(item.index || (i + 1)) + ' 条');
+              matched.push({ label: caseLabel, status: currentStatus });
+              if (currentStatus !== targetValue) unmatched.push(caseLabel + '（当前：' + currentStatus + '）');
+            }
+            if (matched.length) {
+              var prefix = fileName ? ('当前执行文件“' + fileName + '”中，') : '';
+              if (!unmatched.length) {
+                var previousMatchedCount = 0;
+                if (latestReuseWriteEntry && previousItems.length) {
+                  for (i = 0; i < previousItems.length; i += 1) {
+                    var previousItem = previousItems[i] && typeof previousItems[i] === 'object' ? previousItems[i] : {};
+                    var previousDetails = Array.isArray(previousItem.reuseDetails) ? previousItem.reuseDetails : [];
+                    var previousTargetDetail = null;
+                    var previousJ = 0;
+                    for (previousJ = 0; previousJ < previousDetails.length; previousJ += 1) {
+                      var previousDetail = previousDetails[previousJ] && typeof previousDetails[previousJ] === 'object' ? previousDetails[previousJ] : {};
+                      if (String(previousDetail.text || '').trim() === detailName) {
+                        previousTargetDetail = previousDetail;
+                        break;
+                      }
+                    }
+                    if (!previousTargetDetail) continue;
+                    if ((normalizeCaseActualValueToken(previousTargetDetail.status || '') || String(previousTargetDetail.status || '').trim()) === targetValue) previousMatchedCount += 1;
+                  }
+                }
+                if (latestReuseWriteEntry && previousMatchedCount > 0 && previousMatchedCount < matched.length) {
+                  return { text: prefix + '子项“' + detailName + '”已按要求全部改为' + targetValue + '。', priority: 'specific' };
+                }
+                if (latestReuseWriteEntry && previousMatchedCount === matched.length && matched.length > 0) {
+                  return { text: prefix + '子项“' + detailName + '”已全部为' + targetValue + '，无需修改，原本已符合预期。', priority: 'specific' };
+                }
+                return { text: prefix + '子项“' + detailName + '”已全部为' + targetValue + '，无需修改。', priority: 'specific' };
+              }
+              if (latestReuseWriteEntry) {
+                if (!hasFreshReadAfterWrite) {
+                  return { text: prefix + '已执行子项更新，但当前还没有重新读取结果确认。', priority: 'specific' };
+                }
+                return {
+                  text: prefix + '子项“' + detailName + '”共匹配 ' + matched.length + ' 条，已为' + targetValue + '的有 ' + (matched.length - unmatched.length) + ' 条，仍有 ' + unmatched.length + ' 条未达标。'
+                    + (unmatched.length ? ('例如：' + unmatched.slice(0, 3).join('、') + '。') : ''),
+                  priority: 'specific',
+                };
+              }
+              return {
+                text: prefix + '子项“' + detailName + '”共匹配 ' + matched.length + ' 条，已为' + targetValue + '的有 ' + (matched.length - unmatched.length) + ' 条，仍有 ' + unmatched.length + ' 条未达标。'
+                  + (unmatched.length ? ('例如：' + unmatched.slice(0, 3).join('、') + '。') : '')
+                  + '当前还没有实际执行修改。',
+                priority: 'specific',
+              };
+            }
+          }
+        }
+        if (inferredCaseUpdate && normalizeCaseUpdateFieldName(inferredCaseUpdate.field || '') === 'actual') {
+          var targetCaseValue = normalizeCaseActualValueToken(inferredCaseUpdate.value || '');
+          var caseIndex2 = Number(inferredCaseUpdate.index);
+          var currentSummary = null;
+          var previousSummary = null;
+          var latestCaseWriteData = latestCaseWriteEntry && latestCaseWriteEntry.item && latestCaseWriteEntry.item.data && typeof latestCaseWriteEntry.item.data === 'object'
+            ? latestCaseWriteEntry.item.data
+            : null;
+          if (!Number.isFinite(caseIndex2) || caseIndex2 <= 0) caseIndex2 = 0;
+          else caseIndex2 = Math.floor(caseIndex2);
+          if (targetCaseValue) {
+            currentSummary = buildCaseExecutionSummary(currentCaseData, targetCaseValue, caseIndex2);
+            previousSummary = previousCaseData ? buildCaseExecutionSummary(previousCaseData, targetCaseValue, caseIndex2) : null;
+            return {
+              text: buildCaseExecutionResultText(currentSummary, previousSummary, Boolean(latestCaseWriteEntry), latestCaseWriteData, hasFreshReadAfterWrite, targetCaseValue),
+              priority: 'specific',
+            };
+          }
+        }
+        if (fileName) return { text: '已读取当前执行文件“' + fileName + '”的用例，共 ' + total + ' 条。', priority: 'generic' };
+        if (total > 0) return { text: '已读取当前用例列表，共 ' + total + ' 条。', priority: 'generic' };
+        return { text: '', priority: 'none' };
+      }
+
+      var lines = [];
+      var observedCaseListFallback = buildObservedCaseListFallback();
+      var pageInfoObservation = findLatestObservation('page.current_info');
+      var pageDataObservation = findLatestObservation('page.get_data');
+      var pageInfoData = pageInfoObservation && pageInfoObservation.data && typeof pageInfoObservation.data === 'object' ? pageInfoObservation.data : {};
+      var pageData = pageDataObservation && pageDataObservation.data && typeof pageDataObservation.data === 'object' ? pageDataObservation.data : {};
+      var livePageData = {};
+      var liveApis = getApis();
+      if (liveApis.assistantApi && typeof liveApis.assistantApi.getPageData === 'function') {
+        try {
+          livePageData = liveApis.assistantApi.getPageData('') || {};
+        } catch (err) {
+          livePageData = {};
+        }
+      }
+      var pageSnapshot = pageDataObservation ? pageData : pageInfoData;
+      if ((!pageSnapshot || !pageSnapshot.tab) && livePageData && typeof livePageData === 'object') {
+        pageSnapshot = Object.assign({}, livePageData, pageSnapshot || {});
+      }
+      var tab = pageSnapshot && pageSnapshot.tab ? String(pageSnapshot.tab).trim() : '';
+      var tabLabel = tab ? (getTabLabelById(tab) || tab) : '';
+      var asksWhatPage = containsAny(content, ['什么页面', '哪个页面', '当前页面', '中文名', '页面名称']);
+      var asksWhatData = containsAny(content, ['什么数据', '有哪些数据', '数据快照', '页面数据', '数据']);
+      var asksWhatCanDo = containsAny(content, ['能做什么', '可以做什么', '你能做什么', '能干什么', '可做什么', '做什么', '做些什么'])
+        && (containsAny(content, ['页面', '这里', '当前']) || asksWhatPage);
+      if (observedCaseListFallback && observedCaseListFallback.priority === 'specific' && observedCaseListFallback.text) {
+        return observedCaseListFallback.text;
+      }
+      if (pageInfoObservation || pageDataObservation) {
+        if (tabLabel && tab) lines.push('当前页面是：' + tabLabel + '（' + tab + '）。');
+        else if (tabLabel) lines.push('当前页面是：' + tabLabel + '。');
+        else if (tab) lines.push('当前页面是：' + tab + '。');
+        if (asksWhatData || !asksWhatPage || !asksWhatCanDo) {
+          var dataLines = buildObservedPageDataLines(pageSnapshot);
+          if (dataLines.length) lines.push('当前已读取到的数据：\n' + dataLines.join('\n'));
+        }
+        if (asksWhatCanDo) {
+          var capabilityLines = buildPageCapabilitySummaryLines(tab);
+          if (capabilityLines.length) lines.push('我现在在这个页面可以帮你：\n' + capabilityLines.join('\n'));
+        }
+        if (lines.length) return lines.join('\n\n');
+      }
+      if (observedCaseListFallback && observedCaseListFallback.text) lines.push(observedCaseListFallback.text);
+      observations.forEach(function(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        if (isSoftBlockedObservation(row)) return;
+        if (!row.message) return;
+        lines.push(String(row.message));
+      });
+      if (!lines.length && observations.length) return '已获取当前结果，但模型还没有给出明确总结。';
+      if (!lines.length) return '我暂时没能完成这次任务，请换个说法或稍后重试。';
+      return mergeAssistantReplyTextParts(lines) || (observations.length ? '已获取当前结果，但模型还没有给出明确总结。' : '我暂时没能完成这次任务，请换个说法或稍后重试。');
+    }
+
+    while (round < maxRounds) {
+      var protocol = protocolRetryOverride;
+      if (protocolRetryOverride) {
+        protocolRetryOverride = null;
+      } else {
+        protocol = await callAssistantProtocolModel(content, {
+          contentBlocks: contentBlocks,
+          taskUserText: taskUserText,
+          pendingInteraction: pendingSnapshot,
+          selectedChoice: selectedChoice,
+          observations: observations,
+        });
+      }
+      var protocolText = '';
+      var blockedInRound = false;
+      var cancelledInRound = false;
+      var repeatedSuccessfulWriteCallInRound = false;
+      var roundObservations = [];
+      var i = 0;
+      activeSelectedChoice = selectedChoice && typeof selectedChoice === 'object' ? JSON.parse(JSON.stringify(selectedChoice)) : null;
+      pendingSnapshot = null;
+      selectedChoice = null;
+      if (!protocol) return null;
+      protocolText = buildAssistantProtocolResultText(protocol.message, protocol.blocks);
+      if (!taskRuntime && (protocol.task || (Array.isArray(protocol.calls) && protocol.calls.length))) {
+        taskRuntime = buildAssistantProtocolTaskRuntime(protocol, content);
+        syncSelectedChoiceTaskStep();
+        if (Array.isArray(protocol.calls) && protocol.calls.length) primeAssistantProtocolRunningStep(taskRuntime, protocol.calls);
+        pushTaskUpdate(protocolText || '已进入任务状态，正在执行。');
+      } else if (taskRuntime && Array.isArray(protocol.calls) && protocol.calls.length) {
+        taskRuntime = ensureAssistantProtocolTaskRuntime(taskRuntime, protocol, content);
+        syncSelectedChoiceTaskStep();
+        primeAssistantProtocolRunningStep(taskRuntime, protocol.calls);
+      }
+      if (assistantProtocolRequiresWrite(protocol)) modelDeclaredWriteTask = true;
+      if (taskRuntime && taskRuntime.taskState && assistantTaskStateRequiresWrite(taskRuntime.taskState)) modelDeclaredWriteTask = true;
+      var callSignature = Array.isArray(protocol.calls) && protocol.calls.length ? buildAssistantProtocolCallSignature(protocol.calls) : '';
+      if (callSignature && successfulCallSignatures[callSignature]) {
+        var repeatedReadOnlyCalls = areAssistantProtocolCallsReadOnly(protocol.calls);
+        var repeatedSuccessfulWriteCalls = !repeatedReadOnlyCalls && hasSuccessfulWriteCall;
+        var repeatedFallbackText = buildObservationFallbackText() || '';
+        var pendingWriteRequirement = assistantBuildPendingWriteRequirement(content, observations, {
+          taskUserText: taskUserText,
+          requiresWrite: modelDeclaredWriteTask,
+          hasSuccessfulWriteCall: hasSuccessfulWriteCall,
+          protocol: protocol,
+          fallbackText: repeatedFallbackText,
+        });
+        var repeatObservation = {
+          capability: 'assistant.runtime.repeat_calls',
+          status: repeatedSuccessfulWriteCalls ? 'ok' : 'blocked',
+          message: repeatedSuccessfulWriteCalls
+            ? '模型重复返回了已成功执行过的写操作，平台已跳过重复执行，请直接基于 observations 汇总结果。'
+            : '模型重复返回了已经成功执行过的相同 calls，请直接基于 observations 汇总结果，或只返回新的 calls。',
+          data: {
+            signature: callSignature,
+            callCount: Array.isArray(protocol.calls) ? protocol.calls.length : 0,
+          },
+          choices: [],
+        };
+        observations.push(repeatObservation);
+        markTaskRuntimeAwaitingModel('已完成本轮步骤，正在整理结果。');
+        if (repeatedSuccessfulWriteCalls) {
+          var repeatedWriteFinalProtocol = await callAssistantProtocolModel(content, {
+            contentBlocks: contentBlocks,
+            taskUserText: taskUserText,
+            pendingInteraction: null,
+            selectedChoice: null,
+            observations: observations,
+            forceNoCalls: true,
+          });
+          if (repeatedWriteFinalProtocol && (!Array.isArray(repeatedWriteFinalProtocol.calls) || !repeatedWriteFinalProtocol.calls.length)) {
+            var repeatedWriteText = buildAssistantProtocolResultText(repeatedWriteFinalProtocol.message, repeatedWriteFinalProtocol.blocks);
+            var repeatedWriteSummary = repeatedWriteFinalProtocol.task && repeatedWriteFinalProtocol.task.summary
+              ? repeatedWriteFinalProtocol.task.summary
+              : (repeatedWriteText || '任务已完成。');
+            if (taskRuntime && taskRuntime.taskState) {
+              syncAssistantProtocolFinalizeStep(taskRuntime, 'completed', repeatedWriteSummary);
+              setAssistantTaskStateStatus(taskRuntime.taskState, 'completed', repeatedWriteSummary);
+            }
+            return {
+              handled: true,
+              text: repeatedWriteText || '任务已完成。',
+              messageOptions: {
+                blocks: normalizeAssistantBlocks(Array.isArray(repeatedWriteFinalProtocol.blocks) ? repeatedWriteFinalProtocol.blocks : []),
+                taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+              },
+            };
+          }
+          var repeatedWriteFallbackText = buildObservationFallbackText() || '写操作已完成。';
+          if (taskRuntime && taskRuntime.taskState) {
+            syncAssistantProtocolFinalizeStep(taskRuntime, 'completed', repeatedWriteFallbackText);
+            setAssistantTaskStateStatus(taskRuntime.taskState, 'completed', repeatedWriteFallbackText);
+          }
+          return {
+            handled: true,
+            text: repeatedWriteFallbackText,
+            messageOptions: {
+              blocks: [],
+              taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+            },
+          };
+        }
+        if (repeatedReadOnlyCalls && repeatedCallGuardCount < 1) {
+          var recoveryProtocol = await callAssistantProtocolModel(content, {
+            contentBlocks: contentBlocks,
+            taskUserText: taskUserText,
+            pendingInteraction: null,
+            selectedChoice: null,
+            observations: observations,
+            blockedCalls: protocol.calls,
+            extraInstructions: pendingWriteRequirement && pendingWriteRequirement.instruction ? [pendingWriteRequirement.instruction] : [],
+          });
+          var recoverySignature = recoveryProtocol && Array.isArray(recoveryProtocol.calls) && recoveryProtocol.calls.length
+            ? buildAssistantProtocolCallSignature(recoveryProtocol.calls)
+            : '';
+          if (recoveryProtocol && (!recoverySignature || recoverySignature !== callSignature)) {
+            protocolRetryOverride = recoveryProtocol;
+            round += 1;
             continue;
           }
-          return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
         }
-        var mcpSignature = buildPlanSignature('mcp', mcpCalls);
-        var mcpHasExecTransferTool = hasExecTransferMcpCall(mcpCalls);
-        if (seenPlanSignatures[mcpSignature]) {
-          if (expectsExecTransfer && !mcpHasExecTransferTool) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
-          return finalizeTaskReply('工具计划重复，已停止自动重试。', 'blocked', '工具计划重复，任务已停止。');
+        repeatedCallGuardCount += 1;
+        if (repeatedReadOnlyCalls && pendingWriteRequirement && pendingWriteRequirement.instruction && pendingWriteRecoveryCount < 1) {
+          pendingWriteRecoveryCount += 1;
+          var writeRecoveryProtocol = await callAssistantProtocolModel(content, {
+            contentBlocks: contentBlocks,
+            taskUserText: taskUserText,
+            pendingInteraction: null,
+            selectedChoice: null,
+            observations: observations,
+            blockedCalls: protocol.calls,
+            extraInstructions: [
+              pendingWriteRequirement.instruction,
+              '你刚刚重复了读取 calls。现有 observation 说明用户要的修改还没执行；这一轮必须返回新的写 calls，不能只给读操作或直接结束。'
+            ],
+          });
+          var writeRecoverySignature = writeRecoveryProtocol && Array.isArray(writeRecoveryProtocol.calls) && writeRecoveryProtocol.calls.length
+            ? buildAssistantProtocolCallSignature(writeRecoveryProtocol.calls)
+            : '';
+          if (writeRecoveryProtocol && (!writeRecoverySignature || writeRecoverySignature !== callSignature)) {
+            protocolRetryOverride = writeRecoveryProtocol;
+            round += 1;
+            continue;
+          }
         }
-        seenPlanSignatures[mcpSignature] = true;
-        var appendedMcp = appendAssistantTaskPlans(taskStateSession, 'mcp', mcpCalls, { userText: content });
-        taskStateSession = appendedMcp.taskState;
-        var mcpStepIndices = appendedMcp.indices;
-        if (mcpStepIndices.length) pushTaskStateUpdate();
-        var mcpOutputs = [];
-        var mcpHaltStatus = '';
-        var mcpHaltSummary = '';
-        for (var m = 0; m < mcpCalls.length; m += 1) {
-          var mcpStepIndex = mcpStepIndices[m] !== undefined ? mcpStepIndices[m] : -1;
-          if (taskStateSession && mcpStepIndex >= 0 && taskStateSession.steps[mcpStepIndex]) {
-            setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'running', '正在执行：' + taskStateSession.steps[mcpStepIndex].label);
-            pushTaskStateUpdate();
-          }
-          var mcpResult = await executeModelMcpToolCall(mcpCalls[m], content, topLevelResponse);
-          if (!mcpResult || mcpResult.handled !== true) {
-            mcpHaltStatus = 'blocked';
-            mcpHaltSummary = '当前步骤未产出可用结果。';
-            if (taskStateSession && mcpStepIndex >= 0) {
-              setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'blocked', mcpHaltSummary);
-              pushTaskStateUpdate();
-            }
-            break;
-          }
-          var mcpTextOut = mcpResult.text === undefined || mcpResult.text === null ? '' : String(mcpResult.text).trim();
-          var waitingSummary = getPendingAssistantWaitingSummary();
-          if (waitingSummary) {
-            var pendingContinuation = buildAssistantTaskContinuation('mcp', mcpCalls.slice(m + 1), mcpStepIndices.slice(m + 1), content, topLevelResponse);
-            var pendingStepIndex = mcpStepIndex;
-            var currentToolName = normalizeMcpToolName(mcpCalls[m] && (mcpCalls[m].tool || mcpCalls[m].name || ''));
-            if (!pendingContinuation && taskPreviewContinuation) {
-              pendingContinuation = buildAssistantTaskPreviewContinuationAfterStep(taskPreviewContinuation, 'mcp', mcpStepIndex, mcpCalls[m], content, topLevelResponse);
-            }
-            mcpHaltStatus = 'waiting';
-            mcpHaltSummary = waitingSummary;
-            if (pendingExecTransferSelection && currentToolName === 'case_library.search_exec_candidates' && pendingContinuation && pendingContinuation.stepIndices.length) {
-              pendingStepIndex = Number(pendingContinuation.stepIndices[0]);
-              if (!Number.isFinite(pendingStepIndex)) pendingStepIndex = mcpStepIndex;
-              if (taskStateSession && mcpStepIndex >= 0) {
-                setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'completed', '已完成当前步骤，等待你确认目标用例。');
-              }
-              if (taskStateSession && pendingStepIndex >= 0 && taskStateSession.steps[pendingStepIndex]) {
-                setAssistantTaskStateStepStatus(taskStateSession, pendingStepIndex, 'waiting', waitingSummary);
-              }
-            } else if (taskStateSession && mcpStepIndex >= 0) {
-              setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'waiting', waitingSummary);
-            }
-            updateActivePendingAssistantState({
-              taskState: taskStateSession,
-              taskStepIndex: pendingStepIndex,
-              continuation: pendingContinuation,
-              sourceUserText: content,
+        if (repeatedReadOnlyCalls) {
+          var forcedFinalProtocol = await callAssistantProtocolModel(content, {
+            contentBlocks: contentBlocks,
+            taskUserText: taskUserText,
+            pendingInteraction: null,
+            selectedChoice: null,
+            observations: observations,
+            forceNoCalls: true,
+            blockedCalls: protocol.calls,
+          });
+          if (forcedFinalProtocol && (!Array.isArray(forcedFinalProtocol.calls) || !forcedFinalProtocol.calls.length)) {
+            var forcedText = buildAssistantProtocolResultText(forcedFinalProtocol.message, forcedFinalProtocol.blocks);
+            var forcedSummary = forcedFinalProtocol.task && forcedFinalProtocol.task.summary
+              ? forcedFinalProtocol.task.summary
+              : (forcedText || '任务已完成。');
+            var forcedFallbackText = forcedText || buildObservationFallbackText() || '任务已完成。';
+            var forcedPendingWriteRequirement = assistantBuildPendingWriteRequirement(content, observations, {
+              taskUserText: taskUserText,
+              requiresWrite: modelDeclaredWriteTask,
+              hasSuccessfulWriteCall: hasSuccessfulWriteCall,
+              protocol: forcedFinalProtocol,
+              fallbackText: forcedFallbackText,
             });
-            syncPendingExecTransferTaskState(pendingStepIndex);
-            pushTaskStateUpdate();
-          } else if (mcpTextOut.indexOf('MCP 工具执行失败：') === 0) {
-            mcpHaltStatus = 'blocked';
-            mcpHaltSummary = '当前步骤执行失败。';
-            if (taskStateSession && mcpStepIndex >= 0) {
-              setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'blocked', mcpHaltSummary);
-              pushTaskStateUpdate();
+            var forcedBlocked = !!forcedPendingWriteRequirement;
+            var forcedFinalText = forcedFallbackText;
+            if (forcedBlocked) forcedFinalText = mergeAssistantReplyTextParts([forcedFinalText, '模型未返回必要的写操作，当前任务尚未完成。']);
+            if (taskRuntime && taskRuntime.taskState) {
+              syncAssistantProtocolFinalizeStep(taskRuntime, forcedBlocked ? 'blocked' : 'completed', forcedBlocked ? forcedFinalText : forcedSummary);
+              setAssistantTaskStateStatus(taskRuntime.taskState, forcedBlocked ? 'blocked' : 'completed', forcedBlocked ? forcedFinalText : forcedSummary);
             }
-          } else if (mcpTextOut === '已取消。') {
-            mcpHaltStatus = 'cancelled';
-            mcpHaltSummary = '当前步骤已取消。';
-            if (taskStateSession && mcpStepIndex >= 0) {
-              setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'cancelled', mcpHaltSummary);
-              pushTaskStateUpdate();
-            }
-          } else if (taskStateSession && mcpStepIndex >= 0) {
-            setAssistantTaskStateStepStatus(taskStateSession, mcpStepIndex, 'completed', m < mcpCalls.length - 1 ? '当前步骤已完成，继续执行后续步骤。' : taskStateSession.summary);
-            pushTaskStateUpdate();
+            return {
+              handled: true,
+              text: forcedFinalText,
+              messageOptions: {
+                blocks: normalizeAssistantBlocks((forcedFinalProtocol.blocks || []).concat([{
+                  type: 'notice',
+                  level: forcedBlocked ? 'error' : 'warn',
+                  title: forcedBlocked ? '任务未完成' : '已停止重复执行',
+                  text: forcedBlocked
+                    ? '模型连续仅读取而没有返回必要的写操作，平台已停止重复执行。'
+                    : '模型重复返回了相同的已执行 calls，平台已停止重复执行，并基于 observations 整理回复。'
+                }])),
+                taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+              },
+            };
           }
-          if (mcpTextOut && mcpOutputs.indexOf(mcpTextOut) === -1) mcpOutputs.push(mcpTextOut);
-          if (mcpHaltStatus) break;
         }
-        if (!mcpOutputs.length && topLevelResponse) mcpOutputs.push(topLevelResponse);
-        var mcpText = mcpOutputs.join('\n').trim();
-        if (mcpHaltStatus) {
-          if (mcpText) return finalizeTaskReply(mcpText, mcpHaltStatus, mcpHaltSummary);
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse, mcpHaltStatus, mcpHaltSummary);
-          return finalizeTaskReply(currentRaw, mcpHaltStatus, mcpHaltSummary);
+        if (repeatedCallGuardCount >= 2) {
+          var repeatGuardFallbackText = buildObservationFallbackText() || '已根据当前结果结束任务。';
+          var repeatGuardBlocked = hasHardBlockedObservation(observations) || !!pendingWriteRequirement;
+          if (pendingWriteRequirement) {
+            repeatGuardFallbackText = mergeAssistantReplyTextParts([repeatGuardFallbackText, '模型未返回必要的写操作，当前任务尚未完成。']);
+          }
+          if (taskRuntime && taskRuntime.taskState) {
+            syncAssistantProtocolFinalizeStep(taskRuntime, repeatGuardBlocked ? 'blocked' : 'completed', repeatGuardFallbackText);
+            setAssistantTaskStateStatus(taskRuntime.taskState, repeatGuardBlocked ? 'blocked' : 'completed', repeatGuardFallbackText);
+          }
+          return {
+            handled: true,
+            text: repeatGuardFallbackText,
+            messageOptions: {
+              blocks: [{
+                type: 'notice',
+                level: repeatGuardBlocked ? 'error' : 'warn',
+                title: repeatGuardBlocked ? '执行已中断' : '已停止重复执行',
+                text: repeatGuardBlocked
+                  ? (pendingWriteRequirement ? '模型连续仅读取而没有返回必要的写操作，请调整指令或模型后重试。' : '模型连续重复了相同的任务调用，请调整指令后重试。')
+                  : '模型连续重复了相同的读取 calls，平台已停止重复执行，并基于现有 observation 返回结果。'
+              }],
+              taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+            },
+          };
         }
-        var continueMcp = shouldContinueMcpReasoning(content, mcpCalls, mcpOutputs);
-        if (expectsExecTransfer && !mcpHasExecTransferTool && round >= mcpReasoningMaxRounds) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
-        if (!continueMcp || round >= mcpReasoningMaxRounds) {
-          if (mcpText) return finalizeTaskReply(mcpText);
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
-          return finalizeTaskReply(currentRaw);
-        }
-        reasoningTrace.push(formatReasoningTraceEntry(round, 'mcp', mcpCalls, mcpOutputs));
-        var followPrompt = expectsExecTransfer && !mcpHasExecTransferTool
-          ? buildExecTransferRepairPrompt(prompt, reasoningTrace, mcpText || topLevelResponse || currentRaw)
-          : buildMcpReasoningPrompt(prompt, reasoningTrace);
-        var followRes = await callModelWithPrompt(followPrompt);
-        if (!followRes || followRes.ok !== true || !followRes.content) {
-          if (expectsExecTransfer && !mcpHasExecTransferTool) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
-          if (mcpText) return finalizeTaskReply(mcpText);
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
-          return null;
-        }
-        currentRaw = String(followRes.content || '').trim();
-        if (!currentRaw) {
-          if (expectsExecTransfer && !mcpHasExecTransferTool) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
-          if (mcpText) return finalizeTaskReply(mcpText);
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
-          return null;
-        }
+        round += 1;
         continue;
       }
-
-      var actions = extractModelActionList(parsed);
-      if (actions.length) {
-        var actionSignature = buildPlanSignature('action', actions);
-        if (seenPlanSignatures[actionSignature]) {
-          if (expectsExecTransfer) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
-          return finalizeTaskReply('动作计划重复，已停止自动重试。', 'blocked', '动作计划重复，任务已停止。');
-        }
-        seenPlanSignatures[actionSignature] = true;
-        var appendedAction = appendAssistantTaskPlans(taskStateSession, 'action', actions);
-        taskStateSession = appendedAction.taskState;
-        var actionStepIndices = appendedAction.indices;
-        if (actionStepIndices.length) pushTaskStateUpdate();
-        var actionOutputs = [];
-        var actionHaltStatus = '';
-        var actionHaltSummary = '';
-        for (var a = 0; a < actions.length; a += 1) {
-          var actionStepIndex = actionStepIndices[a] !== undefined ? actionStepIndices[a] : -1;
-          if (taskStateSession && actionStepIndex >= 0 && taskStateSession.steps[actionStepIndex]) {
-            setAssistantTaskStateStepStatus(taskStateSession, actionStepIndex, 'running', '正在执行：' + taskStateSession.steps[actionStepIndex].label);
-            pushTaskStateUpdate();
+      if (!Array.isArray(protocol.calls) || !protocol.calls.length) {
+        var clarificationPending = buildAssistantProtocolClarificationPendingInteraction(protocol, taskRuntime, taskUserText || content);
+        if (clarificationPending) {
+          rememberPendingInteraction(clarificationPending);
+          if (taskRuntime && taskRuntime.taskState) {
+            syncSelectedChoiceTaskStep('已收到你的回复，仍需补充信息后继续。');
+            markAssistantTaskRuntimeWaiting(taskRuntime, clarificationPending.prompt || '等待你补充信息后继续。');
+            pushTaskUpdate(clarificationPending.prompt || '等待你补充信息后继续。');
           }
-          var actionResult = await executeModelPlannedAction(actions[a], content, topLevelResponse);
-          if (!actionResult || actionResult.handled !== true) {
-            actionHaltStatus = 'blocked';
-            actionHaltSummary = '当前步骤未产出可用结果。';
-            if (taskStateSession && actionStepIndex >= 0) {
-              setAssistantTaskStateStepStatus(taskStateSession, actionStepIndex, 'blocked', actionHaltSummary);
-              pushTaskStateUpdate();
-            }
-            break;
-          }
-          var actionTextOut = actionResult.text === undefined || actionResult.text === null ? '' : String(actionResult.text).trim();
-          if (actionTextOut === '已取消。') {
-            actionHaltStatus = 'cancelled';
-            actionHaltSummary = '当前步骤已取消。';
-            if (taskStateSession && actionStepIndex >= 0) {
-              setAssistantTaskStateStepStatus(taskStateSession, actionStepIndex, 'cancelled', actionHaltSummary);
-              pushTaskStateUpdate();
-            }
-          } else if (taskStateSession && actionStepIndex >= 0) {
-            setAssistantTaskStateStepStatus(taskStateSession, actionStepIndex, 'completed', a < actions.length - 1 ? '当前步骤已完成，继续执行后续步骤。' : taskStateSession.summary);
-            pushTaskStateUpdate();
-          }
-          if (actionTextOut && actionOutputs.indexOf(actionTextOut) === -1) actionOutputs.push(actionTextOut);
-          if (actionHaltStatus) break;
+          return {
+            handled: true,
+            text: protocolText || clarificationPending.prompt || '请补充信息后继续。',
+            messageOptions: {
+              blocks: normalizeAssistantBlocks(Array.isArray(protocol.blocks) ? protocol.blocks : []),
+              taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+            },
+          };
         }
-        if (!actionOutputs.length && topLevelResponse) actionOutputs.push(topLevelResponse);
-        var actionText = actionOutputs.join('\n').trim();
-        if (actionHaltStatus) {
-          if (actionText) return finalizeTaskReply(actionText, actionHaltStatus, actionHaltSummary);
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse, actionHaltStatus, actionHaltSummary);
-          return finalizeTaskReply(currentRaw, actionHaltStatus, actionHaltSummary);
-        }
-        var continueAction = shouldContinueActionReasoning(content, actions, actionOutputs);
-        if (expectsExecTransfer && round >= mcpReasoningMaxRounds) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
-        if (!continueAction || round >= mcpReasoningMaxRounds) {
-          if (actionText) return finalizeTaskReply(actionText);
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
-          return finalizeTaskReply(currentRaw);
-        }
-        reasoningTrace.push(formatReasoningTraceEntry(round, 'action', actions, actionOutputs));
-        var actionPrompt = expectsExecTransfer
-          ? buildExecTransferRepairPrompt(prompt, reasoningTrace, actionText || topLevelResponse || currentRaw)
-          : buildMcpReasoningPrompt(prompt, reasoningTrace);
-        var actionFollowRes = await callModelWithPrompt(actionPrompt);
-        if (!actionFollowRes || actionFollowRes.ok !== true || !actionFollowRes.content) {
-          if (expectsExecTransfer) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
-          if (actionText) return finalizeTaskReply(actionText);
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
-          return null;
-        }
-        currentRaw = String(actionFollowRes.content || '').trim();
-        if (!currentRaw) {
-          if (expectsExecTransfer) return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
-          if (actionText) return finalizeTaskReply(actionText);
-          if (topLevelResponse) return finalizeTaskReply(topLevelResponse);
-          return null;
-        }
-        continue;
-      }
-
-      if (parsed.response && String(parsed.response).trim()) {
-        if (expectsExecTransfer) {
-          var repairedResponse = await tryRepairExecTransfer(String(parsed.response).trim());
-          if (repairedResponse) {
-            currentRaw = repairedResponse;
+        var noCallFallbackText = buildObservationFallbackText() || '';
+        var noCallPendingWriteRequirement = assistantBuildPendingWriteRequirement(content, observations, {
+          taskUserText: taskUserText,
+          requiresWrite: modelDeclaredWriteTask,
+          hasSuccessfulWriteCall: hasSuccessfulWriteCall,
+          protocol: protocol,
+          fallbackText: noCallFallbackText,
+        });
+        if (noCallPendingWriteRequirement && !hasSuccessfulWriteCall && pendingWriteRecoveryCount < 1) {
+          pendingWriteRecoveryCount += 1;
+          var noCallRecoveryProtocol = await callAssistantProtocolModel(content, {
+            contentBlocks: contentBlocks,
+            taskUserText: taskUserText,
+            pendingInteraction: null,
+            selectedChoice: null,
+            observations: observations,
+            extraInstructions: [
+              noCallPendingWriteRequirement.instruction,
+              '你刚刚直接结束了任务，但 observation 显示修改尚未执行。请改为返回新的写 calls，或明确说明为什么不能写。'
+            ],
+          });
+          if (noCallRecoveryProtocol && Array.isArray(noCallRecoveryProtocol.calls) && noCallRecoveryProtocol.calls.length) {
+            protocolRetryOverride = noCallRecoveryProtocol;
+            round += 1;
             continue;
           }
-          return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
         }
-        return finalizeTaskReply(String(parsed.response).trim());
+        if (taskRuntime && taskRuntime.taskState) {
+          var noCallBlocked = !!noCallPendingWriteRequirement && !hasSuccessfulWriteCall;
+          var noCallSummary = protocol.task && protocol.task.summary ? protocol.task.summary : (protocolText || '任务已完成。');
+          var noCallText = protocolText || noCallFallbackText || '任务已完成。';
+          if (noCallBlocked) noCallText = mergeAssistantReplyTextParts([noCallText, '模型未返回必要的写操作，当前任务尚未完成。']);
+          syncSelectedChoiceTaskStep(noCallBlocked ? '已确认你的选择，但当前任务尚未完成。' : '已确认你的选择，任务已完成。');
+          syncAssistantProtocolFinalizeStep(taskRuntime, noCallBlocked ? 'blocked' : (taskRuntime.taskState.status === 'blocked' ? 'blocked' : 'completed'), noCallBlocked ? noCallText : noCallSummary);
+          setAssistantTaskStateStatus(taskRuntime.taskState, noCallBlocked ? 'blocked' : (taskRuntime.taskState.status === 'blocked' ? 'blocked' : 'completed'), noCallBlocked ? noCallText : noCallSummary);
+        }
+        return {
+          handled: true,
+          text: (!!noCallPendingWriteRequirement && !hasSuccessfulWriteCall)
+            ? mergeAssistantReplyTextParts([protocolText || '', '模型未返回必要的写操作，当前任务尚未完成。'])
+            : (protocolText || noCallFallbackText || (taskRuntime && taskRuntime.taskState ? '任务已完成。' : '')),
+          messageOptions: {
+            blocks: (!!noCallPendingWriteRequirement && !hasSuccessfulWriteCall)
+              ? normalizeAssistantBlocks((protocol.blocks || []).concat([{ type: 'notice', level: 'error', title: '任务未完成', text: '模型在应当执行写操作时直接结束了任务。' }]))
+              : protocol.blocks,
+            taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+          },
+        };
       }
-      if (expectsExecTransfer) {
-        var repairedFallback = await tryRepairExecTransfer(currentRaw);
-        if (repairedFallback) {
-          currentRaw = repairedFallback;
+      for (i = 0; i < protocol.calls.length; i += 1) {
+        var call = protocol.calls[i] && typeof protocol.calls[i] === 'object' ? protocol.calls[i] : {};
+        var stepId = buildAssistantProtocolTaskStepId(call.stepId || call.id, i);
+        var stepIndex = taskRuntime && taskRuntime.stepIndexById && Object.prototype.hasOwnProperty.call(taskRuntime.stepIndexById, stepId)
+          ? Number(taskRuntime.stepIndexById[stepId])
+          : -1;
+        var capabilityId = normalizeMcpToolName(call.capability || call.tool || call.name || '');
+        var execResult = null;
+        var observation = null;
+        var pendingForChoice = null;
+        var pendingBlock = null;
+        var callArgs = call.args && typeof call.args === 'object' ? call.args : {};
+        var normalizedCallArgs = null;
+        var executionSignature = '';
+        var previousSuccessfulObservation = null;
+        if (!capabilityId) continue;
+        var normalizedCall = normalizeAssistantCapabilityCallForExecution(capabilityId, callArgs, content);
+        capabilityId = normalizedCall.capabilityId;
+        normalizedCallArgs = normalizedCall.args;
+        executionSignature = buildAssistantCapabilityExecutionSignature(capabilityId, normalizedCallArgs);
+        if (executionSignature && successfulCapabilityExecutionObservations[executionSignature]) {
+          previousSuccessfulObservation = successfulCapabilityExecutionObservations[executionSignature];
+          observation = {
+            capability: capabilityId,
+            status: 'ok',
+            message: previousSuccessfulObservation && previousSuccessfulObservation.message
+              ? String(previousSuccessfulObservation.message)
+              : '相同操作已执行成功，已跳过重复执行。',
+            data: previousSuccessfulObservation && previousSuccessfulObservation.data && typeof previousSuccessfulObservation.data === 'object'
+              ? JSON.parse(JSON.stringify(previousSuccessfulObservation.data))
+              : (previousSuccessfulObservation ? previousSuccessfulObservation.data : null),
+            choices: [],
+          };
+          roundObservations.push(observation);
+          if (getMcpToolMode(capabilityId) === 'write') repeatedSuccessfulWriteCallInRound = true;
+          if (taskRuntime && taskRuntime.taskState && stepIndex >= 0) {
+            setAssistantTaskStateStepStatus(taskRuntime.taskState, stepIndex, 'completed', '当前步骤已完成，正在整理结果。');
+            if (i < protocol.calls.length - 1) {
+              pushTaskUpdate('当前步骤已完成，继续整理结果。');
+            } else {
+              markTaskRuntimeAwaitingModel('本轮步骤已完成，正在整理结果。');
+            }
+          }
           continue;
         }
-        return finalizeTaskReply(buildExecTransferNotCompletedText(), 'blocked', '任务尚未真正完成。');
+        executedCalls += 1;
+        if (executedCalls > maxExecutedCalls) {
+          if (taskRuntime && taskRuntime.taskState && stepIndex >= 0) {
+            setAssistantTaskStateStepStatus(taskRuntime.taskState, stepIndex, 'blocked', '任务调用轮次已达上限。');
+            syncAssistantProtocolFinalizeStep(taskRuntime, 'blocked', '任务调用轮次已达上限。');
+            pushTaskUpdate('任务调用轮次已达上限。');
+          }
+          observations.push({ capability: capabilityId, status: 'blocked', message: '任务调用轮次已达上限。', data: null, choices: [] });
+          return {
+            handled: true,
+            text: buildObservationFallbackText(),
+            messageOptions: {
+              blocks: [{ type: 'notice', level: 'error', title: '执行已中断', text: '任务调用轮次已达上限，请调整指令后重试。' }],
+              taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+            },
+          };
+        }
+        if (taskRuntime && taskRuntime.taskState && stepIndex >= 0) {
+          setAssistantTaskStateStepStatus(taskRuntime.taskState, stepIndex, 'running', '正在执行：' + taskRuntime.taskState.steps[stepIndex].label);
+          pushTaskUpdate(protocolText || '已进入任务状态，正在执行。');
+          await waitForAssistantUiRender();
+        }
+        execResult = await executeAssistantCapabilityWithRuntimeGate(capabilityId, normalizedCallArgs);
+        observation = buildAssistantCapabilityObservation(capabilityId, normalizedCallArgs, execResult || {});
+        roundObservations.push(observation);
+        if (execResult && execResult.ok === true && executionSignature) {
+          successfulCapabilityExecutionObservations[executionSignature] = observation && typeof observation === 'object'
+            ? JSON.parse(JSON.stringify(observation))
+            : null;
+        }
+        if (execResult && execResult.status === 'choice_required') {
+          pendingForChoice = {
+            kind: 'choice_required',
+            prompt: execResult.message || '请先选择后继续。',
+            sourceUserText: taskUserText || content,
+            sourceCapability: capabilityId,
+            baseArgs: normalizedCallArgs,
+            choices: execResult.choices || [],
+            observation: observation,
+            taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+            taskStepId: stepId,
+            selectedChoice: null,
+          };
+          rememberPendingInteraction(pendingForChoice);
+          pendingBlock = buildPendingInteractionChoiceBlock(pendingForChoice);
+          if (taskRuntime && taskRuntime.taskState && stepIndex >= 0) {
+            setAssistantTaskStateStepStatus(taskRuntime.taskState, stepIndex, 'waiting', execResult.message || '等待你选择后继续。');
+            pushTaskUpdate(execResult.message || '等待你选择后继续。');
+          }
+          observations = observations.concat(roundObservations);
+          return {
+            handled: true,
+            text: protocolText || execResult.message || '请先选择后继续。',
+            messageOptions: {
+              blocks: normalizeAssistantBlocks((protocol.blocks || []).concat(pendingBlock ? [pendingBlock] : [])),
+              taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+            },
+          };
+        }
+        if (!execResult || execResult.ok !== true) {
+          blockedInRound = true;
+          cancelledInRound = execResult && execResult.message === '用户拒绝了本次操作。';
+          if (taskRuntime && taskRuntime.taskState && stepIndex >= 0) {
+            setAssistantTaskStateStepStatus(taskRuntime.taskState, stepIndex, cancelledInRound ? 'cancelled' : 'blocked', execResult && execResult.message ? execResult.message : '当前步骤执行失败。');
+            pushTaskUpdate(execResult && execResult.message ? execResult.message : '当前步骤执行失败。');
+          }
+          break;
+        }
+        if (getMcpToolMode(capabilityId) === 'write') hasSuccessfulWriteCall = true;
+        if (taskRuntime && taskRuntime.taskState && stepIndex >= 0) {
+          setAssistantTaskStateStepStatus(taskRuntime.taskState, stepIndex, 'completed', i < protocol.calls.length - 1 ? '当前步骤已完成，继续执行后续步骤。' : '本轮步骤已完成，正在整理结果。');
+          if (i < protocol.calls.length - 1) {
+            pushTaskUpdate(protocolText || '已进入任务状态，正在执行。');
+          } else {
+            markTaskRuntimeAwaitingModel('本轮步骤已完成，正在整理结果。');
+          }
+        }
       }
-      return finalizeTaskReply(currentRaw);
+      observations = observations.concat(roundObservations);
+      if (!blockedInRound && !cancelledInRound && callSignature) {
+        successfulCallSignatures[callSignature] = true;
+      }
+      if (!blockedInRound && !cancelledInRound && repeatedSuccessfulWriteCallInRound) {
+        var repeatedWriteProtocol = await callAssistantProtocolModel(content, {
+          contentBlocks: contentBlocks,
+          taskUserText: taskUserText,
+          pendingInteraction: null,
+          selectedChoice: null,
+          observations: observations,
+          forceNoCalls: true,
+        });
+        if (repeatedWriteProtocol && (!Array.isArray(repeatedWriteProtocol.calls) || !repeatedWriteProtocol.calls.length)) {
+          var repeatedWriteProtocolText = buildAssistantProtocolResultText(repeatedWriteProtocol.message, repeatedWriteProtocol.blocks);
+          var repeatedWriteProtocolSummary = repeatedWriteProtocol.task && repeatedWriteProtocol.task.summary
+            ? repeatedWriteProtocol.task.summary
+            : (repeatedWriteProtocolText || '任务已完成。');
+          if (taskRuntime && taskRuntime.taskState) {
+            syncAssistantProtocolFinalizeStep(taskRuntime, 'completed', repeatedWriteProtocolSummary);
+            setAssistantTaskStateStatus(taskRuntime.taskState, 'completed', repeatedWriteProtocolSummary);
+          }
+          return {
+            handled: true,
+            text: repeatedWriteProtocolText || '任务已完成。',
+            messageOptions: {
+              blocks: normalizeAssistantBlocks(Array.isArray(repeatedWriteProtocol.blocks) ? repeatedWriteProtocol.blocks : []),
+              taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+            },
+          };
+        }
+        var repeatedWriteRoundFallbackText = buildObservationFallbackText() || '写操作已完成。';
+        if (taskRuntime && taskRuntime.taskState) {
+          syncAssistantProtocolFinalizeStep(taskRuntime, 'completed', repeatedWriteRoundFallbackText);
+          setAssistantTaskStateStatus(taskRuntime.taskState, 'completed', repeatedWriteRoundFallbackText);
+        }
+        return {
+          handled: true,
+          text: repeatedWriteRoundFallbackText,
+          messageOptions: {
+            blocks: [],
+            taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+          },
+        };
+      }
+      if (cancelledInRound) {
+        if (taskRuntime && taskRuntime.taskState) {
+          syncAssistantProtocolFinalizeStep(taskRuntime, 'cancelled', '用户取消了本次任务。');
+          setAssistantTaskStateStatus(taskRuntime.taskState, 'cancelled', '用户取消了本次任务。');
+        }
+        return {
+          handled: true,
+          text: protocolText || '已取消。',
+          messageOptions: {
+            blocks: normalizeAssistantBlocks((protocol.blocks || []).concat([{ type: 'notice', level: 'warn', title: '任务已取消', text: '用户拒绝了本次操作。' }])),
+            taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+          },
+        };
+      }
+      if (blockedInRound) {
+        var latestBlockedObservation = roundObservations.length ? roundObservations[roundObservations.length - 1] : null;
+        var latestBlockedStatus = latestBlockedObservation && latestBlockedObservation.status ? String(latestBlockedObservation.status) : '';
+        var latestBlockedMessage = latestBlockedObservation && latestBlockedObservation.message ? String(latestBlockedObservation.message) : '';
+        if (latestBlockedStatus === 'blocked') {
+          var blockedReplyText = latestBlockedMessage || buildObservationFallbackText() || '当前步骤执行失败。';
+          if (taskRuntime && taskRuntime.taskState) {
+            syncAssistantProtocolFinalizeStep(taskRuntime, 'blocked', blockedReplyText);
+            setAssistantTaskStateStatus(taskRuntime.taskState, 'blocked', blockedReplyText);
+          }
+          return {
+            handled: true,
+            text: blockedReplyText,
+            messageOptions: {
+              blocks: normalizeAssistantBlocks((protocol.blocks || []).concat([{ type: 'notice', level: 'error', title: '执行受阻', text: blockedReplyText }])),
+              taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+            },
+          };
+        }
+        round += 1;
+        continue;
+      }
+      round += 1;
     }
-
-    return null;
+    if (observations.length) {
+      var fallbackText = buildObservationFallbackText() || '已获得执行结果，但模型没有返回最终总结。';
+      var fallbackStatus = 'completed';
+      var fallbackLevel = 'warn';
+      var fallbackTitle = '已根据当前结果结束任务';
+      var fallbackNoticeText = '模型未继续收敛，平台已基于现有 observation 返回结果。';
+      var fallbackPendingWriteRequirement = assistantBuildPendingWriteRequirement(content, observations, {
+        taskUserText: taskUserText,
+        requiresWrite: modelDeclaredWriteTask,
+        hasSuccessfulWriteCall: hasSuccessfulWriteCall,
+        fallbackText: fallbackText,
+      });
+      var fallbackObservationIndex = 0;
+      for (fallbackObservationIndex = observations.length - 1; fallbackObservationIndex >= 0; fallbackObservationIndex -= 1) {
+        var fallbackObservation = observations[fallbackObservationIndex] && typeof observations[fallbackObservationIndex] === 'object' ? observations[fallbackObservationIndex] : null;
+        if (!fallbackObservation) continue;
+        if (String(fallbackObservation.status || '') !== 'blocked') continue;
+        if (isSoftBlockedObservation(fallbackObservation)) continue;
+        fallbackStatus = 'blocked';
+        fallbackLevel = 'error';
+        fallbackTitle = '执行受阻';
+        fallbackNoticeText = '部分步骤执行受阻，平台已基于现有 observation 返回结果。';
+        break;
+      }
+      if (fallbackStatus !== 'blocked' && fallbackPendingWriteRequirement) {
+        fallbackStatus = 'blocked';
+        fallbackLevel = 'error';
+        fallbackTitle = '任务未完成';
+        fallbackNoticeText = '模型未返回必要的写操作，平台已基于现有 observation 停止执行。';
+        fallbackText = mergeAssistantReplyTextParts([fallbackText, '模型未返回必要的写操作，当前任务尚未完成。']);
+      }
+      if (taskRuntime && taskRuntime.taskState) {
+        syncAssistantProtocolFinalizeStep(taskRuntime, fallbackStatus, fallbackText);
+        setAssistantTaskStateStatus(taskRuntime.taskState, fallbackStatus, fallbackText);
+      }
+      return {
+        handled: true,
+        text: fallbackText,
+        messageOptions: {
+          blocks: [{ type: 'notice', level: fallbackLevel, title: fallbackTitle, text: fallbackNoticeText }],
+          taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+        },
+      };
+    }
+    if (taskRuntime && taskRuntime.taskState) {
+      syncAssistantProtocolFinalizeStep(taskRuntime, 'blocked', '任务尚未收敛，请稍后重试。');
+      setAssistantTaskStateStatus(taskRuntime.taskState, 'blocked', '任务尚未收敛，请稍后重试。');
+    }
+    return {
+      handled: true,
+      text: buildObservationFallbackText(),
+      messageOptions: {
+        blocks: [{ type: 'notice', level: 'error', title: '任务未完成', text: '模型未能在限定轮次内给出最终结果，请调整指令后重试。' }],
+        taskState: taskRuntime && taskRuntime.taskState ? taskRuntime.taskState : null,
+      },
+    };
   }
 
   function formatDiagnosisText(diag) {
@@ -10600,68 +12605,6 @@ return lines.join('\n');
     setStatus('重测失败');
   }
 
-  function getPreviousUserMessageText(currentText) {
-    var latest = String(currentText || '').trim();
-    var skippedCurrent = false;
-    for (var i = chatHistory.length - 1; i >= 0; i -= 1) {
-      var msg = chatHistory[i];
-      if (!msg || msg.role !== 'user') continue;
-      var text = msg.text === undefined || msg.text === null ? '' : String(msg.text).trim();
-      if (!text) continue;
-      if (!skippedCurrent && latest && text === latest) {
-        skippedCurrent = true;
-        continue;
-      }
-      return text;
-    }
-    return '';
-  }
-
-  function getLatestAssistantMessageText() {
-    for (var i = chatHistory.length - 1; i >= 0; i -= 1) {
-      var msg = chatHistory[i];
-      if (!msg || msg.role !== 'ai') continue;
-      var text = msg.text === undefined || msg.text === null ? '' : String(msg.text).trim();
-      if (!text) continue;
-      return text;
-    }
-    return '';
-  }
-
-  function tryHandleCurrentPageFollowUpIntent(text) {
-    var raw = String(text || '').trim();
-    if (!raw) return null;
-    if (!containsAny(raw, ['中文名', '中文名称', '页面名', '页签名', '页面中文', '叫什么'])) return null;
-    var prevUserText = getPreviousUserMessageText(raw);
-    var prevAiText = getLatestAssistantMessageText();
-    var hasCurrentPageContext = containsAny(prevUserText, [
-      '当前页面',
-      '现在页面',
-      '什么页面',
-      '哪个页面',
-      '页签',
-      '在哪个页面',
-      '在哪个页签',
-    ]) || containsAny(prevAiText, [
-      '当前页面是：',
-      '当前页面是',
-      '当前页签',
-      '页面文件：',
-    ]);
-    if (!hasCurrentPageContext) return null;
-    var apis = getApis();
-    var data = null;
-    if (apis.assistantApi && typeof apis.assistantApi.getPageData === 'function') {
-      data = apis.assistantApi.getPageData('');
-    }
-    var tab = data && data.tab ? String(data.tab) : '';
-    var tabLabel = getTabLabelById(tab);
-    if (tabLabel && tab) return '当前页面中文名：' + tabLabel + '（' + tab + '）';
-    if (tabLabel) return '当前页面中文名：' + tabLabel;
-    if (tab) return '当前页面标识：' + tab;
-    return '当前页面信息暂不可用。';
-  }
-
   async function handleUserInput(text, options) {
     var opts = options && typeof options === 'object' ? options : {};
     var attachments = normalizeAssistantMessageAttachments(opts.attachments);
@@ -10696,12 +12639,6 @@ return lines.join('\n');
       return addMessage('ai', msgText, replyOptions || {});
     }
 
-    async function addRouteReply(routeName, replyText, routeData, routeOptions, replyOptions) {
-      var fallbackText = replyText === undefined || replyText === null ? '' : String(replyText);
-      var finalText = await finalizeRouteReplyByModel(content, routeName, fallbackText, routeData || {}, routeOptions || {});
-      addAiReply(finalText || fallbackText, replyOptions || {});
-    }
-
     function updateAiTaskState(taskState, taskText) {
       var nextTaskState = normalizeAssistantTaskState(taskState);
       var nextText = taskText === undefined || taskText === null ? '已进入任务状态，正在执行。' : String(taskText);
@@ -10725,274 +12662,14 @@ return lines.join('\n');
       return;
     }
 
-    if (hasImageInput) {
-      var imageFirstReply = await tryHandleModelDrivenReply(text, {
-        attachments: attachments,
-        contentBlocks: contentBlocks,
-        onTaskStateChange: updateAiTaskState,
-      });
-      if (imageFirstReply && imageFirstReply.handled && imageFirstReply.text) {
-        addAiReply(imageFirstReply.text, imageFirstReply.messageOptions || {});
-        return;
-      }
-    }
-
-    if (!hasImageInput) {
-      var followUpCurrentPageReply = tryHandleCurrentPageFollowUpIntent(content);
-      if (followUpCurrentPageReply) {
-        await addRouteReply('current_page_follow_up', followUpCurrentPageReply, {
-          pageData: getSafePageDataSnapshot(''),
-        }, {});
-        return;
-      }
-
-      var pendingTempExecRemoveReply = await tryHandlePendingTempExecRemoveSelectionIntent(content, { onTaskStateChange: updateAiTaskState });
-      if (pendingTempExecRemoveReply && pendingTempExecRemoveReply.handled === true && pendingTempExecRemoveReply.text) {
-        addAiReply(pendingTempExecRemoveReply.text, pendingTempExecRemoveReply.messageOptions || {});
-        return;
-      }
-
-      var pendingExecTransferCreateConfirmReply = await tryHandlePendingExecTransferCreateVersionConfirmIntent(content, { onTaskStateChange: updateAiTaskState });
-      if (pendingExecTransferCreateConfirmReply && pendingExecTransferCreateConfirmReply.handled === true && pendingExecTransferCreateConfirmReply.text) {
-        addAiReply(pendingExecTransferCreateConfirmReply.text, pendingExecTransferCreateConfirmReply.messageOptions || {});
-        return;
-      }
-
-      var pendingExecTransferVersionClarifyReply = await tryHandlePendingExecTransferVersionNameClarifyIntent(content, { onTaskStateChange: updateAiTaskState });
-      if (pendingExecTransferVersionClarifyReply && pendingExecTransferVersionClarifyReply.handled === true && pendingExecTransferVersionClarifyReply.text) {
-        addAiReply(pendingExecTransferVersionClarifyReply.text, pendingExecTransferVersionClarifyReply.messageOptions || {});
-        return;
-      }
-
-      var pendingExecTransferVersionReply = await tryHandlePendingExecTransferVersionSelectionIntent(content, { onTaskStateChange: updateAiTaskState });
-      if (pendingExecTransferVersionReply && pendingExecTransferVersionReply.handled === true && pendingExecTransferVersionReply.text) {
-        addAiReply(pendingExecTransferVersionReply.text, pendingExecTransferVersionReply.messageOptions || {});
-        return;
-      }
-
-      var pendingExecTransferReply = await tryHandlePendingExecTransferSelectionIntent(content, { onTaskStateChange: updateAiTaskState });
-      if (pendingExecTransferReply && pendingExecTransferReply.handled === true && pendingExecTransferReply.text) {
-        addAiReply(pendingExecTransferReply.text, pendingExecTransferReply.messageOptions || {});
-        return;
-      }
-
-      if (isExplicitExecTransferIntent(content)) {
-        var explicitExecTransferReply = await tryHandleModelDrivenReply(content, {
-          attachments: attachments,
-          contentBlocks: contentBlocks,
-          onTaskStateChange: updateAiTaskState,
-        });
-        if (explicitExecTransferReply && explicitExecTransferReply.handled && explicitExecTransferReply.text) {
-          addAiReply(explicitExecTransferReply.text, explicitExecTransferReply.messageOptions || {});
-        } else {
-          addAiReply(buildExecTransferNotCompletedText());
-        }
-        return;
-      }
-
-      var currentPageFunctionReply = await tryHandleCurrentPageFunctionIntent(content);
-      if (currentPageFunctionReply) {
-        addAiReply(currentPageFunctionReply);
-        return;
-      }
-
-      var caseDetailClarificationReply = await tryHandleCaseDetailClarificationIntent(content);
-      if (caseDetailClarificationReply && caseDetailClarificationReply.handled === true && caseDetailClarificationReply.text) {
-        addAiReply(caseDetailClarificationReply.text);
-        return;
-      }
-
-      var currentCaseFullDetailReply = await tryHandleCurrentCaseFullDetailIntent(content);
-      if (currentCaseFullDetailReply && currentCaseFullDetailReply.handled === true && currentCaseFullDetailReply.text) {
-        addAiReply(currentCaseFullDetailReply.text);
-        return;
-      }
-
-      if (shouldPreferModelDrivenTaskRoute(content)) {
-        var compositeTaskReply = await tryHandleModelDrivenReply(content, {
-          attachments: attachments,
-          contentBlocks: contentBlocks,
-          onTaskStateChange: updateAiTaskState,
-        });
-        if (compositeTaskReply && compositeTaskReply.handled && compositeTaskReply.text) {
-          addAiReply(compositeTaskReply.text, compositeTaskReply.messageOptions || {});
-          return;
-        }
-      }
-
-      if (shouldPreferModelDrivenCaseUpdateRoute(content)) {
-        var modelFirstCaseUpdateReply = await tryHandleModelDrivenReply(content, {
-          attachments: attachments,
-          contentBlocks: contentBlocks,
-          onTaskStateChange: updateAiTaskState,
-        });
-        if (modelFirstCaseUpdateReply && modelFirstCaseUpdateReply.handled && modelFirstCaseUpdateReply.text) {
-          addAiReply(modelFirstCaseUpdateReply.text, modelFirstCaseUpdateReply.messageOptions || {});
-          return;
-        }
-      }
-
-      if (isCaseListIntent(content) && !isMissingLibraryIntent(content) && !isCaseLibraryContentQueryIntent(content)) {
-        var earlyCaseListReply = await runModelCaseListAction(content, {
-          action: 'query_case_list',
-          query: content,
-        }, '');
-        if (earlyCaseListReply && earlyCaseListReply.handled === true && earlyCaseListReply.text) {
-          addAiReply(earlyCaseListReply.text);
-          return;
-        }
-      }
-
-      var directCaseUpdateReply = await tryHandleCaseUpdateCommand(content);
-      if (directCaseUpdateReply) {
-        await addRouteReply('direct_case_update', directCaseUpdateReply, {
-          pageData: getSafePageDataSnapshot(''),
-        }, {});
-        return;
-      }
-
-      var tempExecRemoveReply = await tryHandleTempExecRemoveCommand(content);
-      if (tempExecRemoveReply) {
-        await addRouteReply('tempexec_remove', tempExecRemoveReply, {
-          pageData: getSafePageDataSnapshot('tempexec'),
-        }, {
-          skipModel: true,
-        });
-        return;
-      }
-
-      var tempExecFileReply = await tryHandleTempExecFileIntent(content);
-      if (tempExecFileReply) {
-        await addRouteReply('tempexec_file', tempExecFileReply, {
-          pageData: getSafePageDataSnapshot(''),
-        }, {});
-        return;
-      }
-
-      var caseHistoryReply = await tryHandleCaseHistoryIntent(content);
-      if (caseHistoryReply) {
-        addAiReply(caseHistoryReply);
-        return;
-      }
-
-      var modelDriven = await tryHandleModelDrivenReply(content, {
-        attachments: attachments,
-        contentBlocks: contentBlocks,
-        onTaskStateChange: updateAiTaskState,
-      });
-      if (modelDriven && modelDriven.handled && modelDriven.text) {
-        addAiReply(modelDriven.text, modelDriven.messageOptions || {});
-        return;
-      }
-
-      var caseLibraryContentReply = await tryHandleCaseLibraryContentQueryIntent(content);
-      if (caseLibraryContentReply && caseLibraryContentReply.handled === true && caseLibraryContentReply.text) {
-        addAiReply(caseLibraryContentReply.text);
-        return;
-      }
-
-      var currentPageReply = tryHandleCurrentPageIntent(content);
-      if (currentPageReply) {
-        await addRouteReply('current_page_info', currentPageReply, {
-          pageData: getSafePageDataSnapshot(''),
-        }, {});
-        return;
-      }
-
-      var navReply = tryHandleNavigationIntent(content);
-      if (navReply) {
-        await addRouteReply('navigation', navReply, {
-          targetTab: parseTabFromText(content) || '',
-        }, {});
-        return;
-      }
-
-      var queryReply = tryHandleQueryIntent(content);
-      if (queryReply) {
-        await addRouteReply('query', queryReply, {
-          pageData: getSafePageDataSnapshot(parseTabFromText(content) || ''),
-        }, {});
-        return;
-      }
-
-      var memoReply = await tryHandleMemoIntent(content);
-      if (memoReply) {
-        await addRouteReply('memo', memoReply, {}, {});
-        return;
-      }
-
-      var settingReply = await tryHandleSettingsIntent(content);
-      if (settingReply) {
-        await addRouteReply('settings', settingReply, {
-          pageData: getSafePageDataSnapshot('settings'),
-        }, {});
-        return;
-      }
-
-      var caseReply = await tryHandleCaseIntent(content);
-      if (caseReply) {
-        await addRouteReply('case', caseReply, {
-          pageData: getSafePageDataSnapshot(''),
-        }, {});
-        return;
-      }
-
-      if (shouldRunIntentClassifier(content)) {
-        var classified = await classifyIntentByModel(content);
-        if (classified && typeof classified === 'object') {
-          if (classified.intent === 'query_case_list') {
-            var caseListReplyByModel = await runModelCaseListAction(content, {
-              action: 'query_case_list',
-              query: content,
-            }, '');
-            if (caseListReplyByModel && caseListReplyByModel.handled === true && caseListReplyByModel.text) {
-              addAiReply(caseListReplyByModel.text);
-              return;
-            }
-          }
-          if (classified.intent === 'navigate') {
-            var targetTabRaw = classified.tab ? String(classified.tab) : '';
-            var targetTab = targetTabRaw && isKnownTabId(targetTabRaw) ? targetTabRaw : parseTabFromText(content);
-            if (targetTab) {
-              var apis0 = getApis();
-              if (apis0.assistantApi && typeof apis0.assistantApi.switchTab === 'function') {
-                apis0.assistantApi.switchTab(targetTab);
-                await addRouteReply('classified_navigation', '已按意图跳转到：' + targetTab, {
-                  targetTab: targetTab,
-                }, {});
-                return;
-              }
-            }
-          }
-          if (classified.intent === 'query') {
-            if (isCaseListIntent(content)) {
-              var caseListReplyByQuery = await runModelCaseListAction(content, {
-                action: 'query_case_list',
-                query: content,
-              }, '');
-              if (caseListReplyByQuery && caseListReplyByQuery.handled === true && caseListReplyByQuery.text) {
-                addAiReply(caseListReplyByQuery.text);
-                return;
-              }
-            }
-            var queryTabRaw = classified.tab ? String(classified.tab) : '';
-            var queryTab = queryTabRaw && isKnownTabId(queryTabRaw) ? queryTabRaw : parseTabFromText(content);
-            if (!queryTab && !isProjectScopedText(content)) {
-              // 非项目上下文问题走通用问答，不返回页面数据包。
-            } else {
-              var apis1 = getApis();
-              if (apis1.assistantApi && typeof apis1.assistantApi.getPageData === 'function') {
-                var data = apis1.assistantApi.getPageData(queryTab || '');
-                await addRouteReply('classified_query', '按你的意图返回页面数据：\n' + formatJsonCompact(data), {
-                  pageData: data,
-                  targetTab: queryTab || '',
-                }, {});
-                return;
-              }
-            }
-          }
-        }
-      }
+    var protocolV2Reply = await tryHandleAssistantProtocolV2(text, {
+      attachments: attachments,
+      contentBlocks: contentBlocks,
+      onTaskStateChange: updateAiTaskState,
+    });
+    if (protocolV2Reply && protocolV2Reply.handled && (protocolV2Reply.text || (protocolV2Reply.messageOptions && (protocolV2Reply.messageOptions.blocks || protocolV2Reply.messageOptions.taskState)))) {
+      addAiReply(protocolV2Reply.text || '', protocolV2Reply.messageOptions || {});
+      return;
     }
 
     var apis = getApis();
@@ -11000,38 +12677,15 @@ return lines.join('\n');
       addAiReply('助手主对话能力暂不可用，请稍后重试。');
       return;
     }
-
-    var prompt = [
-      '你是测试助手平台内置AI助手。',
-      '优先提供可执行建议，回答简洁。',
-      '你可以根据内容类型自行决定输出格式：结构化对比用 Markdown 表格，命令/代码/配置示例用 Markdown 代码块。',
-      hasImageInput ? '若用户附带图片，请先阅读图片内容，再结合文本回答；图片理解必须由模型自主完成。' : '',
-      '当涉及删除、配置变更等写操作，提醒需要确认后执行。',
-      '若用户询问页面数据，可提示他让你直接“获取某页面数据”。',
-      '若用户询问“当前有哪些用例/用例列表”，优先直接返回列表结果，不要要求用户改写问题。',
-      '请结合最近对话上下文回答，用户使用“就这个/按刚才那个/就今天的”等省略表达时要承接前文语义。',
-      '对于项目外问题（如天气、常识、日常咨询）也要正常回答，不要误返回页面数据。',
-      '如果问题依赖实时信息（如天气）且缺少地点，可先询问城市后再回答。',
-      '如果你要展示图片，可直接输出 Markdown 图片语法，界面会自动渲染。'
-    ].join('\n');
-    var conversationHistory = buildConversationHistory(conversationHistoryLimit, content);
-
-    setStatus('助手思考中...');
-    var res = await apis.assistantApi.callModel(content, {
-      prompt: buildConversationPromptWithPriority(prompt, content),
-      temperature: 0.2,
-      history: conversationHistory,
-      contentBlocks: contentBlocks,
+    addAiReply('回复失败：助手未返回可用的 assistant_v2 结果，请稍后重试。', {
+      blocks: [{
+        type: 'notice',
+        level: 'error',
+        title: '协议返回异常',
+        text: '当前仅保留 assistant_v2 主流程，本轮没有拿到可执行结果。请重试，或换一种更明确的说法。'
+      }],
     });
-    if (!res || res.ok !== true) {
-      addAiReply('回复失败：' + (res && res.reason ? res.reason : '未知错误'));
-      setStatus('回复失败');
-      return;
-    }
-    addAiReply(String(res.content || ''), {
-      attachments: res && res.attachments ? res.attachments : [],
-    });
-    setStatus('');
+    setStatus('回复失败');
   }
 
   function dispatchAssistantConversationMessage(text, options) {
@@ -11364,6 +13018,9 @@ return lines.join('\n');
     renderPendingAttachments();
     refreshSendState();
     refreshState();
+    if (window.app) {
+      window.app.formatTempExecReuseUpdateSuccessTextForTest = formatTempExecReuseUpdateSuccessText;
+    }
     if (!chatHistory.length) {
       addMessage('ai', '你好，我可以帮你做页面跳转、数据查询、备忘处理、用例生成触发、漏测推荐触发，以及模型报错自动诊断。');
     }

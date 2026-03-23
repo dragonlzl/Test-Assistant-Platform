@@ -11400,6 +11400,78 @@ button.exec-overview-file-chip,
   border-radius: 0;
   padding: 0;
 }
+.assistant-block {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.22);
+  background: rgba(248,250,252,0.82);
+}
+.assistant-block-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.assistant-block-content {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.assistant-block-content > :first-child {
+  margin-top: 0;
+}
+.assistant-block-content > :last-child {
+  margin-bottom: 0;
+}
+.assistant-block-notice-info {
+  border-color: rgba(37,99,235,0.18);
+  background: rgba(239,246,255,0.92);
+}
+.assistant-block-notice-success {
+  border-color: rgba(22,163,74,0.2);
+  background: rgba(240,253,244,0.92);
+}
+.assistant-block-notice-warn {
+  border-color: rgba(245,158,11,0.22);
+  background: rgba(255,251,235,0.95);
+}
+.assistant-block-notice-error {
+  border-color: rgba(239,68,68,0.2);
+  background: rgba(254,242,242,0.95);
+}
+.assistant-block-list-items,
+.assistant-block-choice-items {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.assistant-block-list-item,
+.assistant-block-choice-item {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.assistant-block-list-desc {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.assistant-block-choice-actions {
+  margin-top: 10px;
+}
+.assistant-block-choice-actions .assistant-action-btn {
+  font-size: 12px;
+}
+.assistant-block-code {
+  padding-bottom: 0;
+}
+.assistant-block-code .assistant-code-block {
+  margin-top: 0;
+}
 .assistant-task-card {
   margin-bottom: 8px;
   padding: 10px 12px;

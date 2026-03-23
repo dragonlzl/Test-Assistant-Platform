@@ -3734,20 +3734,49 @@
       return list;
     }
 
+    function assistantGetTabLabel(tabId) {
+      var target = tabId === undefined || tabId === null ? '' : String(tabId).trim();
+      var tabs = assistantListTabs();
+      var i = 0;
+      if (!target) return '';
+      for (i = 0; i < tabs.length; i += 1) {
+        if (!tabs[i] || String(tabs[i].tab || '').trim() !== target) continue;
+        return tabs[i].label ? String(tabs[i].label).trim() : target;
+      }
+      return '';
+    }
+
     function assistantBuildPageCaseContextSummary(snapshot) {
       var data = snapshot && typeof snapshot === 'object' ? snapshot : {};
       var caseFile = data.caseFile && typeof data.caseFile === 'object' ? data.caseFile : null;
+      var items = Array.isArray(data.items) ? data.items : [];
       var total = Number(data.total);
       var totalAll = Number(data.totalAll);
+      var reuseCaseCount = 0;
+      var reusePresetNames = caseFile && Array.isArray(caseFile.reusePresetNames) ? caseFile.reusePresetNames.map(function(item) {
+        return item === undefined || item === null ? '' : String(item).trim();
+      }).filter(Boolean) : [];
       if (!caseFile) return null;
       if (!Number.isFinite(total) || total < 0) total = 0;
       if (!Number.isFinite(totalAll) || totalAll < 0) totalAll = total;
+      items.forEach(function(item) {
+        var row = item && typeof item === 'object' ? item : {};
+        var details = Array.isArray(row.reuseDetails) ? row.reuseDetails : [];
+        if (row.isReuseCase === true || row.reuseEnabled === true || Number(row.reuseDetailCount || 0) > 0 || details.length > 0) {
+          reuseCaseCount += 1;
+        }
+      });
       return {
         contextSource: data.contextSource ? String(data.contextSource) : '',
         fileId: caseFile.id === undefined || caseFile.id === null ? '' : String(caseFile.id),
         fileName: caseFile.name === undefined || caseFile.name === null ? '' : String(caseFile.name),
         projectId: caseFile.projectId === undefined || caseFile.projectId === null ? '' : String(caseFile.projectId),
         versionId: caseFile.versionId === undefined || caseFile.versionId === null ? '' : String(caseFile.versionId),
+        reuseEnabled: caseFile.reuseEnabled === true,
+        hasReuseCases: caseFile.reuseEnabled === true || caseFile.hasReuseCases === true || reuseCaseCount > 0,
+        reuseCaseCount: reuseCaseCount,
+        reusePresetCount: Number(caseFile.reusePresetCount) || reusePresetNames.length,
+        reusePresetNames: reusePresetNames,
         total: total,
         totalAll: totalAll,
         searchText: data.searchText === undefined || data.searchText === null ? '' : String(data.searchText),
@@ -4578,8 +4607,63 @@
       });
     }
 
-    function assistantNormalizeTempExecCaseItem(item, index) {
+    function assistantNormalizeTempExecAggregateStatusValue(rawValue) {
+      var normalized = assistantNormalizeTempExecActualValue(rawValue);
+      if (normalized === '变更重跑' || normalized === '有改动') return '未执行';
+      if (normalized) return normalized;
+      return rawValue === undefined || rawValue === null ? '' : String(rawValue).trim();
+    }
+
+    function assistantResolveTempExecReuseAggregateStatus(details) {
+      var visibleDetails = Array.isArray(details) ? details.filter(function(detail) {
+        return detail && detail.removed !== true;
+      }) : [];
+      var passed = 0;
+      var failed = 0;
+      var blocked = 0;
+      var pending = 0;
+      var unspecified = 0;
+      var i = 0;
+      if (!visibleDetails.length) return '未执行';
+      for (i = 0; i < visibleDetails.length; i += 1) {
+        var detail = visibleDetails[i] && typeof visibleDetails[i] === 'object' ? visibleDetails[i] : {};
+        var status = assistantNormalizeTempExecAggregateStatusValue(detail.status);
+        if (status === '通过') passed += 1;
+        else if (status === '失败') failed += 1;
+        else if (status === '阻塞') blocked += 1;
+        else if (status === '不适用') unspecified += 1;
+        else pending += 1;
+      }
+      if (failed) return '失败';
+      if (blocked) return '阻塞';
+      if (pending) return '未执行';
+      if (passed) return '通过';
+      if (unspecified && !passed) return '不适用';
+      return '未执行';
+    }
+
+    function assistantNormalizeTempExecCaseItem(item, index, options) {
       var row = item && typeof item === 'object' ? item : {};
+      var opts = options && typeof options === 'object' ? options : {};
+      var visibleReuseDetails = Array.isArray(row.reuseDetails)
+        ? row.reuseDetails.filter(function(detail) {
+            return detail && detail.removed !== true;
+          }).map(function(detail, detailIndex) {
+            var detailRow = detail && typeof detail === 'object' ? detail : {};
+            return {
+              index: detailIndex + 1,
+              id: detailRow.id === undefined || detailRow.id === null ? '' : String(detailRow.id),
+              text: detailRow.text === undefined || detailRow.text === null ? '' : String(detailRow.text),
+              note: detailRow.note === undefined || detailRow.note === null ? '' : String(detailRow.note),
+              status: detailRow.status === undefined || detailRow.status === null ? '' : String(detailRow.status),
+            };
+          })
+        : [];
+      var reuseEnabled = opts.reuseEnabled === true
+        || row.reuseEnabled === true
+        || row.isReuseCase === true
+        || Number(row.reuseDetailCount || 0) > 0
+        || visibleReuseDetails.length > 0;
       var pre = row.precondition !== undefined && row.precondition !== null
         ? row.precondition
         : row.preconditions;
@@ -4590,6 +4674,9 @@
           : (row.status !== undefined && row.status !== null
             ? row.status
             : row.result));
+      var executionResult = reuseEnabled
+        ? assistantResolveTempExecReuseAggregateStatus(visibleReuseDetails)
+        : assistantNormalizeTempExecAggregateStatusValue(executionResultRaw);
       return {
         index: index + 1,
         sourceIndex: index + 1,
@@ -4604,7 +4691,10 @@
         actual: row.actual === undefined || row.actual === null ? '' : String(row.actual),
         status: row.status === undefined || row.status === null ? '' : String(row.status),
         result: row.result === undefined || row.result === null ? '' : String(row.result),
-        executionResult: executionResultRaw === undefined || executionResultRaw === null ? '' : String(executionResultRaw),
+        executionResult: executionResult,
+        isReuseCase: reuseEnabled,
+        reuseDetailCount: visibleReuseDetails.length,
+        reuseDetails: visibleReuseDetails,
         updatedAt: '',
       };
     }
@@ -4627,8 +4717,12 @@
         }
       }
       if (!currentFile || !Array.isArray(currentFile.cases)) return null;
+      var hasReuseCases = assistantTempExecFileHasReuseCases(currentFile);
+      var reusePresetNames = assistantListTempExecReusePresetNames(currentFile);
       var allItems = currentFile.cases.map(function(item, idx) {
-        return assistantNormalizeTempExecCaseItem(item, idx);
+        return assistantNormalizeTempExecCaseItem(item, idx, {
+          reuseEnabled: currentFile.reuseEnabled === true,
+        });
       });
       var items = allItems.slice(0, limit);
       var fileIdText = currentFile.id === undefined || currentFile.id === null ? '' : String(currentFile.id);
@@ -4636,6 +4730,10 @@
       var caseFile = {
         id: fileIdText,
         name: caseName ? String(caseName) : (fileIdText ? ('用例#' + fileIdText) : '当前用例'),
+        reuseEnabled: currentFile.reuseEnabled === true,
+        hasReuseCases: hasReuseCases,
+        reusePresetCount: reusePresetNames.length,
+        reusePresetNames: reusePresetNames.slice(),
         projectId: currentFile.projectId === undefined || currentFile.projectId === null
           ? (currentFile.project_id === undefined || currentFile.project_id === null ? '' : String(currentFile.project_id))
           : String(currentFile.projectId),
@@ -6205,6 +6303,2186 @@
       return result;
     }
 
+    function assistantNormalizeTempExecReuseField(rawField) {
+      var text = rawField === undefined || rawField === null ? '' : String(rawField).trim().toLowerCase();
+      text = text.replace(/\s+/g, '');
+      if (!text) return '';
+      if (text === 'actual' || text === 'result' || text === 'status' || text === '执行结果' || text === '状态' || text === '子项执行结果' || text === '子项状态') return 'actual';
+      if (text === 'remark' || text === 'remarks' || text === 'note' || text === 'comment' || text === '备注' || text === '子项备注' || text === '说明') return 'remark';
+      if (text === 'text' || text === 'name' || text === 'title' || text === '子项' || text === '子项名称' || text === '子项标题' || text === '测试项' || text === '测试项名称') return 'text';
+      return '';
+    }
+
+    function assistantNormalizeTempExecReuseModeHint(rawMode) {
+      var text = rawMode === undefined || rawMode === null ? '' : String(rawMode).trim().toLowerCase();
+      text = text.replace(/\s+/g, '_').replace(/-/g, '_');
+      if (!text) return '';
+      if (text === 'preset_set' || text === 'set_presets' || text === 'preset_replace' || text === 'replace_presets' || text === 'set_preset_items') return 'preset_set';
+      if (text === 'preset_add' || text === 'add_presets' || text === 'append_presets' || text === 'add_preset_items') return 'preset_add';
+      if (text === 'preset_rename' || text === 'rename_preset' || text === 'rename_presets' || text === 'rename_preset_item' || text === 'rename_preset_items' || text === 'update_preset_name' || text === 'modify_preset_name' || text === 'edit_preset_name') return 'preset_rename';
+      if (text === 'detail_delete' || text === 'delete_detail' || text === 'detail_remove' || text === 'remove_detail' || text === 'delete_sub_item' || text === 'delete_sub_items' || text === 'remove_sub_item' || text === 'remove_sub_items' || text === 'delete' || text === 'remove' || text === 'delete_all' || text === 'remove_all' || text === 'batch_delete' || text === 'batch_remove' || text === 'delete_reuse_sub_items' || text === 'remove_reuse_sub_items') return 'detail_delete';
+      if (text === 'detail_update' || text === 'update_detail' || text === 'detail_set' || text === 'update_sub_item' || text === 'update_sub_items' || text === 'modify_sub_item' || text === 'modify_sub_items' || text === 'edit_sub_item' || text === 'edit_sub_items' || text === 'update' || text === 'modify' || text === 'edit' || text === 'set' || text === 'replace') return 'detail_update';
+      return text;
+    }
+
+    function assistantExtractTempExecReuseItems(value) {
+      var out = [];
+      var seen = {};
+      var list = [];
+      if (Array.isArray(value)) {
+        list = value.slice();
+      } else if (value !== undefined && value !== null) {
+        list = String(value).split(/[\n\r,，、；;]+/);
+      }
+      list.forEach(function(item) {
+        var text = item === undefined || item === null ? '' : String(item).trim();
+        if (!text) return;
+        if (seen[text]) return;
+        seen[text] = true;
+        out.push(text);
+      });
+      return out;
+    }
+
+    function assistantFindTempExecFilesByKeyword(keyword) {
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      var key = keyword === undefined || keyword === null ? '' : String(keyword).trim().toLowerCase();
+      var matched = [];
+      if (!key) return matched;
+      for (var i = 0; i < list.length; i += 1) {
+        var item = list[i] && typeof list[i] === 'object' ? list[i] : null;
+        if (!item) continue;
+        var name = item.name || item.file_name_clean || item.fileName || '';
+        if (name && String(name).toLowerCase().indexOf(key) !== -1) matched.push(item);
+      }
+      return matched;
+    }
+
+    function assistantExtractTempExecReuseTargetQuery(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      return assistantReadFirstArgString(args, ['fileName', 'query', 'keyword', 'file', 'title', 'name']);
+    }
+
+    function assistantTempExecCaseHasReuseDetails(item) {
+      var row = item && typeof item === 'object' ? item : {};
+      var details = Array.isArray(row.reuseDetails) ? row.reuseDetails.filter(function(detail) {
+        return detail && detail.removed !== true;
+      }) : [];
+      return row.reuseEnabled === true
+        || row.isReuseCase === true
+        || Number(row.reuseDetailCount || 0) > 0
+        || details.length > 0;
+    }
+
+    function assistantTempExecFileHasReuseCases(file) {
+      var target = file && typeof file === 'object' ? file : null;
+      var cases = [];
+      var i = 0;
+      if (!target) return false;
+      if (target.reuseEnabled === true) return true;
+      cases = Array.isArray(target.cases) ? target.cases : [];
+      for (i = 0; i < cases.length; i += 1) {
+        if (assistantTempExecCaseHasReuseDetails(cases[i])) return true;
+      }
+      return false;
+    }
+
+    function assistantListTempExecReusePresetNames(file) {
+      var target = file && typeof file === 'object' ? file : null;
+      var presets = target && Array.isArray(target.reusePresets) ? target.reusePresets : [];
+      return presets.map(function(item) {
+        return item && item.text !== undefined && item.text !== null ? String(item.text).trim() : '';
+      }).filter(Boolean);
+    }
+
+    function assistantBuildTempExecReuseTargetSelectionMessage(queryText, items) {
+      var list = Array.isArray(items) ? items : [];
+      var lines = [];
+      var keyword = queryText ? String(queryText) : '目标复用执行用例';
+      lines.push('当前执行中找到 ' + list.length + ' 份可能匹配“' + keyword + '”的复用执行用例，请先确认要操作哪一份：');
+      list.forEach(function(item, idx) {
+        var label = item && item.label ? String(item.label) : (item && item.name ? String(item.name) : ('第 ' + String(idx + 1) + ' 份'));
+        lines.push((idx + 1) + '. ' + label);
+      });
+      lines.push('请直接回复“选第1个”、“游侠那个”，或直接说具体版本名。');
+      return lines.join('\n');
+    }
+
+    function assistantResolveTempExecReuseTargetFile(payload, tempApi) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var explicitFileId = assistantReadFirstArgString(args, ['fileId', 'execFileId', 'caseFileId', 'caseId']);
+      var requestedName = assistantExtractTempExecReuseTargetQuery(args);
+      var list = Array.isArray(state.tempExecFiles) ? state.tempExecFiles : [];
+      var visibleFiles = [];
+      var matched = [];
+      var reuseMatched = [];
+      var file = null;
+      if (explicitFileId) {
+        file = assistantGetTempExecFileById(explicitFileId);
+        if (!file) {
+          return { ok: false, reason: '当前执行中未找到指定的复用执行用例' };
+        }
+      } else if (requestedName) {
+        visibleFiles = list.filter(function(item) {
+          if (!item || typeof item !== 'object') return false;
+          if (String(item.status || '') === 'archived') return false;
+          return true;
+        });
+        visibleFiles.forEach(function(item, idx) {
+          if (!assistantMatchTempExecFileQuery(item, requestedName, idx + 1)) return;
+          matched.push(assistantBuildTempExecRemoveItemMeta(item, idx + 1));
+        });
+        reuseMatched = matched.filter(function(item) {
+          return item && item.file && assistantTempExecFileHasReuseCases(item.file);
+        });
+        if (!matched.length) {
+          return { ok: false, reason: '当前执行中未找到和“' + requestedName + '”匹配的用例，请换个描述后再试' };
+        }
+        if (reuseMatched.length > 1) {
+          return {
+            ok: false,
+            reason: 'selection_required',
+            selectionRequired: true,
+            actionLabel: '选择要操作的复用执行用例',
+            message: assistantBuildTempExecReuseTargetSelectionMessage(requestedName, reuseMatched),
+            query: requestedName,
+            items: reuseMatched,
+            pendingArgs: Object.assign({}, args),
+          };
+        }
+        if (reuseMatched.length === 1) {
+          file = reuseMatched[0].file;
+        } else if (matched.length === 1) {
+          file = matched[0].file;
+        } else {
+          return {
+            ok: false,
+            reason: '当前执行中找到 ' + matched.length + ' 份和“' + requestedName + '”相关的用例，但它们都不是复用类型，无法预设或修改子项。'
+          };
+        }
+      } else {
+        var fallbackArgs = Object.assign({}, args);
+        var activeFileId = state && (state.tempExecActiveId || state.tempExecActiveFileId)
+          ? String(state.tempExecActiveId || state.tempExecActiveFileId)
+          : '';
+        delete fallbackArgs.index;
+        delete fallbackArgs.itemIndex;
+        delete fallbackArgs.row;
+        delete fallbackArgs.seq;
+        delete fallbackArgs.position;
+        if ((fallbackArgs.fileIndex === undefined || fallbackArgs.fileIndex === null || String(fallbackArgs.fileIndex).trim() === '') && activeFileId) {
+          file = assistantGetTempExecFileById(activeFileId);
+        }
+        if (!file && list.length === 1) file = list[0];
+        if (!file) file = assistantResolveTempExecTargetFile(fallbackArgs, tempApi);
+      }
+      if (!file) {
+        return { ok: false, reason: '当前没有可操作的执行用例' };
+      }
+      return {
+        ok: true,
+        file: file,
+        fileId: file.id === undefined || file.id === null ? '' : String(file.id),
+        fileName: assistantResolveTempExecFileDisplayName(file, 1),
+      };
+    }
+
+    function assistantResolveTempExecReuseMode(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var mode = assistantNormalizeTempExecReuseModeHint(assistantReadFirstArgString(args, ['mode', 'action', 'type', 'intent', 'task', 'operationType', 'operateType', 'operate', 'op']));
+      var operation = assistantReadFirstArgString(args, ['operation']).toLowerCase();
+      var field = assistantNormalizeTempExecReuseField(args.field || args.key || args.column || args.name || args.detailField || args.subField || '');
+      var renameScope = assistantReadFirstArgString(args, ['renameScope', 'scopeChoice', 'targetScope']).toLowerCase();
+      if (mode === 'preset_set' || mode === 'set_presets' || mode === 'preset_replace' || mode === 'replace_presets') return 'preset_set';
+      if (mode === 'preset_add' || mode === 'add_presets') return 'preset_add';
+      if (mode === 'preset_rename' || mode === 'rename_preset' || mode === 'rename_presets') return 'preset_rename';
+      if (mode === 'detail_delete' || mode === 'delete_detail' || mode === 'detail_remove' || mode === 'remove_detail' || mode === 'delete_sub_item' || mode === 'remove_sub_item') return 'detail_delete';
+      if (mode === 'detail_update' || mode === 'update_detail' || mode === 'detail_set') return 'detail_update';
+      if (operation === 'delete' || operation === 'remove') return 'detail_delete';
+      if (args.deleteAll === true || args.removeAll === true || args.delete === true || args.remove === true || String(args.scope || '').toLowerCase() === 'all') return 'detail_delete';
+      if (field === 'text' && (renameScope === 'preset_all' || renameScope === 'preset' || renameScope === 'global')) return 'preset_rename';
+      if (field) return 'detail_update';
+      if (Array.isArray(args.presetItems) || Array.isArray(args.items) || Array.isArray(args.subItems) || Array.isArray(args.reuseItems)) return 'preset_set';
+      if (assistantReadFirstArgString(args, ['presetItemsText', 'presetText', 'itemsText', 'subItemsText', 'reuseItemsText'])) return 'preset_set';
+      return '';
+    }
+
+    function assistantResolveTempExecReuseCaseIndex(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var idxRaw = args.index;
+      if ((idxRaw === undefined || idxRaw === null) && args.itemIndex !== undefined && args.itemIndex !== null) idxRaw = args.itemIndex;
+      if ((idxRaw === undefined || idxRaw === null) && args.seq !== undefined && args.seq !== null) idxRaw = args.seq;
+      if ((idxRaw === undefined || idxRaw === null) && args.row !== undefined && args.row !== null) idxRaw = args.row;
+      if ((idxRaw === undefined || idxRaw === null) && args.sourceIndex !== undefined && args.sourceIndex !== null) idxRaw = args.sourceIndex;
+      var idx = Number(idxRaw);
+      if (Number.isFinite(idx) && idx > 0) return Math.floor(idx);
+      return 0;
+    }
+
+    function assistantReadTempExecReuseExplicitCaseIndex(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var idxRaw = args.index;
+      if ((idxRaw === undefined || idxRaw === null) && args.itemIndex !== undefined && args.itemIndex !== null) idxRaw = args.itemIndex;
+      if ((idxRaw === undefined || idxRaw === null) && args.seq !== undefined && args.seq !== null) idxRaw = args.seq;
+      if ((idxRaw === undefined || idxRaw === null) && args.row !== undefined && args.row !== null) idxRaw = args.row;
+      if ((idxRaw === undefined || idxRaw === null) && args.sourceIndex !== undefined && args.sourceIndex !== null) idxRaw = args.sourceIndex;
+      var idx = Number(idxRaw);
+      if (!Number.isFinite(idx) || idx <= 0) return 0;
+      return Math.floor(idx);
+    }
+
+    function assistantExtractTempExecReuseCaseIndexes(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var rawList = null;
+      var source = [];
+      var out = [];
+      var seen = {};
+      if (Array.isArray(args.caseIndexes)) rawList = args.caseIndexes;
+      else if (Array.isArray(args.indexes)) rawList = args.indexes;
+      else if (Array.isArray(args.rows)) rawList = args.rows;
+      if (rawList) source = rawList.slice();
+      else {
+        var explicitIndex = assistantReadTempExecReuseExplicitCaseIndex(args);
+        if (explicitIndex > 0) source.push(explicitIndex);
+      }
+      source.forEach(function(item) {
+        var num = Math.floor(Number(item));
+        if (!Number.isFinite(num) || num <= 0) return;
+        if (seen[num]) return;
+        seen[num] = true;
+        out.push(num);
+      });
+      return out;
+    }
+
+    function assistantReadTempExecStateIndexList(source, fileId) {
+      var raw = null;
+      var list = [];
+      if (!source || !fileId) return list;
+      raw = source[fileId];
+      if (!raw) return list;
+      if (typeof raw.size === 'number' && typeof raw.forEach === 'function') {
+        raw.forEach(function(value) { list.push(Number(value)); });
+      } else if (Array.isArray(raw)) {
+        list = raw.slice();
+      } else if (typeof raw === 'object') {
+        Object.keys(raw).forEach(function(key) {
+          if (raw[key]) list.push(Number(key));
+        });
+      }
+      return list.filter(function(value) {
+        return Number.isFinite(value) && value >= 0;
+      }).map(function(value) {
+        return Math.floor(value);
+      });
+    }
+
+    function assistantResolveTempExecFocusedSingleCaseIndex(file) {
+      var target = file && typeof file === 'object' ? file : null;
+      var fileId = target && target.id !== undefined && target.id !== null ? String(target.id) : '';
+      var selection = [];
+      var reuseOpen = [];
+      var remarkOpen = [];
+      var defectOpen = [];
+      if (!fileId) return 0;
+      selection = assistantReadTempExecStateIndexList(state.tempExecSelections, fileId);
+      if (selection.length === 1) return selection[0] + 1;
+      reuseOpen = assistantReadTempExecStateIndexList(state.tempExecReuseOpen, fileId);
+      if (reuseOpen.length === 1) return reuseOpen[0] + 1;
+      remarkOpen = assistantReadTempExecStateIndexList(state.tempExecRemarkOpen, fileId);
+      if (remarkOpen.length === 1) return remarkOpen[0] + 1;
+      defectOpen = assistantReadTempExecStateIndexList(state.tempExecDefectOpen, fileId);
+      if (defectOpen.length === 1) return defectOpen[0] + 1;
+      return 0;
+    }
+
+    function assistantExtractTempExecReuseCaseScopeQuery(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var query = assistantReadFirstArgString(args, ['caseQuery', 'caseName', 'caseTitle', 'rowQuery']);
+      if (assistantReadTempExecReuseExplicitCaseIndex(args) > 0 || assistantResolveTempExecReuseCaseIndex(args) > 0) return '';
+      query = assistantTrimTempExecRemoveQuery(query || '');
+      return query;
+    }
+
+    function assistantResolveTempExecReuseVisibleDetails(file, caseIndex) {
+      var sourceIndex = Math.max(0, Number(caseIndex || 1) - 1);
+      var targetCase = file && Array.isArray(file.cases) && file.cases[sourceIndex] ? file.cases[sourceIndex] : null;
+      var details = [];
+      if (!targetCase) {
+        return { ok: false, reason: '未找到第 ' + caseIndex + ' 条用例，请确认序号是否正确' };
+      }
+      details = Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails.filter(function(detail) {
+        return detail && detail.removed !== true;
+      }) : [];
+      return {
+        ok: true,
+        caseItem: targetCase,
+        caseIndex: caseIndex,
+        details: details,
+      };
+    }
+
+    function assistantBuildTempExecReuseCaseMeta(caseItem, caseIndex) {
+      var row = caseItem && typeof caseItem === 'object' ? caseItem : {};
+      var visibleRes = assistantResolveTempExecReuseVisibleDetails({ cases: [row] }, 1);
+      var details = visibleRes && Array.isArray(visibleRes.details) ? visibleRes.details : [];
+      var title = row.title !== undefined && row.title !== null && String(row.title).trim() ? String(row.title).trim() : ('第 ' + caseIndex + ' 条用例');
+      var moduleName = row.module !== undefined && row.module !== null && String(row.module).trim() ? String(row.module).trim() : '';
+      return {
+        caseIndex: caseIndex,
+        caseItem: row,
+        details: details,
+        detailCount: details.length,
+        title: title,
+        module: moduleName,
+        label: '第 ' + caseIndex + ' 条：' + title + '（' + details.length + ' 个子项' + (moduleName ? '，模块：' + moduleName : '') + '）',
+      };
+    }
+
+    function assistantBuildTempExecReuseCaseMetas(file) {
+      var list = file && Array.isArray(file.cases) ? file.cases : [];
+      var out = [];
+      list.forEach(function(item, idx) {
+        var meta = assistantBuildTempExecReuseCaseMeta(item, idx + 1);
+        if (!meta || !meta.detailCount) return;
+        out.push(meta);
+      });
+      return out;
+    }
+
+    function assistantReadTempExecReuseDetailName(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      return assistantReadFirstArgString(args, ['detailName', 'subItemName', 'childName', 'detailText', 'subItemText', 'childText']);
+    }
+
+    function assistantReadTempExecReuseDetailIndex(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var detailIndexRaw = args.detailIndex;
+      if ((detailIndexRaw === undefined || detailIndexRaw === null) && args.subItemIndex !== undefined && args.subItemIndex !== null) detailIndexRaw = args.subItemIndex;
+      if ((detailIndexRaw === undefined || detailIndexRaw === null) && args.childIndex !== undefined && args.childIndex !== null) detailIndexRaw = args.childIndex;
+      if ((detailIndexRaw === undefined || detailIndexRaw === null) && args.detailSeq !== undefined && args.detailSeq !== null) detailIndexRaw = args.detailSeq;
+      var detailIndex = Number(detailIndexRaw);
+      if (!Number.isFinite(detailIndex) || detailIndex <= 0) return 0;
+      return Math.floor(detailIndex);
+    }
+
+    function assistantFindTempExecReuseDetailCaseMetas(file, payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var detailId = assistantReadFirstArgString(args, ['detailId', 'subItemId', 'childId']);
+      var detailName = assistantReadTempExecReuseDetailName(args);
+      var detailIndex = assistantReadTempExecReuseDetailIndex(args);
+      var explicitCaseIndexes = assistantExtractTempExecReuseCaseIndexes(args);
+      var resolvedCaseIndex = assistantResolveTempExecReuseCaseIndex(args);
+      var caseQuery = assistantExtractTempExecReuseCaseScopeQuery(args);
+      var caseMetas = assistantBuildTempExecReuseCaseMetas(file);
+      var exact = [];
+      var partial = [];
+      if (!explicitCaseIndexes.length && resolvedCaseIndex > 0) {
+        explicitCaseIndexes = [resolvedCaseIndex];
+      }
+      if (explicitCaseIndexes.length) {
+        caseMetas = caseMetas.filter(function(meta) {
+          return explicitCaseIndexes.indexOf(meta.caseIndex) !== -1;
+        });
+        caseQuery = '';
+        if (!caseMetas.length) {
+          return { ok: false, reason: '未找到指定的用例条目，请确认序号后再试' };
+        }
+      }
+      if (caseQuery) {
+        caseMetas = caseMetas.filter(function(meta) {
+          return assistantMatchTempExecReuseCaseQuery(meta, caseQuery);
+        });
+        if (!caseMetas.length) {
+          return { ok: false, reason: '未找到和“' + caseQuery + '”匹配的用例条目，请确认后再试' };
+        }
+      }
+      if (detailId) {
+        caseMetas = caseMetas.filter(function(meta) {
+          return Array.isArray(meta && meta.details) && meta.details.some(function(detail) {
+            return detail && String(detail.id || '') === detailId;
+          });
+        });
+        if (explicitCaseIndexes.length && !caseMetas.length) {
+          return { ok: false, reason: '指定用例中未找到目标复用子项，请确认后再试' };
+        }
+        return {
+          ok: true,
+          filtered: true,
+          detailId: detailId,
+          detailName: detailName,
+          detailIndex: detailIndex,
+          caseQuery: caseQuery,
+          caseMetas: caseMetas,
+        };
+      }
+      if (detailName) {
+        caseMetas.forEach(function(meta) {
+          var exactHit = false;
+          var partialHit = false;
+          (meta && Array.isArray(meta.details) ? meta.details : []).forEach(function(detail) {
+            var score = assistantResolveTempExecReuseNameMatchScore(detail && detail.text ? String(detail.text) : '', detailName);
+            if (score === 2) exactHit = true;
+            else if (score === 1) partialHit = true;
+          });
+          if (exactHit) exact.push(meta);
+          else if (partialHit) partial.push(meta);
+        });
+        if (explicitCaseIndexes.length && !exact.length && !partial.length) {
+          return { ok: false, reason: '指定用例中未找到名为“' + detailName + '”的复用子项' };
+        }
+        return {
+          ok: true,
+          filtered: true,
+          detailId: '',
+          detailName: detailName,
+          detailIndex: detailIndex,
+          caseQuery: caseQuery,
+          caseMetas: exact.length ? exact : partial,
+        };
+      }
+      if (detailIndex > 0) {
+        caseMetas = caseMetas.filter(function(meta) {
+          return Number(meta && meta.detailCount || 0) >= detailIndex;
+        });
+        if (explicitCaseIndexes.length && !caseMetas.length) {
+          return { ok: false, reason: '指定用例中未找到第 ' + detailIndex + ' 个复用子项' };
+        }
+        return {
+          ok: true,
+          filtered: true,
+          detailId: '',
+          detailName: detailName,
+          detailIndex: detailIndex,
+          caseQuery: caseQuery,
+          caseMetas: caseMetas,
+        };
+      }
+      return {
+        ok: true,
+        filtered: false,
+        detailId: '',
+        detailName: '',
+        detailIndex: 0,
+        caseQuery: caseQuery,
+        caseMetas: caseMetas,
+      };
+    }
+
+    function assistantPickTempExecReuseFocusedCaseMeta(caseMetas, file) {
+      var list = Array.isArray(caseMetas) ? caseMetas : [];
+      var focusedIndex = assistantResolveTempExecFocusedSingleCaseIndex(file);
+      var i = 0;
+      if (!(focusedIndex > 0) || !list.length) return null;
+      for (i = 0; i < list.length; i += 1) {
+        if (!list[i] || Number(list[i].caseIndex || 0) !== focusedIndex) continue;
+        return list[i];
+      }
+      return null;
+    }
+
+    function assistantPickTempExecReuseFocusedResolvedTarget(resolvedTargets, file) {
+      var list = Array.isArray(resolvedTargets) ? resolvedTargets : [];
+      var focusedIndex = assistantResolveTempExecFocusedSingleCaseIndex(file);
+      var i = 0;
+      if (!(focusedIndex > 0) || !list.length) return null;
+      for (i = 0; i < list.length; i += 1) {
+        var row = list[i] && typeof list[i] === 'object' ? list[i] : null;
+        var meta = row && row.caseMeta && typeof row.caseMeta === 'object' ? row.caseMeta : null;
+        if (!meta || Number(meta.caseIndex || 0) !== focusedIndex) continue;
+        return row;
+      }
+      return null;
+    }
+
+    function assistantBuildTempExecReuseDetailCaseSelectionRequired(payload, fileName, caseMetas, options) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var opts = options && typeof options === 'object' ? options : {};
+      var name = fileName || '当前执行用例';
+      var list = Array.isArray(caseMetas) ? caseMetas : [];
+      var detailName = opts.detailName ? String(opts.detailName) : '';
+      var allowAll = opts.allowAll === true;
+      var aggregateCaseIndexes = Array.isArray(opts.aggregateCaseIndexes) ? opts.aggregateCaseIndexes : [];
+      var aggregateScope = opts.aggregateScope ? String(opts.aggregateScope) : 'matched_cases';
+      var aggregateDetailCount = Number(opts.aggregateDetailCount || aggregateCaseIndexes.length || list.length || 0);
+      var items = list.map(function(meta) {
+        return {
+          id: 'reuse-detail-case:' + meta.caseIndex,
+          label: meta.label,
+          name: meta.title,
+          applyPatch: {
+            index: meta.caseIndex,
+            caseIndexes: [meta.caseIndex],
+          },
+        };
+      });
+      if (allowAll && aggregateCaseIndexes.length > 1) {
+        items.push({
+          id: 'reuse-detail-case:' + aggregateScope,
+          label: detailName
+            ? ('全部匹配子项“' + detailName + '”的 ' + aggregateCaseIndexes.length + ' 条用例（共 ' + aggregateDetailCount + ' 项，将统一处理）')
+            : ('全部匹配的 ' + aggregateCaseIndexes.length + ' 条用例（共 ' + aggregateDetailCount + ' 项，将统一处理）'),
+          name: detailName || '全部',
+          applyPatch: {
+            applyAll: true,
+            scope: aggregateScope,
+            caseIndexes: aggregateCaseIndexes.slice(),
+          },
+        });
+      }
+      var message = detailName
+        ? ('执行用例【' + name + '】中有 ' + list.length + ' 条用例包含子项“' + detailName + '”，请先确认要操作哪一条：')
+        : ('执行用例【' + name + '】中有 ' + list.length + ' 条用例包含复用子项，请先确认要操作哪一条：');
+      if (allowAll && aggregateCaseIndexes.length > 1) message += ' 如果要统一处理，也可以直接回复“全部”。';
+      return {
+        ok: false,
+        reason: 'selection_required',
+        selectionRequired: true,
+        selectionType: 'detail_case',
+        actionLabel: '确认要操作的用例条目',
+        message: message,
+        query: name,
+        items: items,
+        pendingArgs: Object.assign({}, args),
+      };
+    }
+
+    function assistantResolveTempExecReuseDetailCaseIndex(payload, file, fileName) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var caseIndex = assistantResolveTempExecReuseCaseIndex(args);
+      if (caseIndex > 0) return { ok: true, caseIndex: caseIndex };
+      var caseRes = assistantFindTempExecReuseDetailCaseMetas(file, args);
+      var caseMetas = [];
+      var focusedMeta = null;
+      if (!caseRes || caseRes.ok !== true) return caseRes || { ok: false, reason: '未找到目标复用子项' };
+      caseMetas = Array.isArray(caseRes.caseMetas) ? caseRes.caseMetas : [];
+      if (caseMetas.length === 1) {
+        return { ok: true, caseIndex: caseMetas[0].caseIndex, caseMetas: caseMetas };
+      }
+      focusedMeta = assistantPickTempExecReuseFocusedCaseMeta(caseMetas, file);
+      if (focusedMeta) {
+        return { ok: true, caseIndex: focusedMeta.caseIndex, caseMetas: [focusedMeta], focused: true };
+      }
+      if (!caseMetas.length) {
+        if (caseRes.filtered && caseRes.detailName) {
+          return { ok: false, reason: '当前执行用例中未找到名为“' + caseRes.detailName + '”的复用子项' };
+        }
+        if (caseRes.filtered && caseRes.detailIndex > 0) {
+          return { ok: false, reason: '当前执行用例中未找到第 ' + caseRes.detailIndex + ' 个复用子项' };
+        }
+        return { ok: false, reason: '当前执行用例中没有可编辑的复用子项' };
+      }
+      return assistantBuildTempExecReuseDetailCaseSelectionRequired(args, fileName, caseMetas, {
+        detailName: caseRes.detailName || '',
+      });
+    }
+
+    function assistantIsTempExecReuseDetailApplyAll(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var scope = assistantReadFirstArgString(args, ['detailScope', 'caseScope', 'scope', 'scopeChoice']).toLowerCase();
+      if (args.applyAll === true || args.batch === true || args.all === true) return true;
+      return scope === 'matched_cases' || scope === 'selected_cases' || scope === 'file_all' || scope === 'all';
+    }
+
+    function assistantBuildTempExecReuseDetailAggregateResult(resolvedTargets, options) {
+      var list = Array.isArray(resolvedTargets) ? resolvedTargets : [];
+      var opts = options && typeof options === 'object' ? options : {};
+      var caseIndexes = [];
+      var uniqueCaseIndexes = [];
+      var caseSeen = {};
+      var details = [];
+      var detailNames = [];
+      list.forEach(function(target) {
+        var caseIndex = target && target.caseMeta ? Number(target.caseMeta.caseIndex || 0) : 0;
+        var detailRes = target && target.detailRes ? target.detailRes : null;
+        if (!(caseIndex > 0) || !detailRes || !detailRes.detail) return;
+        caseIndexes.push(caseIndex);
+        if (!caseSeen[caseIndex]) {
+          caseSeen[caseIndex] = true;
+          uniqueCaseIndexes.push(caseIndex);
+        }
+        details.push({ caseIndex: caseIndex, detail: detailRes.detail, detailIndex: detailRes.detailIndex });
+        detailNames.push(detailRes.detail && detailRes.detail.text ? String(detailRes.detail.text) : ('子项' + String(detailRes.detailIndex || 1)));
+      });
+      return {
+        ok: true,
+        all: true,
+        scope: opts.scope ? String(opts.scope) : (uniqueCaseIndexes.length > 1 ? 'matched_cases' : 'single_case'),
+        query: opts.query ? String(opts.query) : '',
+        caseIndexes: uniqueCaseIndexes,
+        selectedCaseCount: uniqueCaseIndexes.length,
+        details: details,
+        detailNames: detailNames,
+        updatedCount: details.length,
+      };
+    }
+
+    function assistantBuildTempExecReuseAllVisibleDetailAggregateResult(caseMetas, options) {
+      var metas = Array.isArray(caseMetas) ? caseMetas : [];
+      var resolvedTargets = [];
+      metas.forEach(function(meta) {
+        var details = meta && Array.isArray(meta.details) ? meta.details : [];
+        details.forEach(function(detail, detailIndex) {
+          if (!detail) return;
+          resolvedTargets.push({
+            caseMeta: meta,
+            detailRes: {
+              ok: true,
+              caseIndex: meta.caseIndex,
+              caseItem: meta.caseItem,
+              detail: detail,
+              detailIndex: detail && detail.index ? Number(detail.index) : (detailIndex + 1),
+            }
+          });
+        });
+      });
+      if (!resolvedTargets.length) {
+        return { ok: false, reason: '当前执行用例中没有可编辑的复用子项' };
+      }
+      return assistantBuildTempExecReuseDetailAggregateResult(resolvedTargets, options);
+    }
+
+    function assistantResolveTempExecReuseAllVisibleTargetsByScope(payload, file) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var caseMetas = assistantBuildTempExecReuseCaseMetas(file);
+      var explicitCaseIndexes = assistantExtractTempExecReuseCaseIndexes(args);
+      var explicitScope = assistantReadFirstArgString(args, ['detailScope', 'caseScope', 'scope', 'scopeChoice']).toLowerCase();
+      var explicitCaseIndex = assistantResolveTempExecReuseCaseIndex(args);
+      if (explicitCaseIndexes.length) {
+        caseMetas = caseMetas.filter(function(meta) {
+          return explicitCaseIndexes.indexOf(meta.caseIndex) !== -1;
+        });
+      } else if (explicitCaseIndex > 0 && explicitScope !== 'file_all') {
+        caseMetas = caseMetas.filter(function(meta) {
+          return meta && meta.caseIndex === explicitCaseIndex;
+        });
+      }
+      if (!caseMetas.length) {
+        return { ok: false, reason: '当前执行用例中没有可编辑的复用子项' };
+      }
+      return assistantBuildTempExecReuseAllVisibleDetailAggregateResult(caseMetas, {
+        scope: explicitScope || (caseMetas.length > 1 ? 'file_all' : 'single_case'),
+        query: '',
+      });
+    }
+
+    function assistantTextContainsAny(text, keywords) {
+      var raw = text === undefined || text === null ? '' : String(text);
+      var list = Array.isArray(keywords) ? keywords : [];
+      var i = 0;
+      if (!raw || !list.length) return false;
+      for (i = 0; i < list.length; i += 1) {
+        var token = list[i] === undefined || list[i] === null ? '' : String(list[i]);
+        if (!token) continue;
+        if (raw.indexOf(token) !== -1) return true;
+      }
+      return false;
+    }
+
+    function assistantSanitizeTempExecReuseOverallStatusArgs(payload) {
+      var args = payload && typeof payload === 'object' ? Object.assign({}, payload) : {};
+      var field = assistantNormalizeTempExecReuseField(args.field || args.key || args.column || args.name || args.detailField || args.subField || '');
+      var detailName = assistantReadTempExecReuseDetailName(args);
+      var detailId = assistantReadFirstArgString(args, ['detailId', 'subItemId', 'childId']);
+      var detailIndex = assistantReadTempExecReuseDetailIndex(args);
+      if (field !== 'actual') return args;
+      if (!assistantIsTempExecReuseDetailApplyAll(args)) return args;
+      if (detailName || detailId || detailIndex > 0) return args;
+      ['detailIndex', 'subItemIndex', 'childIndex', 'detailSeq', 'detailId', 'subItemId', 'childId'].forEach(function(key) {
+        if (Object.prototype.hasOwnProperty.call(args, key)) delete args[key];
+      });
+      return args;
+    }
+
+    function assistantBuildCaseUpdateArgsFromNonReuseTempExecStatusUpdate(payload) {
+      var args = payload && typeof payload === 'object' ? Object.assign({}, payload) : {};
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      var resolvedFile = assistantResolveTempExecReuseTargetFile(args, tempApi);
+      var field = assistantNormalizeTempExecReuseField(args.field || args.key || args.column || args.name || args.detailField || args.subField || '');
+      var scope = String(args.scope || '').trim().toLowerCase();
+      var value = args.value;
+      if (value === undefined) value = args.to;
+      if (value === undefined) value = args.text;
+      if (value === undefined) value = args.content;
+      if (value === undefined) value = args.newValue;
+      value = assistantNormalizeTempExecActualValue(value);
+      if (!resolvedFile || resolvedFile.ok !== true || !resolvedFile.file || assistantTempExecFileHasReuseCases(resolvedFile.file)) return null;
+      if (field !== 'actual' || !value) return null;
+      return {
+        field: 'actual',
+        value: value,
+        index: args.index,
+        itemIndex: args.itemIndex,
+        seq: args.seq,
+        row: args.row,
+        scope: (scope === 'file_all' || scope === 'matched_cases' || scope === 'all' || (!scope && !(args.index || args.itemIndex || args.seq || args.row))) ? 'all' : 'single',
+        context: 'tempexec',
+        confirmed: args.confirmed === true,
+      };
+    }
+
+    function assistantResolveTempExecReuseDetailUpdateTargets(payload, file, fileName, field) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var caseRes = assistantFindTempExecReuseDetailCaseMetas(file, args);
+      var caseMetas = [];
+      var explicitCaseIndexes = assistantExtractTempExecReuseCaseIndexes(args);
+      var explicitScope = assistantReadFirstArgString(args, ['detailScope', 'caseScope', 'scope', 'scopeChoice']).toLowerCase();
+      var supportBatch = field === 'actual' || field === 'remark';
+      var applyAll = supportBatch && assistantIsTempExecReuseDetailApplyAll(args);
+      var resolvedTargets = [];
+      var unresolvedTargets = [];
+      var focusedTarget = null;
+      if (!caseRes || caseRes.ok !== true) return caseRes || { ok: false, reason: '未找到目标复用子项' };
+      caseMetas = Array.isArray(caseRes.caseMetas) ? caseRes.caseMetas : [];
+      if (!caseMetas.length) {
+        if (caseRes.filtered && caseRes.detailName) {
+          return { ok: false, reason: '当前执行用例中未找到名为“' + caseRes.detailName + '”的复用子项' };
+        }
+        if (caseRes.filtered && caseRes.detailIndex > 0) {
+          return { ok: false, reason: '当前执行用例中未找到第 ' + caseRes.detailIndex + ' 个复用子项' };
+        }
+        return { ok: false, reason: '当前执行用例中没有可编辑的复用子项' };
+      }
+      if (applyAll && !caseRes.filtered) {
+        return assistantBuildTempExecReuseAllVisibleDetailAggregateResult(caseMetas, {
+          scope: explicitScope || (explicitCaseIndexes.length ? 'selected_cases' : 'file_all'),
+          query: '',
+        });
+      }
+      if (caseRes.filtered || explicitCaseIndexes.length > 1 || applyAll) {
+        caseMetas.forEach(function(meta) {
+          var detailRes = assistantResolveTempExecReuseDetail(Object.assign({}, args, { index: meta.caseIndex }), file, meta.caseIndex);
+          if (detailRes && detailRes.ok === true) {
+            resolvedTargets.push({ caseMeta: meta, detailRes: detailRes });
+          } else {
+            unresolvedTargets.push(detailRes && detailRes.reason ? String(detailRes.reason) : ('第 ' + meta.caseIndex + ' 条用例中的目标复用子项仍不够明确'));
+          }
+        });
+        if (!resolvedTargets.length) {
+          return { ok: false, reason: unresolvedTargets.length ? unresolvedTargets[0] : '未找到目标复用子项' };
+        }
+        if (applyAll || explicitCaseIndexes.length > 1) {
+          if (unresolvedTargets.length) {
+            return { ok: false, reason: unresolvedTargets[0] };
+          }
+          return assistantBuildTempExecReuseDetailAggregateResult(resolvedTargets, {
+            scope: explicitScope || (explicitCaseIndexes.length > 1 ? 'selected_cases' : 'matched_cases'),
+            query: caseRes.detailName || '',
+          });
+        }
+        if (resolvedTargets.length === 1) {
+          return {
+            ok: true,
+            all: false,
+            caseIndex: resolvedTargets[0].caseMeta.caseIndex,
+            caseMeta: resolvedTargets[0].caseMeta,
+            detailRes: resolvedTargets[0].detailRes,
+          };
+        }
+        focusedTarget = assistantPickTempExecReuseFocusedResolvedTarget(resolvedTargets, file);
+        if (focusedTarget) {
+          return {
+            ok: true,
+            all: false,
+            caseIndex: focusedTarget.caseMeta.caseIndex,
+            caseMeta: focusedTarget.caseMeta,
+            detailRes: focusedTarget.detailRes,
+          };
+        }
+        return assistantBuildTempExecReuseDetailCaseSelectionRequired(args, fileName, resolvedTargets.map(function(target) {
+          return target.caseMeta;
+        }), {
+          detailName: caseRes.detailName || '',
+          allowAll: supportBatch && unresolvedTargets.length === 0,
+          aggregateCaseIndexes: resolvedTargets.map(function(target) { return target.caseMeta.caseIndex; }),
+          aggregateScope: 'matched_cases',
+          aggregateDetailCount: resolvedTargets.length,
+        });
+      }
+      if (caseMetas.length === 1) {
+        var singleRes = assistantResolveTempExecReuseDetail(Object.assign({}, args, { index: caseMetas[0].caseIndex }), file, caseMetas[0].caseIndex);
+        if (!singleRes || singleRes.ok !== true) return singleRes || { ok: false, reason: '未找到目标复用子项' };
+        return {
+          ok: true,
+          all: false,
+          caseIndex: caseMetas[0].caseIndex,
+          caseMeta: caseMetas[0],
+          detailRes: singleRes,
+        };
+      }
+      return assistantBuildTempExecReuseDetailCaseSelectionRequired(args, fileName, caseMetas, {
+        detailName: caseRes.detailName || '',
+      });
+    }
+
+
+    function assistantResolveFreshTempExecReuseDetailTarget(fileId, target) {
+      var row = target && typeof target === 'object' ? target : {};
+      var caseIndex = Number(row.caseIndex || 0);
+      var sourceDetail = row.detail && typeof row.detail === 'object' ? row.detail : null;
+      var file = assistantGetTempExecFileById(fileId);
+      var targetCase = null;
+      var visibleDetails = [];
+      var targetId = sourceDetail && sourceDetail.id !== undefined && sourceDetail.id !== null ? String(sourceDetail.id) : '';
+      var targetName = sourceDetail && sourceDetail.text !== undefined && sourceDetail.text !== null ? String(sourceDetail.text).trim() : '';
+      var targetDetailIndex = Number(row.detailIndex || 0);
+      var exactMatches = [];
+      var partialMatches = [];
+      var matched = null;
+      var i = 0;
+      if (!file) return { ok: false, reason: '未找到目标执行用例' };
+      if (!(caseIndex > 0) || !Array.isArray(file.cases) || !file.cases[caseIndex - 1]) {
+        return { ok: false, reason: '未找到第 ' + caseIndex + ' 条用例，请确认序号是否正确' };
+      }
+      targetCase = file.cases[caseIndex - 1];
+      visibleDetails = Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails.filter(function(detail) {
+        return detail && detail.removed !== true;
+      }) : [];
+      if (!visibleDetails.length) return { ok: false, reason: '目标用例当前没有可编辑的复用子项' };
+      if (targetId) {
+        for (i = 0; i < visibleDetails.length; i += 1) {
+          if (String(visibleDetails[i].id || '') !== targetId) continue;
+          matched = visibleDetails[i];
+          return { ok: true, caseIndex: caseIndex, caseItem: targetCase, detail: matched, detailIndex: i + 1 };
+        }
+      }
+      if (targetName) {
+        for (i = 0; i < visibleDetails.length; i += 1) {
+          var label = visibleDetails[i] && visibleDetails[i].text !== undefined && visibleDetails[i].text !== null ? String(visibleDetails[i].text).trim() : '';
+          if (!label) continue;
+          if (label.toLowerCase() === targetName.toLowerCase()) exactMatches.push({ detail: visibleDetails[i], detailIndex: i + 1 });
+          else if (label.toLowerCase().indexOf(targetName.toLowerCase()) !== -1 || targetName.toLowerCase().indexOf(label.toLowerCase()) !== -1) partialMatches.push({ detail: visibleDetails[i], detailIndex: i + 1 });
+        }
+        if (exactMatches.length === 1) {
+          return { ok: true, caseIndex: caseIndex, caseItem: targetCase, detail: exactMatches[0].detail, detailIndex: exactMatches[0].detailIndex };
+        }
+        if (!exactMatches.length && partialMatches.length === 1) {
+          return { ok: true, caseIndex: caseIndex, caseItem: targetCase, detail: partialMatches[0].detail, detailIndex: partialMatches[0].detailIndex };
+        }
+      }
+      if (targetDetailIndex > 0 && visibleDetails[targetDetailIndex - 1]) {
+        matched = visibleDetails[targetDetailIndex - 1];
+        return { ok: true, caseIndex: caseIndex, caseItem: targetCase, detail: matched, detailIndex: targetDetailIndex };
+      }
+      return { ok: false, reason: targetName ? ('未能重新定位子项“' + targetName + '”') : '未能重新定位目标复用子项' };
+    }
+
+    function assistantApplyVerifiedTempExecReuseStatusUpdate(tempApi, fileId, target, nextStatus) {
+      var resolved = assistantResolveFreshTempExecReuseDetailTarget(fileId, target);
+      var refreshed = null;
+      var updated = false;
+      var finalStatus = '';
+      if (!resolved || resolved.ok !== true) return resolved || { ok: false, reason: '未找到目标复用子项' };
+      updated = tempApi && typeof tempApi.updateTempExecReuseStatus === 'function'
+        ? tempApi.updateTempExecReuseStatus(fileId, resolved.caseIndex - 1, resolved.detail && resolved.detail.id, nextStatus) === true
+        : false;
+      if (!updated) {
+        return { ok: false, reason: '目标复用子项未实际写入，请稍后重试' };
+      }
+      refreshed = assistantResolveFreshTempExecReuseDetailTarget(fileId, {
+        caseIndex: resolved.caseIndex,
+        detail: resolved.detail,
+        detailIndex: resolved.detailIndex,
+      });
+      if (!refreshed || refreshed.ok !== true) return refreshed || { ok: false, reason: '写入后未能重新读取目标复用子项' };
+      finalStatus = refreshed.detail && refreshed.detail.status !== undefined && refreshed.detail.status !== null ? String(refreshed.detail.status).trim() : '';
+      if (finalStatus !== String(nextStatus)) {
+        return { ok: false, reason: '目标复用子项写入后状态仍为“' + (finalStatus || '未执行') + '”，未成功更新为“' + String(nextStatus) + '”' };
+      }
+      return {
+        ok: true,
+        caseIndex: resolved.caseIndex,
+        caseItem: refreshed.caseItem,
+        detail: refreshed.detail,
+        detailIndex: refreshed.detailIndex,
+      };
+    }
+
+    function assistantResolveTempExecReuseRenameScope(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var scope = assistantReadFirstArgString(args, ['renameScope', 'scopeChoice', 'targetScope', 'nameScope']).toLowerCase();
+      if (scope === 'preset_all' || scope === 'preset' || scope === 'global' || scope === 'all' || scope === 'file_all' || scope === 'whole_file') return 'preset_all';
+      if (scope === 'single_case' || scope === 'case' || scope === 'detail' || scope === 'single' || scope === 'one_case') return 'single_case';
+      if (assistantExtractTempExecReuseCaseIndexes(args).length === 1) return 'single_case';
+      return '';
+    }
+
+    function assistantResolveTempExecReusePresetScope(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var scope = assistantReadFirstArgString(args, ['presetScope', 'scopeChoice', 'targetScope', 'scope', 'nameScope']).toLowerCase();
+      if (scope === 'preset_all' || scope === 'preset' || scope === 'global' || scope === 'all' || scope === 'file_all' || scope === 'whole_file') return 'file_all';
+      if (scope === 'single_case' || scope === 'case' || scope === 'detail' || scope === 'single' || scope === 'one_case') return 'single_case';
+      if (assistantExtractTempExecReuseCaseIndexes(args).length === 1) return 'single_case';
+      return '';
+    }
+
+    function assistantBuildTempExecReusePresetScopeSelection(file, fileName, payload, mode) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var resolvedScope = assistantResolveTempExecReusePresetScope(args);
+      var caseMetas = assistantBuildTempExecReuseCaseMetas(file);
+      var items = [];
+      var explicitCaseIndexes = assistantExtractTempExecReuseCaseIndexes(args);
+      var totalDetailCount = 0;
+      caseMetas.forEach(function(meta) {
+        totalDetailCount += Number(meta && meta.detailCount ? meta.detailCount : 0) || 0;
+      });
+      if (resolvedScope === 'single_case') {
+        if (explicitCaseIndexes.length === 1) {
+          return { ok: true, scope: 'single_case', caseIndex: explicitCaseIndexes[0], caseMetas: caseMetas, totalDetailCount: totalDetailCount };
+        }
+        items = caseMetas.map(function(meta) {
+          return {
+            id: 'reuse-preset-case:' + meta.caseIndex,
+            label: meta.label,
+            applyPatch: {
+              presetScope: 'single_case',
+              index: meta.caseIndex,
+              caseIndexes: [meta.caseIndex],
+            },
+          };
+        });
+        return {
+          ok: false,
+          reason: 'selection_required',
+          selectionRequired: true,
+          selectionType: 'preset_case',
+          actionLabel: mode === 'preset_add' ? '确认要新增子项的用例范围' : '确认要设置子项的用例范围',
+          message: '你已选择只处理某条用例，还需要确认具体是第几条：',
+          query: fileName,
+          items: items,
+          pendingArgs: Object.assign({}, args, { presetScope: 'single_case' }),
+        };
+      }
+      if (!resolvedScope && caseMetas.length > 1) {
+        return {
+          ok: false,
+          reason: 'selection_required',
+          selectionRequired: true,
+          selectionType: 'preset_scope',
+          actionLabel: mode === 'preset_add' ? '确认新增子项的范围' : '确认设置子项的范围',
+          message: '你说的范围还不够明确，请先确认是整份执行用例统一处理，还是只处理其中某条用例：',
+          query: fileName,
+          items: [{
+            id: 'reuse-preset-scope:file-all',
+            label: '整份执行用例【' + fileName + '】（共 ' + caseMetas.length + ' 条用例，处理后会统一更新预设子项）',
+            applyPatch: { presetScope: 'file_all' },
+          }, {
+            id: 'reuse-preset-scope:single-case',
+            label: '只处理某条用例（先确认具体条目，不改整份预设）',
+            applyPatch: { presetScope: 'single_case' },
+          }],
+          pendingArgs: Object.assign({}, args),
+        };
+      }
+      return { ok: true, scope: resolvedScope || 'file_all', caseMetas: caseMetas, totalDetailCount: totalDetailCount };
+    }
+
+    function assistantApplyTempExecReuseItemsToSingleCase(tempApi, fileId, caseIndex, nextItems, mode) {
+      var targetIndex = Math.max(0, Number(caseIndex || 1) - 1);
+      var expectedItems = Array.isArray(nextItems) ? nextItems.map(function(item) {
+        return item === undefined || item === null ? '' : String(item).trim();
+      }).filter(Boolean) : [];
+      var currentFile = assistantGetTempExecFileById(fileId);
+      var currentCase = currentFile && Array.isArray(currentFile.cases) && currentFile.cases[targetIndex] ? currentFile.cases[targetIndex] : null;
+      var currentDetails = currentCase && Array.isArray(currentCase.reuseDetails) ? currentCase.reuseDetails.slice() : [];
+      var visibleTexts = [];
+      currentDetails.forEach(function(detail) {
+        if (!detail || detail.removed === true) return;
+        var text = detail.text === undefined || detail.text === null ? '' : String(detail.text).trim();
+        if (!text) return;
+        visibleTexts.push(text);
+      });
+      if (mode === 'preset_set' && tempApi.removeTempExecReuseEntry) {
+        currentDetails.forEach(function(detail) {
+          var text = detail && detail.text !== undefined && detail.text !== null ? String(detail.text).trim() : '';
+          if (!detail || detail.removed === true || !text) return;
+          if (expectedItems.indexOf(text) !== -1) return;
+          tempApi.removeTempExecReuseEntry(fileId, targetIndex, detail.id, { skipConfirm: true });
+        });
+      }
+      expectedItems.forEach(function(itemText) {
+        var refreshedFile = assistantGetTempExecFileById(fileId);
+        var refreshedCase = refreshedFile && Array.isArray(refreshedFile.cases) && refreshedFile.cases[targetIndex] ? refreshedFile.cases[targetIndex] : null;
+        var refreshedDetails = refreshedCase && Array.isArray(refreshedCase.reuseDetails) ? refreshedCase.reuseDetails.slice() : [];
+        var exists = refreshedDetails.some(function(detail) {
+          return detail && detail.removed !== true && String(detail.text || '').trim() === itemText;
+        });
+        var beforeIds = refreshedDetails.map(function(detail) { return detail && detail.id ? String(detail.id) : ''; }).filter(Boolean);
+        var afterFile = null;
+        var afterCase = null;
+        var afterDetails = [];
+        var newDetail = null;
+        if (exists) return;
+        if (!tempApi.addTempExecReuseEntry || !tempApi.updateTempExecReuseText) return;
+        tempApi.addTempExecReuseEntry(fileId, targetIndex);
+        afterFile = assistantGetTempExecFileById(fileId);
+        afterCase = afterFile && Array.isArray(afterFile.cases) && afterFile.cases[targetIndex] ? afterFile.cases[targetIndex] : null;
+        afterDetails = afterCase && Array.isArray(afterCase.reuseDetails) ? afterCase.reuseDetails.slice() : [];
+        afterDetails.forEach(function(detail) {
+          if (!detail || !detail.id || newDetail) return;
+          if (beforeIds.indexOf(String(detail.id)) !== -1) return;
+          newDetail = detail;
+        });
+        if (!newDetail && afterDetails.length) newDetail = afterDetails[afterDetails.length - 1];
+        if (!newDetail || !newDetail.id) return;
+        tempApi.updateTempExecReuseText(fileId, targetIndex, newDetail.id, itemText);
+      });
+      currentFile = assistantGetTempExecFileById(fileId);
+      currentCase = currentFile && Array.isArray(currentFile.cases) && currentFile.cases[targetIndex] ? currentFile.cases[targetIndex] : null;
+      currentDetails = currentCase && Array.isArray(currentCase.reuseDetails) ? currentCase.reuseDetails.slice() : [];
+      return currentDetails.filter(function(detail) {
+        return detail && detail.removed !== true && String(detail.text || '').trim();
+      }).map(function(detail) {
+        return String(detail.text || '').trim();
+      });
+    }
+
+    function assistantComputeTempExecReuseUpdatedText(currentText, nextValue, operation) {
+      var previous = currentText === undefined || currentText === null ? '' : String(currentText);
+      var next = nextValue === undefined || nextValue === null ? '' : String(nextValue).trim();
+      var op = assistantNormalizeCaseUpdateOperation({ operation: operation }, 'replace');
+      if (op === 'append') return previous + next;
+      if (op === 'prepend') return next + previous;
+      return next;
+    }
+
+    function assistantResolveTempExecReuseNameMatchScore(sourceText, queryText) {
+      var source = assistantNormalizeTempExecRemoveLookupText(sourceText || '');
+      var query = assistantNormalizeTempExecRemoveLookupText(queryText || '');
+      if (!source || !query) return 0;
+      if (source === query) return 2;
+      if (source.indexOf(query) !== -1 || query.indexOf(source) !== -1) return 1;
+      return 0;
+    }
+
+    function assistantResolveTempExecReusePresetTarget(file, payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var presetId = assistantReadFirstArgString(args, ['presetId', 'reusePresetId']);
+      var detailName = assistantReadFirstArgString(args, ['detailName', 'subItemName', 'childName', 'detailText', 'subItemText', 'childText', 'from', 'oldValue', 'oldText', 'sourceText', 'currentText']);
+      var presets = file && Array.isArray(file.reusePresets) ? file.reusePresets.filter(function(item) {
+        return item && item.text !== undefined && item.text !== null && String(item.text).trim();
+      }) : [];
+      var exact = [];
+      var partial = [];
+      if (!presets.length) return { ok: true, preset: null, detailName: detailName };
+      if (presetId) {
+        for (var i = 0; i < presets.length; i += 1) {
+          if (String(presets[i].id || '') === presetId) {
+            return { ok: true, preset: presets[i], detailName: detailName || String(presets[i].text || '') };
+          }
+        }
+        return { ok: false, reason: '未找到指定的预设子项，请确认后再试' };
+      }
+      if (!detailName) return { ok: true, preset: null, detailName: '' };
+      presets.forEach(function(preset) {
+        var score = assistantResolveTempExecReuseNameMatchScore(preset && preset.text ? String(preset.text) : '', detailName);
+        if (score === 2) exact.push(preset);
+        else if (score === 1) partial.push(preset);
+      });
+      if (exact.length === 1) return { ok: true, preset: exact[0], detailName: detailName };
+      if (!exact.length && partial.length === 1) return { ok: true, preset: partial[0], detailName: detailName };
+      if (exact.length > 1 || partial.length > 1) {
+        return { ok: false, reason: '匹配到多个预设子项，请补充更具体的预设子项名称' };
+      }
+      return { ok: true, preset: null, detailName: detailName };
+    }
+
+    function assistantFindTempExecReuseRenameCaseMetas(file, payload, detailName) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var explicitCaseIndexes = assistantExtractTempExecReuseCaseIndexes(args);
+      var resolvedCaseIndex = assistantResolveTempExecReuseCaseIndex(args);
+      var caseQuery = assistantExtractTempExecReuseCaseScopeQuery(args);
+      var caseMetas = assistantBuildTempExecReuseCaseMetas(file);
+      var exact = [];
+      var partial = [];
+      if (!explicitCaseIndexes.length && resolvedCaseIndex > 0) {
+        explicitCaseIndexes = [resolvedCaseIndex];
+      }
+      if (explicitCaseIndexes.length > 1) {
+        return { ok: false, reason: '只修改某条用例的子项名称时，请先明确具体是第几条用例' };
+      }
+      if (explicitCaseIndexes.length) {
+        caseMetas = caseMetas.filter(function(meta) {
+          return explicitCaseIndexes.indexOf(meta.caseIndex) !== -1;
+        });
+        caseQuery = '';
+        if (!caseMetas.length) {
+          return { ok: false, reason: '未找到第 ' + explicitCaseIndexes[0] + ' 条用例，请确认序号是否正确' };
+        }
+      }
+      if (caseQuery) {
+        caseMetas = caseMetas.filter(function(meta) {
+          return assistantMatchTempExecReuseCaseQuery(meta, caseQuery);
+        });
+        if (!caseMetas.length) {
+          return { ok: false, reason: '未找到和“' + caseQuery + '”匹配的用例条目，请确认后再试' };
+        }
+      }
+      if (!detailName) {
+        return { ok: true, caseMetas: explicitCaseIndexes.length ? caseMetas : [] };
+      }
+      caseMetas.forEach(function(meta) {
+        var exactHit = false;
+        var partialHit = false;
+        (meta && Array.isArray(meta.details) ? meta.details : []).forEach(function(detail) {
+          var score = assistantResolveTempExecReuseNameMatchScore(detail && detail.text ? String(detail.text) : '', detailName);
+          if (score === 2) exactHit = true;
+          else if (score === 1) partialHit = true;
+        });
+        if (exactHit) exact.push(meta);
+        else if (partialHit) partial.push(meta);
+      });
+      if (explicitCaseIndexes.length && !exact.length && !partial.length) {
+        return { ok: false, reason: '第 ' + explicitCaseIndexes[0] + ' 条用例中未找到名为“' + detailName + '”的复用子项' };
+      }
+      return { ok: true, caseMetas: exact.length ? exact : partial };
+    }
+
+    function assistantBuildTempExecReuseRenameScopeSelectionRequired(payload, fileName, preset, matchedCaseMetas) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var presetName = preset && preset.text ? String(preset.text) : '目标预设子项';
+      var caseCount = Array.isArray(matchedCaseMetas) ? matchedCaseMetas.length : 0;
+      var items = [
+        {
+          id: 'reuse-rename-scope:preset',
+          label: '整份执行用例【' + fileName + '】的预设子项【' + presetName + '】（会同步影响当前文件内所有同名预设子项）',
+          name: presetName,
+          applyPatch: {
+            renameScope: 'preset_all',
+          },
+        },
+        {
+          id: 'reuse-rename-scope:single-case',
+          label: '只改某条用例里的子项【' + presetName + '】（' + (caseCount > 1 ? ('当前匹配 ' + caseCount + ' 条用例，不影响其他用例') : '不影响其他用例') + '）',
+          name: presetName,
+          applyPatch: {
+            renameScope: 'single_case',
+          },
+        }
+      ];
+      var lines = [
+        '“' + presetName + '”同时命中了整份执行用例的预设子项和具体用例子项。',
+        '请先确认你要改整份预设，还是只改某条用例里的该子项：'
+      ];
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + item.label);
+      });
+      lines.push('请回复“全部都改”、“只改单条”，或“只改第2条”。');
+      return {
+        ok: false,
+        reason: 'selection_required',
+        selectionRequired: true,
+        actionLabel: '确认要修改名称的范围',
+        message: lines.join('\n'),
+        selectionType: 'rename_scope',
+        items: items,
+        pendingArgs: Object.assign({}, args),
+      };
+    }
+
+    function assistantBuildTempExecReuseRenameCaseSelectionRequired(payload, fileName, detailName, matchedCaseMetas) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var targetName = detailName || '目标子项';
+      var items = Array.isArray(matchedCaseMetas) ? matchedCaseMetas.map(function(meta) {
+        return {
+          id: 'reuse-rename-case:' + meta.caseIndex,
+          label: meta.label,
+          name: meta.title,
+          applyPatch: {
+            renameScope: 'single_case',
+            index: meta.caseIndex,
+            caseIndexes: [meta.caseIndex],
+          },
+        };
+      }) : [];
+      var lines = [
+        '执行用例【' + fileName + '】中有 ' + items.length + ' 条用例包含子项“' + targetName + '”，请再确认只修改哪一条：'
+      ];
+      items.forEach(function(item, idx) {
+        lines.push((idx + 1) + '. ' + item.label);
+      });
+      lines.push('请回复“选第1个”或“只改第2条”。');
+      return {
+        ok: false,
+        reason: 'selection_required',
+        selectionRequired: true,
+        actionLabel: '确认要修改的用例',
+        message: lines.join('\n'),
+        selectionType: 'rename_case',
+        items: items,
+        pendingArgs: Object.assign({}, args),
+      };
+    }
+
+    function assistantResolveTempExecReuseTextRenamePlan(payload, file, fileName) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var renameScope = assistantResolveTempExecReuseRenameScope(args);
+      var presetRes = assistantResolveTempExecReusePresetTarget(file, args);
+      var detailName = '';
+      var caseRes = null;
+      var matchedCaseMetas = [];
+      if (!presetRes || presetRes.ok !== true) return presetRes || { ok: false, reason: '未找到要修改的预设子项' };
+      detailName = presetRes.detailName || (presetRes.preset && presetRes.preset.text ? String(presetRes.preset.text) : '');
+      caseRes = assistantFindTempExecReuseRenameCaseMetas(file, args, detailName);
+      if (!caseRes || caseRes.ok !== true) return caseRes || { ok: false, reason: '未找到要修改的目标用例' };
+      matchedCaseMetas = Array.isArray(caseRes.caseMetas) ? caseRes.caseMetas : [];
+      if (renameScope === 'preset_all') {
+        if (!presetRes.preset) {
+          return { ok: false, reason: detailName ? ('执行用例【' + fileName + '】中未找到名为“' + detailName + '”的预设子项，无法整份修改') : '未找到要修改的预设子项' };
+        }
+        return {
+          ok: true,
+          mode: 'preset_rename',
+          preset: presetRes.preset,
+          detailName: detailName,
+          index: 0,
+          matchedCaseMetas: matchedCaseMetas,
+        };
+      }
+      if (renameScope === 'single_case') {
+        var focusedRenameMeta = null;
+        if (!matchedCaseMetas.length) {
+          return { ok: false, reason: detailName ? ('未找到包含子项“' + detailName + '”的目标用例') : '未找到要修改的目标用例' };
+        }
+        focusedRenameMeta = assistantPickTempExecReuseFocusedCaseMeta(matchedCaseMetas, file);
+        if (focusedRenameMeta) {
+          return {
+            ok: true,
+            mode: 'detail_update',
+            detailName: detailName,
+            index: focusedRenameMeta.caseIndex,
+            matchedCaseMetas: [focusedRenameMeta],
+            preset: presetRes.preset || null,
+          };
+        }
+        if (matchedCaseMetas.length > 1) {
+          return assistantBuildTempExecReuseRenameCaseSelectionRequired(args, fileName, detailName, matchedCaseMetas);
+        }
+        return {
+          ok: true,
+          mode: 'detail_update',
+          detailName: detailName,
+          index: matchedCaseMetas[0].caseIndex,
+          matchedCaseMetas: matchedCaseMetas,
+          preset: presetRes.preset || null,
+        };
+      }
+      if (presetRes.preset && matchedCaseMetas.length) {
+        return assistantBuildTempExecReuseRenameScopeSelectionRequired(args, fileName, presetRes.preset, matchedCaseMetas);
+      }
+      if (presetRes.preset) {
+        return {
+          ok: true,
+          mode: 'preset_rename',
+          preset: presetRes.preset,
+          detailName: detailName,
+          index: 0,
+          matchedCaseMetas: matchedCaseMetas,
+        };
+      }
+      if (matchedCaseMetas.length > 1) {
+        return assistantBuildTempExecReuseRenameCaseSelectionRequired(args, fileName, detailName, matchedCaseMetas);
+      }
+      if (matchedCaseMetas.length === 1) {
+        return {
+          ok: true,
+          mode: 'detail_update',
+          detailName: detailName,
+          index: matchedCaseMetas[0].caseIndex,
+          matchedCaseMetas: matchedCaseMetas,
+          preset: null,
+        };
+      }
+      return {
+        ok: true,
+        mode: 'detail_update',
+        detailName: detailName,
+        index: 0,
+        matchedCaseMetas: matchedCaseMetas,
+        preset: null,
+      };
+    }
+
+    function assistantExtractTempExecReuseDeleteScopeQuery(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var query = assistantReadFirstArgString(args, ['caseQuery', 'caseName', 'caseTitle', 'rowQuery']);
+      if (!query) query = assistantExtractTempExecReuseTargetQuery(args);
+      return assistantTrimTempExecRemoveQuery(query || '');
+    }
+
+    function assistantMatchTempExecReuseCaseQuery(caseMeta, queryText) {
+      var meta = caseMeta && typeof caseMeta === 'object' ? caseMeta : {};
+      var rawQuery = assistantTrimTempExecRemoveQuery(queryText);
+      var normalizedQuery = assistantNormalizeTempExecRemoveLookupText(rawQuery);
+      var candidates = [
+        meta.title,
+        meta.module,
+        meta.label,
+        meta.caseIndex ? ('第' + meta.caseIndex + '条') : '',
+        meta.caseItem && typeof meta.caseItem === 'object' ? assistantBuildTempExecSearchText(meta.caseItem) : ''
+      ].filter(function(item) {
+        return item !== undefined && item !== null && String(item).trim();
+      }).map(function(item) {
+        return String(item).trim();
+      });
+      var lookupText = assistantNormalizeTempExecRemoveLookupText(candidates.join('\n'));
+      var compactQuery = normalizedQuery.replace(/(?:用例文件|执行用例|测试用例|用例|测试|当前执行|执行中|执行里|当前)/g, '');
+      var tokens = rawQuery.split(/[\s,，、/]+/).map(function(item) {
+        return assistantNormalizeTempExecRemoveLookupText(assistantTrimTempExecRemoveQuery(item));
+      }).filter(Boolean);
+      if (!normalizedQuery) return false;
+      if (lookupText.indexOf(normalizedQuery) !== -1) return true;
+      if (compactQuery && compactQuery !== normalizedQuery && lookupText.indexOf(compactQuery) !== -1) return true;
+      if (!tokens.length) return false;
+      return tokens.every(function(token) {
+        return lookupText.indexOf(token) !== -1;
+      });
+    }
+
+    function assistantBuildTempExecReuseDeleteSelectionItems(fileName, queryText, caseMetas, matchedCaseMetas) {
+      var fileLabel = fileName ? String(fileName) : '当前执行用例';
+      var allCases = Array.isArray(caseMetas) ? caseMetas : [];
+      var matchedCases = Array.isArray(matchedCaseMetas) ? matchedCaseMetas : [];
+      var items = [];
+      var fileDeletedCount = 0;
+      var matchedDeletedCount = 0;
+      allCases.forEach(function(meta) {
+        fileDeletedCount += Number(meta && meta.detailCount || 0);
+      });
+      if (allCases.length > 1) {
+        items.push({
+          id: 'reuse-delete-scope:file-all',
+          label: '整份执行用例【' + fileLabel + '】（共 ' + allCases.length + ' 条用例，' + fileDeletedCount + ' 个子项）',
+          name: fileLabel,
+          applyPatch: {
+            deleteAll: true,
+            scope: 'file_all',
+            caseIndexes: allCases.map(function(meta) { return meta.caseIndex; }),
+          },
+        });
+      }
+      if (queryText && matchedCases.length > 1) {
+        matchedCases.forEach(function(meta) {
+          matchedDeletedCount += Number(meta && meta.detailCount || 0);
+        });
+        items.push({
+          id: 'reuse-delete-scope:matched-all',
+          label: '匹配“' + queryText + '”的 ' + matchedCases.length + ' 条用例（共 ' + matchedDeletedCount + ' 个子项）',
+          name: queryText,
+          applyPatch: {
+            deleteAll: true,
+            scope: 'matched_cases',
+            caseIndexes: matchedCases.map(function(meta) { return meta.caseIndex; }),
+            caseQuery: queryText,
+          },
+        });
+      }
+      (matchedCases.length ? matchedCases : allCases).forEach(function(meta) {
+        if (!meta) return;
+        items.push({
+          id: 'reuse-delete-scope:case-' + meta.caseIndex,
+          label: meta.label,
+          name: meta.title,
+          applyPatch: {
+            deleteAll: true,
+            scope: 'single_case',
+            index: meta.caseIndex,
+            caseIndexes: [meta.caseIndex],
+          },
+        });
+      });
+      return items;
+    }
+
+    function assistantBuildTempExecReuseDeleteSelectionMessage(fileName, queryText, items) {
+      var list = Array.isArray(items) ? items : [];
+      var lines = [];
+      var targetText = queryText ? ('“' + queryText + '”') : '“全部子项”';
+      lines.push(targetText + ' 的范围还不够明确，它可能指整份执行用例、若干条匹配用例，或其中某一条用例。');
+      lines.push('请先确认你要删除哪一层范围的全部子项：');
+      list.forEach(function(item, idx) {
+        var label = item && item.label ? String(item.label) : ('选项 ' + String(idx + 1));
+        lines.push((idx + 1) + '. ' + label);
+      });
+      lines.push('请直接回复“选第1个”、“整份都删”，或“只删第2条”。');
+      return lines.join('\n');
+    }
+
+    function assistantBuildTempExecReuseDeleteAggregateResult(caseMetas, options) {
+      var selected = Array.isArray(caseMetas) ? caseMetas : [];
+      var opts = options && typeof options === 'object' ? options : {};
+      var details = [];
+      var deletedNames = [];
+      var caseIndexes = [];
+      var caseLabels = [];
+      selected.forEach(function(meta) {
+        if (!meta || !Array.isArray(meta.details) || !meta.details.length) return;
+        caseIndexes.push(meta.caseIndex);
+        caseLabels.push(meta.label ? String(meta.label) : ('第 ' + meta.caseIndex + ' 条'));
+        meta.details.forEach(function(detail, idx) {
+          details.push({ caseIndex: meta.caseIndex, detail: detail });
+          deletedNames.push(detail && detail.text ? String(detail.text) : ('子项' + String(idx + 1)));
+        });
+      });
+      return {
+        ok: true,
+        all: true,
+        scope: opts.scope ? String(opts.scope) : (caseIndexes.length > 1 ? 'multi_case' : 'single_case'),
+        scopeLabel: opts.scopeLabel ? String(opts.scopeLabel) : (caseIndexes.length > 1 ? ('共 ' + caseIndexes.length + ' 条用例') : ('第 ' + (caseIndexes[0] || 1) + ' 条')),
+        query: opts.query ? String(opts.query) : '',
+        caseIndexes: caseIndexes,
+        caseLabels: caseLabels,
+        index: caseIndexes.length === 1 ? caseIndexes[0] : 0,
+        selectedCaseCount: caseIndexes.length,
+        details: details,
+        deletedCount: details.length,
+        deletedNames: deletedNames,
+      };
+    }
+
+    function assistantBuildTempExecReuseDeleteSelectionRequired(payload, fileName, queryText, caseMetas, matchedCaseMetas) {
+      var items = assistantBuildTempExecReuseDeleteSelectionItems(fileName, queryText, caseMetas, matchedCaseMetas);
+      if (!items.length) {
+        return { ok: false, reason: '当前未能确定要删除哪一条用例的子项范围，请补充更具体的用例范围' };
+      }
+      return {
+        ok: false,
+        reason: 'selection_required',
+        selectionRequired: true,
+        actionLabel: '确认要删除的子项范围',
+        message: assistantBuildTempExecReuseDeleteSelectionMessage(fileName, queryText, items),
+        selectionType: 'delete_scope',
+        query: queryText,
+        items: items,
+        pendingArgs: Object.assign({}, payload || {}),
+      };
+    }
+
+    function assistantIsTempExecReuseDeleteAll(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      if (args.deleteAll === true || args.removeAll === true || args.all === true || args.delete === 'all' || args.remove === 'all') return true;
+      return String(args.scope || '').toLowerCase() === 'all' || String(args.scope || '').toLowerCase() === 'file_all' || String(args.scope || '').toLowerCase() === 'matched_cases';
+    }
+
+    function assistantResolveTempExecReuseDeleteTargets(payload, file, fileName) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var deleteAll = assistantIsTempExecReuseDeleteAll(args);
+      var explicitCaseIndexes = assistantExtractTempExecReuseCaseIndexes(args);
+      var caseMetas = assistantBuildTempExecReuseCaseMetas(file);
+      var queryText = assistantExtractTempExecReuseDeleteScopeQuery(args);
+      var matchedCaseMetas = queryText ? caseMetas.filter(function(meta) {
+        return assistantMatchTempExecReuseCaseQuery(meta, queryText);
+      }) : [];
+      var selectedCaseMetas = [];
+      var detailRes = null;
+      var caseIndex = 0;
+      var scope = String(args.scope || '').toLowerCase();
+      if (!caseMetas.length) {
+        return { ok: false, reason: '当前执行用例中没有可删除的复用子项' };
+      }
+      if (deleteAll) {
+        if (scope === 'file_all') {
+          return assistantBuildTempExecReuseDeleteAggregateResult(caseMetas, {
+            scope: 'file_all',
+            scopeLabel: '整份执行用例',
+            query: queryText,
+          });
+        }
+        if (scope === 'matched_cases') {
+          if (!matchedCaseMetas.length) return { ok: false, reason: '未找到和“' + queryText + '”匹配的用例条目' };
+          return assistantBuildTempExecReuseDeleteAggregateResult(matchedCaseMetas, {
+            scope: 'matched_cases',
+            scopeLabel: '匹配“' + queryText + '”的 ' + matchedCaseMetas.length + ' 条用例',
+            query: queryText,
+          });
+        }
+        if (explicitCaseIndexes.length) {
+          selectedCaseMetas = caseMetas.filter(function(meta) {
+            return explicitCaseIndexes.indexOf(meta.caseIndex) !== -1;
+          });
+          if (!selectedCaseMetas.length) return { ok: false, reason: '未找到要删除全部子项的目标用例条目' };
+          return assistantBuildTempExecReuseDeleteAggregateResult(selectedCaseMetas, {
+            scope: selectedCaseMetas.length > 1 ? 'selected_cases' : 'single_case',
+            scopeLabel: selectedCaseMetas.length > 1
+              ? ('选中的 ' + selectedCaseMetas.length + ' 条用例')
+              : ('第 ' + selectedCaseMetas[0].caseIndex + ' 条'),
+            query: queryText,
+          });
+        }
+        if (caseMetas.length === 1) {
+          return assistantBuildTempExecReuseDeleteAggregateResult(caseMetas, {
+            scope: 'single_case',
+            scopeLabel: '第 ' + caseMetas[0].caseIndex + ' 条',
+            query: queryText,
+          });
+        }
+        if (queryText && matchedCaseMetas.length === 1) {
+          return assistantBuildTempExecReuseDeleteAggregateResult(matchedCaseMetas, {
+            scope: 'single_case',
+            scopeLabel: '第 ' + matchedCaseMetas[0].caseIndex + ' 条',
+            query: queryText,
+          });
+        }
+        return assistantBuildTempExecReuseDeleteSelectionRequired(args, fileName, queryText, caseMetas, matchedCaseMetas);
+      }
+      if (explicitCaseIndexes.length > 1) {
+        return { ok: false, reason: '删除单个复用子项时，请先明确具体是第几条用例' };
+      }
+      caseIndex = explicitCaseIndexes.length ? explicitCaseIndexes[0] : assistantReadTempExecReuseExplicitCaseIndex(args);
+      if (!caseIndex) {
+        if (caseMetas.length === 1) caseIndex = caseMetas[0].caseIndex;
+        else if (matchedCaseMetas.length === 1) caseIndex = matchedCaseMetas[0].caseIndex;
+      }
+      if (!caseIndex) {
+        return assistantBuildTempExecReuseDeleteSelectionRequired(args, fileName, queryText, caseMetas, matchedCaseMetas);
+      }
+      detailRes = assistantResolveTempExecReuseDetail(Object.assign({}, args, { index: caseIndex }), file, caseIndex);
+      if (!detailRes || detailRes.ok !== true) return detailRes || { ok: false, reason: '未找到目标复用子项' };
+      return {
+        ok: true,
+        all: false,
+        scope: 'single_case',
+        query: queryText,
+        caseItem: detailRes.caseItem,
+        caseIndex: caseIndex,
+        caseIndexes: [caseIndex],
+        selectedCaseCount: 1,
+        details: [{ caseIndex: caseIndex, detail: detailRes.detail }],
+        detail: detailRes.detail,
+        detailIndex: detailRes.detailIndex,
+        deletedCount: 1,
+        deletedNames: [detailRes.detail && detailRes.detail.text ? String(detailRes.detail.text) : ('子项' + String(detailRes.detailIndex || 1))],
+      };
+    }
+
+    function assistantResolveTempExecReuseDetail(payload, file, caseIndex) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var sourceIndex = Math.max(0, Number(caseIndex || 1) - 1);
+      var targetCase = file && Array.isArray(file.cases) && file.cases[sourceIndex] ? file.cases[sourceIndex] : null;
+      if (!targetCase) {
+        return { ok: false, reason: '未找到第 ' + caseIndex + ' 条用例，请确认序号是否正确' };
+      }
+      var details = Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails.filter(function(detail) {
+        return detail && detail.removed !== true;
+      }) : [];
+      if (!details.length) {
+        return { ok: false, reason: '第 ' + caseIndex + ' 条用例当前没有可编辑的复用子项' };
+      }
+      var detailId = assistantReadFirstArgString(args, ['detailId', 'subItemId', 'childId']);
+      var detailName = assistantReadFirstArgString(args, ['detailName', 'subItemName', 'childName', 'detailText', 'subItemText', 'childText']);
+      var detailIndexRaw = args.detailIndex;
+      if ((detailIndexRaw === undefined || detailIndexRaw === null) && args.subItemIndex !== undefined && args.subItemIndex !== null) detailIndexRaw = args.subItemIndex;
+      if ((detailIndexRaw === undefined || detailIndexRaw === null) && args.childIndex !== undefined && args.childIndex !== null) detailIndexRaw = args.childIndex;
+      if ((detailIndexRaw === undefined || detailIndexRaw === null) && args.detailSeq !== undefined && args.detailSeq !== null) detailIndexRaw = args.detailSeq;
+      if (detailId) {
+        for (var i = 0; i < details.length; i += 1) {
+          if (String(details[i].id || '') === detailId) {
+            return { ok: true, detail: details[i], detailIndex: i + 1, caseItem: targetCase, caseIndex: caseIndex };
+          }
+        }
+      }
+      var detailIndex = Number(detailIndexRaw);
+      if (detailName) {
+        var normalized = String(detailName).trim().toLowerCase();
+        var exact = [];
+        var partial = [];
+        for (var j = 0; j < details.length; j += 1) {
+          var label = details[j] && details[j].text ? String(details[j].text).trim() : '';
+          var lowered = label.toLowerCase();
+          if (!label) continue;
+          if (lowered === normalized) exact.push({ detail: details[j], detailIndex: j + 1 });
+          else if (lowered.indexOf(normalized) !== -1 || normalized.indexOf(lowered) !== -1) partial.push({ detail: details[j], detailIndex: j + 1 });
+        }
+        if (exact.length === 1) {
+          return { ok: true, detail: exact[0].detail, detailIndex: exact[0].detailIndex, caseItem: targetCase, caseIndex: caseIndex };
+        }
+        if (!exact.length && partial.length === 1) {
+          return { ok: true, detail: partial[0].detail, detailIndex: partial[0].detailIndex, caseItem: targetCase, caseIndex: caseIndex };
+        }
+        if (exact.length > 1 || partial.length > 1) {
+          return { ok: false, reason: '匹配到多个复用子项，请补充更具体的子项名称或序号' };
+        }
+        return { ok: false, reason: '未找到名为“' + detailName + '”的复用子项' };
+      }
+      if (Number.isFinite(detailIndex) && detailIndex > 0) {
+        if (details[detailIndex - 1]) {
+          return { ok: true, detail: details[detailIndex - 1], detailIndex: detailIndex, caseItem: targetCase, caseIndex: caseIndex };
+        }
+        return { ok: false, reason: '未找到第 ' + detailIndex + ' 个复用子项，请确认序号是否正确' };
+      }
+      if (details.length === 1) {
+        return { ok: true, detail: details[0], detailIndex: 1, caseItem: targetCase, caseIndex: caseIndex };
+      }
+      return {
+        ok: false,
+        reason: '第 ' + caseIndex + ' 条用例包含多个复用子项，请补充子项名称或序号：' + details.slice(0, 4).map(function(detail, idx) {
+          return String(idx + 1) + '. ' + String(detail && detail.text ? detail.text : ('子项' + String(idx + 1)));
+        }).join('；')
+      };
+    }
+
+    function assistantBuildTempExecReuseFieldLabel(field) {
+      if (field === 'actual') return '子项执行结果';
+      if (field === 'remark') return '子项备注';
+      if (field === 'text') return '子项名称';
+      return '复用子项';
+    }
+
+    function assistantBuildTempExecReuseUpdateActionLabel(field) {
+      if (field === 'actual') return '修改复用子项执行结果';
+      if (field === 'remark') return '修改复用子项备注';
+      if (field === 'text') return '修改复用子项名称';
+      return '修改复用子项';
+    }
+
+    function assistantBuildBulkNameSummary(names, options) {
+      var list = Array.isArray(names) ? names.map(function(item) {
+        return item === undefined || item === null ? '' : String(item).trim();
+      }).filter(Boolean) : [];
+      var opts = options && typeof options === 'object' ? options : {};
+      var maxListCount = Number(opts.maxListCount);
+      if (!Number.isFinite(maxListCount) || maxListCount <= 0) maxListCount = 8;
+      if (!list.length) return '';
+      if (list.length <= maxListCount) {
+        return list.map(function(name) {
+          return '“' + assistantTrimCaseUpdateConfirmValue(name, 20) + '”';
+        }).join('、');
+      }
+      return '共 ' + list.length + ' 项，将统一处理';
+    }
+
+    function assistantBuildTempExecReuseConfirmMeta(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      var resolvedFile = assistantResolveTempExecReuseTargetFile(args, tempApi);
+      var file = null;
+      var fileName = '';
+      var mode = '';
+      var presetItems = [];
+      var deleteRes = null;
+      var field = '';
+      var renamePlan = null;
+      var detailTargetsRes = null;
+      var caseIndex = 0;
+      var caseIndexRes = null;
+      var detailRes = null;
+      var operation = '';
+      var rawValue = null;
+      var normalizedValue = '';
+      var previewValue = '';
+      var presetTarget = null;
+      var presetTargetName = '';
+      var presets = [];
+      var duplicatePreset = false;
+      var targetLabel = '';
+      var fieldLabel = '';
+      var message = '';
+      if (!resolvedFile || resolvedFile.ok !== true) return resolvedFile || { ok: false, reason: '未找到目标复用用例' };
+      file = resolvedFile.file;
+      fileName = resolvedFile.fileName || '当前执行用例';
+      if (!assistantTempExecFileHasReuseCases(file)) {
+        return { ok: false, reason: '执行用例【' + fileName + '】不是复用类型，无法预设子项、修改子项或删除子项' };
+      }
+      mode = assistantResolveTempExecReuseMode(args);
+      if (mode === 'preset_set' || mode === 'preset_add') {
+        var presetScopeRes = null;
+        presetItems = assistantExtractTempExecReuseItems(args.presetItems || args.items || args.subItems || args.reuseItems || args.presetItemsText || args.presetText || args.itemsText || args.subItemsText || args.reuseItemsText || args.value);
+        if (!presetItems.length) return { ok: false, reason: '缺少预设子项内容，请提供要设置的子项列表' };
+        presetScopeRes = assistantBuildTempExecReusePresetScopeSelection(file, fileName, args, mode);
+        if (!presetScopeRes || presetScopeRes.ok !== true) return presetScopeRes || { ok: false, reason: '未确定预设子项处理范围' };
+        if (String(presetScopeRes.scope || '') === 'single_case') {
+          return {
+            ok: true,
+            actionLabel: mode === 'preset_add' ? '为单条用例添加复用子项' : '设置单条用例复用子项',
+            message: '将执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】第 ' + presetScopeRes.caseIndex + ' 条的子项' + (mode === 'preset_add' ? '追加为：' : '设置为：') + assistantBuildBulkNameSummary(presetItems) + '。'
+          };
+        }
+        return {
+          ok: true,
+          actionLabel: mode === 'preset_add' ? '追加复用预设子项' : '设置复用预设子项',
+          message: '将执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】的预设子项' + (mode === 'preset_add' ? '追加为：' : '设置为：') + assistantBuildBulkNameSummary(presetItems) + '。'
+        };
+      }
+      if (mode === 'detail_delete') {
+        deleteRes = assistantResolveTempExecReuseDeleteTargets(args, file, fileName);
+        if (!deleteRes || deleteRes.ok !== true) return deleteRes || { ok: false, reason: '未找到目标复用子项' };
+        if (deleteRes.all === true) {
+          if (String(deleteRes.scope || '') === 'file_all') {
+            message = '删除执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】的全部复用子项，共 ' + deleteRes.selectedCaseCount + ' 条用例、' + deleteRes.deletedCount + ' 项';
+          } else if (String(deleteRes.scope || '') === 'matched_cases' && deleteRes.query) {
+            message = '删除执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】中匹配“' + assistantTrimCaseUpdateConfirmValue(deleteRes.query, 20) + '”的 ' + deleteRes.selectedCaseCount + ' 条用例的全部子项，共 ' + deleteRes.deletedCount + ' 项';
+          } else if (deleteRes.selectedCaseCount > 1) {
+            message = '删除执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】中选中的 ' + deleteRes.selectedCaseCount + ' 条用例的全部子项，共 ' + deleteRes.deletedCount + ' 项';
+          } else {
+            message = '删除执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】第 ' + (deleteRes.index || 1) + ' 条的全部子项，共 ' + deleteRes.deletedCount + ' 项';
+          }
+          return {
+            ok: true,
+            actionLabel: '删除全部复用子项',
+            message: message + '。' + (deleteRes.deletedNames && deleteRes.deletedNames.length ? ('处理范围：' + assistantBuildBulkNameSummary(deleteRes.deletedNames) + '。') : '')
+          };
+        }
+        presetTargetName = deleteRes.detail && deleteRes.detail.text ? String(deleteRes.detail.text) : ('子项' + String(deleteRes.detailIndex || 1));
+        return {
+          ok: true,
+          actionLabel: '删除复用子项',
+          message: '删除执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】第 ' + deleteRes.caseIndex + ' 条的子项【' + assistantTrimCaseUpdateConfirmValue(presetTargetName, 20) + '】。'
+        };
+      }
+      if (mode !== 'detail_update' && mode !== 'preset_rename') {
+        return { ok: false, reason: '未识别到复用子项操作类型，请明确是预设子项、修改子项还是删除子项' };
+      }
+      field = assistantNormalizeTempExecReuseField(args.field || args.key || args.column || args.name || args.detailField || args.subField || '');
+      if (!field && mode === 'preset_rename') field = 'text';
+      if (!field) return { ok: false, reason: '缺少复用子项字段，支持：子项执行结果/子项备注/子项名称' };
+      operation = assistantNormalizeCaseUpdateOperation(args, 'replace');
+      rawValue = args.value;
+      if (rawValue === undefined) rawValue = args.to;
+      if (rawValue === undefined) rawValue = args.text;
+      if (rawValue === undefined) rawValue = args.content;
+      if (rawValue === undefined) rawValue = args.newValue;
+      normalizedValue = rawValue === undefined || rawValue === null ? '' : String(rawValue).trim();
+      if (field === 'actual') {
+        normalizedValue = assistantNormalizeTempExecActualValue(normalizedValue);
+        if (!normalizedValue) return { ok: false, reason: '子项执行结果仅支持：未执行 / 通过 / 失败 / 阻塞 / 不适用' };
+      } else if (!normalizedValue) {
+        return { ok: false, reason: '缺少要写入的值' };
+      }
+      if (field === 'text') {
+        renamePlan = assistantResolveTempExecReuseTextRenamePlan(args, file, fileName);
+        if (!renamePlan || renamePlan.ok !== true) return renamePlan || { ok: false, reason: '未找到目标复用子项' };
+        if (renamePlan.mode === 'preset_rename') {
+          presetTarget = renamePlan.preset;
+          presetTargetName = presetTarget && presetTarget.text ? String(presetTarget.text) : (renamePlan.detailName || '预设子项');
+          previewValue = assistantComputeTempExecReuseUpdatedText(presetTargetName, normalizedValue, operation);
+          if (!previewValue) return { ok: false, reason: '缺少要写入的值' };
+          presets = tempApi && typeof tempApi.ensureReusePresets === 'function' ? (tempApi.ensureReusePresets(file) || []) : (Array.isArray(file.reusePresets) ? file.reusePresets : []);
+          duplicatePreset = presets.some(function(item) {
+            return item && String(item.id || '') !== String(presetTarget && presetTarget.id || '') && String(item.text || '').trim() === previewValue;
+          });
+          if (duplicatePreset) return { ok: false, reason: '已存在同名的预设子项，请换一个名称后再试' };
+          if (operation === 'append') {
+            message = '在执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】的预设子项【' + assistantTrimCaseUpdateConfirmValue(presetTargetName, 20) + '】名称末尾追加“' + assistantTrimCaseUpdateConfirmValue(normalizedValue, 20) + '”。';
+          } else if (operation === 'prepend') {
+            message = '在执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】的预设子项【' + assistantTrimCaseUpdateConfirmValue(presetTargetName, 20) + '】名称开头追加“' + assistantTrimCaseUpdateConfirmValue(normalizedValue, 20) + '”。';
+          } else {
+            message = '将执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】的预设子项【' + assistantTrimCaseUpdateConfirmValue(presetTargetName, 20) + '】改为“' + assistantTrimCaseUpdateConfirmValue(previewValue, 20) + '”。';
+          }
+          if (Array.isArray(renamePlan.matchedCaseMetas) && renamePlan.matchedCaseMetas.length) {
+            message += ' 这会同步影响当前文件内 ' + renamePlan.matchedCaseMetas.length + ' 条匹配用例。';
+          } else {
+            message += ' 这会同步影响当前文件内后续使用该预设的用例。';
+          }
+          return {
+            ok: true,
+            actionLabel: '修改复用预设子项名称',
+            message: message,
+          };
+        }
+        if (renamePlan.index > 0) caseIndex = renamePlan.index;
+      }
+      if (field === 'actual' || field === 'remark') {
+        var targetArgs = assistantSanitizeTempExecReuseOverallStatusArgs(args);
+        var overallStatusApplyAll = field === 'actual'
+          && assistantIsTempExecReuseDetailApplyAll(targetArgs)
+          && !assistantReadTempExecReuseDetailName(targetArgs)
+          && assistantReadTempExecReuseDetailIndex(targetArgs) <= 0;
+        detailTargetsRes = overallStatusApplyAll
+          ? assistantResolveTempExecReuseAllVisibleTargetsByScope(targetArgs, file)
+          : assistantResolveTempExecReuseDetailUpdateTargets(targetArgs, file, fileName, field);
+        if (!detailTargetsRes || detailTargetsRes.ok !== true) return detailTargetsRes || { ok: false, reason: '未找到目标复用子项' };
+        if (detailTargetsRes.all === true) {
+          if (String(detailTargetsRes.scope || '') === 'matched_cases' && detailTargetsRes.query) {
+            targetLabel = '执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】中匹配子项【' + assistantTrimCaseUpdateConfirmValue(detailTargetsRes.query, 20) + '】的 ' + detailTargetsRes.selectedCaseCount + ' 条用例';
+          } else if (String(detailTargetsRes.scope || '') === 'file_all') {
+            targetLabel = '执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】中的全部复用子项';
+          } else if (detailTargetsRes.selectedCaseCount > 1) {
+            targetLabel = '执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】中选中的 ' + detailTargetsRes.selectedCaseCount + ' 条用例';
+          } else if (detailTargetsRes.selectedCaseCount === 1 && Array.isArray(detailTargetsRes.caseIndexes) && detailTargetsRes.caseIndexes.length === 1) {
+            targetLabel = '执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】第 ' + detailTargetsRes.caseIndexes[0] + ' 条用例的全部复用子项';
+          } else {
+            targetLabel = '执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】中的复用子项';
+          }
+          fieldLabel = assistantBuildTempExecReuseFieldLabel(field);
+          if (field === 'actual') {
+            message = '将' + targetLabel + '的' + fieldLabel + '统一改为“' + normalizedValue + '”。';
+          } else if (operation === 'append') {
+            message = '在' + targetLabel + '的' + fieldLabel + '末尾统一追加“' + assistantTrimCaseUpdateConfirmValue(normalizedValue, 20) + '”。';
+          } else if (operation === 'prepend') {
+            message = '在' + targetLabel + '的' + fieldLabel + '开头统一追加“' + assistantTrimCaseUpdateConfirmValue(normalizedValue, 20) + '”。';
+          } else {
+            message = '将' + targetLabel + '的' + fieldLabel + '统一改为“' + assistantTrimCaseUpdateConfirmValue(normalizedValue, 20) + '”。';
+          }
+          return {
+            ok: true,
+            actionLabel: assistantBuildTempExecReuseUpdateActionLabel(field),
+            message: message,
+          };
+        }
+        caseIndex = detailTargetsRes.caseIndex;
+        detailRes = detailTargetsRes.detailRes;
+      } else {
+        if (!(caseIndex > 0)) {
+          caseIndexRes = assistantResolveTempExecReuseDetailCaseIndex(args, file, fileName);
+          if (!caseIndexRes || caseIndexRes.ok !== true) return caseIndexRes || { ok: false, reason: '未找到目标复用子项' };
+          caseIndex = caseIndexRes.caseIndex;
+        }
+        detailRes = assistantResolveTempExecReuseDetail(Object.assign({}, args, { index: caseIndex }), file, caseIndex);
+        if (!detailRes || detailRes.ok !== true) return detailRes || { ok: false, reason: '未找到目标复用子项' };
+      }
+      targetLabel = '执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】第 ' + caseIndex + ' 条的子项【' + assistantTrimCaseUpdateConfirmValue(detailRes.detail && detailRes.detail.text ? detailRes.detail.text : ('子项' + detailRes.detailIndex), 20) + '】';
+      if (detailRes.caseItem && detailRes.caseItem.title) {
+        targetLabel = '执行用例【' + assistantTrimCaseUpdateConfirmValue(fileName, 28) + '】第 ' + caseIndex + ' 条（' + assistantTrimCaseUpdateConfirmValue(String(detailRes.caseItem.title || ''), 20) + '）的子项【' + assistantTrimCaseUpdateConfirmValue(detailRes.detail && detailRes.detail.text ? detailRes.detail.text : ('子项' + detailRes.detailIndex), 20) + '】';
+      }
+      fieldLabel = assistantBuildTempExecReuseFieldLabel(field);
+      if (field === 'actual') {
+        message = '将' + targetLabel + '的' + fieldLabel + '改为“' + normalizedValue + '”。';
+      } else if (operation === 'append') {
+        message = '在' + targetLabel + '的' + fieldLabel + '末尾追加“' + assistantTrimCaseUpdateConfirmValue(normalizedValue, 20) + '”。';
+      } else if (operation === 'prepend') {
+        message = '在' + targetLabel + '的' + fieldLabel + '开头追加“' + assistantTrimCaseUpdateConfirmValue(normalizedValue, 20) + '”。';
+      } else {
+        previewValue = field === 'text'
+          ? assistantComputeTempExecReuseUpdatedText(detailRes.detail && detailRes.detail.text ? String(detailRes.detail.text) : '', normalizedValue, operation)
+          : normalizedValue;
+        message = '将' + targetLabel + '的' + fieldLabel + '改为“' + assistantTrimCaseUpdateConfirmValue(previewValue, 20) + '”。';
+      }
+      return {
+        ok: true,
+        actionLabel: assistantBuildTempExecReuseUpdateActionLabel(field),
+        message: message,
+      };
+    }
+
+    function assistantUpdateTempExecReuse(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      var resolvedFile = null;
+      var file = null;
+      var fileId = '';
+      var fileName = '';
+      var mode = '';
+      var nextItems = [];
+      var currentPresets = [];
+      var refreshedFile = null;
+      var refreshedPresets = [];
+      var refreshedTexts = [];
+      var finalFile = null;
+      var finalPresets = [];
+      var deleteRes = null;
+      var field = '';
+      var renamePlan = null;
+      var detailTargetsRes = null;
+      var detailTargets = [];
+      var caseIndex = 0;
+      var caseIndexRes = null;
+      var detailRes = null;
+      var detail = null;
+      var detailIndex = 0;
+      var operation = '';
+      var rawValue = null;
+      var nextValue = '';
+      var finalValue = '';
+      var presets = [];
+      var previousPresetValue = '';
+      var duplicatePreset = false;
+      var affectedCaseCount = 0;
+      if (!tempApi) return { ok: false, reason: '当前页面不支持复用子项操作' };
+      // AI 助手后台执行时不能为了写入而切页；切到 tempexec 会触发异步 reload，可能把刚写入的结果覆盖掉。
+      resolvedFile = assistantResolveTempExecReuseTargetFile(args, tempApi);
+      if (!resolvedFile || resolvedFile.ok !== true) return resolvedFile || { ok: false, reason: '未找到目标复用用例' };
+      file = resolvedFile.file;
+      fileId = resolvedFile.fileId || '';
+      fileName = resolvedFile.fileName || '当前执行用例';
+      if (tempApi.setTempExecActive && fileId) {
+        try { tempApi.setTempExecActive(String(fileId)); } catch (err2) { /* ignore */ }
+      }
+      if (!assistantTempExecFileHasReuseCases(file)) {
+        return { ok: false, reason: '执行用例【' + fileName + '】不是复用类型，无法预设子项、修改子项或删除子项' };
+      }
+      mode = assistantResolveTempExecReuseMode(args);
+      if (mode === 'preset_set' || mode === 'preset_add') {
+        var presetScopeRunRes = null;
+        var appliedCaseIndex = 0;
+        var finalCaseItems = [];
+        nextItems = assistantExtractTempExecReuseItems(args.presetItems || args.items || args.subItems || args.reuseItems || args.presetItemsText || args.presetText || args.itemsText || args.subItemsText || args.reuseItemsText || args.value);
+        if (!nextItems.length) return { ok: false, reason: '缺少预设子项内容，请提供要设置的子项列表' };
+        presetScopeRunRes = assistantBuildTempExecReusePresetScopeSelection(file, fileName, args, mode);
+        if (!presetScopeRunRes || presetScopeRunRes.ok !== true) return presetScopeRunRes || { ok: false, reason: '未确定预设子项处理范围' };
+        if (String(presetScopeRunRes.scope || '') === 'single_case') {
+          if (!tempApi.addTempExecReuseEntry || !tempApi.updateTempExecReuseText || !tempApi.removeTempExecReuseEntry) {
+            return { ok: false, reason: '当前环境缺少单条复用子项编辑能力' };
+          }
+          appliedCaseIndex = Number(presetScopeRunRes.caseIndex || 0);
+          if (!Number.isFinite(appliedCaseIndex) || appliedCaseIndex <= 0) return { ok: false, reason: '请先确认要处理的是第几条用例' };
+          finalCaseItems = assistantApplyTempExecReuseItemsToSingleCase(tempApi, fileId, appliedCaseIndex, nextItems, mode);
+          return {
+            ok: true,
+            mode: mode,
+            scope: 'single_case',
+            fileId: fileId,
+            fileName: fileName,
+            index: appliedCaseIndex,
+            presetItems: finalCaseItems,
+            count: finalCaseItems.length,
+          };
+        }
+        if (!tempApi.ensureReusePresets || !tempApi.startTempExecPresetDraft || !tempApi.updateTempExecPresetDraft || !tempApi.confirmTempExecPresetDraft || !tempApi.removeTempExecPreset) {
+          return { ok: false, reason: '当前环境缺少复用预设能力' };
+        }
+        currentPresets = tempApi.ensureReusePresets(file) || [];
+        if (mode === 'preset_set') {
+          currentPresets.slice().forEach(function(preset) {
+            var label = preset && preset.text ? String(preset.text) : '';
+            if (!label) return;
+            if (nextItems.indexOf(label) === -1) tempApi.removeTempExecPreset(fileId, preset.id);
+          });
+        }
+        refreshedFile = assistantGetTempExecFileById(fileId) || file;
+        refreshedPresets = tempApi.ensureReusePresets(refreshedFile) || [];
+        refreshedTexts = refreshedPresets.map(function(item) { return item && item.text ? String(item.text) : ''; }).filter(Boolean);
+        nextItems.forEach(function(item) {
+          if (refreshedTexts.indexOf(item) !== -1) return;
+          tempApi.startTempExecPresetDraft(fileId);
+          tempApi.updateTempExecPresetDraft(item);
+          tempApi.confirmTempExecPresetDraft(fileId);
+          refreshedTexts.push(item);
+        });
+        finalFile = assistantGetTempExecFileById(fileId) || refreshedFile;
+        finalPresets = Array.isArray(finalFile.reusePresets) ? finalFile.reusePresets.map(function(item) { return item && item.text ? String(item.text) : ''; }).filter(Boolean) : nextItems.slice();
+        return {
+          ok: true,
+          mode: mode,
+          scope: 'file_all',
+          selectedCaseCount: presetScopeRunRes.caseMetas && presetScopeRunRes.caseMetas.length ? presetScopeRunRes.caseMetas.length : 0,
+          fileId: fileId,
+          fileName: fileName,
+          presetItems: finalPresets,
+          count: finalPresets.length,
+        };
+      }
+      if (mode === 'detail_delete') {
+        if (!tempApi.removeTempExecReuseEntry) return { ok: false, reason: '当前环境缺少复用子项删除能力' };
+        deleteRes = assistantResolveTempExecReuseDeleteTargets(args, file, fileName);
+        if (!deleteRes || deleteRes.ok !== true) return deleteRes || { ok: false, reason: '未找到目标复用子项' };
+        deleteRes.details.forEach(function(item) {
+          var row = item && typeof item === 'object' ? item : {};
+          var rowDetail = row.detail && typeof row.detail === 'object' ? row.detail : null;
+          var rowCaseIndex = Number(row.caseIndex);
+          if (!rowDetail || !rowDetail.id) return;
+          if (!Number.isFinite(rowCaseIndex) || rowCaseIndex <= 0) return;
+          tempApi.removeTempExecReuseEntry(fileId, rowCaseIndex - 1, rowDetail.id, { skipConfirm: true });
+        });
+        return {
+          ok: true,
+          mode: mode,
+          deleteAll: deleteRes.all === true,
+          scope: deleteRes.scope ? String(deleteRes.scope) : '',
+          query: deleteRes.query ? String(deleteRes.query) : '',
+          fileId: fileId,
+          fileName: fileName,
+          index: deleteRes.index || 0,
+          caseIndexes: Array.isArray(deleteRes.caseIndexes) ? deleteRes.caseIndexes.slice() : [],
+          selectedCaseCount: Number(deleteRes.selectedCaseCount || 0),
+          detailIndex: deleteRes.all === true ? 0 : deleteRes.detailIndex,
+          detailId: deleteRes.all === true ? '' : (deleteRes.detail && deleteRes.detail.id ? String(deleteRes.detail.id) : ''),
+          detailName: deleteRes.all === true ? '' : (deleteRes.detail && deleteRes.detail.text ? String(deleteRes.detail.text) : ('子项' + String(deleteRes.detailIndex || 1))),
+          deletedCount: deleteRes.deletedCount,
+          deletedNames: deleteRes.deletedNames,
+        };
+      }
+      if (mode !== 'detail_update' && mode !== 'preset_rename') {
+        return { ok: false, reason: '未识别到复用子项操作类型，请明确是预设子项、修改子项还是删除子项' };
+      }
+      field = assistantNormalizeTempExecReuseField(args.field || args.key || args.column || args.name || args.detailField || args.subField || '');
+      if (!field && mode === 'preset_rename') field = 'text';
+      if (!field) return { ok: false, reason: '缺少复用子项字段，支持：子项执行结果/子项备注/子项名称' };
+      operation = assistantNormalizeCaseUpdateOperation(args, 'replace');
+      rawValue = args.value;
+      if (rawValue === undefined) rawValue = args.to;
+      if (rawValue === undefined) rawValue = args.text;
+      if (rawValue === undefined) rawValue = args.content;
+      if (rawValue === undefined) rawValue = args.newValue;
+      nextValue = rawValue === undefined || rawValue === null ? '' : String(rawValue).trim();
+      finalValue = nextValue;
+      if (field === 'actual') {
+        var appliedTargets = [];
+        var applyRes = null;
+        var applyFailedReason = '';
+        finalValue = assistantNormalizeTempExecActualValue(nextValue);
+        if (!finalValue) return { ok: false, reason: '子项执行结果仅支持：未执行 / 通过 / 失败 / 阻塞 / 不适用' };
+        if (!tempApi.updateTempExecReuseStatus) return { ok: false, reason: '当前环境缺少复用子项状态更新能力' };
+        var targetArgs = assistantSanitizeTempExecReuseOverallStatusArgs(args);
+        var overallStatusApplyAll = field === 'actual'
+          && assistantIsTempExecReuseDetailApplyAll(targetArgs)
+          && !assistantReadTempExecReuseDetailName(targetArgs)
+          && assistantReadTempExecReuseDetailIndex(targetArgs) <= 0;
+        detailTargetsRes = overallStatusApplyAll
+          ? assistantResolveTempExecReuseAllVisibleTargetsByScope(targetArgs, file)
+          : assistantResolveTempExecReuseDetailUpdateTargets(targetArgs, file, fileName, field);
+        if (!detailTargetsRes || detailTargetsRes.ok !== true) return detailTargetsRes || { ok: false, reason: '未找到目标复用子项' };
+        if (detailTargetsRes.all === true) {
+          detailTargets = Array.isArray(detailTargetsRes.details) ? detailTargetsRes.details : [];
+          detailTargets.forEach(function(target) {
+            if (applyFailedReason) return;
+            if (!target || !(target.caseIndex > 0) || !target.detail) {
+              applyFailedReason = '缺少可写入的复用子项目标';
+              return;
+            }
+            applyRes = assistantApplyVerifiedTempExecReuseStatusUpdate(tempApi, fileId, target, finalValue);
+            if (!applyRes || applyRes.ok !== true) {
+              applyFailedReason = applyRes && applyRes.reason ? String(applyRes.reason) : '目标复用子项未实际写入';
+              return;
+            }
+            appliedTargets.push(applyRes);
+          });
+          if (applyFailedReason) return { ok: false, reason: applyFailedReason };
+          if (!appliedTargets.length) return { ok: false, reason: '未能更新任何匹配的复用子项' };
+          return {
+            ok: true,
+            all: true,
+            mode: 'detail_update',
+            field: field,
+            value: finalValue,
+            operation: 'replace',
+            scope: detailTargetsRes.scope || 'matched_cases',
+            query: detailTargetsRes.query || '',
+            fileId: fileId,
+            fileName: fileName,
+            caseIndexes: Array.isArray(detailTargetsRes.caseIndexes) ? detailTargetsRes.caseIndexes.slice() : appliedTargets.map(function(target) { return Number(target.caseIndex || 0); }).filter(function(item) { return item > 0; }),
+            selectedCaseCount: Number(detailTargetsRes.selectedCaseCount || appliedTargets.length || 0),
+            updatedCount: appliedTargets.length,
+            detailNames: appliedTargets.map(function(target) {
+              return target && target.detail && target.detail.text ? String(target.detail.text) : ('子项' + String(target && target.detailIndex ? target.detailIndex : ''));
+            }),
+          };
+        }
+        caseIndex = detailTargetsRes.caseIndex;
+        detailRes = detailTargetsRes.detailRes;
+        applyRes = assistantApplyVerifiedTempExecReuseStatusUpdate(tempApi, fileId, {
+          caseIndex: caseIndex,
+          detail: detailRes && detailRes.detail ? detailRes.detail : null,
+          detailIndex: detailRes && detailRes.detailIndex ? detailRes.detailIndex : 0,
+        }, finalValue);
+        if (!applyRes || applyRes.ok !== true) return applyRes || { ok: false, reason: '目标复用子项未实际写入' };
+        return {
+          ok: true,
+          mode: 'detail_update',
+          field: field,
+          value: finalValue,
+          operation: 'replace',
+          fileId: fileId,
+          fileName: fileName,
+          index: caseIndex,
+          detailIndex: applyRes.detailIndex,
+          detailId: applyRes.detail && applyRes.detail.id ? String(applyRes.detail.id) : '',
+          detailName: applyRes.detail && applyRes.detail.text ? String(applyRes.detail.text) : ('子项' + applyRes.detailIndex),
+        };
+      }
+      if (!nextValue) return { ok: false, reason: '缺少要写入的值' };
+      if (field === 'text') {
+        renamePlan = assistantResolveTempExecReuseTextRenamePlan(args, file, fileName);
+        if (!renamePlan || renamePlan.ok !== true) return renamePlan || { ok: false, reason: '未找到目标复用子项' };
+        if (renamePlan.mode === 'preset_rename') {
+          if (!tempApi.renameTempExecPreset) return { ok: false, reason: '当前环境缺少复用预设重命名能力' };
+          previousPresetValue = renamePlan.preset && renamePlan.preset.text ? String(renamePlan.preset.text) : '';
+          finalValue = assistantComputeTempExecReuseUpdatedText(previousPresetValue, nextValue, operation);
+          if (!finalValue) return { ok: false, reason: '缺少要写入的值' };
+          presets = tempApi.ensureReusePresets ? (tempApi.ensureReusePresets(file) || []) : (Array.isArray(file.reusePresets) ? file.reusePresets : []);
+          duplicatePreset = presets.some(function(item) {
+            return item && String(item.id || '') !== String(renamePlan.preset && renamePlan.preset.id || '') && String(item.text || '').trim() === finalValue;
+          });
+          if (duplicatePreset) return { ok: false, reason: '已存在同名的预设子项，请换一个名称后再试' };
+          affectedCaseCount = 0;
+          (file.cases || []).forEach(function(caseItem) {
+            var details = caseItem && Array.isArray(caseItem.reuseDetails) ? caseItem.reuseDetails : [];
+            var hit = false;
+            details.forEach(function(detailItem) {
+              if (detailItem && detailItem.removed !== true && String(detailItem.text || '') === previousPresetValue) hit = true;
+            });
+            if (hit) affectedCaseCount += 1;
+          });
+          if (previousPresetValue !== finalValue) tempApi.renameTempExecPreset(fileId, renamePlan.preset.id, finalValue);
+          return {
+            ok: true,
+            mode: 'preset_rename',
+            field: 'text',
+            value: finalValue,
+            previousValue: previousPresetValue,
+            operation: operation,
+            fileId: fileId,
+            fileName: fileName,
+            presetId: renamePlan.preset && renamePlan.preset.id ? String(renamePlan.preset.id) : '',
+            detailName: previousPresetValue,
+            affectedCaseCount: affectedCaseCount,
+          };
+        }
+        if (renamePlan.index > 0) caseIndex = renamePlan.index;
+      }
+      if (field === 'remark') {
+        if (!tempApi.updateTempExecReuseNote) return { ok: false, reason: '当前环境缺少复用子项备注更新能力' };
+        detailTargetsRes = assistantResolveTempExecReuseDetailUpdateTargets(args, file, fileName, field);
+        if (!detailTargetsRes || detailTargetsRes.ok !== true) return detailTargetsRes || { ok: false, reason: '未找到目标复用子项' };
+        if (detailTargetsRes.all === true) {
+          detailTargets = Array.isArray(detailTargetsRes.details) ? detailTargetsRes.details : [];
+          detailTargets.forEach(function(target) {
+            var currentNote = target && target.detail && target.detail.note !== undefined && target.detail.note !== null ? String(target.detail.note) : '';
+            var nextNote = assistantComputeTempExecReuseUpdatedText(currentNote, nextValue, operation);
+            if (!target || !(target.caseIndex > 0) || !target.detail || !target.detail.id) return;
+            tempApi.updateTempExecReuseNote(fileId, target.caseIndex - 1, target.detail.id, nextNote);
+          });
+          return {
+            ok: true,
+            all: true,
+            mode: 'detail_update',
+            field: field,
+            value: nextValue,
+            operation: operation,
+            scope: detailTargetsRes.scope || 'matched_cases',
+            query: detailTargetsRes.query || '',
+            fileId: fileId,
+            fileName: fileName,
+            caseIndexes: Array.isArray(detailTargetsRes.caseIndexes) ? detailTargetsRes.caseIndexes.slice() : [],
+            selectedCaseCount: Number(detailTargetsRes.selectedCaseCount || detailTargets.length || 0),
+            updatedCount: Number(detailTargetsRes.updatedCount || detailTargets.length || 0),
+            detailNames: Array.isArray(detailTargetsRes.detailNames) ? detailTargetsRes.detailNames.slice() : [],
+          };
+        }
+        caseIndex = detailTargetsRes.caseIndex;
+        detailRes = detailTargetsRes.detailRes;
+        detail = detailRes.detail;
+        detailIndex = detailRes.detailIndex;
+        finalValue = assistantComputeTempExecReuseUpdatedText(detail && detail.note !== undefined && detail.note !== null ? String(detail.note) : '', nextValue, operation);
+        tempApi.updateTempExecReuseNote(fileId, caseIndex - 1, detail.id, finalValue);
+      } else {
+        if (!(caseIndex > 0)) {
+          caseIndexRes = assistantResolveTempExecReuseDetailCaseIndex(args, file, fileName);
+          if (!caseIndexRes || caseIndexRes.ok !== true) return caseIndexRes || { ok: false, reason: '未找到目标复用子项' };
+          caseIndex = caseIndexRes.caseIndex;
+        }
+        detailRes = assistantResolveTempExecReuseDetail(Object.assign({}, args, { index: caseIndex }), file, caseIndex);
+        if (!detailRes || detailRes.ok !== true) return detailRes || { ok: false, reason: '未找到目标复用子项' };
+        detail = detailRes.detail;
+        detailIndex = detailRes.detailIndex;
+        if (!tempApi.updateTempExecReuseText) return { ok: false, reason: '当前环境缺少复用子项名称更新能力' };
+        finalValue = assistantComputeTempExecReuseUpdatedText(detail && detail.text !== undefined && detail.text !== null ? String(detail.text) : '', nextValue, operation);
+        tempApi.updateTempExecReuseText(fileId, caseIndex - 1, detail.id, finalValue);
+      }
+      return {
+        ok: true,
+        mode: 'detail_update',
+        field: field,
+        value: finalValue,
+        operation: operation,
+        fileId: fileId,
+        fileName: fileName,
+        index: caseIndex,
+        detailIndex: detailIndex,
+        detailId: detail && detail.id ? String(detail.id) : '',
+        detailName: field === 'text' ? finalValue : (detail && detail.text ? String(detail.text) : ('子项' + detailIndex)),
+      };
+    }
+
     function assistantNormalizeCaseUpdateField(rawField, context) {
       var text = rawField === undefined || rawField === null ? '' : String(rawField).trim().toLowerCase();
       text = text.replace(/\s+/g, '');
@@ -6891,6 +9169,18 @@
         if (pair.field === 'actual') return { ok: false, reason: '用例库页面不支持修改执行结果字段' };
         node = assistantPickCaseLibraryEditableNode(pair.field, index);
       } else {
+        var tempApiForIndex = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+        var targetFileIdForIndex = fileId || assistantResolveTempExecActiveFileId(tempApiForIndex);
+        var targetFileForIndex = targetFileIdForIndex ? assistantGetTempExecFileById(targetFileIdForIndex) : null;
+        var totalCaseCountForIndex = targetFileForIndex && Array.isArray(targetFileForIndex.cases) ? targetFileForIndex.cases.length : 0;
+        if (!targetFileForIndex && Array.isArray(state.tempExecFiles) && state.tempExecFiles.length) {
+          targetFileForIndex = state.tempExecFiles[0];
+          targetFileIdForIndex = targetFileForIndex && targetFileForIndex.id !== undefined && targetFileForIndex.id !== null ? String(targetFileForIndex.id) : '';
+          totalCaseCountForIndex = targetFileForIndex && Array.isArray(targetFileForIndex.cases) ? targetFileForIndex.cases.length : 0;
+        }
+        if (index > 0 && totalCaseCountForIndex > 0 && index > totalCaseCountForIndex) {
+          return { ok: false, reason: '未找到第 ' + index + ' 条用例，请确认序号是否正确（当前共 ' + totalCaseCountForIndex + ' 条）' };
+        }
         var tempField = pair.field;
         if (tempField === 'precondition') tempField = 'preconditions';
         if (tempField === 'remark') {
@@ -8415,13 +10705,14 @@
       if (raw === 'page.current_info' || raw === 'current_page_info' || raw === 'page.info') return 'page.current_info';
       if (raw === 'page.get_data' || raw === 'query_page_data' || raw === 'page_data') return 'page.get_data';
       if (raw === 'nav.switch_tab' || raw === 'navigate' || raw === 'switch_tab') return 'nav.switch_tab';
-      if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list' || raw === 'case_library.query_exec_cases' || raw === 'case_library_query_exec_cases' || raw === 'query_exec_cases' || raw === 'list_exec_cases' || raw === 'case_library.list_exec_cases' || raw === 'case_library_list_exec_cases') return 'cases.list_current';
+      if (raw === 'cases.list_current' || raw === 'query_case_list' || raw === 'case_list' || raw === 'case_library.query_exec_cases' || raw === 'case_library_query_exec_cases' || raw === 'query_exec_cases' || raw === 'list_exec_cases' || raw === 'case_library.list_exec_cases' || raw === 'case_library_list_exec_cases' || raw === 'case_library.search_case_candidates' || raw === 'case_library_search_case_candidates' || raw === 'search_case_candidates' || raw === 'search_case_candidate' || raw === 'case_library.get_case_detail' || raw === 'case_library_get_case_detail' || raw === 'get_case_detail' || raw === 'query_case_detail') return 'cases.list_current';
       if (raw === 'case_library.query_cases' || raw === 'case_library_query_cases' || raw === 'query_case_library_cases' || raw === 'search_case_library_cases' || raw === 'case_library_search_case_content' || raw === 'search_case_content') return 'case_library.query_cases';
       if (raw === 'missing_library.list_current' || raw === 'missing_library_list_current' || raw === 'list_missing_library' || raw === 'missing_case_library_list') return 'missing_library.list_current';
       if (raw === 'cross_page.match_missing_cases' || raw === 'cross_page_match_missing_cases' || raw === 'match_missing_cases' || raw === 'match_case_missing_library') return 'cross_page.match_missing_cases';
       if (raw === 'case_library.search_exec_candidates' || raw === 'case_library_search_exec_candidates' || raw === 'search_case_files_for_exec' || raw === 'search_exec_candidates' || raw === 'case_library.search_exec_cases' || raw === 'case_library_search_exec_cases' || raw === 'search_exec_cases') return 'case_library.search_exec_candidates';
       if (raw === 'case_library.transfer_to_exec' || raw === 'case_library_transfer_to_exec' || raw === 'transfer_to_exec' || raw === 'transfer_case_to_exec' || raw === 'exec_case_file') return 'case_library.transfer_to_exec';
       if (raw === 'tempexec.remove_files' || raw === 'tempexec_remove_files' || raw === 'remove_exec_files' || raw === 'remove_from_exec' || raw === 'remove_current_exec_files' || raw === 'case_library.remove_exec_files' || raw === 'case_library_remove_exec_files' || raw === 'case_library.batch_remove_exec_cases' || raw === 'case_library_batch_remove_exec_cases' || raw === 'batch_remove_exec_cases') return 'tempexec.remove_files';
+      if (raw === 'tempexec.reuse_update' || raw === 'tempexec_reuse_update' || raw === 'update_reuse_case' || raw === 'reuse_update' || raw === 'reuse_case_update' || raw === 'tempexec.update_reuse' || raw === 'case_library.batch_operate_reuse_sub_items' || raw === 'case_library_batch_operate_reuse_sub_items' || raw === 'batch_operate_reuse_sub_items' || raw === 'case_library.operate_reuse_sub_items' || raw === 'case_library_operate_reuse_sub_items' || raw === 'operate_reuse_sub_items' || raw === 'batch_operate_reuse_sub_item' || raw === 'operate_reuse_sub_item') return 'tempexec.reuse_update';
       if (raw === 'case_library.batch_update_exec_results' || raw === 'case_library_batch_update_exec_results' || raw === 'batch_update_exec_results' || raw === 'update_exec_results' || raw === 'case_library.batch_set_exec_results' || raw === 'case_library_batch_set_exec_results' || raw === 'batch_set_exec_results' || raw === 'set_exec_results' || raw === 'set_exec_result') return 'case_library.batch_update_exec_results';
       if (raw === 'case_library.batch_archive_exec_cases' || raw === 'case_library_batch_archive_exec_cases' || raw === 'batch_archive_exec_cases' || raw === 'archive_exec_cases' || raw === 'case_library.batch_archive_cases' || raw === 'case_library_batch_archive_cases' || raw === 'batch_archive_cases' || raw === 'archive_cases') return 'case_library.batch_archive_exec_cases';
       if (raw === 'ui.list_controls' || raw === 'list_controls' || raw === 'list_ui_controls') return 'ui.list_controls';
@@ -8453,12 +10744,13 @@
         { name: 'page.current_info', mode: 'read', description: '获取当前页面名称/标识信息' },
         { name: 'page.get_data', mode: 'read', description: '读取指定页面的数据快照' },
         { name: 'nav.switch_tab', mode: 'write', description: '切换到目标页签' },
-        { name: 'cases.list_current', mode: 'read', description: '读取当前页面或项目用例列表' },
+        { name: 'cases.list_current', mode: 'read', description: '读取当前页面或项目用例列表；在 tempexec 可返回当前执行文件、caseFile.hasReuseCases、caseFile.reusePresetNames、行级 isReuseCase、聚合后的 executionResult、reuseDetails 子项明细，用于先判断是否为复用型用例及现状是否已符合要求' },
         { name: 'case_library.query_cases', mode: 'read', description: '跨页面查询用例库内容，并在大数据量时自动拆分子任务并发检索' },
         { name: 'case_library.search_exec_candidates', mode: 'read', description: '按项目/名称搜索可转到当前执行的用例文件候选' },
         { name: 'case_library.transfer_to_exec', mode: 'write', description: '将指定用例文件转到当前执行；若未指定执行版本，会返回待选择版本或待确认新建版本结果' },
         { name: 'tempexec.remove_files', mode: 'write', description: '按名称或关键词移出当前执行中的用例文件' },
-        { name: 'case_library.batch_update_exec_results', mode: 'write', description: '批量修改当前执行用例的执行结果' },
+        { name: 'tempexec.reuse_update', mode: 'write', description: '管理当前执行中复用型用例的预设子项，并支持按 caseTitle/caseQuery + 子项名或 applyAll 批量修改子项执行结果 / 备注 / 名称 / 删除子项；复用型用例状态写入优先走这里' },
+        { name: 'case_library.batch_update_exec_results', mode: 'write', description: '批量修改当前执行用例的普通执行结果字段；若目标是复用型用例，应优先改子项状态而不是只改顶层结果字段' },
         { name: 'case_library.batch_archive_exec_cases', mode: 'write', description: '归档当前执行中的用例' },
         { name: 'missing_library.list_current', mode: 'read', description: '读取当前项目的漏测/易漏用例库，可跨页面查询' },
         { name: 'cross_page.match_missing_cases', mode: 'read', description: '将当前页面用例与当前项目漏测用例库做跨页面匹配' },
@@ -8476,10 +10768,10 @@
         { name: 'memo.toggle', mode: 'write', description: '更新备忘完成状态' },
         { name: 'memo.remove', mode: 'write', description: '删除备忘' },
         { name: 'settings.describe', mode: 'read', description: '读取设置项说明' },
-        { name: 'settings.patch', mode: 'write', description: '修改助手设置' },
+        { name: 'settings.patch', mode: 'write', description: '修改设置' },
         { name: 'assistant.list_scaffolds', mode: 'read', description: '查看可调用的标准展示手脚架' },
         { name: 'assistant.render_scaffold', mode: 'read', description: '渲染标准展示手脚架（如 case_table、markdown_table、numbered_list、bullet_list、key_value_table）' },
-        { name: 'case.update', mode: 'write', description: '修改当前可见用例字段（优先级/标题/步骤等）' },
+        { name: 'case.update', mode: 'write', description: '修改当前可见用例字段（含执行结果/备注/优先级/标题/步骤等）；在 tempexec 支持用 scope=all 批量修改普通用例执行结果或备注，复用型用例执行结果应优先改子项状态' },
         { name: 'case.delete', mode: 'write', description: '删除当前可见用例条目' },
         { name: 'casegen.run', mode: 'write', description: '触发用例生成流程' },
         { name: 'missing_recommend.run', mode: 'write', description: '触发漏测推荐流程' },
@@ -8594,6 +10886,35 @@
         return Promise.resolve(removeRes && removeRes.ok
           ? { ok: true, tool: tool, data: removeRes }
           : { ok: false, tool: tool, data: removeRes || null, reason: removeRes && removeRes.reason ? String(removeRes.reason) : '移出执行失败' });
+      }
+      if (tool === 'tempexec.reuse_update') {
+        var reuseConfirmMeta = assistantBuildTempExecReuseConfirmMeta(payload || {});
+        if (reuseConfirmMeta && reuseConfirmMeta.selectionRequired === true) {
+          return Promise.resolve({
+            ok: false,
+            tool: tool,
+            data: reuseConfirmMeta || null,
+            reason: 'selection_required'
+          });
+        }
+        if (!reuseConfirmMeta || reuseConfirmMeta.ok !== true) {
+          return Promise.resolve({
+            ok: false,
+            tool: tool,
+            data: reuseConfirmMeta || null,
+            reason: reuseConfirmMeta && reuseConfirmMeta.reason ? String(reuseConfirmMeta.reason) : '复用子项操作失败'
+          });
+        }
+        if (payload.confirmed !== true) {
+          return Promise.resolve(assistantBuildMcpConfirmRequired(tool, {
+            actionLabel: reuseConfirmMeta.actionLabel,
+            message: reuseConfirmMeta.message,
+          }));
+        }
+        var reuseRes = assistantUpdateTempExecReuse(payload || {});
+        return Promise.resolve(reuseRes && reuseRes.ok
+          ? { ok: true, tool: tool, data: reuseRes }
+          : { ok: false, tool: tool, data: reuseRes || null, reason: reuseRes && reuseRes.reason ? String(reuseRes.reason) : '复用子项操作失败' });
       }
       if (tool === 'case_library.batch_update_exec_results') {
         var batchUpdatePayload = Object.assign({
@@ -8839,6 +11160,564 @@
       return Promise.resolve({ ok: false, tool: tool, reason: '未知 MCP 工具：' + tool });
     }
 
+    function assistantBuildCapabilityArgsHint(capabilityId) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      if (id === 'page.current_info') return [];
+      if (id === 'page.get_data') return [
+        { name: 'tab', description: '可选，目标页签标识；留空表示当前页' },
+      ];
+      if (id === 'nav.switch_tab') return [
+        { name: 'tab', description: '必填，目标页签标识' },
+      ];
+      if (id === 'cases.list_current') return [
+        { name: 'query', description: '可选，按关键词过滤当前页/当前项目用例' },
+        { name: 'detailLevel', description: '可选，summary 或 full；在执行页 full 模式会返回 caseFile.reuseEnabled、caseFile.hasReuseCases、caseFile.reusePresetCount、caseFile.reusePresetNames、items[].isReuseCase、items[].executionResult、items[].reuseDetailCount、items[].reuseDetails' },
+        { name: 'limit', description: '可选，返回条数上限；批量判断当前执行文件时可传足够大的值（最多 1000）' },
+        { name: 'countOnly', description: '可选，仅返回数量' },
+      ];
+      if (id === 'case_library.query_cases') return [
+        { name: 'query', description: '可选，跨页检索关键词或原话' },
+        { name: 'projectId', description: '可选，限定项目' },
+        { name: 'detailLevel', description: '可选，summary 或 full' },
+        { name: 'countOnly', description: '可选，仅返回数量' },
+      ];
+      if (id === 'case_library.search_exec_candidates') return [
+        { name: 'query', description: '必填，待转执行的用例名称或短语' },
+        { name: 'projectId', description: '可选，限定项目' },
+      ];
+      if (id === 'case_library.transfer_to_exec') return [
+        { name: 'caseFileId', description: '必填，目标用例文件 ID' },
+        { name: 'projectId', description: '必填，所属项目 ID' },
+        { name: 'execVersionId', description: '可选，执行版本 ID' },
+        { name: 'execVersionName', description: '可选，执行版本名' },
+      ];
+      if (id === 'tempexec.remove_files') return [
+        { name: 'query', description: '必填，当前执行中的用例名称或关键词' },
+      ];
+      if (id === 'tempexec.reuse_update') return [
+        { name: 'fileId', description: '可选，目标执行用例文件 ID' },
+        { name: 'fileName', description: '可选，目标执行用例文件名称' },
+        { name: 'mode', description: '必填，操作模式：detail_update / detail_rename / detail_delete / preset_add 等' },
+        { name: 'field', description: '修改字段；改执行结果时传 actual，改备注时传 remark，改名称时传 text' },
+        { name: 'caseQuery', description: '可选，用例标题/模块关键词；当用户指定单条用例但没有直接给序号时可用它缩小到目标用例' },
+        { name: 'caseTitle', description: '可选，目标用例标题；与 caseQuery 作用相同，单条修改时优先传' },
+        { name: 'detailName', description: '可选，按复用子项名称定位，如 222' },
+        { name: 'detailIndex', description: '可选，按子项序号定位目标子项' },
+        { name: 'value', description: '可选，要写入的值；执行结果只能是 未执行/通过/失败/阻塞/不适用' },
+        { name: 'index', description: '可选，目标用例索引；单条修改时使用' },
+        { name: 'caseIndexes', description: '可选，批量修改时指定命中的用例索引列表' },
+        { name: 'applyAll', description: '可选，true 表示对全部匹配项或全部可见子项执行批量操作；整份复用文件改状态时常用' },
+        { name: 'scope', description: '可选，批量范围；常用值 matched_cases / file_all' },
+      ];
+      if (id === 'case_library.batch_update_exec_results') return [
+        { name: 'result', description: '必填，目标执行结果；普通用例可直接使用，复用型用例应优先改子项状态' },
+        { name: 'query', description: '可选，要修改的范围关键词' },
+      ];
+      if (id === 'case_library.batch_archive_exec_cases') return [
+        { name: 'query', description: '可选，待归档的当前执行用例范围' },
+        { name: 'reason', description: '可选，归档原因' },
+      ];
+      if (id === 'missing_library.list_current') return [
+        { name: 'projectId', description: '可选，限定项目' },
+      ];
+      if (id === 'cross_page.match_missing_cases') return [
+        { name: 'projectId', description: '可选，限定项目' },
+      ];
+      if (id === 'ui.list_controls') return [
+        { name: 'max', description: '可选，返回控件数量上限' },
+      ];
+      if (id === 'ui.click_control') return [
+        { name: 'controlId', description: '优先，来自 ui.list_controls 的控件 ID' },
+        { name: 'controlText', description: '可选，按文本定位控件' },
+      ];
+      if (id === 'ui.fill_input') return [
+        { name: 'controlId', description: '优先，来自 ui.list_controls 的控件 ID' },
+        { name: 'value', description: '必填，输入值' },
+      ];
+      if (id === 'tempexec.search_cases') return [
+        { name: 'term', description: '可选，当前执行页搜索词' },
+      ];
+      if (id === 'tempexec.show_xmind' || id === 'tempexec.export_xmind' || id === 'tempexec.next_file') return [];
+      if (id === 'tempexec.switch_file') return [
+        { name: 'fileId', description: '可选，目标执行用例文件 ID' },
+        { name: 'name', description: '可选，目标执行用例名称' },
+      ];
+      if (id === 'web.search') return [
+        { name: 'query', description: '必填，联网检索关键词' },
+        { name: 'limit', description: '可选，返回结果条数' },
+      ];
+      if (id === 'memo.list') return [];
+      if (id === 'memo.add') return [
+        { name: 'text', description: '必填，备忘内容' },
+        { name: 'tab', description: '可选，关联页签' },
+      ];
+      if (id === 'memo.toggle') return [
+        { name: 'index', description: '必填，备忘序号' },
+        { name: 'done', description: '必填，是否完成' },
+      ];
+      if (id === 'memo.remove') return [
+        { name: 'index', description: '必填，备忘序号' },
+      ];
+      if (id === 'settings.describe') return [
+        { name: 'key', description: '必填，设置项 key' },
+      ];
+      if (id === 'settings.patch') return [
+        { name: 'patch', description: '必填，待写入的设置对象' },
+      ];
+      if (id === 'assistant.list_scaffolds') return [];
+      if (id === 'assistant.render_scaffold') return [
+        { name: 'scaffold', description: '必填，手脚架类型' },
+        { name: 'data', description: '可选，渲染数据' },
+      ];
+      if (id === 'case.update') return [
+        { name: 'field', description: '必填，待修改字段；常用值 actual / remark / title / steps / expected' },
+        { name: 'value', description: '可选，写入值；当 field=actual 时仅支持 未执行/通过/失败/阻塞/不适用' },
+        { name: 'index', description: '可选，目标用例序号；单条修改时使用' },
+        { name: 'scope', description: '可选，single 或 all；批量修改当前执行时常用 all' },
+        { name: 'context', description: '可选，tempexec 或 case-library；修改执行页结果时优先使用 tempexec' },
+      ];
+      if (id === 'case.delete') return [
+        { name: 'index', description: '必填，目标用例序号' },
+      ];
+      if (id === 'casegen.run' || id === 'missing_recommend.run') return [];
+      return [];
+    }
+
+    function assistantNormalizeCapabilityApprovalPolicy(value) {
+      var text = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+      if (text === 'user_confirm' || text === 'tool_managed' || text === 'none') return text;
+      return '';
+    }
+
+    function assistantGetMcpToolMode(toolName) {
+      var tool = assistantNormalizeMcpToolName(toolName);
+      var tools = [];
+      var i = 0;
+      if (!tool) return '';
+      tools = assistantMcpListTools();
+      if (Array.isArray(tools) && tools.length) {
+        for (i = 0; i < tools.length; i += 1) {
+          var row = tools[i] && typeof tools[i] === 'object' ? tools[i] : {};
+          var rowName = assistantNormalizeMcpToolName(row.name || '');
+          var mode = row.mode === undefined || row.mode === null ? '' : String(row.mode).trim().toLowerCase();
+          if (!rowName || rowName !== tool || !mode) continue;
+          return mode;
+        }
+      }
+      if (tool === 'nav.switch_tab' || tool === 'ui.click_control' || tool === 'ui.fill_input'
+        || tool === 'tempexec.export_xmind' || tool === 'tempexec.remove_files' || tool === 'tempexec.reuse_update'
+        || tool === 'settings.patch' || tool === 'case.update' || tool === 'case.delete'
+        || tool === 'casegen.run' || tool === 'missing_recommend.run'
+        || tool === 'memo.add' || tool === 'memo.toggle' || tool === 'memo.remove'
+        || tool === 'case_library.batch_update_exec_results' || tool === 'case_library.batch_archive_exec_cases'
+        || tool === 'case_library.transfer_to_exec') {
+        return 'write';
+      }
+      return 'read';
+    }
+
+    function assistantGetCapabilityApprovalPolicy(capabilityId) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      if (!id) return 'none';
+      if (id === 'memo.add' || id === 'memo.toggle' || id === 'memo.remove'
+        || id === 'settings.patch'
+        || id === 'case.update' || id === 'case.delete'
+        || id === 'casegen.run' || id === 'missing_recommend.run') {
+        return 'user_confirm';
+      }
+      if (assistantGetMcpToolMode(id) === 'write') return 'tool_managed';
+      return 'none';
+    }
+
+    function assistantBuildCapabilitySourceType(capabilityId) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      if (id === 'assistant.render_scaffold' || id === 'assistant.list_scaffolds') return 'render';
+      return 'mcp';
+    }
+
+    function assistantBuildCapabilityBackedBy(capabilityId) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      if (!id) return '';
+      return 'assistantMcpApi.callTool(' + id + ')';
+    }
+
+    function assistantBuildCapabilityDescriptor(tool) {
+      var item = tool && typeof tool === 'object' ? tool : {};
+      var id = assistantNormalizeMcpToolName(item.name || '');
+      var mode = item.mode ? String(item.mode).trim().toLowerCase() : assistantGetMcpToolMode(id);
+      var sourceType = item.sourceType ? String(item.sourceType).trim().toLowerCase() : assistantBuildCapabilitySourceType(id);
+      var approvalPolicy = assistantNormalizeCapabilityApprovalPolicy(item.approvalPolicy);
+      if (!id) return null;
+      if (sourceType !== 'api' && sourceType !== 'render') sourceType = 'mcp';
+      if (approvalPolicy !== 'user_confirm' && approvalPolicy !== 'tool_managed' && approvalPolicy !== 'none') {
+        approvalPolicy = assistantGetCapabilityApprovalPolicy(id);
+      }
+      return {
+        id: id,
+        sourceType: sourceType,
+        backedBy: item.backedBy ? String(item.backedBy) : assistantBuildCapabilityBackedBy(id),
+        mode: mode,
+        description: item.description ? String(item.description) : '',
+        argsHint: Array.isArray(item.argsHint) ? item.argsHint.slice() : assistantBuildCapabilityArgsHint(id),
+        approvalPolicy: approvalPolicy,
+        available: item.available !== false,
+      };
+    }
+
+    function assistantFindCapabilityDescriptor(capabilityId) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      var list = assistantListCapabilities();
+      var i = 0;
+      if (!id) return null;
+      for (i = 0; i < list.length; i += 1) {
+        if (assistantNormalizeMcpToolName(list[i] && list[i].id) === id) return list[i];
+      }
+      return null;
+    }
+
+    function assistantListCapabilities() {
+      return assistantMcpListTools().map(function(tool) {
+        return assistantBuildCapabilityDescriptor(tool);
+      }).filter(function(item) { return !!item; });
+    }
+
+    function assistantBuildCapabilityChoiceLabel(capabilityId, item, index) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      var row = item && typeof item === 'object' ? item : {};
+      if (id === 'case_library.search_exec_candidates') {
+        var parts = [];
+        if (row.name) parts.push(String(row.name));
+        if (row.projectName) parts.push('项目：' + String(row.projectName));
+        if (row.versionName) parts.push('版本：' + String(row.versionName));
+        if (row.itemCount !== undefined && row.itemCount !== null && String(row.itemCount) !== '') parts.push('条目：' + String(row.itemCount));
+        return parts.join(' | ') || ('候选 ' + (index + 1));
+      }
+      if (id === 'case_library.transfer_to_exec') {
+        if (row.name) return String(row.name) + (row.isImportedVersion === true ? '（原用例版本）' : '');
+        if (row.label) return String(row.label);
+      }
+      if (row.label) return String(row.label);
+      if (row.name) return String(row.name);
+      if (row.title) return String(row.title);
+      return '选项 ' + (index + 1);
+    }
+
+    function assistantBuildCapabilityChoiceList(capabilityId, data, args) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      var payload = data && typeof data === 'object' ? data : {};
+      var baseArgs = args && typeof args === 'object' ? Object.assign({}, args) : {};
+      var items = Array.isArray(payload.items) ? payload.items : [];
+      var choices = [];
+      if (id === 'case_library.transfer_to_exec' && payload.versionCreateConfirmRequired === true) {
+        return [{
+          id: 'transfer-create-version',
+          label: payload.requestedVersionName ? ('新建版本“' + String(payload.requestedVersionName) + '”并继续') : '新建并继续',
+          description: '确认后将按新版本继续转到当前执行。',
+          replyText: payload.requestedVersionName ? ('新建版本 ' + String(payload.requestedVersionName)) : '确认新建',
+          suggestedCapability: 'case_library.transfer_to_exec',
+          argsPatch: {
+            execVersionName: payload.requestedVersionName ? String(payload.requestedVersionName) : '',
+            createVersionIfMissing: true,
+          },
+        }, {
+          id: 'transfer-create-version-cancel',
+          label: '取消',
+          description: '取消本次新建版本。',
+          replyText: '取消',
+          suggestedCapability: '',
+          argsPatch: {},
+        }];
+      }
+      items.forEach(function(item, index) {
+        var row = item && typeof item === 'object' ? item : {};
+        var choice = {
+          id: row.id !== undefined && row.id !== null ? String(row.id) : (id + '-choice-' + (index + 1)),
+          label: assistantBuildCapabilityChoiceLabel(id, row, index),
+          description: row.description ? String(row.description) : '',
+          replyText: '选第' + (index + 1) + '个',
+          suggestedCapability: id,
+          argsPatch: row.applyPatch && typeof row.applyPatch === 'object' ? Object.assign({}, row.applyPatch) : {},
+          data: row,
+        };
+        if (id === 'case_library.search_exec_candidates') {
+          choice.suggestedCapability = 'case_library.transfer_to_exec';
+          choice.argsPatch = {
+            caseFileId: row.id !== undefined && row.id !== null ? String(row.id) : '',
+            projectId: row.projectId !== undefined && row.projectId !== null ? String(row.projectId) : (baseArgs.projectId !== undefined && baseArgs.projectId !== null ? String(baseArgs.projectId) : ''),
+          };
+        } else if (id === 'case_library.transfer_to_exec') {
+          choice.suggestedCapability = 'case_library.transfer_to_exec';
+          choice.argsPatch = {
+            caseFileId: payload.caseFileId !== undefined && payload.caseFileId !== null ? String(payload.caseFileId) : (baseArgs.caseFileId !== undefined && baseArgs.caseFileId !== null ? String(baseArgs.caseFileId) : ''),
+            projectId: payload.projectId !== undefined && payload.projectId !== null ? String(payload.projectId) : (baseArgs.projectId !== undefined && baseArgs.projectId !== null ? String(baseArgs.projectId) : ''),
+          };
+          if (row.id !== undefined && row.id !== null && String(row.id).trim()) choice.argsPatch.execVersionId = String(row.id);
+          if (row.name !== undefined && row.name !== null && String(row.name).trim()) choice.argsPatch.execVersionName = String(row.name);
+        }
+        choices.push(choice);
+      });
+      return choices;
+    }
+
+    function assistantBuildGenericCapabilityConfirmMeta(capabilityId, args) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      var payload = args && typeof args === 'object' ? args : {};
+      var labelMap = {
+        'memo.add': '新增备忘',
+        'memo.toggle': '更新备忘状态',
+        'memo.remove': '删除备忘',
+        'settings.patch': '修改设置',
+        'case.update': '修改用例',
+        'case.delete': '删除用例',
+        'casegen.run': '触发用例生成',
+        'missing_recommend.run': '触发漏测推荐'
+      };
+      var label = labelMap[id] || '执行操作';
+      var message = '该操作会写入或修改数据，请先获得用户同意。';
+      if (id === 'memo.add' && payload.text) message = '将新增备忘：' + String(payload.text) + '。';
+      if (id === 'memo.remove' && payload.index !== undefined && payload.index !== null) message = '将删除第 ' + String(payload.index) + ' 条备忘。';
+      if (id === 'memo.toggle' && payload.index !== undefined && payload.index !== null) message = '将更新第 ' + String(payload.index) + ' 条备忘状态。';
+      if (id === 'settings.patch') message = '该操作会修改设置，请确认继续。';
+      if (id === 'case.update') return assistantBuildCaseUpdateConfirmMeta(payload);
+      if (id === 'case.delete') message = '该操作会删除当前可见用例，请确认继续。';
+      if (id === 'casegen.run') message = '该操作会触发用例生成流程，请确认继续。';
+      if (id === 'missing_recommend.run') message = '该操作会触发漏测推荐流程，请确认继续。';
+      return {
+        actionLabel: label,
+        message: message,
+      };
+    }
+
+    function assistantShouldPreConfirmCapability(capabilityId) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      return id === 'memo.add' || id === 'memo.toggle' || id === 'memo.remove'
+        || id === 'settings.patch'
+        || id === 'case.update' || id === 'case.delete'
+        || id === 'casegen.run' || id === 'missing_recommend.run';
+    }
+
+    function assistantBuildCapabilityResult(ok, status, message, data, choices, approvedArgs) {
+      return {
+        ok: ok === true,
+        status: status || (ok === true ? 'ok' : 'blocked'),
+        message: message ? String(message) : '',
+        data: data && typeof data === 'object' ? data : (data === undefined ? null : data),
+        choices: Array.isArray(choices) ? choices : [],
+        approvedArgs: approvedArgs && typeof approvedArgs === 'object' ? Object.assign({}, approvedArgs) : null,
+      };
+    }
+
+    function assistantBuildPageDataSummaryBits(data) {
+      var pageData = data && typeof data === 'object' ? data : {};
+      var bits = [];
+      var currentCaseContext = pageData.currentCaseContext && typeof pageData.currentCaseContext === 'object' ? pageData.currentCaseContext : null;
+      if (pageData.requirementLabel) bits.push('当前需求：' + String(pageData.requirementLabel));
+      bits.push('模型数：' + (Number(pageData.modelsCount) || 0));
+      bits.push('已导入用例数：' + (Number(pageData.importedCasesCount) || 0));
+      bits.push('用例生成模块数：' + (Number(pageData.caseGenModuleCount) || 0));
+      bits.push('当前执行文件数：' + (Number(pageData.tempExecFileCount) || 0));
+      if (currentCaseContext && currentCaseContext.fileName) {
+        bits.push('当前用例文件：' + String(currentCaseContext.fileName) + '（可见 ' + (Number(currentCaseContext.total) || 0) + ' 条）');
+      }
+      if (pageData.caseLibraryHistoryDetail && pageData.caseLibraryHistoryDetail.hasContext === true) bits.push('已读取当前用例库历史详情上下文');
+      if (pageData.missingCaseLibraryView && pageData.missingCaseLibraryView.hasContext === true) bits.push('已读取易漏用例视图上下文');
+      if (pageData.tempExecCaseLibraryDiffDetail && pageData.tempExecCaseLibraryDiffDetail.hasContext === true) bits.push('已读取当前执行与用例库差异上下文');
+      return bits;
+    }
+
+    function assistantBuildCapabilitySuccessMessage(capabilityId, args, data) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      var pageData = data && typeof data === 'object' ? data : {};
+      var tab = pageData.tab ? String(pageData.tab).trim() : '';
+      var tabLabel = assistantGetTabLabel(tab);
+      if (id === 'page.current_info') {
+        if (tabLabel && tab) return '当前页面：' + tabLabel + '（' + tab + '）';
+        if (tabLabel) return '当前页面：' + tabLabel;
+        if (tab) return '当前页面：' + tab;
+        return '已读取当前页面信息。';
+      }
+      if (id === 'page.get_data') {
+        var bits = assistantBuildPageDataSummaryBits(pageData);
+        if (tabLabel && bits.length) return '已读取“' + tabLabel + '”页面数据：' + bits.slice(0, 5).join('；');
+        if (tab && bits.length) return '已读取“' + tab + '”页面数据：' + bits.slice(0, 5).join('；');
+        if (bits.length) return '已读取页面数据：' + bits.slice(0, 5).join('；');
+        return '已读取当前页面数据。';
+      }
+      if (id === 'cases.list_current') {
+        var totalCount = Number(pageData.totalAll);
+        if (!Number.isFinite(totalCount) || totalCount < 0) totalCount = Number(pageData.total);
+        if (!Number.isFinite(totalCount) || totalCount < 0) totalCount = Array.isArray(pageData.items) ? pageData.items.length : 0;
+        if (pageData.caseFile && pageData.caseFile.name) {
+          return '已读取当前执行文件“' + String(pageData.caseFile.name) + '”的用例，共 ' + totalCount + ' 条。';
+        }
+        if (pageData.scope === 'editor') return '已读取当前页面用例，共 ' + totalCount + ' 条。';
+        if (pageData.scope === 'project') return '已读取当前项目用例列表，共 ' + totalCount + ' 条。';
+        return '已读取当前用例列表，共 ' + totalCount + ' 条。';
+      }
+      if (id === 'tempexec.reuse_update') {
+        var formatter = window.app && typeof window.app.formatTempExecReuseUpdateSuccessTextForTest === 'function'
+          ? window.app.formatTempExecReuseUpdateSuccessTextForTest
+          : null;
+        if (formatter) {
+          try {
+            var formatted = formatter(pageData || {});
+            if (formatted) return String(formatted);
+          } catch (err) {
+            // ignore
+          }
+        }
+        if (pageData && pageData.fileName && pageData.detailName && pageData.value) {
+          return '已修改复用子项：执行用例“' + String(pageData.fileName) + '”，子项“' + String(pageData.detailName) + '”执行结果 = ' + String(pageData.value);
+        }
+        return '已完成复用子项更新。';
+      }
+      return '';
+    }
+
+    function assistantNormalizeCapabilityExecutionResult(capabilityId, args, rawResult) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+      var res = rawResult && typeof rawResult === 'object' ? rawResult : {};
+      var reason = res.reason ? String(res.reason) : '';
+      var data = res.data && typeof res.data === 'object' ? res.data : null;
+      if (!id) return assistantBuildCapabilityResult(false, 'missing_capability', '能力不存在', null, [], null);
+      if (reason === 'confirm_required') {
+        return assistantBuildCapabilityResult(false, 'confirm_required', data && data.message ? String(data.message) : '该操作需要用户确认。', data, [], Object.assign({}, payload, { confirmed: true }, data && data.confirmPatch && typeof data.confirmPatch === 'object' ? data.confirmPatch : {}));
+      }
+      if (reason === 'selection_required') {
+        return assistantBuildCapabilityResult(false, 'choice_required', data && data.message ? String(data.message) : '还需要用户选择后才能继续。', data, assistantBuildCapabilityChoiceList(id, data, payload), null);
+      }
+      if (!res || res.ok !== true) {
+        if (!reason && data && data.reason) reason = String(data.reason);
+        if (reason.indexOf('未知 MCP 工具') === 0) {
+          return assistantBuildCapabilityResult(false, 'missing_capability', reason, data, [], null);
+        }
+        return assistantBuildCapabilityResult(false, 'blocked', reason || '能力执行失败', data, [], null);
+      }
+      if (id === 'case_library.transfer_to_exec' && data && data.versionSelectionRequired === true) {
+        return assistantBuildCapabilityResult(false, 'choice_required', data.message ? String(data.message) : '请选择要转入的执行版本。', data, assistantBuildCapabilityChoiceList(id, data, payload), null);
+      }
+      if (id === 'case_library.transfer_to_exec' && data && data.versionCreateConfirmRequired === true) {
+        return assistantBuildCapabilityResult(false, 'choice_required', data.message ? String(data.message) : '请确认是否新建执行版本。', data, assistantBuildCapabilityChoiceList(id, data, payload), null);
+      }
+      var successMessage = res.message ? String(res.message) : assistantBuildCapabilitySuccessMessage(id, payload, data);
+      return assistantBuildCapabilityResult(true, 'ok', successMessage, data, [], null);
+    }
+
+    function assistantTempExecStatusTargetNeedsReuseCapability(payload) {
+      var args = payload && typeof payload === 'object' ? payload : {};
+      var tempApi = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      var resolvedFile = assistantResolveTempExecReuseTargetFile(args, tempApi);
+      var file = resolvedFile && resolvedFile.ok === true ? resolvedFile.file : null;
+      var scope = assistantReadFirstArgString(args, ['scope', 'target', 'range']).toLowerCase();
+      var caseIndexes = assistantExtractTempExecReuseCaseIndexes(args);
+      var caseIndex = assistantResolveTempExecReuseCaseIndex(args);
+      var i = 0;
+      if (!file || !assistantTempExecFileHasReuseCases(file)) return false;
+      if (args.applyAll === true || args.all === true || args.batch === true) return true;
+      if (scope === 'all' || scope === 'file_all' || scope === 'matched_cases' || scope === 'selected_cases') return true;
+      if (caseIndexes.length) {
+        for (i = 0; i < caseIndexes.length; i += 1) {
+          if (Array.isArray(file.cases) && file.cases[caseIndexes[i] - 1] && assistantTempExecCaseHasReuseDetails(file.cases[caseIndexes[i] - 1])) {
+            return true;
+          }
+        }
+        return false;
+      }
+      if (caseIndex > 0) {
+        return !!(Array.isArray(file.cases) && file.cases[caseIndex - 1] && assistantTempExecCaseHasReuseDetails(file.cases[caseIndex - 1]));
+      }
+      if (Array.isArray(file.cases) && file.cases.length === 1) {
+        return assistantTempExecCaseHasReuseDetails(file.cases[0]);
+      }
+      return false;
+    }
+
+    function assistantRewriteStatusCapabilityForReuse(capabilityId, args) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+      var field = '';
+      var value = payload.value;
+      var scope = assistantReadFirstArgString(payload, ['scope', 'target', 'range']).toLowerCase();
+      var caseIndexes = assistantExtractTempExecReuseCaseIndexes(payload);
+      var caseIndex = assistantResolveTempExecReuseCaseIndex(payload);
+      if (id === 'case_library.batch_update_exec_results') {
+        payload.context = 'tempexec';
+        payload.scope = 'all';
+        payload.field = 'actual';
+        if (value === undefined || value === null || String(value).trim() === '') value = payload.result;
+        if (value === undefined || value === null || String(value).trim() === '') value = payload.status;
+        if (value === undefined || value === null || String(value).trim() === '') value = payload.to;
+        if (value !== undefined && value !== null && String(value).trim()) payload.value = String(value).trim();
+        if (assistantTempExecStatusTargetNeedsReuseCapability(payload)) {
+          return {
+            capabilityId: 'tempexec.reuse_update',
+            args: Object.assign({}, payload, {
+              mode: 'detail_update',
+              field: 'actual',
+              applyAll: true,
+              scope: 'file_all',
+            }),
+          };
+        }
+        return { capabilityId: id, args: payload };
+      }
+      if (id !== 'case.update') return { capabilityId: id, args: payload };
+      field = assistantNormalizeCaseUpdateField(payload.field || payload.key || payload.column || payload.name || '', payload.context);
+      if (field !== 'actual') return { capabilityId: id, args: payload };
+      if (!assistantTempExecStatusTargetNeedsReuseCapability(payload)) return { capabilityId: id, args: payload };
+      if (value === undefined || value === null || String(value).trim() === '') value = payload.to;
+      if (value === undefined || value === null || String(value).trim() === '') value = payload.text;
+      if (value === undefined || value === null || String(value).trim() === '') value = payload.content;
+      if (value === undefined || value === null || String(value).trim() === '') value = payload.newValue;
+      if (value !== undefined && value !== null && String(value).trim()) payload.value = String(value).trim();
+      payload.applyAll = true;
+      if (!scope || scope === 'all') {
+        if (caseIndexes.length > 1) payload.scope = 'selected_cases';
+        else if (caseIndex > 0 || caseIndexes.length === 1) payload.scope = 'single_case';
+        else payload.scope = 'file_all';
+      }
+      return {
+        capabilityId: 'tempexec.reuse_update',
+        args: Object.assign({}, payload, {
+          mode: 'detail_update',
+          field: 'actual',
+        }),
+      };
+    }
+
+    function assistantExecuteCapability(capabilityId, args) {
+      var id = assistantNormalizeMcpToolName(capabilityId);
+      var payload = args && typeof args === 'object' ? Object.assign({}, args) : {};
+      var downgradedCaseUpdateArgs = null;
+      var descriptor = null;
+      var rewritten = assistantRewriteStatusCapabilityForReuse(id, payload);
+      if (rewritten && rewritten.capabilityId) {
+        id = assistantNormalizeMcpToolName(rewritten.capabilityId);
+        payload = rewritten.args && typeof rewritten.args === 'object' ? Object.assign({}, rewritten.args) : {};
+      }
+      if (id === 'tempexec.reuse_update') {
+        downgradedCaseUpdateArgs = assistantBuildCaseUpdateArgsFromNonReuseTempExecStatusUpdate(payload);
+        if (downgradedCaseUpdateArgs) {
+          id = 'case.update';
+          payload = downgradedCaseUpdateArgs;
+        }
+      }
+      descriptor = assistantFindCapabilityDescriptor(id);
+      if (!id || !descriptor || descriptor.available !== true) {
+        return Promise.resolve(assistantBuildCapabilityResult(false, 'missing_capability', '当前不可用能力：' + String(capabilityId || ''), null, [], null));
+      }
+      if (descriptor.approvalPolicy === 'user_confirm' && payload.confirmed !== true) {
+        var confirmMeta = assistantBuildGenericCapabilityConfirmMeta(id, payload);
+        return Promise.resolve(assistantBuildCapabilityResult(false, 'confirm_required', confirmMeta.message, confirmMeta, [], Object.assign({}, payload, { confirmed: true })));
+      }
+      return Promise.resolve(assistantMcpCallTool(id, payload)).then(function(res) {
+        return assistantNormalizeCapabilityExecutionResult(id, payload, res);
+      }).catch(function(err) {
+        return assistantBuildCapabilityResult(false, 'blocked', err && err.message ? String(err.message) : '能力执行异常', null, [], null);
+      });
+    }
+
     window.app.assistantApi = {
       listTabs: assistantListTabs,
       switchTab: function(tab) { return switchTab(String(tab || '')); },
@@ -8868,6 +11747,15 @@
         return assistantMcpCallTool(name, args || {});
       },
     };
+    window.app.assistantCapabilityApi = {
+      listCapabilities: assistantListCapabilities,
+      executeCapability: function(id, args) {
+        return assistantExecuteCapability(id, args || {});
+      },
+    };
+    if (typeof window.app.formatTempExecReuseUpdateSuccessTextForTest !== 'function') {
+      window.app.formatTempExecReuseUpdateSuccessTextForTest = function() { return ''; };
+    }
     window.app.assistantSettingsApi = {
       getSettings: assistantGetSettings,
       listModels: function() { return typeof listAssistantModels === 'function' ? listAssistantModels() : []; },
@@ -8896,6 +11784,7 @@
     assistantDispatchEvent('app-assistant-api-ready', {
       hasAssistantApi: true,
       hasAssistantMcpApi: true,
+      hasAssistantCapabilityApi: true,
       hasAssistantSettingsApi: true,
       hasAssistantModelDiagApi: true,
     });

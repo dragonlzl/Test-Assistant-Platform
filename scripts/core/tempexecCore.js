@@ -10232,19 +10232,13 @@
       renderTempExecView();
     }
 
-    function removeTempExecReuseEntry(fileId, index, detailId) {
+    function removeTempExecReuseEntry(fileId, index, detailId, options) {
+      var opts = options && typeof options === 'object' ? options : {};
       var file = getTempExecFile(fileId);
       if (!file || !file.cases[index]) return;
       var targetCase = file.cases[index];
       if (!Array.isArray(targetCase.reuseDetails)) return;
-      openConfirmDrawer({
-        title: '删除复用测试项',
-        message: '确定删除该复用测试项吗？该操作不可撤销。',
-        confirmText: '确认删除',
-        cancelText: '取消',
-        danger: true,
-      }).then(function(result) {
-        if (!result || result.ok !== true) return;
+      function applyRemoval() {
         var nextFile = getTempExecFile(fileId);
         if (!nextFile || !nextFile.cases[index]) return;
         var nextCase = nextFile.cases[index];
@@ -10275,25 +10269,52 @@
         }
         persistTempExecState();
         renderTempExecView();
+      }
+      if (opts.skipConfirm === true) {
+        applyRemoval();
+        return;
+      }
+      openConfirmDrawer({
+        title: '删除复用测试项',
+        message: '确定删除该复用测试项吗？该操作不可撤销。',
+        confirmText: '确认删除',
+        cancelText: '取消',
+        danger: true,
+      }).then(function(result) {
+        if (!result || result.ok !== true) return;
+        applyRemoval();
       });
     }
 
     function updateTempExecReuseStatus(fileId, index, detailId, value) {
       var file = getTempExecFile(fileId);
-      if (!file || !file.cases[index]) return;
-      var targetCase = file.cases[index];
+      var targetId = detailId === undefined || detailId === null ? '' : String(detailId);
+      var targetCase = null;
+      var entry = null;
+      var nextStatus = '';
+      var i = 0;
+      if (!file || !file.cases[index]) return false;
+      targetCase = file.cases[index];
       if (!Array.isArray(targetCase.reuseDetails)) targetCase.reuseDetails = [];
-      var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
-      if (!entry) return;
-      if (isReuseDetailRemoved(entry)) return;
-      var nextStatus = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
+      if (!targetId) return false;
+      for (i = 0; i < targetCase.reuseDetails.length; i += 1) {
+        var item = targetCase.reuseDetails[i];
+        if (!item) continue;
+        if (String(item.id || '') !== targetId) continue;
+        entry = item;
+        break;
+      }
+      if (!entry) return false;
+      if (isReuseDetailRemoved(entry)) return false;
+      nextStatus = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
       entry.status = nextStatus;
       targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
         queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
       }
       persistTempExecState();
-      updateTempExecReuseStatusUi(fileId, index, detailId, nextStatus);
+      updateTempExecReuseStatusUi(fileId, index, entry.id, nextStatus);
+      return true;
     }
 
     // 仅刷新复用子项结果的局部 UI，避免整页重绘导致抖动。

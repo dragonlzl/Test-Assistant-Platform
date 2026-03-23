@@ -4089,54 +4089,6 @@ test.describe('全局AI助手', () => {
     })).not.toContain('按你的意图返回页面数据');
   });
 
-  test('模型重复输出 action JSON 时应仍可执行，并支持中文名追问', async ({ page }) => {
-    const modelId = 'assistant-model-1';
-
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
-    await expect(page.locator('#assistantModelSelect option[value="assistant-model-1"]')).toHaveCount(1);
-    await page.selectOption('#assistantModelSelect', modelId);
-    await page.check('#assistantEnabledToggle');
-    await page.click('#saveAssistantSetting');
-    await expect.poll(() => page.evaluate(() => {
-      if (!window.app || !window.app.assistantSettingsApi || typeof window.app.assistantSettingsApi.getSettings !== 'function') return false;
-      var snap = window.app.assistantSettingsApi.getSettings();
-      return Boolean(snap && snap.assistantEnabled === true && String(snap.assistantModelId || '') === 'assistant-model-1');
-    })).toBe(true);
-
-    await page.evaluate(() => {
-      window.__assistantActionReplyCalls = 0;
-      if (window.app && window.app.assistantApi) {
-        window.app.assistantApi.callModel = async function(userText) {
-          var text = String(userText || '').trim();
-          window.__assistantActionReplyCalls += 1;
-          if (text.indexOf('当前页面') !== -1) {
-            return { ok: true, content: '{"action":"current_page_info"}{"action":"current_page_info"}' };
-          }
-          return {
-            ok: true,
-            content: '你是想看**当前页面的中文名**对吗？\n我可以直接帮你取，发我一句：**“获取当前页面数据”**。',
-          };
-        };
-      }
-      var btn = document.getElementById('assistantLauncherBtn');
-      if (btn) btn.click();
-    });
-    await expect(page.locator('#assistantPanel')).not.toHaveClass(/hidden/);
-
-    await page.fill('#assistantInput', '当前页面时什么');
-    await page.click('#assistantSendBtn');
-
-    await expect(page.locator('#assistantMessages')).toContainText('当前页面是：');
-    await expect(page.locator('#assistantMessages')).not.toContainText('{"action":"current_page_info"}');
-
-    await page.fill('#assistantInput', '中文名');
-    await page.click('#assistantSendBtn');
-
-    await expect(page.locator('#assistantMessages')).toContainText('当前页面中文名：');
-    await expect(page.locator('#assistantMessages')).not.toContainText('获取当前页面数据');
-    await expect.poll(() => page.evaluate(() => Number(window.__assistantActionReplyCalls || 0))).toBe(2);
-  });
-
   test('页面功能介绍命中旧分支时也应交给模型整理', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
@@ -4311,7 +4263,7 @@ test.describe('全局AI助手', () => {
     await expect.poll(() => page.evaluate(() => Number(window.__assistantMcpCountCalls || 0))).toBeGreaterThanOrEqual(1);
   });
 
-  test('模型返回 legacy query_case_list 动作时应基于数据自由回答', async ({ page }) => {
+  test('assistant_v2 读取当前用例列表后应基于数据自由回答', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
@@ -4376,18 +4328,38 @@ test.describe('全局AI助手', () => {
       }
       window.__assistantLegacyCaseListCalls = 0;
       if (window.app && window.app.assistantApi) {
-        window.app.assistantApi.callModel = async function(input, options) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
           window.__assistantLegacyCaseListCalls += 1;
-          var prompt = options && options.prompt ? String(options.prompt) : '';
-          if (prompt.indexOf('工具结果解读助手') !== -1) {
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (!observations.length) {
             return {
               ok: true,
-              content: '不是。当前页面有 2 条用例，其中 1 条已执行通过，1 条未执行。',
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先读取当前页面用例执行情况。',
+                task: {
+                  title: '检查当前页面用例执行情况',
+                  summary: '先读取当前页面用例列表，再判断是否全部未执行。',
+                  steps: [{ id: 'step-1', label: '读取当前页面用例列表' }],
+                },
+                calls: [{ stepId: 'step-1', capability: 'cases.list_current', args: { scope: 'editor' } }],
+              }),
             };
           }
           return {
             ok: true,
-            content: '{"action":"query_case_list","scope":"editor"}',
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '不是。当前页面有 2 条用例，其中 1 条已执行通过，1 条未执行。',
+              blocks: [],
+            }),
           };
         };
       }
@@ -6612,8 +6584,38 @@ test.describe('全局AI助手', () => {
 
     await page.evaluate(() => {
       if (window.app && window.app.assistantApi) {
-        window.app.assistantApi.callModel = async function() {
-          return { ok: true, content: '{"action":"query_page_data","tab":"case-library"}' };
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先查看当前页面状态。',
+                task: {
+                  title: '检查当前页面状态',
+                  summary: '先读取页面信息，再回答当前页面有哪些用例。',
+                  steps: [{ id: 'step-1', label: '读取当前页面状态' }],
+                },
+                calls: [{ stepId: 'step-1', capability: 'page.get_data', args: { tab: 'case-library' } }],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '当前页面没有正在编辑或查看的用例。\n1. 进入“用例库 -> 查看&编辑”，打开一个用例文件。',
+              blocks: [],
+            }),
+          };
         };
       }
       var btn = document.getElementById('assistantLauncherBtn');
@@ -6752,7 +6754,7 @@ test.describe('全局AI助手', () => {
     await expect.poll(() => page.evaluate(() => Number(window.__assistantModelFirstCount || 0))).toBe(1);
   });
 
-  test('模型动作 settings_patch 需聊天内确认后才执行', async ({ page }) => {
+  test('assistant_v2 settings.patch 需聊天内确认后才执行', async ({ page }) => {
     const modelId = 'assistant-model-1';
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
@@ -6769,11 +6771,38 @@ test.describe('全局AI助手', () => {
     await page.evaluate(() => {
       window.__assistantModelActionCount = 0;
       if (window.app && window.app.assistantApi) {
-        window.app.assistantApi.callModel = async function() {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
           window.__assistantModelActionCount += 1;
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先准备更新设置。',
+                task: {
+                  title: '开启导航智能收起',
+                  summary: '确认后更新导航智能收起设置。',
+                  steps: [{ id: 'step-1', label: '更新导航智能收起设置' }],
+                },
+                calls: [{ stepId: 'step-1', capability: 'settings.patch', args: { patch: { smartTopNavCollapse: true } } }],
+              }),
+            };
+          }
           return {
             ok: true,
-            content: '{"action":"settings_patch","patch":{"smartTopNavCollapse":true}}',
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '设置已更新，已开启导航智能收起。',
+              blocks: [{ type: 'notice', level: 'success', title: '设置已更新', text: '已开启导航智能收起。' }],
+            }),
           };
         };
       }
@@ -6788,7 +6817,7 @@ test.describe('全局AI助手', () => {
     await expect(page.locator('#assistantMessages')).toContainText('准备执行：修改设置');
     await page.locator('#assistantMessages button:has-text("允许操作")').last().click();
     await expect(page.locator('#assistantMessages')).toContainText('设置已更新');
-    await expect.poll(() => page.evaluate(() => Number(window.__assistantModelActionCount || 0))).toBe(1);
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantModelActionCount || 0))).toBe(2);
     await expect.poll(() => page.evaluate(() => {
       if (!window.app || !window.app.state || !window.app.state.settings) return false;
       return Boolean(window.app.state.settings.smartTopNavCollapse === true);
@@ -8831,10 +8860,37 @@ test.describe('全局AI助手', () => {
       window.__assistantSearchCount = 0;
       window.__assistantSearchQuery = '';
       if (window.app && window.app.assistantApi) {
-        window.app.assistantApi.callModel = async function() {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先帮你联网查一下深圳今天的天气。',
+                task: {
+                  title: '查询深圳今日天气',
+                  summary: '先联网检索，再整理成简版结果。',
+                  steps: [{ id: 'step-1', label: '联网查询深圳今天天气' }],
+                },
+                calls: [{ stepId: 'step-1', capability: 'web.search', args: { query: '深圳 今天天气' } }],
+              }),
+            };
+          }
           return {
             ok: true,
-            content: '{"action":"web_search","query":"深圳 今天天气","response":"我帮你联网查了深圳今天的天气信息。"}',
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '我帮你联网查了深圳今天的天气信息。\n我已根据联网结果整理为简版。\n- 深圳天气预报\n- https://example.com/weather/shenzhen\n- 搜索源：duckduckgo',
+              blocks: [],
+            }),
           };
         };
         window.app.assistantApi.searchWeb = async function(query) {
@@ -8898,10 +8954,37 @@ test.describe('全局AI助手', () => {
 
     await page.evaluate(() => {
       if (window.app && window.app.assistantApi) {
-        window.app.assistantApi.callModel = async function() {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先帮你联网查一下天气。',
+                task: {
+                  title: '查询天气信息',
+                  summary: '先联网检索，再整理结果。',
+                  steps: [{ id: 'step-1', label: '联网查询天气信息' }],
+                },
+                calls: [{ stepId: 'step-1', capability: 'web.search', args: { query: '深圳 今天天气' } }],
+              }),
+            };
+          }
           return {
             ok: true,
-            content: '{"action":"web_search","query":"深圳 今天天气","response":"我帮你联网查了深圳今天的天气信息。"}',
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '我帮你联网查了深圳今天的天气信息。\n我已根据联网结果整理为简版。\n- 深圳天气预报\n- weather.com.cn\n- 搜索源：bing-rss',
+              blocks: [],
+            }),
           };
         };
       }
@@ -8941,7 +9024,11 @@ test.describe('全局AI助手', () => {
         window.app.assistantApi.callModel = async function() {
           return {
             ok: true,
-            content: '{"action":"web_search","query":"今天天气怎么样","response":"我先帮你查一下。"}',
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '请先告诉我你所在的城市，我再帮你查天气。',
+              blocks: [{ type: 'notice', level: 'info', title: '需要补充信息', text: '请先告诉我你所在的城市。' }],
+            }),
           };
         };
       }
@@ -8955,6 +9042,494 @@ test.describe('全局AI助手', () => {
 
     await expect(page.locator('#assistantMessages')).toContainText('请先告诉我你所在的城市');
     await expect(page.locator('#assistantMessages')).not.toContainText('结果如下：');
+  });
+
+  test('assistant_v2 命令不明确时会先澄清并带着待确认上下文继续', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantClarifyRounds = [];
+      window.__assistantCapabilityExecCount = 0;
+      if (window.app && window.app.assistantCapabilityApi) {
+        var originalExecuteCapability = window.app.assistantCapabilityApi.executeCapability;
+        window.app.assistantCapabilityApi.executeCapability = async function(id, args) {
+          window.__assistantCapabilityExecCount += 1;
+          if (typeof originalExecuteCapability === 'function') {
+            return originalExecuteCapability.call(this, id, args);
+          }
+          return {
+            ok: false,
+            status: 'missing_capability',
+            message: '能力不可用',
+            data: null,
+            choices: [],
+            approvedArgs: null,
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input, options) {
+          var payload = null;
+          var latestUserText = '';
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          latestUserText = payload && payload.latestUserText ? String(payload.latestUserText) : '';
+          window.__assistantClarifyRounds.push({
+            latestUserText: latestUserText,
+            pendingKind: payload && payload.pendingInteraction && payload.pendingInteraction.kind
+              ? String(payload.pendingInteraction.kind)
+              : '',
+            pendingPrompt: payload && payload.pendingInteraction && payload.pendingInteraction.prompt
+              ? String(payload.pendingInteraction.prompt)
+              : '',
+            pendingSourceUserText: payload && payload.pendingInteraction && payload.pendingInteraction.sourceUserText
+              ? String(payload.pendingInteraction.sourceUserText)
+              : '',
+            prompt: options && options.prompt ? String(options.prompt) : '',
+          });
+          if (String(latestUserText).trim() === '帮我改成通过') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '请确认是把全部名为222的子项改成通过，还是只改当前这条？',
+                blocks: [{
+                  type: 'notice',
+                  level: 'info',
+                  title: '需要补充信息',
+                  text: '当前还缺少修改范围，请确认是全部还是当前这条。'
+                }],
+              }),
+            };
+          }
+          if (String(latestUserText).trim() === '全部名为222的都改成通过') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '收到，我会按“全部名为222的子项改成通过”继续处理。',
+                blocks: [],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '未命中测试分支。',
+              blocks: [],
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+
+    await page.fill('#assistantInput', '帮我改成通过');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('请确认是把全部名为222的子项改成通过');
+    await expect.poll(() => page.evaluate(() => Number(window.__assistantCapabilityExecCount || 0))).toBe(0);
+
+    await page.fill('#assistantInput', '全部名为222的都改成通过');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('收到，我会按“全部名为222的子项改成通过”继续处理');
+
+    const secondRound = await page.evaluate(() => {
+      var list = Array.isArray(window.__assistantClarifyRounds) ? window.__assistantClarifyRounds : [];
+      return list.length >= 2 ? list[1] : null;
+    });
+    expect(secondRound).not.toBeNull();
+    expect(String(secondRound && secondRound.pendingKind || '')).toBe('model_clarify');
+    expect(String(secondRound && secondRound.pendingPrompt || '')).toContain('请确认是把全部名为222的子项改成通过');
+    expect(String(secondRound && secondRound.pendingSourceUserText || '')).toContain('帮我改成通过');
+    expect(String(secondRound && secondRound.prompt || '')).toContain('如果用户意图、目标对象、目标范围、目标值或前置条件仍不明确，不要猜测');
+    expect(String(secondRound && secondRound.prompt || '')).toContain('当前存在待确认上下文');
+    expect(String(secondRound && secondRound.prompt || '')).toContain('原始用户请求');
+  });
+
+  test('assistant_v2 澄清页面范围后应继续原任务而不是把短回复当成新问题', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantClarifyPageRounds = [];
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input, options) {
+          var payload = null;
+          var latestUserText = '';
+          var pending = null;
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          latestUserText = payload && payload.latestUserText ? String(payload.latestUserText) : '';
+          pending = payload && payload.pendingInteraction && typeof payload.pendingInteraction === 'object'
+            ? payload.pendingInteraction
+            : null;
+          window.__assistantClarifyPageRounds.push({
+            latestUserText: latestUserText,
+            pendingKind: pending && pending.kind ? String(pending.kind) : '',
+            pendingPrompt: pending && pending.prompt ? String(pending.prompt) : '',
+            pendingSourceUserText: pending && pending.sourceUserText ? String(pending.sourceUserText) : '',
+            prompt: options && options.prompt ? String(options.prompt) : '',
+          });
+          if (String(latestUserText).trim() === '把全部用例都改回未执行状态') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '您指的是当前执行页面（用例执行页）的全部用例，还是其他页面（如用例库）的全部用例？如果是执行页，请确认是针对当前执行文件的全部用例。',
+                blocks: [{
+                  type: 'notice',
+                  level: 'info',
+                  title: '需要补充信息',
+                  text: '请确认修改范围是在当前执行页面，还是其他页面。'
+                }],
+              }),
+            };
+          }
+          if (String(latestUserText).trim() === '当前页面的') {
+            if (pending
+              && String(pending.kind || '') === 'model_clarify'
+              && String(pending.sourceUserText || '').indexOf('把全部用例都改回未执行状态') !== -1
+              && String(options && options.prompt || '').indexOf('原始用户请求') !== -1) {
+              return {
+                ok: true,
+                content: JSON.stringify({
+                  protocolVersion: 'assistant_v2',
+                  message: '收到，你的意思是把当前页面的全部用例改回未执行状态。我会继续按这个原任务处理。',
+                  blocks: [],
+                }),
+              };
+            }
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '请确认您具体想了解当前页面的什么信息？这样我可以为您提供准确的读取结果。',
+                blocks: [{
+                  type: 'notice',
+                  level: 'info',
+                  title: '需要补充信息',
+                  text: '请确认您具体想了解当前页面的什么信息？'
+                }],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '未命中测试分支。',
+              blocks: [],
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+
+    await page.fill('#assistantInput', '把全部用例都改回未执行状态');
+    await page.click('#assistantSendBtn');
+    await expect(page.locator('#assistantMessages')).toContainText('您指的是当前执行页面');
+
+    await page.fill('#assistantInput', '当前页面的');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('把当前页面的全部用例改回未执行状态');
+    await expect(page.locator('#assistantMessages')).not.toContainText('请确认您具体想了解当前页面的什么信息');
+
+    const secondRound = await page.evaluate(() => {
+      var list = Array.isArray(window.__assistantClarifyPageRounds) ? window.__assistantClarifyPageRounds : [];
+      return list.length >= 2 ? list[1] : null;
+    });
+    expect(secondRound).not.toBeNull();
+    expect(String(secondRound && secondRound.pendingKind || '')).toBe('model_clarify');
+    expect(String(secondRound && secondRound.pendingSourceUserText || '')).toContain('把全部用例都改回未执行状态');
+    expect(String(secondRound && secondRound.prompt || '')).toContain('原始用户请求');
+  });
+
+  test('assistant_v2 两次澄清后重复读取时仍会带着原任务语义转入复用写操作', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantTaskUserTexts = [];
+      window.__assistantExecutedCapabilities = [];
+      if (window.app && window.app.assistantCapabilityApi) {
+        window.app.assistantCapabilityApi.executeCapability = async function(id, args) {
+          var capabilityId = String(id || '');
+          var payload = args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : {};
+          window.__assistantExecutedCapabilities.push({
+            id: capabilityId,
+            args: payload,
+          });
+          if (capabilityId === 'cases.list_current') {
+            return {
+              ok: true,
+              status: 'ok',
+              message: '已读取当前执行文件“111的新皮肤”的用例，共 2 条。',
+              data: {
+                caseFile: {
+                  name: '111的新皮肤',
+                  hasReuseCases: true,
+                  reuseEnabled: true,
+                },
+                hasReuseCases: true,
+                total: 2,
+                totalAll: 2,
+                items: [{
+                  index: 1,
+                  title: '用例1',
+                  isReuseCase: true,
+                  reuseDetails: [{
+                    text: '111',
+                    status: '通过'
+                  }, {
+                    text: '222',
+                    status: '阻塞'
+                  }]
+                }, {
+                  index: 2,
+                  title: '用例2',
+                  isReuseCase: true,
+                  reuseDetails: [{
+                    text: '111',
+                    status: '失败'
+                  }, {
+                    text: '222',
+                    status: '通过'
+                  }]
+                }]
+              },
+              choices: [],
+              approvedArgs: null,
+            };
+          }
+          if (capabilityId === 'tempexec.reuse_update') {
+            return {
+              ok: true,
+              status: 'ok',
+              message: '已完成复用子项更新。',
+              data: {
+                fileName: '111的新皮肤',
+                value: '未执行',
+                scope: 'file_all',
+                updatedCount: 2,
+              },
+              choices: [],
+              approvedArgs: null,
+            };
+          }
+          return {
+            ok: false,
+            status: 'missing_capability',
+            message: '能力不可用：' + capabilityId,
+            data: null,
+            choices: [],
+            approvedArgs: null,
+          };
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var latestUserText = '';
+          var taskUserText = '';
+          var observations = [];
+          var forceNoCalls = false;
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          latestUserText = payload && payload.latestUserText ? String(payload.latestUserText) : '';
+          taskUserText = payload && payload.taskUserText ? String(payload.taskUserText) : '';
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          forceNoCalls = Boolean(payload && payload.forceNoCalls === true);
+          window.__assistantTaskUserTexts.push({
+            latestUserText: latestUserText,
+            taskUserText: taskUserText,
+            observationCapabilities: observations.map(function(item) {
+              return item && item.capability ? String(item.capability) : '';
+            }).filter(Boolean),
+          });
+          if (String(latestUserText).trim() === '把全部用例都改回未执行状态') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '您指的是当前执行页面（用例执行页）的全部用例，还是其他页面（如用例库）的全部用例？',
+                blocks: [{
+                  type: 'notice',
+                  level: 'info',
+                  title: '需要补充信息',
+                  text: '请先确认修改范围。'
+                }],
+              }),
+            };
+          }
+          if (String(latestUserText).trim() === '当前页面的') {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '您提到的“当前页面”是指整个执行页，还是特指当前打开的这一份执行用例文件？',
+                blocks: [{
+                  type: 'notice',
+                  level: 'info',
+                  title: '需要补充信息',
+                  text: '请确认是整个执行页还是当前这一份文件。'
+                }],
+              }),
+            };
+          }
+          if (String(latestUserText).trim() === '正在操作的这一份') {
+            if (forceNoCalls || observations.some(function(item) {
+              return item && item.capability === 'tempexec.reuse_update';
+            })) {
+              return {
+                ok: true,
+                content: JSON.stringify({
+                  protocolVersion: 'assistant_v2',
+                  message: '已按要求把当前正在操作的这一份执行用例文件全部改回未执行状态。',
+                  blocks: [],
+                }),
+              };
+            }
+            if (!observations.length) {
+              return {
+                ok: true,
+                content: JSON.stringify({
+                  protocolVersion: 'assistant_v2',
+                  message: '我先读取当前执行文件的用例列表。',
+                  task: {
+                    title: '将当前用例文件全部改回未执行状态',
+                    summary: '先读取现状，再执行修改。',
+                    steps: [{
+                      id: 'step-read',
+                      label: '读取当前用例列表'
+                    }]
+                  },
+                  calls: [{
+                    stepId: 'step-read',
+                    capability: 'cases.list_current',
+                    args: {
+                      detailLevel: 'full',
+                      limit: 200
+                    }
+                  }]
+                }),
+              };
+            }
+            if (observations.some(function(item) {
+              return item && item.capability === 'assistant.runtime.repeat_calls';
+            })) {
+              if (taskUserText.indexOf('把全部用例都改回未执行状态') !== -1
+                && taskUserText.indexOf('当前页面的') !== -1
+                && taskUserText.indexOf('正在操作的这一份') !== -1) {
+                return {
+                  ok: true,
+                  content: JSON.stringify({
+                    protocolVersion: 'assistant_v2',
+                    message: '继续按当前执行文件处理复用用例状态。',
+                    task: {
+                      title: '将当前用例文件全部改回未执行状态',
+                      summary: '直接执行复用子项状态修改。',
+                      steps: [{
+                        id: 'step-write',
+                        label: '批量修改当前执行文件的复用状态'
+                      }]
+                    },
+                    calls: [{
+                      stepId: 'step-write',
+                      capability: 'tempexec.reuse_update',
+                      args: {
+                        mode: 'detail_update',
+                        field: 'actual',
+                        applyAll: true,
+                        scope: 'file_all',
+                        value: '未执行'
+                      }
+                    }]
+                  }),
+                };
+              }
+            }
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我再确认一次当前执行文件列表。',
+                task: {
+                  title: '将当前用例文件全部改回未执行状态',
+                  summary: '再次读取现状。',
+                  steps: [{
+                    id: 'step-read-again',
+                    label: '再次读取当前用例列表'
+                  }]
+                },
+                calls: [{
+                  stepId: 'step-read-again',
+                  capability: 'cases.list_current',
+                  args: {
+                    detailLevel: 'full',
+                    limit: 200
+                  }
+                }]
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '未命中测试分支。',
+              blocks: [],
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+
+    await page.fill('#assistantInput', '把全部用例都改回未执行状态');
+    await page.click('#assistantSendBtn');
+    await expect(page.locator('#assistantMessages')).toContainText('请先确认修改范围');
+
+    await page.fill('#assistantInput', '当前页面的');
+    await page.click('#assistantSendBtn');
+    await expect(page.locator('#assistantMessages')).toContainText('请确认是整个执行页还是当前这一份文件');
+
+    await page.fill('#assistantInput', '正在操作的这一份');
+    await page.click('#assistantSendBtn');
+
+    await expect(page.locator('#assistantMessages')).toContainText('已按要求把当前正在操作的这一份执行用例文件全部改回未执行状态');
+
+    const executed = await page.evaluate(() => Array.isArray(window.__assistantExecutedCapabilities) ? window.__assistantExecutedCapabilities : []);
+    expect(executed.some(item => String(item && item.id || '') === 'tempexec.reuse_update')).toBe(true);
+
+    const taskTexts = await page.evaluate(() => Array.isArray(window.__assistantTaskUserTexts) ? window.__assistantTaskUserTexts : []);
+    const recoveryRound = Array.isArray(taskTexts)
+      ? taskTexts.find(function(item) {
+        var caps = Array.isArray(item && item.observationCapabilities) ? item.observationCapabilities : [];
+        return caps.indexOf('assistant.runtime.repeat_calls') !== -1;
+      })
+      : null;
+    expect(recoveryRound).not.toBeNull();
+    expect(String(recoveryRound && recoveryRound.taskUserText || '')).toContain('把全部用例都改回未执行状态');
+    expect(String(recoveryRound && recoveryRound.taskUserText || '')).toContain('当前页面的');
+    expect(String(recoveryRound && recoveryRound.taskUserText || '')).toContain('正在操作的这一份');
   });
 
   test('web_search 失败时应返回友好降级提示', async ({ page }) => {
@@ -8977,7 +9552,16 @@ test.describe('全局AI助手', () => {
         window.app.assistantApi.callModel = async function() {
           return {
             ok: true,
-            content: '{"action":"web_search","query":"AI 最新新闻"}',
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '我先帮你联网查询 AI 最新新闻。',
+              task: {
+                title: '查询 AI 最新新闻',
+                summary: '先联网检索，再整理结果。',
+                steps: [{ id: 'step-1', label: '联网查询 AI 最新新闻' }],
+              },
+              calls: [{ stepId: 'step-1', capability: 'web.search', args: { query: 'AI 最新新闻' } }],
+            }),
           };
         };
         window.app.assistantApi.searchWeb = async function() {
@@ -9124,14 +9708,22 @@ test.describe('全局AI助手', () => {
     await page.evaluate(() => {
       window.__assistantHistorySnapshots = [];
       if (window.app && window.app.assistantApi) {
-        window.app.assistantApi.callModel = async function(userText, options) {
+        window.app.assistantApi.callModel = async function(input, options) {
+          var payload = null;
           var history = options && Array.isArray(options.history) ? options.history : [];
+          var latestUserText = '';
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          latestUserText = payload && payload.latestUserText ? String(payload.latestUserText) : String(input || '');
           window.__assistantHistorySnapshots.push({
-            userText: String(userText || ''),
+            userText: latestUserText,
             history: history,
             prompt: options && options.prompt ? String(options.prompt) : '',
           });
-          var text = String(userText || '').trim();
+          var text = String(latestUserText || '').trim();
           if (text === '今天的天气怎么样？') {
             return { ok: true, content: '可以的，请先告诉我你所在城市。' };
           }
@@ -9221,15 +9813,23 @@ test.describe('全局AI助手', () => {
     await page.evaluate(() => {
       window.__assistantPrioritySnapshots = [];
       if (window.app && window.app.assistantApi) {
-        window.app.assistantApi.callModel = async function(userText, options) {
+        window.app.assistantApi.callModel = async function(input, options) {
+          var payload = null;
           var history = options && Array.isArray(options.history) ? options.history : [];
           var prompt = options && options.prompt ? String(options.prompt) : '';
+          var latestUserText = '';
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          latestUserText = payload && payload.latestUserText ? String(payload.latestUserText) : String(input || '');
           window.__assistantPrioritySnapshots.push({
-            userText: String(userText || ''),
+            userText: latestUserText,
             history: history,
             prompt: prompt,
           });
-          var text = String(userText || '').trim();
+          var text = String(latestUserText || '').trim();
           if (text === '今天的天气怎么样？') {
             return { ok: true, content: '可以，请先告诉我城市。' };
           }
@@ -10374,6 +10974,1586 @@ test.describe('全局AI助手', () => {
       var list = Array.isArray(window.__assistantRemovedExecFiles) ? window.__assistantRemovedExecFiles : [];
       return list.join('|');
     })).toBe('exec-1');
+  });
+
+  test('cases.list_current 会向模型暴露行级复用标记、子项明细和聚合执行结果', async ({ page }) => {
+    await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-row-1',
+            name: '混合执行文件',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'preset-1', text: '子项111' },
+              { id: 'preset-2', text: '子项222' },
+              { id: 'preset-3', text: '子项333' },
+            ],
+            cases: [
+              {
+                id: 'reuse-case-1',
+                title: '复用用例A',
+                executionResult: '未执行',
+                actual: '未执行',
+                reuseDetails: [
+                  { id: 'd-1', text: '子项111', status: '通过' },
+                  { id: 'd-2', text: '子项222', status: '阻塞' },
+                ],
+              },
+              {
+                id: 'plain-case-1',
+                title: '普通用例B',
+                executionResult: '通过',
+                actual: '通过',
+              },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-row-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-row-1';
+      }
+    });
+
+    const result = await page.evaluate(async () => {
+      return await window.app.assistantCapabilityApi.executeCapability('cases.list_current', {
+        detailLevel: 'full',
+        limit: 20,
+      });
+    });
+    expect(result && result.ok).toBe(true);
+    expect(result && result.data && result.data.items && result.data.items[0] && result.data.items[0].isReuseCase).toBe(true);
+    expect(result && result.data && result.data.items && result.data.items[0] && result.data.items[0].executionResult).toBe('阻塞');
+    expect(result && result.data && result.data.items && result.data.items[0] && result.data.items[0].reuseDetailCount).toBe(2);
+    expect(Array.isArray(result && result.data && result.data.items && result.data.items[0] && result.data.items[0].reuseDetails)).toBe(true);
+    expect(result && result.data && result.data.caseFile && result.data.caseFile.hasReuseCases).toBe(true);
+    expect(result && result.data && result.data.caseFile && result.data.caseFile.reusePresetCount).toBe(3);
+    expect(Array.isArray(result && result.data && result.data.caseFile && result.data.caseFile.reusePresetNames)).toBe(true);
+    expect((result && result.data && result.data.caseFile && result.data.caseFile.reusePresetNames || []).join('|')).toBe('子项111|子项222|子项333');
+    expect(result && result.data && result.data.items && result.data.items[1] && result.data.items[1].isReuseCase).toBe(false);
+
+    const pageData = await page.evaluate(() => {
+      return window.app.assistantApi.getPageData('');
+    });
+    expect(pageData && pageData.currentCaseContext && pageData.currentCaseContext.hasReuseCases).toBe(true);
+    expect(pageData && pageData.currentCaseContext && pageData.currentCaseContext.reuseCaseCount).toBe(1);
+    expect(pageData && pageData.currentCaseContext && pageData.currentCaseContext.reusePresetCount).toBe(3);
+    expect((pageData && pageData.currentCaseContext && pageData.currentCaseContext.reusePresetNames || []).join('|')).toBe('子项111|子项222|子项333');
+  });
+
+  test('assistant_v2 提示链会明确告诉模型复用型用例按子项状态判断', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantReusePromptCalls = [];
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-prompt-1',
+            name: '复用执行文件',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'preset-rp-1', text: '子项111' },
+              { id: 'preset-rp-2', text: '子项222' },
+            ],
+            cases: [
+              {
+                id: 'reuse-case-prompt-1',
+                title: '复用用例提示链',
+                executionResult: '未执行',
+                actual: '未执行',
+                reuseDetails: [
+                  { id: 'rp-1', text: '子项111', status: '通过' },
+                  { id: 'rp-2', text: '子项222', status: '失败' },
+                ],
+              },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-prompt-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-prompt-1';
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(inputText, options) {
+          window.__assistantReusePromptCalls.push({
+            inputText: String(inputText || ''),
+            prompt: options && options.prompt ? String(options.prompt) : '',
+          });
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '收到，我会先判断是否为复用型用例。',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我判断当前执行页这些用例是不是都已经通过');
+    await page.click('#assistantSendBtn');
+
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        return Array.isArray(window.__assistantReusePromptCalls) ? window.__assistantReusePromptCalls.length : 0;
+      });
+    }).toBeGreaterThan(0);
+    const capture = await page.evaluate(() => {
+      var calls = Array.isArray(window.__assistantReusePromptCalls) ? window.__assistantReusePromptCalls : [];
+      return calls.find(function(item) {
+        return !!String(item && item.prompt || '').trim();
+      }) || calls[0] || null;
+    });
+    expect(capture).not.toBeNull();
+    expect(String(capture && capture.prompt || '')).toContain('items[].isReuseCase');
+    expect(String(capture && capture.prompt || '')).toContain('items[].reuseDetails[].status');
+    expect(String(capture && capture.prompt || '')).toContain('caseFile.reusePresetNames');
+    expect(String(capture && capture.prompt || '')).toContain('不能只看第一个子项');
+    expect(String(capture && capture.prompt || '')).toContain('tempexec.reuse_update');
+    expect(String(capture && capture.prompt || '')).toContain('platformContextMarkdown');
+    expect(String(capture && capture.prompt || '')).toContain('runtimeContext');
+
+    const payload = (() => {
+      try {
+        return JSON.parse(String(capture && capture.inputText || ''));
+      } catch (err) {
+        return null;
+      }
+    })();
+    expect(payload && payload.currentPage && payload.currentPage.pageData && payload.currentPage.pageData.currentCaseContext && payload.currentPage.pageData.currentCaseContext.hasReuseCases).toBe(true);
+    expect(String(payload && payload.platformContextMarkdown || '')).toContain('# 测试助手平台固定上下文');
+    expect(String(payload && payload.platformContextMarkdown || '')).toContain('`tempexec`：用例执行');
+    expect(payload && payload.runtimeContext && payload.runtimeContext.currentPage && payload.runtimeContext.currentPage.tab).toBe('tempexec');
+    expect((payload && payload.runtimeContext && payload.runtimeContext.currentPage && payload.runtimeContext.currentPage.knownFacts || []).join('\n')).toContain('当前页签：tempexec');
+    expect((payload && payload.runtimeContext && payload.runtimeContext.currentPage && payload.runtimeContext.currentPage.currentPageCapabilities || []).map(function(item) {
+      return item && item.id ? String(item.id) : '';
+    })).toContain('tempexec.reuse_update');
+  });
+
+  test('assistant_v2 可按单条用例标题只修改指定复用子项', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantChineseIndexExecArgs = [];
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-single-1',
+            name: '复用单条执行',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'preset-single-1', text: '子项111' },
+              { id: 'preset-single-2', text: '子项222' },
+            ],
+            cases: [
+              {
+                id: 'reuse-single-case-1',
+                title: '复用用例A',
+                reuseDetails: [
+                  { id: 'single-a-1', text: '子项111', status: '通过' },
+                  { id: 'single-a-2', text: '子项222', status: '阻塞' },
+                ],
+              },
+              {
+                id: 'reuse-single-case-2',
+                title: '复用用例B',
+                reuseDetails: [
+                  { id: 'single-b-1', text: '子项111', status: '通过' },
+                  { id: 'single-b-2', text: '子项222', status: '失败' },
+                ],
+              },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-single-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-single-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.setTempExecActive = function(fileId) {
+          if (window.app && window.app.state) {
+            window.app.state.tempExecActiveId = String(fileId || '');
+            window.app.state.tempExecActiveFileId = String(fileId || '');
+          }
+        };
+        window.app.tempExecApi.updateTempExecReuseStatus = function(fileId, caseIndex, detailId, nextStatus) {
+          var fid = String(fileId || '');
+          var idx = Number(caseIndex);
+          var targetId = String(detailId || '');
+          var status = String(nextStatus || '');
+          var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+            ? window.app.state.tempExecFiles
+            : [];
+          var file = files.find(function(item) {
+            return String(item && item.id || '') === fid;
+          });
+          var targetCase = file && Array.isArray(file.cases) && idx >= 0 && idx < file.cases.length
+            ? file.cases[idx]
+            : null;
+          var details = targetCase && Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails : [];
+          var matched = false;
+          details.forEach(function(detail) {
+            if (String(detail && detail.id || '') !== targetId) return;
+            detail.status = status;
+            matched = true;
+          });
+          return matched;
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先读取当前复用用例，再只修改指定用例的子项222。',
+                task: {
+                  title: '修正指定复用子项状态',
+                  summary: '先读取现状，再只改目标用例的目标子项。',
+                  steps: [
+                    { id: 'step-read-before', label: '读取当前复用用例详情' },
+                    { id: 'step-write', label: '只修改指定用例的目标子项' },
+                    { id: 'step-read-after', label: '复核修改结果' },
+                  ],
+                },
+                calls: [
+                  { stepId: 'step-read-before', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+                  {
+                    stepId: 'step-write',
+                    capability: 'tempexec.reuse_update',
+                    args: {
+                      mode: 'detail_update',
+                      field: 'actual',
+                      caseTitle: '复用用例B',
+                      detailName: '子项222',
+                      value: '通过',
+                    },
+                  },
+                  { stepId: 'step-read-after', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+                ],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '已只把复用用例B的子项222改为通过，其余用例未改动。',
+            }),
+          };
+        };
+      }
+      if (window.app && window.app.assistantCapabilityApi) {
+        var originalExecuteCapability = window.app.assistantCapabilityApi.executeCapability;
+        window.app.assistantCapabilityApi.executeCapability = async function(id, args) {
+          window.__assistantChineseIndexExecArgs.push({
+            id: String(id || ''),
+            args: args && typeof args === 'object' ? JSON.parse(JSON.stringify(args)) : null,
+          });
+          return typeof originalExecuteCapability === 'function'
+            ? originalExecuteCapability.call(this, id, args)
+            : {
+              ok: false,
+              status: 'missing_capability',
+              message: '能力不可用',
+              data: null,
+              choices: [],
+              approvedArgs: null,
+            };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把复用用例B里子项222的执行结果改成通过');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改复用子项执行结果' }).last();
+    await expect(approvalCard).toBeVisible();
+    await expect(approvalCard).toContainText('复用用例B');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect.poll(() => page.evaluate(() => {
+      var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+        ? window.app.state.tempExecFiles
+        : [];
+      var file = files[0] || null;
+      var rows = file && Array.isArray(file.cases) ? file.cases : [];
+      return rows.map(function(item) {
+        var details = item && Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+        var target = details.find(function(detail) {
+          return String(detail && detail.text || '') === '子项222';
+        });
+        return target ? String(target.status || '') : '';
+      }).join('|');
+    })).toBe('阻塞|通过');
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已只把复用用例B的子项222改为通过');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="blocked"]')).toHaveCount(0);
+  });
+
+  test('assistant_v2 可按模型给出的第2条参数只修改该条复用子项', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-row-target-1',
+            name: '复用行目标执行',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'preset-row-1', text: '子项111' },
+              { id: 'preset-row-2', text: '子项222' },
+            ],
+            cases: [
+              {
+                id: 'reuse-row-case-1',
+                title: '复用用例A',
+                reuseDetails: [
+                  { id: 'row-a-1', text: '子项111', status: '失败' },
+                  { id: 'row-a-2', text: '子项222', status: '通过' },
+                ],
+              },
+              {
+                id: 'reuse-row-case-2',
+                title: '复用用例B',
+                reuseDetails: [
+                  { id: 'row-b-1', text: '子项111', status: '阻塞' },
+                  { id: 'row-b-2', text: '子项222', status: '通过' },
+                ],
+              },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-row-target-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-row-target-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.setTempExecActive = function(fileId) {
+          if (window.app && window.app.state) {
+            window.app.state.tempExecActiveId = String(fileId || '');
+            window.app.state.tempExecActiveFileId = String(fileId || '');
+          }
+        };
+        window.app.tempExecApi.updateTempExecReuseStatus = function(fileId, caseIndex, detailId, nextStatus) {
+          var fid = String(fileId || '');
+          var idx = Number(caseIndex);
+          var targetId = String(detailId || '');
+          var status = String(nextStatus || '');
+          var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+            ? window.app.state.tempExecFiles
+            : [];
+          var file = files.find(function(item) {
+            return String(item && item.id || '') === fid;
+          });
+          var targetCase = file && Array.isArray(file.cases) && idx >= 0 && idx < file.cases.length
+            ? file.cases[idx]
+            : null;
+          var details = targetCase && Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails : [];
+          var matched = false;
+          details.forEach(function(detail) {
+            if (String(detail && detail.id || '') !== targetId) return;
+            detail.status = status;
+            matched = true;
+          });
+          return matched;
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先读取当前复用用例，再只修改第2条用例的子项111。',
+                task: {
+                  title: '修正指定行的复用子项状态',
+                  summary: '先读取现状，再只改第2条用例的目标子项。',
+                  steps: [
+                    { id: 'step-read-before', label: '读取当前复用用例详情' },
+                    { id: 'step-write', label: '只修改第2条用例的目标子项' },
+                    { id: 'step-read-after', label: '复核修改结果' },
+                  ],
+                },
+                calls: [
+                  { stepId: 'step-read-before', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+                  {
+                    stepId: 'step-write',
+                    capability: 'tempexec.reuse_update',
+                    args: {
+                      mode: 'detail_update',
+                      field: 'actual',
+                      index: 2,
+                      detailName: '子项111',
+                      value: '通过',
+                    },
+                  },
+                  { stepId: 'step-read-after', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+                ],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '已只把第2条用例的子项111改为通过。',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '第2条用例的子项111执行结果改成通过');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改复用子项执行结果' }).last();
+    await expect(approvalCard).toBeVisible();
+    await expect(approvalCard).toContainText('第 2 条');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect.poll(() => page.evaluate(() => {
+      var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+        ? window.app.state.tempExecFiles
+        : [];
+      var file = files[0] || null;
+      var rows = file && Array.isArray(file.cases) ? file.cases : [];
+      return rows.map(function(item) {
+        var details = item && Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+        var target = details.find(function(detail) {
+          return String(detail && detail.text || '') === '子项111';
+        });
+        return target ? String(target.status || '') : '';
+      }).join('|');
+    })).toBe('失败|通过');
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已只把第2条用例的子项111改为通过');
+    await expect(finalReply).not.toContainText('执行受阻');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+  });
+
+  test('assistant_v2 可按模型给出的第五条参数只修改目标复用子项', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantChineseWrongRowRounds = [];
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-row-cn-1',
+            name: '111的新皮肤',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'preset-cn-1', text: '111' },
+              { id: 'preset-cn-2', text: '222' },
+            ],
+            cases: [
+              { id: 'cn-case-1', title: '用例1', reuseDetails: [{ id: 'cn-1-1', text: '111', status: '通过' }, { id: 'cn-1-2', text: '222', status: '未执行' }] },
+              { id: 'cn-case-2', title: '用例2', reuseDetails: [{ id: 'cn-2-1', text: '111', status: '通过' }, { id: 'cn-2-2', text: '222', status: '未执行' }] },
+              { id: 'cn-case-3', title: '用例3', reuseDetails: [{ id: 'cn-3-1', text: '111', status: '通过' }, { id: 'cn-3-2', text: '222', status: '未执行' }] },
+              { id: 'cn-case-4', title: '用例4', reuseDetails: [{ id: 'cn-4-1', text: '111', status: '通过' }, { id: 'cn-4-2', text: '222', status: '未执行' }] },
+              { id: 'cn-case-5', title: '用例5', reuseDetails: [{ id: 'cn-5-1', text: '111', status: '通过' }, { id: 'cn-5-2', text: '222', status: '未执行' }] },
+              { id: 'cn-case-6', title: '用例6', reuseDetails: [{ id: 'cn-6-1', text: '111', status: '通过' }, { id: 'cn-6-2', text: '222', status: '未执行' }] },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-row-cn-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-row-cn-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.setTempExecActive = function(fileId) {
+          if (window.app && window.app.state) {
+            window.app.state.tempExecActiveId = String(fileId || '');
+            window.app.state.tempExecActiveFileId = String(fileId || '');
+          }
+        };
+        window.app.tempExecApi.updateTempExecReuseStatus = function(fileId, caseIndex, detailId, nextStatus) {
+          var fid = String(fileId || '');
+          var idx = Number(caseIndex);
+          var targetId = String(detailId || '');
+          var status = String(nextStatus || '');
+          var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+            ? window.app.state.tempExecFiles
+            : [];
+          var file = files.find(function(item) {
+            return String(item && item.id || '') === fid;
+          });
+          var targetCase = file && Array.isArray(file.cases) && idx >= 0 && idx < file.cases.length
+            ? file.cases[idx]
+            : null;
+          var details = targetCase && Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails : [];
+          var matched = false;
+          details.forEach(function(detail) {
+            if (String(detail && detail.id || '') !== targetId) return;
+            detail.status = status;
+            matched = true;
+          });
+          return matched;
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          window.__assistantChineseWrongRowRounds.push(payload);
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先按模型判断执行修改。',
+                task: {
+                  title: '修正指定行的复用子项状态',
+                  summary: '模型直接给出第5条和目标子项，前端只负责执行。',
+                  steps: [
+                    { id: 'step-write', label: '修改目标行的子项执行结果' },
+                  ],
+                },
+                calls: [
+                  {
+                    stepId: 'step-write',
+                    capability: 'tempexec.reuse_update',
+                    args: {
+                      mode: 'detail_update',
+                      field: 'actual',
+                      index: 5,
+                      detailName: '222',
+                      value: '失败',
+                    },
+                  },
+                ],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '已只把第五条用例的子项222改为失败。',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '把第五条用例的子项222改成失败');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改复用子项执行结果' }).last();
+    await expect(approvalCard).toBeVisible();
+    await expect(approvalCard).toContainText('第 5 条');
+    await expect(approvalCard).toContainText('用例5');
+    await expect(approvalCard).not.toContainText('第 1 条');
+    await expect(approvalCard).not.toContainText('用例1');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect.poll(() => page.evaluate(() => {
+      var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+        ? window.app.state.tempExecFiles
+        : [];
+      var file = files[0] || null;
+      var rows = file && Array.isArray(file.cases) ? file.cases : [];
+      return rows.map(function(item) {
+        var details = item && Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+        var target = details.find(function(detail) {
+          return String(detail && detail.text || '') === '222';
+        });
+        return target ? String(target.status || '') : '';
+      }).join('|');
+    })).toBe('未执行|未执行|未执行|未执行|失败|未执行');
+
+    await expect.poll(() => page.evaluate(() => {
+      var rounds = Array.isArray(window.__assistantChineseWrongRowRounds) ? window.__assistantChineseWrongRowRounds : [];
+      var second = rounds.length >= 2 ? rounds[1] : null;
+      var observations = second && Array.isArray(second.observations) ? second.observations : [];
+      var writeObservation = observations.find(function(item) {
+        return item && String(item.capability || '') === 'tempexec.reuse_update';
+      });
+      var args = writeObservation && writeObservation.data && writeObservation.data.args && typeof writeObservation.data.args === 'object'
+        ? writeObservation.data.args
+        : null;
+      return args ? JSON.stringify({
+        index: args.index,
+        caseTitle: args.caseTitle || '',
+        caseQuery: args.caseQuery || '',
+        detailName: args.detailName || '',
+      }) : '';
+    })).toBe(JSON.stringify({
+      index: 5,
+      caseTitle: '',
+      caseQuery: '',
+      detailName: '222',
+    }));
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已只把第五条用例的子项222改为失败');
+    await expect(finalReply).not.toContainText('66 条未达标');
+  });
+
+  test('assistant_v2 单条复用子项修改在模型先只读时会继续追写', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantReadThenWriteRounds = [];
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-read-then-write-1',
+            name: '111的新皮肤',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'preset-rtw-1', text: '111' },
+              { id: 'preset-rtw-2', text: '222' },
+            ],
+            cases: [
+              { id: 'rtw-case-1', title: '用例1', reuseDetails: [{ id: 'rtw-1-1', text: '111', status: '通过' }, { id: 'rtw-1-2', text: '222', status: '未执行' }] },
+              { id: 'rtw-case-2', title: '用例2', reuseDetails: [{ id: 'rtw-2-1', text: '111', status: '通过' }, { id: 'rtw-2-2', text: '222', status: '未执行' }] },
+              { id: 'rtw-case-3', title: '用例3', reuseDetails: [{ id: 'rtw-3-1', text: '111', status: '通过' }, { id: 'rtw-3-2', text: '222', status: '未执行' }] },
+              { id: 'rtw-case-4', title: '用例4', reuseDetails: [{ id: 'rtw-4-1', text: '111', status: '通过' }, { id: 'rtw-4-2', text: '222', status: '未执行' }] },
+              { id: 'rtw-case-5', title: '用例5', reuseDetails: [{ id: 'rtw-5-1', text: '111', status: '通过' }, { id: 'rtw-5-2', text: '222', status: '未执行' }] },
+              { id: 'rtw-case-6', title: '用例6', reuseDetails: [{ id: 'rtw-6-1', text: '111', status: '通过' }, { id: 'rtw-6-2', text: '222', status: '未执行' }] },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-read-then-write-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-read-then-write-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.setTempExecActive = function(fileId) {
+          if (window.app && window.app.state) {
+            window.app.state.tempExecActiveId = String(fileId || '');
+            window.app.state.tempExecActiveFileId = String(fileId || '');
+          }
+        };
+        window.app.tempExecApi.updateTempExecReuseStatus = function(fileId, caseIndex, detailId, nextStatus) {
+          var fid = String(fileId || '');
+          var idx = Number(caseIndex);
+          var targetId = String(detailId || '');
+          var status = String(nextStatus || '');
+          var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+            ? window.app.state.tempExecFiles
+            : [];
+          var file = files.find(function(item) {
+            return String(item && item.id || '') === fid;
+          });
+          var targetCase = file && Array.isArray(file.cases) && idx >= 0 && idx < file.cases.length
+            ? file.cases[idx]
+            : null;
+          var details = targetCase && Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails : [];
+          var matched = false;
+          details.forEach(function(detail) {
+            if (String(detail && detail.id || '') !== targetId) return;
+            detail.status = status;
+            matched = true;
+          });
+          return matched;
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input, options) {
+          var payload = null;
+          var observations = [];
+          var prompt = options && options.prompt ? String(options.prompt) : '';
+          var hasWriteObservation = false;
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          hasWriteObservation = observations.some(function(item) {
+            return item && String(item.capability || '') === 'tempexec.reuse_update' && String(item.status || '') === 'ok';
+          });
+          window.__assistantReadThenWriteRounds.push({
+            observationCapabilities: observations.map(function(item) {
+              return item && item.capability ? String(item.capability) : '';
+            }),
+            forceNoCalls: payload && payload.forceNoCalls === true,
+            prompt: prompt,
+          });
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先读取当前用例列表确认目标位置。',
+                task: {
+                  title: '修改第五条用例的子项222状态为失败',
+                  summary: '先读取目标用例，再修改对应子项。',
+                  steps: [
+                    { id: 'step-read', label: '读取当前用例列表' },
+                  ],
+                },
+                calls: [
+                  { stepId: 'step-read', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+                ],
+              }),
+            };
+          }
+          if (hasWriteObservation || (payload && payload.forceNoCalls === true)) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '已只把第五条用例的子项222改为失败。',
+              }),
+            };
+          }
+          if (prompt.indexOf('必须返回新的写 calls') !== -1 || prompt.indexOf('当前任务属于实际写操作') !== -1) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '已确认目标，我现在执行写入。',
+                task: {
+                  title: '修改第五条用例的子项222状态为失败',
+                  summary: '读取完成后，执行目标子项修改。',
+                  steps: [
+                    { id: 'step-read', label: '读取当前用例列表' },
+                    { id: 'step-write', label: '修改目标子项执行结果' },
+                  ],
+                },
+                calls: [
+                  {
+                    stepId: 'step-write',
+                    capability: 'tempexec.reuse_update',
+                    args: {
+                      mode: 'detail_update',
+                      field: 'actual',
+                      index: 5,
+                      detailName: '222',
+                      value: '失败',
+                    },
+                  },
+                ],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '我继续读取当前用例列表确认目标位置。',
+              task: {
+                title: '修改第五条用例的子项222状态为失败',
+                summary: '继续确认目标位置。',
+                steps: [
+                  { id: 'step-read', label: '读取当前用例列表' },
+                ],
+              },
+              calls: [
+                { stepId: 'step-read', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+              ],
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '把第五条用例的子项222改成失败');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改复用子项执行结果' }).last();
+    await expect(approvalCard).toBeVisible();
+    await expect(approvalCard).toContainText('第 5 条');
+    await expect(approvalCard).toContainText('用例5');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect.poll(() => page.evaluate(() => {
+      var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+        ? window.app.state.tempExecFiles
+        : [];
+      var file = files[0] || null;
+      var rows = file && Array.isArray(file.cases) ? file.cases : [];
+      return rows.map(function(item) {
+        var details = item && Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+        var target = details.find(function(detail) {
+          return String(detail && detail.text || '') === '222';
+        });
+        return target ? String(target.status || '') : '';
+      }).join('|');
+    })).toBe('未执行|未执行|未执行|未执行|失败|未执行');
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已只把第五条用例的子项222改为失败');
+    await expect(finalReply).not.toContainText('模型未继续收敛');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+  });
+
+  test('相同写操作再次触发时只保留一张系统权限卡', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-approval-dedupe-1',
+            name: '111的新皮肤',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'approval-preset-1', text: '111' },
+            ],
+            cases: [
+              {
+                id: 'approval-case-1',
+                title: '任意角色获取碎片',
+                reuseDetails: [
+                  { id: 'approval-detail-1', text: '111', status: '未执行' },
+                ],
+              },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-approval-dedupe-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-approval-dedupe-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.setTempExecActive = function(fileId) {
+          if (window.app && window.app.state) {
+            window.app.state.tempExecActiveId = String(fileId || '');
+            window.app.state.tempExecActiveFileId = String(fileId || '');
+          }
+        };
+        window.app.tempExecApi.updateTempExecReuseStatus = function(fileId, caseIndex, detailId, nextStatus) {
+          var fid = String(fileId || '');
+          var idx = Number(caseIndex);
+          var targetId = String(detailId || '');
+          var status = String(nextStatus || '');
+          var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+            ? window.app.state.tempExecFiles
+            : [];
+          var file = files.find(function(item) {
+            return String(item && item.id || '') === fid;
+          });
+          var targetCase = file && Array.isArray(file.cases) && idx >= 0 && idx < file.cases.length
+            ? file.cases[idx]
+            : null;
+          var details = targetCase && Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails : [];
+          details.forEach(function(detail) {
+            if (String(detail && detail.id || '') !== targetId) return;
+            detail.status = status;
+          });
+          return true;
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '准备修改第1条用例的子项111。',
+                task: {
+                  title: '修改复用子项状态',
+                  summary: '执行单条复用子项修改。',
+                  steps: [
+                    { id: 'step-write', label: '修改目标子项执行结果' },
+                  ],
+                },
+                calls: [
+                  {
+                    stepId: 'step-write',
+                    capability: 'tempexec.reuse_update',
+                    args: {
+                      mode: 'detail_update',
+                      field: 'actual',
+                      index: 1,
+                      detailName: '111',
+                      value: '通过',
+                    },
+                  },
+                ],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '已完成这次修改。',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+
+    await page.fill('#assistantInput', '第1条用例的子项111执行结果改成通过');
+    await page.click('#assistantSendBtn');
+
+    let approvalCards = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改复用子项执行结果' });
+    await expect(approvalCards).toHaveCount(1);
+    await approvalCards.last().getByRole('button', { name: '允许操作' }).click();
+    await expect(page.locator('#assistantMessages .assistant-msg.ai').last()).toContainText('已完成这次修改');
+
+    await page.fill('#assistantInput', '第1条用例的子项111执行结果改成通过');
+    await page.click('#assistantSendBtn');
+
+    approvalCards = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改复用子项执行结果' });
+    await expect(approvalCards).toHaveCount(1);
+    await expect(approvalCards.last()).toContainText('允许操作');
+    await expect(approvalCards.last()).not.toContainText('已允许，正在执行...');
+  });
+
+  test('assistant_v2 请求超出当前用例总数时会明确回复未找到目标条目', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      var cases = [];
+      var i = 0;
+      for (i = 1; i <= 66; i += 1) {
+        cases.push({
+          id: 'range-case-' + i,
+          title: '用例' + i,
+          reuseDetails: [
+            { id: 'range-detail-' + i + '-1', text: '111', status: '未执行' },
+            { id: 'range-detail-' + i + '-2', text: '222', status: '通过' },
+          ],
+        });
+      }
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-out-of-range-1',
+            name: '111的新皮肤',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'range-preset-1', text: '111' },
+              { id: 'range-preset-2', text: '222' },
+            ],
+            cases: cases,
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-out-of-range-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-out-of-range-1';
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (payload && payload.forceNoCalls === true) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '',
+                blocks: [],
+              }),
+            };
+          }
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先读取当前用例列表确认目标范围。',
+                task: {
+                  title: '修改第67条用例的子项111执行结果为通过',
+                  summary: '先读取当前用例列表，再判断是否能把目标子项改为通过。',
+                  steps: [
+                    { id: 'step-read', label: '读取当前用例列表' },
+                  ],
+                },
+                calls: [
+                  { stepId: 'step-read', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+                ],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '我继续读取当前用例列表确认目标范围。',
+              task: {
+                title: '修改第67条用例的子项111执行结果为通过',
+                summary: '继续确认当前是否存在第67条用例并判断是否能改为通过。',
+                steps: [
+                  { id: 'step-read', label: '读取当前用例列表' },
+                ],
+              },
+              calls: [
+                { stepId: 'step-read', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+              ],
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '第67条用例子项111改成通过');
+    await page.click('#assistantSendBtn');
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('当前共 66 条用例');
+    await expect(finalReply).toContainText('未找到第 67 条用例');
+    await expect(finalReply).toContainText('未执行对子项“111”改为通过的修改');
+    await expect(finalReply).not.toContainText('当前页面是：');
+  });
+
+  test('tempexec.reuse_update 在当前只选中一条用例时可直接落到该条目标', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-focus-1',
+            name: '复用聚焦执行',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'preset-focus-1', text: '子项111' },
+              { id: 'preset-focus-2', text: '子项222' },
+            ],
+            cases: [
+              {
+                id: 'reuse-focus-case-1',
+                title: '复用用例A',
+                reuseDetails: [
+                  { id: 'focus-a-1', text: '子项111', status: '通过' },
+                  { id: 'focus-a-2', text: '子项222', status: '失败' },
+                ],
+              },
+              {
+                id: 'reuse-focus-case-2',
+                title: '复用用例B',
+                reuseDetails: [
+                  { id: 'focus-b-1', text: '子项111', status: '通过' },
+                  { id: 'focus-b-2', text: '子项222', status: '阻塞' },
+                ],
+              },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-focus-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-focus-1';
+        window.app.state.tempExecSelections = {
+          'exec-reuse-focus-1': [1],
+        };
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.setTempExecActive = function(fileId) {
+          if (window.app && window.app.state) {
+            window.app.state.tempExecActiveId = String(fileId || '');
+            window.app.state.tempExecActiveFileId = String(fileId || '');
+          }
+        };
+        window.app.tempExecApi.updateTempExecReuseStatus = function(fileId, caseIndex, detailId, nextStatus) {
+          var fid = String(fileId || '');
+          var idx = Number(caseIndex);
+          var targetId = String(detailId || '');
+          var status = String(nextStatus || '');
+          var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+            ? window.app.state.tempExecFiles
+            : [];
+          var file = files.find(function(item) {
+            return String(item && item.id || '') === fid;
+          });
+          var targetCase = file && Array.isArray(file.cases) && idx >= 0 && idx < file.cases.length
+            ? file.cases[idx]
+            : null;
+          var details = targetCase && Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails : [];
+          var matched = false;
+          details.forEach(function(detail) {
+            if (String(detail && detail.id || '') !== targetId) return;
+            detail.status = status;
+            matched = true;
+          });
+          return matched;
+        };
+      }
+      return await window.app.assistantCapabilityApi.executeCapability('tempexec.reuse_update', {
+        confirmed: true,
+        mode: 'detail_update',
+        field: 'actual',
+        detailName: '子项222',
+        value: '通过',
+      });
+    });
+    expect(result && result.ok).toBe(true);
+
+    const values = await page.evaluate(() => {
+      var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+        ? window.app.state.tempExecFiles
+        : [];
+      var file = files[0] || null;
+      var rows = file && Array.isArray(file.cases) ? file.cases : [];
+      return rows.map(function(item) {
+        var details = item && Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+        var target = details.find(function(detail) {
+          return String(detail && detail.text || '') === '子项222';
+        });
+        return target ? String(target.status || '') : '';
+      }).join('|');
+    });
+    expect(values).toBe('失败|通过');
+  });
+
+  test('assistant_v2 会把复用型用例的全部子项都改成目标状态', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantReuseBulkSecondPayload = null;
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-reuse-bulk-1',
+            name: '复用批量执行',
+            projectId: '2001',
+            versionId: '301',
+            reuseEnabled: false,
+            reusePresets: [
+              { id: 'preset-bulk-1', text: '子项111' },
+              { id: 'preset-bulk-2', text: '子项222' },
+              { id: 'preset-bulk-3', text: '子项333' },
+            ],
+            cases: [
+              {
+                id: 'reuse-bulk-case-1',
+                title: '复用用例A',
+                reuseDetails: [
+                  { id: 'bulk-a-1', text: '子项111', status: '通过' },
+                  { id: 'bulk-a-2', text: '子项222', status: '阻塞' },
+                ],
+              },
+              {
+                id: 'reuse-bulk-case-2',
+                title: '复用用例B',
+                reuseDetails: [
+                  { id: 'bulk-b-1', text: '子项111', status: '失败' },
+                  { id: 'bulk-b-2', text: '子项222', status: '通过' },
+                  { id: 'bulk-b-3', text: '子项333', status: '阻塞' },
+                ],
+              },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-reuse-bulk-1';
+        window.app.state.tempExecActiveFileId = 'exec-reuse-bulk-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.setTempExecActive = function(fileId) {
+          if (window.app && window.app.state) {
+            window.app.state.tempExecActiveId = String(fileId || '');
+            window.app.state.tempExecActiveFileId = String(fileId || '');
+          }
+        };
+        window.app.tempExecApi.updateTempExecReuseStatus = function(fileId, caseIndex, detailId, nextStatus) {
+          var fid = String(fileId || '');
+          var idx = Number(caseIndex);
+          var targetId = String(detailId || '');
+          var status = String(nextStatus || '');
+          var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+            ? window.app.state.tempExecFiles
+            : [];
+          var file = files.find(function(item) {
+            return String(item && item.id || '') === fid;
+          });
+          var targetCase = file && Array.isArray(file.cases) && idx >= 0 && idx < file.cases.length
+            ? file.cases[idx]
+            : null;
+          var details = targetCase && Array.isArray(targetCase.reuseDetails) ? targetCase.reuseDetails : [];
+          var matched = false;
+          details.forEach(function(detail) {
+            if (String(detail && detail.id || '') !== targetId) return;
+            detail.status = status;
+            matched = true;
+          });
+          return matched;
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先读取当前复用用例，再把全部子项改成未执行并复核。',
+                task: {
+                  title: '批量修正复用用例状态',
+                  summary: '先检查当前复用子项，再统一改成未执行。',
+                  steps: [
+                    { id: 'step-read-before', label: '读取当前复用用例详情' },
+                    { id: 'step-write', label: '统一修改全部子项状态' },
+                    { id: 'step-read-after', label: '复核修改结果' },
+                  ],
+                },
+                calls: [
+                  { stepId: 'step-read-before', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+                  { stepId: 'step-write', capability: 'tempexec.reuse_update', args: { field: 'actual', applyAll: true, value: '未执行' } },
+                  { stepId: 'step-read-after', capability: 'cases.list_current', args: { detailLevel: 'full', limit: 200 } },
+                ],
+              }),
+            };
+          }
+          window.__assistantReuseBulkSecondPayload = payload;
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '已按要求把当前复用文件内 2 条用例的全部 5 个子项改为未执行。',
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把所有用例改成未执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改复用子项执行结果' }).last();
+    await expect(approvalCard).toBeVisible();
+    await expect(approvalCard).toContainText('全部复用子项');
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    await expect.poll(() => page.evaluate(() => {
+      var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+        ? window.app.state.tempExecFiles
+        : [];
+      var file = files[0] || null;
+      var details = [];
+      if (file && Array.isArray(file.cases)) {
+        file.cases.forEach(function(item) {
+          var rows = item && Array.isArray(item.reuseDetails) ? item.reuseDetails : [];
+          rows.forEach(function(detail) {
+            details.push(String(detail && detail.status || ''));
+          });
+        });
+      }
+      return details.join('|');
+    })).toBe('未执行|未执行|未执行|未执行|未执行');
+
+    const secondPayload = await page.evaluate(() => window.__assistantReuseBulkSecondPayload || null);
+    expect(secondPayload).not.toBeNull();
+    expect((secondPayload && secondPayload.observations || []).map(item => item && item.capability)).toContain('tempexec.reuse_update');
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已按要求把当前复用文件内 2 条用例的全部 5 个子项改为未执行');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="blocked"]')).toHaveCount(0);
+  });
+
+  test('assistant_v2 成功写入后重复读取不应再被判为执行受阻', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      window.__assistantRepeatReadModelCalls = 0;
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-repeat-1',
+            name: '批量回归执行',
+            projectId: '2001',
+            versionId: '301',
+            cases: [
+              { id: 'case-1', title: '登录成功', executionResult: '通过', actual: '通过' },
+              { id: 'case-2', title: '登录失败提示', executionResult: '阻塞', actual: '阻塞' },
+              { id: 'case-3', title: '验证码校验', executionResult: '未执行', actual: '未执行' },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-repeat-1';
+        window.app.state.tempExecActiveFileId = 'exec-repeat-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.updateTempExecResult = function(fileId, index, value) {
+          var fid = String(fileId || '');
+          var idx = Number(index);
+          var nextValue = String(value || '');
+          var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+            ? window.app.state.tempExecFiles
+            : [];
+          files.forEach(function(file) {
+            var fileIdText = file && file.id !== undefined && file.id !== null ? String(file.id) : '';
+            if (fileIdText !== fid) return;
+            if (!Array.isArray(file.cases) || !(idx >= 0) || idx >= file.cases.length) return;
+            file.cases[idx].executionResult = nextValue;
+            file.cases[idx].actual = nextValue;
+          });
+          return true;
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          window.__assistantRepeatReadModelCalls += 1;
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先批量改成未执行，再核对结果。',
+                task: {
+                  title: '批量调整执行结果',
+                  summary: '按要求批量改为未执行并核对。',
+                  steps: [
+                    { id: 'step-write', label: '批量修改执行结果' },
+                    { id: 'step-read', label: '读取当前用例列表' },
+                    { id: 'step-final', label: '整理结果并回复用户' },
+                  ],
+                },
+                calls: [
+                  { stepId: 'step-write', capability: 'case_library.batch_update_exec_results', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '未执行' } },
+                  { stepId: 'step-read', capability: 'cases.list_current', args: { detailLevel: 'full' } },
+                ],
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '继续核对当前结果。',
+              task: {
+                title: '批量调整执行结果',
+                summary: '按要求批量改为未执行并核对。',
+                steps: [
+                  { id: 'step-write', label: '批量修改执行结果' },
+                  { id: 'step-read', label: '读取当前用例列表' },
+                  { id: 'step-final', label: '整理结果并回复用户' },
+                ],
+              },
+              calls: [
+                { stepId: 'step-read', capability: 'cases.list_current', args: { detailLevel: 'full' } },
+              ],
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '帮我把所有用例改成未执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改用例' }).last();
+    await expect(approvalCard).toBeVisible();
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已按要求把全部 3 条用例改为未执行');
+    await expect(finalReply).toContainText('已停止重复执行');
+    await expect(finalReply).not.toContainText('执行受阻');
+    await expect(finalReply).not.toContainText('当前页面是：');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="blocked"]')).toHaveCount(0);
+  });
+
+  test('assistant_v2 写入成功但未再次读取列表时，会基于当前页面真实状态给出总结', async ({ page }) => {
+    const modelId = 'assistant-model-1';
+
+    await enableAssistant(page, modelId);
+    await page.evaluate(() => {
+      if (window.app && window.app.state) {
+        window.app.state.activeTab = 'tempexec';
+        window.app.state.tempExecFiles = [
+          {
+            id: 'exec-live-fallback-1',
+            name: '直播状态校验',
+            projectId: '2001',
+            versionId: '301',
+            cases: [
+              { id: 'lf-1', title: '用例A', executionResult: '通过', actual: '通过' },
+              { id: 'lf-2', title: '用例B', executionResult: '阻塞', actual: '阻塞' },
+            ],
+          },
+        ];
+        window.app.state.tempExecActiveId = 'exec-live-fallback-1';
+        window.app.state.tempExecActiveFileId = 'exec-live-fallback-1';
+      }
+      if (window.app && window.app.tempExecApi) {
+        window.app.tempExecApi.updateTempExecResult = function(fileId, index, value) {
+          var fid = String(fileId || '');
+          var idx = Number(index);
+          var nextValue = String(value || '');
+          var files = window.app && window.app.state && Array.isArray(window.app.state.tempExecFiles)
+            ? window.app.state.tempExecFiles
+            : [];
+          files.forEach(function(file) {
+            if (String(file && file.id || '') !== fid) return;
+            if (!Array.isArray(file.cases) || !(idx >= 0) || idx >= file.cases.length) return;
+            file.cases[idx].executionResult = nextValue;
+            file.cases[idx].actual = nextValue;
+          });
+          return true;
+        };
+      }
+      if (window.app && window.app.assistantApi) {
+        window.app.assistantApi.callModel = async function(input) {
+          var payload = null;
+          var observations = [];
+          var forceNoCalls = false;
+          try {
+            payload = JSON.parse(String(input || ''));
+          } catch (err) {
+            payload = null;
+          }
+          observations = payload && Array.isArray(payload.observations) ? payload.observations : [];
+          forceNoCalls = payload && payload.forceNoCalls === true;
+          if (!observations.length) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '我先批量改成未执行。',
+                task: {
+                  title: '批量修正执行结果',
+                  summary: '先修改，再整理结果。',
+                  steps: [
+                    { id: 'step-write', label: '批量修改执行结果' },
+                    { id: 'step-final', label: '整理结果并回复用户' },
+                  ],
+                },
+                calls: [
+                  { stepId: 'step-write', capability: 'case_library.batch_update_exec_results', args: { context: 'tempexec', scope: 'all', field: 'actual', value: '未执行' } },
+                ],
+              }),
+            };
+          }
+          if (forceNoCalls) {
+            return {
+              ok: true,
+              content: JSON.stringify({
+                protocolVersion: 'assistant_v2',
+                message: '',
+              }),
+            };
+          }
+          return {
+            ok: true,
+            content: JSON.stringify({
+              protocolVersion: 'assistant_v2',
+              message: '我再确认一下页面信息。',
+              task: {
+                title: '批量修正执行结果',
+                summary: '先修改，再整理结果。',
+                steps: [
+                  { id: 'step-write', label: '批量修改执行结果' },
+                  { id: 'step-final', label: '整理结果并回复用户' },
+                ],
+              },
+              calls: [
+                { stepId: 'step-final', capability: 'page.current_info', args: {} },
+              ],
+            }),
+          };
+        };
+      }
+    });
+
+    await openAssistant(page);
+    await page.fill('#assistantInput', '将所有用例状态改为未执行');
+    await page.click('#assistantSendBtn');
+
+    const approvalCard = page.locator('#assistantMessages .assistant-msg').filter({ hasText: '准备执行：修改用例' }).last();
+    await expect(approvalCard).toBeVisible();
+    await approvalCard.getByRole('button', { name: '允许操作' }).click();
+
+    const finalReply = page.locator('#assistantMessages .assistant-msg.ai').last();
+    await expect(finalReply).toContainText('已按要求把全部 2 条用例改为未执行');
+    await expect(finalReply).not.toContainText('当前还没有实际执行修改');
+    await expect(finalReply).not.toContainText('仍有 1 条未达标');
+    await expect(finalReply.locator('.assistant-task-card[data-task-status="completed"]')).toBeVisible();
   });
 
 });
