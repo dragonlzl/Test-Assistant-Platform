@@ -18,6 +18,10 @@
     const defaultTemperature = 0.2;
     const assignmentName = 'default';
     const api = window.app && window.app.apiClient;
+    const showCenterToast = window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function'
+      ? window.app.utils.showCenterToast
+      : null;
+    const previousDefaultCaseGenPrompt = '你是游戏测试用例专家，针对单个测试模块生成 JSON 用例列表，需严格遵循以下要求，生成高质量用例：\n1、每条用例字段：{module, title, priority（仅从P0、P1、P2中选择）, preconditions, steps, expected}，steps 为数组。\n2、生成时需要结合模块的测试场景/测试要点/耦合模块。\n3、生成的用例需要具备可读性，语句要清晰明确简洁。\n3、其中用例标题title需保持言简意赅，不要过于详细，详细的内容应该分配到前提条件preconditions、操作步骤steps、和预期结果expected中。\n4、操作步骤需要分步展示，比如以1、2、3的形式分步展示。';
 
     const domRefs = dom || {};
     const pickEl = function(key, id) { return domRefs[key] || document.getElementById(id); };
@@ -128,6 +132,11 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function showAssignmentSavedToast() {
+      if (!showCenterToast) return;
+      showCenterToast('指派已保存', 'ok', 3000);
     }
 
     function normalizeCapabilityKey(value) {
@@ -507,7 +516,7 @@
       merged.comparePrompt = merged.comparePrompt || defaultPrompts.compare;
       merged.splitPrompt = merged.splitPrompt || defaultPrompts.split;
       merged.caseGenPrompt = merged.caseGenPrompt || defaultPrompts.casegen;
-      if (merged.caseGenPrompt === legacyCaseGenPrompt) {
+      if (merged.caseGenPrompt === legacyCaseGenPrompt || merged.caseGenPrompt === previousDefaultCaseGenPrompt) {
         merged.caseGenPrompt = defaultPrompts.casegen;
         migrated = true;
       }
@@ -1396,7 +1405,10 @@
       resetModelFormBtn.addEventListener('click', () => resetModelForm(true));
     }
     if (saveAssignmentsTopBtn) {
-      saveAssignmentsTopBtn.addEventListener('click', saveAssignments);
+      saveAssignmentsTopBtn.addEventListener('click', function() {
+        saveAssignments();
+        showAssignmentSavedToast();
+      });
     }
 
     loadModels();

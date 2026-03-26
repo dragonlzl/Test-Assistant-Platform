@@ -25,12 +25,25 @@
     var caseGenAllGenerateBtn = document.getElementById('caseGenAllGenerateBtn');
     var caseGenAllTopupBtn = document.getElementById('caseGenAllTopupBtn');
     var caseGenSuggestionGenerateBtn = document.getElementById('caseGenSuggestionGenerateBtn');
+    var caseGenSettingsTabBtn = document.getElementById('caseGenSettingsTabBtn');
+    var caseGenModulesTabBtn = document.getElementById('caseGenModulesTabBtn');
+    var caseGenCustomRequirementEl = document.getElementById('caseGenCustomRequirement');
+    var caseGenNeedBoundaryEl = document.getElementById('caseGenNeedBoundary');
+    var caseGenNeedMobileEl = document.getElementById('caseGenNeedMobile');
+    var caseGenNeedSpecialEl = document.getElementById('caseGenNeedSpecial');
+    var caseGenSpecialRepeatOperationEl = document.getElementById('caseGenSpecialRepeatOperation');
+    var caseGenSpecialMultiTouchEl = document.getElementById('caseGenSpecialMultiTouch');
+    var caseGenSpecialRepeatExecutionEl = document.getElementById('caseGenSpecialRepeatExecution');
+    var caseGenSpecialWeakNetworkEl = document.getElementById('caseGenSpecialWeakNetwork');
+    var caseGenSpecialInterruptResumeEl = document.getElementById('caseGenSpecialInterruptResume');
     var exportCaseGenBtn = document.getElementById('exportCaseGen');
     var exportCaseGenXmindBtn = document.getElementById('exportCaseGenXmind');
     var testCaseGenModelBtn = document.getElementById('testCaseGenModel');
     var caseGenStoreActionSelect = document.getElementById('caseGenStoreActionSelect');
     var caseGenStoreNewBtn = document.getElementById('caseGenStoreNewBtn');
     var caseGenStoreAppendBtn = document.getElementById('caseGenStoreAppendBtn');
+    var caseGenStoreModeNewBtn = document.getElementById('caseGenStoreModeNewBtn');
+    var caseGenStoreModeAppendBtn = document.getElementById('caseGenStoreModeAppendBtn');
     var caseGenAllViewBtn = document.getElementById('caseGenAllViewBtn');
     var caseGenAllSelectBtn = document.getElementById('caseGenAllSelectBtn');
 
@@ -47,8 +60,17 @@
       if (!casesGenerationContainer) return;
       function handleCaseGenClick(e) {
         var targetGenerate = e.target.closest('[data-generate]');
-        if (targetGenerate && api.generateCasesForModule) {
-          api.generateCasesForModule(targetGenerate.dataset.generate);
+        if (targetGenerate) {
+          if (api.openCaseGenModuleGenerateDrawer) {
+            api.openCaseGenModuleGenerateDrawer(targetGenerate.dataset.generate);
+            return;
+          }
+          if (api.generateCasesForModule) {
+            api.generateCasesForModule(targetGenerate.dataset.generate);
+            return;
+          }
+        }
+        if (targetGenerate) {
           return;
         }
         var targetView = e.target.closest('[data-view]');
@@ -91,10 +113,6 @@
         if (targetClear && api.clearModuleCases) {
           api.clearModuleCases(targetClear.dataset.clear);
           return;
-        }
-        var targetTopup = e.target.closest('[data-topup]');
-        if (targetTopup && api.topUpCasesForModule) {
-          api.topUpCasesForModule(targetTopup.dataset.topup);
         }
       }
       function handleCaseGenChange(e) {
@@ -175,18 +193,167 @@
   }
 
     function bindBatchButtons() {
-      if (caseGenAllGenerateBtn && api.generateAllCaseGenModules) {
-        caseGenAllGenerateBtn.addEventListener('click', api.generateAllCaseGenModules);
+      if (caseGenAllGenerateBtn) {
+        caseGenAllGenerateBtn.addEventListener('click', function() {
+          if (api && typeof api.openCaseGenBatchActionDrawer === 'function') {
+            api.openCaseGenBatchActionDrawer('generate');
+            return;
+          }
+          if (api && typeof api.generateAllCaseGenModules === 'function') {
+            api.generateAllCaseGenModules();
+          }
+        });
       }
-      if (caseGenAllTopupBtn && api.topUpAllCaseGenModules) {
-        caseGenAllTopupBtn.addEventListener('click', api.topUpAllCaseGenModules);
+      if (caseGenAllTopupBtn) {
+        caseGenAllTopupBtn.addEventListener('click', function() {
+          if (api && typeof api.openCaseGenBatchActionDrawer === 'function') {
+            api.openCaseGenBatchActionDrawer('topup');
+            return;
+          }
+          if (api && typeof api.topUpAllCaseGenModules === 'function') {
+            api.topUpAllCaseGenModules();
+          }
+        });
       }
-      if (caseGenSuggestionGenerateBtn && api.generateSuggestedCaseGenModules) {
-        caseGenSuggestionGenerateBtn.addEventListener('click', api.generateSuggestedCaseGenModules);
+      if (caseGenSuggestionGenerateBtn) {
+        caseGenSuggestionGenerateBtn.addEventListener('click', function() {
+          if (api && typeof api.openCaseGenBatchActionDrawer === 'function') {
+            api.openCaseGenBatchActionDrawer('suggested');
+            return;
+          }
+          if (api && typeof api.generateSuggestedCaseGenModules === 'function') {
+            api.generateSuggestedCaseGenModules();
+          }
+        });
+      }
+    }
+
+    function ensureCaseGenSettings() {
+      if (api && typeof api.ensureCaseGenSettings === 'function') {
+        return api.ensureCaseGenSettings();
+      }
+      if (!state.caseGenSettings || typeof state.caseGenSettings !== 'object') {
+        state.caseGenSettings = {
+          activeTab: 'settings',
+          storeMode: 'new',
+          customRequirement: '',
+          needBoundary: false,
+          needMobile: false,
+          needSpecial: false,
+          specialRepeatOperation: false,
+          specialMultiTouch: false,
+          specialRepeatExecution: false,
+          specialWeakNetwork: false,
+          specialInterruptResume: false,
+        };
+      }
+      return state.caseGenSettings;
+    }
+
+    function updateCaseGenSetting(key, value) {
+      if (api && typeof api.setCaseGenSettingValue === 'function') {
+        api.setCaseGenSettingValue(key, value);
+        return;
+      }
+      var settings = ensureCaseGenSettings();
+      settings[key] = value;
+      persistWorkflowState();
+    }
+
+    function syncCaseGenSettingsUI() {
+      var settings = ensureCaseGenSettings();
+      if (caseGenCustomRequirementEl) caseGenCustomRequirementEl.value = settings.customRequirement || '';
+      if (caseGenNeedBoundaryEl) caseGenNeedBoundaryEl.checked = settings.needBoundary === true;
+      if (caseGenNeedMobileEl) caseGenNeedMobileEl.checked = settings.needMobile === true;
+      if (caseGenNeedSpecialEl) caseGenNeedSpecialEl.checked = settings.needSpecial === true;
+      if (caseGenSpecialRepeatOperationEl) caseGenSpecialRepeatOperationEl.checked = settings.specialRepeatOperation === true;
+      if (caseGenSpecialMultiTouchEl) caseGenSpecialMultiTouchEl.checked = settings.specialMultiTouch === true;
+      if (caseGenSpecialRepeatExecutionEl) caseGenSpecialRepeatExecutionEl.checked = settings.specialRepeatExecution === true;
+      if (caseGenSpecialWeakNetworkEl) caseGenSpecialWeakNetworkEl.checked = settings.specialWeakNetwork === true;
+      if (caseGenSpecialInterruptResumeEl) caseGenSpecialInterruptResumeEl.checked = settings.specialInterruptResume === true;
+      if (api && typeof api.syncCaseGenSpecialOptionsState === 'function') {
+        api.syncCaseGenSpecialOptionsState();
+      }
+      if (api && typeof api.setCaseGenViewTab === 'function') {
+        api.setCaseGenViewTab(settings.activeTab || 'settings', { persist: false });
+      }
+      if (api && typeof api.setCaseGenStoreMode === 'function') {
+        api.setCaseGenStoreMode(settings.storeMode || 'new', { persist: false });
+      }
+    }
+
+    function bindCaseGenSettings() {
+      if (caseGenSettingsTabBtn && api && typeof api.setCaseGenViewTab === 'function') {
+        caseGenSettingsTabBtn.addEventListener('click', function() {
+          api.setCaseGenViewTab('settings');
+        });
+      }
+      if (caseGenModulesTabBtn && api && typeof api.setCaseGenViewTab === 'function') {
+        caseGenModulesTabBtn.addEventListener('click', function() {
+          api.setCaseGenViewTab('modules');
+        });
+      }
+      if (caseGenCustomRequirementEl) {
+        caseGenCustomRequirementEl.addEventListener('input', debounce(function() {
+          updateCaseGenSetting('customRequirement', caseGenCustomRequirementEl.value || '');
+        }, 200));
+      }
+      if (caseGenNeedBoundaryEl) {
+        caseGenNeedBoundaryEl.addEventListener('change', function() {
+          updateCaseGenSetting('needBoundary', caseGenNeedBoundaryEl.checked === true);
+        });
+      }
+      if (caseGenNeedMobileEl) {
+        caseGenNeedMobileEl.addEventListener('change', function() {
+          updateCaseGenSetting('needMobile', caseGenNeedMobileEl.checked === true);
+        });
+      }
+      if (caseGenNeedSpecialEl) {
+        caseGenNeedSpecialEl.addEventListener('change', function() {
+          updateCaseGenSetting('needSpecial', caseGenNeedSpecialEl.checked === true);
+          if (api && typeof api.syncCaseGenSpecialOptionsState === 'function') {
+            api.syncCaseGenSpecialOptionsState();
+          }
+        });
+      }
+      if (caseGenSpecialRepeatOperationEl) {
+        caseGenSpecialRepeatOperationEl.addEventListener('change', function() {
+          updateCaseGenSetting('specialRepeatOperation', caseGenSpecialRepeatOperationEl.checked === true);
+        });
+      }
+      if (caseGenSpecialMultiTouchEl) {
+        caseGenSpecialMultiTouchEl.addEventListener('change', function() {
+          updateCaseGenSetting('specialMultiTouch', caseGenSpecialMultiTouchEl.checked === true);
+        });
+      }
+      if (caseGenSpecialRepeatExecutionEl) {
+        caseGenSpecialRepeatExecutionEl.addEventListener('change', function() {
+          updateCaseGenSetting('specialRepeatExecution', caseGenSpecialRepeatExecutionEl.checked === true);
+        });
+      }
+      if (caseGenSpecialWeakNetworkEl) {
+        caseGenSpecialWeakNetworkEl.addEventListener('change', function() {
+          updateCaseGenSetting('specialWeakNetwork', caseGenSpecialWeakNetworkEl.checked === true);
+        });
+      }
+      if (caseGenSpecialInterruptResumeEl) {
+        caseGenSpecialInterruptResumeEl.addEventListener('change', function() {
+          updateCaseGenSetting('specialInterruptResume', caseGenSpecialInterruptResumeEl.checked === true);
+        });
       }
     }
 
     function bindStoreButtons() {
+      if (caseGenStoreModeNewBtn && api && typeof api.setCaseGenStoreMode === 'function') {
+        caseGenStoreModeNewBtn.addEventListener('click', function() {
+          api.setCaseGenStoreMode('new');
+        });
+      }
+      if (caseGenStoreModeAppendBtn && api && typeof api.setCaseGenStoreMode === 'function') {
+        caseGenStoreModeAppendBtn.addEventListener('click', function() {
+          api.setCaseGenStoreMode('append');
+        });
+      }
       if (caseGenStoreActionSelect) {
         caseGenStoreActionSelect.addEventListener('change', function() {
           if (api && typeof api.setCaseGenDbStoreNewAction === 'function') {
@@ -221,7 +388,9 @@
     bindModelSelectors();
     bindExportButtons();
     bindBatchButtons();
+    bindCaseGenSettings();
     bindStoreButtons();
+    syncCaseGenSettingsUI();
   }
 
   window.app = window.app || {};

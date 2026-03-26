@@ -1301,6 +1301,7 @@
       state.tempExecSelections = {};
       state.tempExecRemarkOpen = {};
       state.tempExecReuseOpen = {};
+      state.tempExecReuseBatchExpanded = {};
       state.tempExecDefectOpen = {};
       state.tempExecPresetDraft = null;
       state.tempExecStatusFilter = { fileId: '', status: '' };
@@ -7317,6 +7318,7 @@
       state.tempExecSelections = {};
       state.tempExecRemarkOpen = {};
       state.tempExecReuseOpen = {};
+      state.tempExecReuseBatchExpanded = {};
       state.tempExecDefectOpen = {};
       state.tempExecPresetDraft = null;
       resetTempExecPages();
@@ -7612,6 +7614,7 @@
       state.tempExecSelections = {};
       state.tempExecRemarkOpen = {};
       state.tempExecReuseOpen = {};
+      state.tempExecReuseBatchExpanded = {};
       state.tempExecDefectOpen = {};
       state.tempExecPresetDraft = null;
       resetTempExecPages();
@@ -9279,6 +9282,9 @@
       delete state.tempExecSelections[fileId];
       delete state.tempExecRemarkOpen[fileId];
       delete state.tempExecReuseOpen[fileId];
+      if (state.tempExecReuseBatchExpanded && typeof state.tempExecReuseBatchExpanded === 'object') {
+        delete state.tempExecReuseBatchExpanded[fileId];
+      }
       delete state.tempExecPages[fileId];
       state.tempExecFocus = state.tempExecFocus.filter(function(id) { return id !== fileId; });
       saveTempExecFocus();
@@ -9415,6 +9421,9 @@
         delete state.tempExecSelections[String(id)];
         delete state.tempExecRemarkOpen[String(id)];
         delete state.tempExecReuseOpen[String(id)];
+        if (state.tempExecReuseBatchExpanded && typeof state.tempExecReuseBatchExpanded === 'object') {
+          delete state.tempExecReuseBatchExpanded[String(id)];
+        }
         delete state.tempExecPages[String(id)];
         state.tempExecFocus = (state.tempExecFocus || []).filter(function(fid) { return String(fid) !== String(id); });
         delete state.tempExecDefectOpen[String(id)];
@@ -9762,6 +9771,7 @@
         ].map(function(text) { return (text || '').toString().toLowerCase(); }).join(' ');
         return target.indexOf(searchTerm) !== -1;
       });
+      var matchIndexes = matches.map(function(entry) { return entry.idx; });
       var selection = ensureTempExecSelection(file.id);
       var remarkOpenSet = ensureTempExecRemarkOpen(file.id);
       var reuseOpenSet = ensureTempExecReuseOpen(file.id);
@@ -10008,13 +10018,41 @@
         ? ''
         : '<tr><td colspan="' + colCount + '">' + (file.cases.length ? '当前页暂无用例' : '未解析到有效用例') + '</td></tr>';
       var summary = buildTempExecSummary(file);
+      var reusePlaceholderMap = state.tempExecReusePlaceholders && state.tempExecReusePlaceholders[file.id]
+        ? state.tempExecReusePlaceholders[file.id]
+        : null;
+      var allMatchedReuseOpen = reuseEnabled
+        && matchIndexes.length > 0
+        && matchIndexes.every(function(idx) {
+          return reuseOpenSet.has(idx) || Boolean(reusePlaceholderMap && reusePlaceholderMap[String(idx)] !== undefined);
+        });
+      var reuseBatchExpandedMap = state.tempExecReuseBatchExpanded && typeof state.tempExecReuseBatchExpanded === 'object'
+        ? state.tempExecReuseBatchExpanded
+        : null;
+      var reuseBatchExpandedRemembered = Boolean(
+        reuseBatchExpandedMap
+        && Object.prototype.hasOwnProperty.call(reuseBatchExpandedMap, file.id)
+      );
+      var batchExpanded = reuseBatchExpandedRemembered
+        ? Boolean(reuseBatchExpandedMap[file.id])
+        : allMatchedReuseOpen;
+      var reuseBatchToggle = reuseEnabled
+        ? (
+          '<button type="button" class="secondary temp-reuse-expand-toggle" data-temp-reuse-toggle-all="' + file.id + '" data-temp-visible="' + escapeHtml(matchIndexes.join(',')) + '" data-temp-expanded="' + (batchExpanded ? '1' : '0') + '"' + (matchIndexes.length ? '' : ' disabled') + '>' +
+            (batchExpanded ? '收起所有子项' : '展开所有子项') +
+          '</button>'
+        )
+        : '';
       var reuseToggle = (
         '<div class="temp-reuse-toggle">' +
-          '<label>' +
-            '<input type="checkbox" data-temp-reuse-toggle="' + file.id + '" ' + (reuseEnabled ? 'checked' : '') + '>' +
-            '<span>用例复用</span>' +
-          '</label>' +
-          '<span class="hint">' + (reuseEnabled ? '可为单条用例补充多条执行记录' : '开启后可为用例记录多条执行项') + '</span>' +
+          '<div class="temp-reuse-toggle-main">' +
+            '<label>' +
+              '<input type="checkbox" data-temp-reuse-toggle="' + file.id + '" ' + (reuseEnabled ? 'checked' : '') + '>' +
+              '<span>用例复用</span>' +
+            '</label>' +
+            '<span class="hint">' + (reuseEnabled ? '可为单条用例补充多条执行记录' : '开启后可为用例记录多条执行项') + '</span>' +
+          '</div>' +
+          reuseBatchToggle +
         '</div>'
       );
       var presetPanel = reuseEnabled ? renderReusePresetPanel(file) : '';
@@ -10336,9 +10374,13 @@
       if (!file) return;
       if (enabled === Boolean(file.reuseEnabled)) return;
       function applyReuseToggle(nextEnabled) {
+        if (!state.tempExecReuseBatchExpanded || typeof state.tempExecReuseBatchExpanded !== 'object') {
+          state.tempExecReuseBatchExpanded = {};
+        }
         if (nextEnabled) {
           file.reuseEnabled = true;
           ensureReusePresets(file);
+          delete state.tempExecReuseBatchExpanded[fileId];
         } else {
           file.reuseEnabled = false;
           file.cases.forEach(function(item) {
@@ -10349,6 +10391,7 @@
             state.tempExecPresetDraft = null;
           }
           resetTempExecReuseOpen(fileId);
+          delete state.tempExecReuseBatchExpanded[fileId];
         }
         if (isDbMode()) {
           var execSetId = file.execSetId || Number(file.id);

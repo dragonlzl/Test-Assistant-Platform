@@ -305,28 +305,35 @@
     }
 
     function buildCaseGenGuide() {
-      var intro = '<p>基于测试模块拆分结果生成结构化测试用例，支持导出、入库与转执行。</p>';
+      var intro = '<p>基于测试模块拆分结果生成结构化测试用例，页面分为“用例生成设置”和“生成模块”两个页签，支持全局要求配置、按模块生成、导出、入库与转执行。</p>';
       var flow = ''
         + '<ol class="page-guide-steps">'
         + '<li>从“测试模块拆分”或“缺失模块视图”进入时，会自动带入模块列表。</li>'
-        + '<li>在模块卡片中点击 <span class="page-guide-button">【生成用例】</span> 或补全按钮，等待模型生成。</li>'
-        + '<li>入库操作区从上到下：先点击 <span class="page-guide-button">【全模块用例视图】</span> 集中查看并勾选用例。</li>'
-        + '<li>在“新用例入库”区选择入库方式（直接入库 / 入库并转到执行），点击 <span class="page-guide-button">【新用例入库】</span> 完成入库。</li>'
-        + '<li>需要追加到旧用例时，使用下方 <span class="page-guide-button">【旧用例追加入库】</span>。</li>'
-        + '<li>可按需导出 TXT / XMind 文件用于外部共享。</li>'
+        + '<li>在 <span class="page-guide-button">【用例生成设置】</span> 页签点击生成操作区按钮。</li>'
+        + '<li>点击 <span class="page-guide-button">【全模块直接生成】</span> / <span class="page-guide-button">【全模块补全生成】</span> / <span class="page-guide-button">【仅补全用例】</span> 后，会先打开右侧抽屉填写“额外要求填写”，再选择边界、移动端与特殊场景要求，确认后才真正执行生成。</li>'
+        + '<li>切到 <span class="page-guide-button">【生成模块】</span> 页签后，点击模块卡片中的 <span class="page-guide-button">【生成用例】</span> 会打开统一抽屉；可在“<span class="page-guide-button">【全局配置优先】</span> / <span class="page-guide-button">【独立配置优先】</span> / <span class="page-guide-button">【补全生成】</span>”三个页签间切换，再确认执行。</li>'
+        + '<li>若选择 <span class="page-guide-button">【补全生成】</span> 页签，只会基于当前模块的生成建议与已有结果补充，不继承全局或独立配置勾选。</li>'
+        + '<li>入库前先在入库操作区第一部分点击 <span class="page-guide-button">【全模块用例视图】</span>，集中查看并勾选用例。</li>'
+        + '<li>再在第二部分切换“<span class="page-guide-button">【新用例入库】</span> / <span class="page-guide-button">【追加到已有旧用例】</span>”，页面只展示当前方式对应的操作区。</li>'
+        + '<li>选择新用例模式时，可继续配置“直接入库 / 入库并转到执行”；选择追加模式时，使用 <span class="page-guide-button">【旧用例追加入库】</span>。</li>'
+        + '<li>可按需导出 TXT / XMind 文件或返回测试模块拆分继续调整。</li>'
         + '</ol>';
       var rules = ''
         + '<ul class="page-guide-notes">'
-        + '<li><span class="page-guide-button">【生成用例】</span>：对单个模块生成用例，会覆盖该模块已有结果。</li>'
-        + '<li><span class="page-guide-button">【补全生成】</span>：仅对已有结果的模块补充用例，不覆盖原结果。</li>'
+        + '<li><span class="page-guide-button">【额外要求填写】</span>：非必填，位于生成抽屉中，填写后会与基础提示词、选项提示词一起拼接给模型。</li>'
+        + '<li><span class="page-guide-button">【是否需要考虑边界 / 移动设备操作 / 特殊场景】</span>：位于右侧生成抽屉内，默认全部不勾选；每个勾选项都会附带独立提示词部件。</li>'
+        + '<li><span class="page-guide-button">【生成用例】</span>：对单个模块打开统一抽屉；“全局配置优先”会沿用已确认的全局设置，“独立配置优先”只在当前模块本次生成生效且优先于全局。</li>'
+        + '<li><span class="page-guide-button">【补全生成】</span>：位于模块生成抽屉页签内，仅对已有结果的模块补充用例，不覆盖原结果，也不继承全局或模块独立勾选。</li>'
         + '<li><span class="page-guide-button">【全模块直接生成】</span>：对未生成中的模块批量执行“生成用例”；存在已生成数据时会二次确认，取消则全部不执行。</li>'
         + '<li><span class="page-guide-button">【全模块补全生成】</span>：仅对已有结果且未生成中的模块批量补全，无可补全模块时不可点击。</li>'
+        + '<li><span class="page-guide-button">【仅补全用例】</span>：只执行填写了“生成建议”的模块，适合局部补充或重跑。</li>'
         + '<li>模块生成中会被跳过；全部生成中时全模块按钮不可点击。</li>'
         + '</ul>';
       var notes = ''
         + '<ul class="page-guide-notes">'
-        + '<li><span class="page-guide-button">【全模块用例视图】</span>：汇总当前勾选用例，支持批量选中与入库。</li>'
-        + '<li><span class="page-guide-button">【新用例入库】</span>：将勾选用例作为新用例文件写入用例库。</li>'
+        + '<li><span class="page-guide-button">【生成模块】</span> 页签下每行展示两个模块；左侧用例生成进度点击后会自动切到该页签并定位到目标模块。</li>'
+        + '<li><span class="page-guide-button">【全模块用例视图】</span>：入库前的必做步骤，用于汇总当前用例并完成勾选。</li>'
+        + '<li><span class="page-guide-button">【新用例入库】</span> / <span class="page-guide-button">【追加到已有旧用例】</span>：用于切换入库方式，只展示当前选择对应的操作区。</li>'
         + '<li><span class="page-guide-button">【旧用例追加入库】</span>：将勾选用例追加到已存在的用例文件。</li>'
         + '<li><span class="page-guide-button">【导出全部用例TXT】</span> / <span class="page-guide-button">【导出全部勾选用例XMind】</span>：导出当前结果用于外部共享。</li>'
         + '</ul>';

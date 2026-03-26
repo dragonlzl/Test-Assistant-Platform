@@ -11,6 +11,7 @@
     var saveAssignments = ctx.saveAssignments || function() {};
     var testModel = ctx.testModel || function() {};
     var updateFlowStatus = ctx.updateFlowStatus || function() {};
+    var showCenterToast = ctx.showCenterToast || utils.showCenterToast || function() {};
 
     var dom = ctx.dom || {};
     var pick = function(node, id) { return node || document.getElementById(id); };
@@ -126,6 +127,10 @@
       });
     }
 
+    function showAssignmentSavedToast() {
+      showCenterToast('指派已保存', 'ok', 3000);
+    }
+
     function syncGlobalAssignSelection() {
       if (!globalAssignModelSelect) return;
       var candidate = '';
@@ -230,6 +235,7 @@
         saveAssignments();
         renderAssignmentsSelect();
         updateAssignmentStatuses();
+        showAssignmentSavedToast();
       });
     }
 

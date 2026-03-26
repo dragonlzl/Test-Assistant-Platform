@@ -46,7 +46,7 @@ async function seedCaseGenModule(page) {
       window.app.switchTab('casesgen');
     }
   });
-  await page.waitForSelector('#casesGenerationContainer', { timeout: 8000 });
+  await page.waitForFunction(() => window.app && window.app.casesGenApi && typeof window.app.casesGenApi.setCaseGenViewTab === 'function', null, { timeout: 8000 });
 
   await page.evaluate(() => {
     const state = window.app && window.app.state ? window.app.state : null;
@@ -70,6 +70,9 @@ async function seedCaseGenModule(page) {
 
     if (window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
       window.app.casesGenApi.renderCaseGeneration();
+    }
+    if (window.app.casesGenApi && typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
+      window.app.casesGenApi.setCaseGenViewTab('modules', { persist: false });
     }
   });
 

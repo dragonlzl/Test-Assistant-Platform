@@ -104,16 +104,32 @@
       }
       switchTab('casesgen');
       if (typeof handlers.updateMissingView === 'function') handlers.updateMissingView();
+      try {
+        if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
+          window.app.casesGenApi.setCaseGenViewTab('settings', { persist: false });
+        }
+      } catch (errTab) {
+        // ignore
+      }
     }
 
     function goCasesGenAndScroll(moduleId) {
       switchTab('casesgen');
+      try {
+        if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
+          window.app.casesGenApi.setCaseGenViewTab('modules', { persist: false });
+        }
+      } catch (errTab) {
+        // ignore
+      }
       renderCaseGeneration();
       var targetCard = casesGenerationContainer
         ? casesGenerationContainer.querySelector('[data-module-id=\"' + moduleId + '\"]')
         : null;
       if (targetCard) {
         scrollElementIntoView(targetCard, 'smooth', 120);
+      } else if (casesGenerationContainer) {
+        scrollElementIntoView(casesGenerationContainer, 'smooth', 120);
       }
       if (moduleId) {
         openCaseViewIfAvailable(moduleId, true);
