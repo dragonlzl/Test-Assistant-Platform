@@ -3334,7 +3334,49 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .casegen-zones {
   display: flex;
   flex-direction: column;
+  gap: 14px;
+}
+.casegen-tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.casegen-tab {
+  border: 1px solid rgba(37,99,235,0.18);
+  border-radius: 999px;
+  padding: 9px 16px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(239,246,255,0.92));
+  color: #1e3a8a;
+  font-weight: 700;
+  box-shadow: 0 8px 16px rgba(37,99,235,0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+.casegen-tab:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37,99,235,0.35);
+  box-shadow: 0 12px 20px rgba(37,99,235,0.12);
+}
+.casegen-tab.is-active {
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  border-color: rgba(37,99,235,0.55);
+  color: #fff;
+  box-shadow: 0 14px 24px rgba(37,99,235,0.18);
+}
+.casegen-tabpanel {
+  display: none;
+}
+.casegen-tabpanel.is-active {
+  display: block;
+}
+.casegen-settings-grid {
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
+  align-items: stretch;
+}
+.casegen-settings-grid .casegen-zone {
+  flex: 1 1 280px;
+  min-width: 0;
 }
 .casegen-zone {
   border: 1px solid rgba(148,163,184,0.28);
@@ -3359,10 +3401,119 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .casegen-zone-actions {
   margin: 0;
 }
+.casegen-option-list,
+.casegen-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.casegen-option,
+.casegen-action-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.24);
+  background: linear-gradient(135deg, rgba(255,255,255,0.94), rgba(248,250,252,0.92));
+}
+.casegen-option input,
+.casegen-suboption input {
+  margin-top: 2px;
+}
+.casegen-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.casegen-option-title,
+.casegen-suboptions-title {
+  font-weight: 700;
+  color: var(--text);
+}
+.casegen-suboptions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(148,163,184,0.35);
+  background: rgba(248,250,252,0.72);
+  transition: opacity 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+.casegen-suboptions.is-disabled {
+  opacity: 0.62;
+}
+.casegen-suboptions-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+.casegen-suboption {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,0.28);
+  background: rgba(255,255,255,0.88);
+  color: var(--text);
+}
+.casegen-action-item {
+  flex-direction: column;
+  align-items: stretch;
+}
+.casegen-action-item button {
+  align-self: flex-start;
+}
+.casegen-action-item.compact {
+  padding: 8px 10px;
+}
+.casegen-action-desc {
+  margin: 0;
+}
+.casegen-store-zone {
+  margin-top: 0;
+}
 .casegen-store-actions {
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
+}
+.casegen-store-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(148,163,184,0.18);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.66);
+}
+.casegen-store-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.casegen-store-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.casegen-store-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(37,99,235,0.16);
+  background: rgba(37,99,235,0.08);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
 }
 .casegen-store-row {
   display: flex;
@@ -3370,6 +3521,145 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   flex-wrap: wrap;
   gap: 10px;
   margin: 0;
+}
+.casegen-store-mode-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.casegen-store-mode-btn {
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(148,163,184,0.28);
+  background: linear-gradient(135deg, rgba(248,250,252,0.98), rgba(241,245,249,0.94));
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(15,23,42,0.06);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+.casegen-store-mode-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37,99,235,0.32);
+  box-shadow: 0 12px 22px rgba(37,99,235,0.1);
+}
+.casegen-store-mode-btn.is-active {
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+  border-color: rgba(37,99,235,0.52);
+  color: #fff;
+  box-shadow: 0 14px 24px rgba(37,99,235,0.18);
+}
+.casegen-store-panels {
+  width: 100%;
+}
+.casegen-store-panel {
+  display: none;
+  width: 100%;
+  padding: 12px;
+  border: 1px dashed rgba(148,163,184,0.26);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(248,250,252,0.78), rgba(255,255,255,0.94));
+}
+.casegen-store-panel.is-active {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.casegen-module-drawer-card {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.22);
+  background: linear-gradient(135deg, rgba(248,250,252,0.92), rgba(255,255,255,0.96));
+}
+.casegen-module-drawer-tabbar {
+  align-items: stretch;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+.casegen-module-drawer-tabbar .casegen-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.casegen-module-drawer-panel {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148,163,184,0.22);
+  background: linear-gradient(135deg, rgba(248,250,252,0.84), rgba(255,255,255,0.96));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
+}
+.casegen-module-drawer-panel.is-active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.casegen-module-drawer-panel .casegen-module-drawer-card,
+.casegen-module-drawer-panel .casegen-generate-drawer-field {
+  margin-bottom: 0;
+}
+.casegen-module-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.casegen-module-drawer-label,
+.casegen-module-drawer-item-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.casegen-module-drawer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.casegen-module-drawer-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.18);
+  background: rgba(255,255,255,0.72);
+}
+.casegen-module-drawer-item:last-child {
+  grid-column: 1 / -1;
+}
+.casegen-module-drawer-item p,
+.casegen-module-drawer-summary {
+  margin: 4px 0 0;
+  color: var(--text);
+  line-height: 1.6;
+  word-break: break-word;
+}
+.casegen-generate-drawer-field {
+  margin-bottom: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.22);
+  background: linear-gradient(135deg, rgba(248,250,252,0.92), rgba(255,255,255,0.96));
+}
+.casegen-generate-drawer-field-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.casegen-generate-drawer-field textarea {
+  min-height: 88px;
+}
+.casegen-generate-drawer-field-hint {
+  margin: 0;
+}
+.suggestion-panel-hint {
+  margin: 6px 0 0;
+  line-height: 1.55;
 }
 .casegen-zone .status {
   margin: 10px 0 0;
@@ -6268,8 +6558,8 @@ tr.import-invalid-locate-active td {
       gap: 10px;
     }
     .usecase-modules {
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
     }
     .usecase-card {
@@ -6277,6 +6567,7 @@ tr.import-invalid-locate-active td {
       border-radius: 12px;
       padding: 12px;
       background: #fff;
+      min-width: 0;
     }
     .usecase-card h3 {
       margin: 0 0 8px;
@@ -10249,11 +10540,88 @@ button.exec-overview-file-chip,
   border-color: rgba(125,180,255,0.2);
   box-shadow: 0 10px 22px rgba(0,0,0,0.35);
 }
+:root[data-theme="dark"] .casegen-tab {
+  background: linear-gradient(135deg, rgba(31,42,60,0.96), rgba(24,33,47,0.94));
+  border-color: rgba(125,180,255,0.28);
+  color: #bfdbfe;
+  box-shadow: 0 10px 18px rgba(0,0,0,0.28);
+}
+:root[data-theme="dark"] .casegen-tab:hover {
+  border-color: rgba(125,180,255,0.46);
+  box-shadow: 0 12px 22px rgba(0,0,0,0.34);
+}
+:root[data-theme="dark"] .casegen-tab.is-active {
+  background: linear-gradient(135deg, #1d4ed8, #0ea5e9);
+  border-color: rgba(96,165,250,0.52);
+  color: #eff6ff;
+}
+:root[data-theme="dark"] .casegen-option,
+:root[data-theme="dark"] .casegen-action-item {
+  background: linear-gradient(135deg, rgba(18,26,39,0.94), rgba(25,34,49,0.92));
+  border-color: rgba(125,180,255,0.2);
+}
+:root[data-theme="dark"] .casegen-suboptions {
+  background: rgba(15,23,42,0.52);
+  border-color: rgba(125,180,255,0.28);
+}
+:root[data-theme="dark"] .casegen-suboption {
+  background: rgba(26,34,49,0.92);
+  border-color: rgba(125,180,255,0.22);
+}
 :root[data-theme="dark"] .casegen-store-action-select {
   background: var(--panel);
   border-color: var(--border);
   color: var(--text);
   box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
+}
+:root[data-theme="dark"] .casegen-store-section {
+  background: rgba(19,27,41,0.72);
+  border-color: rgba(125,180,255,0.18);
+}
+:root[data-theme="dark"] .casegen-store-badge {
+  background: rgba(37,99,235,0.22);
+  border-color: rgba(96,165,250,0.3);
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .casegen-store-mode-btn {
+  background: linear-gradient(135deg, rgba(31,42,60,0.96), rgba(24,33,47,0.94));
+  border-color: rgba(125,180,255,0.22);
+  color: #dbeafe;
+  box-shadow: 0 10px 18px rgba(0,0,0,0.28);
+}
+:root[data-theme="dark"] .casegen-store-mode-btn:hover {
+  border-color: rgba(125,180,255,0.44);
+  box-shadow: 0 12px 22px rgba(0,0,0,0.34);
+}
+:root[data-theme="dark"] .casegen-store-mode-btn.is-active {
+  background: linear-gradient(135deg, #1d4ed8, #0ea5e9);
+  border-color: rgba(96,165,250,0.52);
+  color: #eff6ff;
+}
+:root[data-theme="dark"] .casegen-store-panel {
+  background: linear-gradient(135deg, rgba(18,26,39,0.92), rgba(26,34,49,0.94));
+  border-color: rgba(125,180,255,0.22);
+}
+:root[data-theme="dark"] .casegen-module-drawer-card {
+  background: linear-gradient(135deg, rgba(18,26,39,0.94), rgba(26,34,49,0.92));
+  border-color: rgba(125,180,255,0.2);
+}
+:root[data-theme="dark"] .casegen-module-drawer-panel {
+  background: linear-gradient(135deg, rgba(16,24,37,0.94), rgba(24,33,47,0.96));
+  border-color: rgba(125,180,255,0.22);
+  box-shadow: inset 0 1px 0 rgba(148,163,184,0.06);
+}
+:root[data-theme="dark"] .casegen-module-drawer-item {
+  background: rgba(15,23,42,0.52);
+  border-color: rgba(125,180,255,0.18);
+}
+:root[data-theme="dark"] .casegen-module-drawer-label,
+:root[data-theme="dark"] .casegen-module-drawer-item-title {
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .casegen-generate-drawer-field {
+  background: linear-gradient(135deg, rgba(18,26,39,0.94), rgba(26,34,49,0.92));
+  border-color: rgba(125,180,255,0.2);
 }
 :root[data-theme="dark"] .casegen-progress-panel {
   background: linear-gradient(135deg, #1b2433 0%, #202b3d 100%);
@@ -10390,6 +10758,40 @@ button.exec-overview-file-chip,
   background: linear-gradient(135deg, #1b2433 0%, #202b3d 100%);
   border-color: var(--border);
   box-shadow: 0 6px 14px rgba(0,0,0,0.35);
+}
+@media (max-width: 1200px) {
+  .casegen-settings-grid .casegen-zone {
+    flex-basis: calc(50% - 6px);
+  }
+}
+@media (max-width: 980px) {
+  .usecase-modules {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .casegen-tabbar {
+    flex-direction: column;
+  }
+  .casegen-tab {
+    width: 100%;
+  }
+  .casegen-module-drawer-tabbar .casegen-tab {
+    flex-basis: auto;
+  }
+  .casegen-store-mode-btn {
+    width: 100%;
+  }
+  .casegen-store-action-select {
+    width: 100%;
+    min-width: 0;
+  }
+  .casegen-module-drawer-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .casegen-settings-grid .casegen-zone {
+    flex-basis: 100%;
+  }
 }
 :root[data-theme="dark"] .temp-req-header {
   background: rgba(125,180,255,0.16);

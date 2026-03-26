@@ -130,6 +130,47 @@ test.describe('模型管理与全局设置', () => {
 
   });
 
+  test('功能指派页的用例生成默认提示词使用最新基础文案', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
+    const caseGenPrompt = page.locator('#caseGenPrompt');
+    await expect(caseGenPrompt).toHaveValue(/你是资深游戏测试工程师，善于用例设计。/);
+    await expect(caseGenPrompt).toHaveValue(/优先生成需求主流程的核心用例/);
+    await expect(caseGenPrompt).toHaveValue(/前提条件preconditions，如果有多条，则需要以1、2、3的形式分步展示。/);
+    await expect(caseGenPrompt).toHaveValue(/操作步骤steps，如果有多条，需要以1、2、3的形式分步展示。/);
+  });
+
+  test('功能指派页点击保存指派后显示 3 秒悬浮提示', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
+    await page.click('#createModelBtn');
+    await page.fill('#modelDisplayName', '保存提示模型');
+    await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
+    await page.fill('#modelApiKey', 'sk-test');
+    await page.fill('#modelIdentifier', 'deepseek-chat');
+    await page.fill('#modelMaxTokens', '1024');
+    await page.click('#saveModelBtn');
+
+    const modelId = await page.evaluate(() => {
+      const models = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
+      return models[0]?.id || '';
+    });
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
+    await expect(page.locator('#saveAssignmentsTop')).toBeVisible();
+
+    const toast = page.locator('.temp-center-toast.ok', { hasText: '指派已保存' });
+    await page.click('#saveAssignmentsTop');
+    await expect(toast).toBeVisible();
+    await expect(toast).toHaveCount(0, { timeout: 5000 });
+
+    await page.selectOption('#cleanModelSelect', modelId);
+    await expect(page.locator('.temp-center-toast', { hasText: '指派已保存' })).toHaveCount(0);
+
+    await page.locator('#saveAssignments').scrollIntoViewIfNeeded();
+    await page.click('#saveAssignments');
+    await expect(toast).toBeVisible();
+    await expect(toast).toHaveCount(0, { timeout: 5000 });
+  });
+
   test('未指派提示点击页签自动定位到保存按钮', async ({ page }) => {
     const assignTab = page.locator('[data-tab-btn="assign"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });

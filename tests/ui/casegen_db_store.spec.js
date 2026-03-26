@@ -27,6 +27,30 @@ async function ensureCasegenProgressExpanded(page) {
   }
 }
 
+async function switchCasegenStoreMode(page, mode) {
+  const next = mode === 'append' ? 'append' : 'new';
+  const button = page.locator(next === 'append' ? '#caseGenStoreModeAppendBtn' : '#caseGenStoreModeNewBtn');
+  const panel = page.locator(next === 'append' ? '#caseGenStoreModeAppendPanel' : '#caseGenStoreModeNewPanel');
+  const otherPanel = page.locator(next === 'append' ? '#caseGenStoreModeNewPanel' : '#caseGenStoreModeAppendPanel');
+  await button.click();
+  await expect(button).toHaveClass(/is-active/);
+  await expect(panel).toBeVisible();
+  await expect(otherPanel).toBeHidden();
+}
+
+async function openCasegenBatchActionDrawer(page, action) {
+  const next = action === 'topup'
+    ? '#caseGenAllTopupBtn'
+    : (action === 'suggested' ? '#caseGenSuggestionGenerateBtn' : '#caseGenAllGenerateBtn');
+  await page.click(next);
+  await expect(page.locator('#caseGenActionDrawer')).toHaveClass(/open/);
+}
+
+async function confirmCasegenBatchActionDrawer(page) {
+  await page.click('#caseGenActionDrawerConfirmBtn');
+  await expect(page.locator('#caseGenActionDrawer')).not.toHaveClass(/open/);
+}
+
 async function seedCaseGenState(page, options) {
   const opts = options || {};
   const requirement = opts.requirement || 'UI自动化需求';
@@ -54,7 +78,10 @@ async function seedCaseGenState(page, options) {
   await page.evaluate(() => {
     if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('casesgen');
   });
-  await page.waitForSelector('#casesGenerationContainer [data-module-id]', { timeout: 8000 });
+  await page.waitForFunction(() => {
+    const state = window.app && window.app.state ? window.app.state : null;
+    return state && Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
+  }, {}, { timeout: 8000 });
 
   await page.evaluate((cfg) => {
     const state = window.app && window.app.state ? window.app.state : null;
@@ -191,11 +218,15 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     const drawer = page.locator('#pageGuideDrawer');
     await expect(drawer).toHaveClass(/open/);
     const guide = page.locator('#pageGuideDrawerBody');
+    await expect(guide).toContainText('用例生成设置');
+    await expect(guide).toContainText('生成模块');
+    await expect(guide).toContainText('额外要求填写');
+    await expect(guide).toContainText('是否需要考虑边界');
     await expect(guide).toContainText('生成用例');
     await expect(guide).toContainText('补全生成');
     await expect(guide).toContainText('全模块直接生成');
     await expect(guide).toContainText('全模块补全生成');
-    await expect(guide).toContainText('入库操作区从上到下');
+    await expect(guide).toContainText('仅补全用例');
     await expect(guide).toContainText('生成规则与区别');
   });
 
@@ -300,6 +331,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
 
     await gotoIndex(page);
     await seedCaseGenState(page, { selectIndex: -1 });
+    await switchCasegenStoreMode(page, 'new');
     await page.selectOption('#caseGenStoreActionSelect', 'store');
     await page.click('#caseGenStoreNewBtn');
 
@@ -347,7 +379,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await gotoIndex(page);
     await seedCaseGenState(page, { selectIndex: 0 });
     await expect(page.locator('#caseGenStoreActionHint')).toBeVisible();
-    await expect(page.locator('#caseGenStoreActionHint')).toContainText('在【全模块用例视图】中勾选用例');
+    await expect(page.locator('#caseGenStoreActionHint')).toContainText('全模块用例视图');
 
     const storeBtn = page.locator('#caseGenStoreNewBtn');
     await expect(storeBtn).toBeEnabled();
@@ -449,6 +481,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
 
     await gotoIndex(page);
     await seedCaseGenState(page, { selectIndex: -1 });
+    await switchCasegenStoreMode(page, 'new');
     await page.selectOption('#caseGenStoreActionSelect', 'store');
     await page.click('#caseGenStoreNewBtn');
 
@@ -510,6 +543,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
 
     await gotoIndex(page);
     await seedCaseGenState(page, { selectIndex: -1 });
+    await switchCasegenStoreMode(page, 'append');
     await page.click('#caseGenStoreAppendBtn');
 
     const viewDrawer = page.locator('#caseGenViewDrawer');
@@ -996,7 +1030,8 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
 
     await expect(page.locator('#caseGenAllGenerateBtn')).toBeEnabled();
     await expect(page.locator('#caseGenAllTopupBtn')).toBeEnabled();
-    await page.click('#caseGenAllGenerateBtn');
+    await openCasegenBatchActionDrawer(page, 'generate');
+    await confirmCasegenBatchActionDrawer(page);
     await cancelConfirmDrawer(page, { messageIncludes: ['模块A', '模块B', '已有生成数据'] });
 
     const runningCount = await page.evaluate(() => {
@@ -1154,7 +1189,8 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await gotoIndex(page);
     await seedCaseGenState(page, { selectIndex: -1, modules });
 
-    await page.click('#caseGenAllGenerateBtn');
+    await openCasegenBatchActionDrawer(page, 'generate');
+    await confirmCasegenBatchActionDrawer(page);
     await confirmDrawer(page, { messageIncludes: ['模块A', '模块B', '已有生成数据'] });
 
     await page.waitForFunction(() => {
@@ -1306,7 +1342,8 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     });
 
     await expect(page.locator('#caseGenSuggestionGenerateBtn')).toBeEnabled();
-    await page.click('#caseGenSuggestionGenerateBtn');
+    await openCasegenBatchActionDrawer(page, 'suggested');
+    await confirmCasegenBatchActionDrawer(page);
 
     await page.waitForFunction(() => {
       const state = window.app && window.app.state ? window.app.state : null;
@@ -1481,7 +1518,8 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
       }
     });
 
-    await page.click('#caseGenAllGenerateBtn');
+    await openCasegenBatchActionDrawer(page, 'generate');
+    await confirmCasegenBatchActionDrawer(page);
 
     await page.waitForFunction(() => {
       const state = window.app && window.app.state ? window.app.state : null;
@@ -1570,6 +1608,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await gotoIndex(page);
     await seedCaseGenState(page, { requirement, selectIndex: 0, noGenerateIndex: 1 });
 
+    await switchCasegenStoreMode(page, 'new');
     await page.selectOption('#caseGenStoreActionSelect', 'store');
     await page.click('#caseGenStoreNewBtn');
 
@@ -1707,6 +1746,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await gotoIndex(page);
     await seedCaseGenState(page, { requirement, selectIndex: 0, noGenerateIndex: 1 });
 
+    await switchCasegenStoreMode(page, 'new');
     await page.selectOption('#caseGenStoreActionSelect', 'store_to_exec');
     await page.click('#caseGenStoreNewBtn');
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
@@ -1719,12 +1759,15 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
     await page.click('#execVersionSelectDrawerConfirmBtn');
 
+    await page.waitForURL(/case-exec\.html/, { timeout: 10000 });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 10000 });
     await expect.poll(async () => {
       return page.evaluate(() => (window.app && window.app.state ? window.app.state.activeTab : ''));
-    }, { timeout: 5000 }).toBe('tempexec');
+    }, { timeout: 10000 }).toBe('tempexec');
 
-    const active = await page.evaluate(() => (window.app && window.app.state ? window.app.state.tempExecActiveId : ''));
-    expect(String(active || '')).toBe('2001');
+    await expect.poll(async () => {
+      return page.evaluate(() => (window.app && window.app.state ? window.app.state.tempExecActiveId : ''));
+    }, { timeout: 10000 }).toBe('2001');
     expect(createdExecSet && createdExecSet.case_file_id).toBe(101);
   });
 
@@ -1781,6 +1824,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await gotoIndex(page);
     await seedCaseGenState(page, { requirement: 'UI自动化需求-追加', selectIndex: 0, noGenerateIndex: 1 });
 
+    await switchCasegenStoreMode(page, 'append');
     await page.click('#caseGenStoreAppendBtn');
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseGenDbStoreProjectSelect', String(project.id));
@@ -1794,6 +1838,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     expect(appendPayload && Array.isArray(appendPayload.items) && appendPayload.items.length).toBe(1);
     expect(String(appendPayload.items[0].module || '')).toContain('登录');
     const drawer = page.locator('#caseGenDbStoreDrawer');
+    await switchCasegenStoreMode(page, 'append');
     await page.click('#caseGenStoreAppendBtn');
     await expect(drawer).toHaveClass(/open/);
 
@@ -1841,6 +1886,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await gotoIndex(page);
     await seedCaseGenState(page, { requirement: 'UI自动化需求-追加取消', selectIndex: 0, noGenerateIndex: 1 });
 
+    await switchCasegenStoreMode(page, 'append');
     await page.click('#caseGenStoreAppendBtn');
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseGenDbStoreProjectSelect', String(project.id));
@@ -1860,6 +1906,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
       await expect(drawer).not.toHaveClass(/open/);
     }
 
+    await switchCasegenStoreMode(page, 'append');
     await page.click('#caseGenStoreAppendBtn');
     await expect(drawer).toHaveClass(/open/);
     expect(appendPayload).toBeNull();
@@ -1925,6 +1972,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await gotoIndex(page);
     await seedCaseGenState(page, { requirement: 'UI自动化需求-追加覆盖', selectIndex: 0, noGenerateIndex: 1 });
 
+    await switchCasegenStoreMode(page, 'append');
     await page.click('#caseGenStoreAppendBtn');
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseGenDbStoreProjectSelect', String(project.id));

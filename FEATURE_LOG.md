@@ -19,6 +19,68 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：AI 用例生成页新增设置页签与模块布局优化
+- 功能描述：重构“AI 功能 → 用例生成”页面，在页面内部新增“用例生成设置 / 生成模块”双页签；新增“额外要求填写”、边界/移动设备/特殊场景提示词部件配置，并将提示词按基础提示词 + 额外要求 + 选项部件的方式拼接后用于生成。其中额外要求与要求选择区均不再直接展示在设置页，而是由批量生成按钮唤起右侧抽屉进行确认；同时优化操作区排版、模块双列布局，以及左侧用例生成进度跳转在新布局下的定位行为。
+- 操作方式：
+  - 进入“AI 功能 → 用例生成”，默认落在“用例生成设置”页签；
+  - 点击“全模块直接生成 / 全模块补全生成 / 仅补全用例”时，会先打开右侧抽屉；
+  - 在抽屉中可选填写“额外要求填写”，并勾选“是否需要考虑边界 / 移动设备操作 / 特殊场景”；若勾选特殊场景，可继续选择“重复操作 / 多点触控 / 重复执行 / 弱网 / 中断恢复”，默认全部不勾选；
+  - 点击抽屉确认后，系统再拼接新的基础提示词、额外要求内容与勾选项提示词部件并执行生成；若直接取消或关闭，则不会保留本次未确认输入；
+  - 切换到“生成模块”页签后，点击模块卡片中的“生成用例”会打开统一抽屉，可在“全局配置优先 / 独立配置优先 / 补全生成”三个页签间切换；模块补全生成功能已收口到该抽屉内执行；
+  - 切换到“生成模块”页签后，按每行两个模块的布局查看和操作模块；点击左侧“用例生成进度”中的模块时，会自动切到该页签并定位目标模块；
+  - 设置页内的操作区按“生成操作区 / 入库操作区 / 其他操作区”同一行排列；其中入库操作区拆分为“全模块用例视图勾选”与“新用例入库 / 追加到已有旧用例”两部分。
+- 使用效果：
+  - 页面信息分区更清晰，生成前的全局约束改为在执行前抽屉中填写和确认，设置页主区域更聚焦；
+  - 生成提示词可按用户输入和勾选动态拼接，生成结果更贴合边界、移动端和特殊场景要求；
+  - 抽屉内的额外要求与要求选择只有点击确认后才会写回全局设置；取消关闭不会污染已确认要求，避免历史勾选残留；
+  - 每次打开抽屉时都以“额外要求为空、选项全不勾选”的默认态开始，降低历史配置对下一轮批量生成的干扰；
+  - 单模块生成入口收敛为统一三页签抽屉，避免“生成 / 独立配置 / 补全”多入口分散，模块侧行为更一致；
+  - 模块区双列展示提升空间利用率，白色主题和黑色主题下都保持可读性；
+  - 左侧用例生成进度在新布局下仍可稳定跳转到目标模块并打开对应模块视图。
+- 新增内容/接口/组件：
+  - 页面结构：
+    - `index.html`、`ai-workflow.html`
+      - 新增 `#caseGenSettingsTabBtn`、`#caseGenModulesTabBtn` 页签；
+      - 新增 `#casegenSettingsPanel`、`#casegenModulesPanel`；
+      - 新增 `#caseGenCustomRequirement`、`#caseGenNeedBoundary`、`#caseGenNeedMobile`、`#caseGenNeedSpecial` 以及 5 个特殊场景勾选项，并统一放入生成抽屉；
+      - 新增 `#caseGenActionDrawer`，承载批量生成前的要求确认；
+      - 将“生成操作区 / 入库操作区 / 其他操作区”按同一行新布局重组。
+  - 样式：
+    - `style.css`
+      - 新增用例生成页签、设置区卡片、特殊场景子选项、操作说明、模块双列布局及暗色主题样式；
+      - 新增响应式规则，移动端下自动退化为单列。
+  - 前端逻辑：
+    - `scripts/base/state.js`
+      - 新增 `state.caseGenSettings`，持久化当前内页签与全部设置项；
+    - `scripts/core/casesGenCore.js`
+      - 新增 `ensureCaseGenSettings`、`syncCaseGenSpecialOptionsState`、`setCaseGenViewTab`、`getCaseGenPromptComponents`、`buildCaseGenPrompt`；
+      - 批量生成和补全生成改为走新的提示词拼接逻辑；
+    - `scripts/modules/casesgen.js`
+      - 新增设置项绑定、UI 回填与页签切换；
+    - `scripts/core/casegenCore.js`、`scripts/handlers/casegenHandlers.js`
+      - 修复跳转到用例生成页/左侧进度点击时对内页签的切换与定位；
+    - `scripts/core/appRuntime.js`、`scripts/modules/app.js`
+      - 透传新增 casesGen API，并在 workflow 快照中读写 `caseGenSettings`；
+    - `config/constants.js`、`scripts/modules/models.js`
+      - 更新默认用例生成基础提示词，并将旧默认值迁移为新文案；
+    - `scripts/modules/pageGuide.js`
+      - 同步页面说明与功能引导文案。
+  - 自动化测试：
+    - 新增 `tests/ui/casegen_settings_prompt.spec.js`，覆盖提示词拼接与左侧进度跳转；
+    - 新增 `tests/api/casegen_settings_no_new_endpoint.spec.js`，校验本次改版未新增后端端点；
+    - 更新 `tests/ui/casegen_layout_zones.spec.js`、`tests/ui/casegen_db_store.spec.js`、`tests/ui/casegen_clear_drawer.spec.js`、`tests/ui/casegen_export_xmind.spec.js`、`tests/ui/casegen_display_format.spec.js` 以匹配新页签与布局。
+- 复用说明：复用现有用例生成模块渲染、批量生成、进度面板、workflow 状态持久化、模型提示词配置和入库/导出链路，仅在原有链路上新增设置态与提示词拼装逻辑；未新增后端接口。
+- 测试与验证：
+  - `node --check scripts/base/state.js scripts/core/appRuntime.js scripts/core/casesGenCore.js scripts/core/casegenCore.js scripts/handlers/casegenHandlers.js scripts/modules/casesgen.js scripts/modules/models.js scripts/modules/pageGuide.js scripts/modules/app.js tests/ui/casegen_clear_drawer.spec.js tests/ui/casegen_db_store.spec.js tests/ui/casegen_display_format.spec.js tests/ui/casegen_export_xmind.spec.js tests/ui/casegen_layout_zones.spec.js tests/ui/casegen_settings_prompt.spec.js tests/api/casegen_settings_no_new_endpoint.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_*.spec.js --reporter=line`（31/31 通过）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line`（2/2 通过）
+- 更新记录：
+  - 2026-03-25 首次完成用例生成页双页签改版、提示词部件配置、模块双列布局和左侧进度跳转适配，并补充 UI/API 回归验证（`index.html`、`ai-workflow.html`、`style.css`、`config/constants.js`、`scripts/base/state.js`、`scripts/core/appRuntime.js`、`scripts/core/casesGenCore.js`、`scripts/core/casegenCore.js`、`scripts/handlers/casegenHandlers.js`、`scripts/modules/casesgen.js`、`scripts/modules/models.js`、`scripts/modules/pageGuide.js`、`scripts/modules/app.js`、`tests/ui/casegen_layout_zones.spec.js`、`tests/ui/casegen_settings_prompt.spec.js`、`tests/ui/casegen_db_store.spec.js`、`tests/ui/casegen_clear_drawer.spec.js`、`tests/ui/casegen_export_xmind.spec.js`、`tests/ui/casegen_display_format.spec.js`、`tests/api/casegen_settings_no_new_endpoint.spec.js`）。
+  - 2026-03-26 将“要求选择区”改为批量生成按钮触发的右侧抽屉确认流，并把要求选择改成草稿态，只有确认后才写回全局设置；同时把设置页操作区调整为“生成操作区 / 入库操作区 / 其他操作区”同一行顺序布局。补充并更新 UI/API 回归验证（`index.html`、`ai-workflow.html`、`style.css`、`scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/casesgen.js`、`scripts/modules/app.js`、`scripts/modules/pageGuide.js`、`tests/ui/casegen_layout_zones.spec.js`、`tests/ui/casegen_settings_prompt.spec.js`、`tests/ui/casegen_db_store.spec.js`、`tests/api/casegen_settings_no_new_endpoint.spec.js`）；验证结果：`npx playwright test --config tests/playwright.config.js tests/ui/casegen_*.spec.js --reporter=line` 34/34 通过，`API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line` 2/2 通过。
+  - 2026-03-26 进一步将“用户要求填写框”并入生成抽屉，改名为“额外要求填写”，并把每次打开抽屉的默认态调整为“文本为空 + 选项全不勾选”。同时保持确认前草稿不落库、取消不污染全局设置。补充并更新 UI/API 回归验证（`index.html`、`ai-workflow.html`、`style.css`、`scripts/core/casesGenCore.js`、`scripts/modules/pageGuide.js`、`tests/ui/casegen_layout_zones.spec.js`、`tests/ui/casegen_settings_prompt.spec.js`、`tests/ui/casegen_db_store.spec.js`）；验证结果：`npx playwright test --config tests/playwright.config.js tests/ui/casegen_*.spec.js --reporter=line` 34/34 通过，`API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line` 2/2 通过。
+  - 2026-03-26 将“生成模块”页的单模块入口进一步收敛为统一三页签抽屉：“全局配置优先 / 独立配置优先 / 补全生成”。其中“补全生成”页签会回显并允许编辑当前模块的“生成建议”，确认后仅按“已有用例 + 当前建议”执行补全；模块卡片外部的“补全生成”按钮同步移除，避免多入口并存。同步清理旧 `data-topup` 依赖、补充抽屉页签样式和页面说明文案，并更新模块抽屉 UI 回归验证（`index.html`、`ai-workflow.html`、`style.css`、`scripts/core/casesGenCore.js`、`scripts/modules/pageGuide.js`、`tests/ui/casegen_settings_prompt.spec.js`、`tests/ui/casegen_layout_zones.spec.js`）；验证结果：`node --check scripts/core/casesGenCore.js scripts/modules/pageGuide.js scripts/modules/casesgen.js tests/ui/casegen_settings_prompt.spec.js tests/ui/casegen_layout_zones.spec.js` 通过，`npx playwright test --config tests/playwright.config.js tests/ui/casegen_settings_prompt.spec.js --reporter=line` 9/9 通过，`npx playwright test --config tests/playwright.config.js tests/ui/casegen_layout_zones.spec.js --reporter=line` 2/2 通过，`npx playwright test --config tests/playwright.config.js tests/ui/casegen_*.spec.js --reporter=line` 38/38 通过，`API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line` 2/2 通过。
+  - 2026-03-26 调整“功能指派”页中用例生成功能的基础提示词为新的 8 条规则版本，并同步更新默认值迁移逻辑：当本地/远端仍保存上一版默认文案时，会自动替换为最新基础提示词，保证“未自定义过”的用例生成配置直接切到新版本（`config/constants.js`、`scripts/modules/models.js`、`tests/ui/models_settings.spec.js`）；验证结果：`node --check config/constants.js scripts/modules/models.js tests/ui/models_settings.spec.js` 通过，`npx playwright test --config tests/playwright.config.js tests/ui/models_settings.spec.js --reporter=line` 7/7 通过。
+
 - 功能名称：用例生成通用操作区新增“仅补全用例”按钮
 - 功能描述：在“用例生成 → 通用操作区”新增“仅补全用例”按钮。点击后只对“生成建议”非空的模块触发生成，执行链路与逐模块点击“生成用例”一致；无建议模块不会触发。
 - 操作方式：
@@ -4377,3 +4439,46 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（通过，4/4）
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_interactions.spec.js --reporter=line`（通过，1/1）
   - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_structure_edit_reuse_endpoints.spec.js --reporter=line`（通过，1/1）
+
+- 更新记录：2026-03-25 优化 AI 用例生成页“入库操作区”布局：入库区改为两段式结构，第一段固定展示“全模块用例视图”并强调勾选为必做步骤；第二段新增“新用例入库 / 追加到已有旧用例”切换按钮，点击后仅展示对应入库操作区，继续复用现有新入库/追加抽屉与参数逻辑，不新增后端接口（`index.html`、`ai-workflow.html`、`style.css`、`scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`scripts/modules/casesgen.js`、`scripts/modules/pageGuide.js`）。
+- 更新记录：2026-03-25 补充入库区切换 UI 回归：页面分区用例新增“默认展示新用例入库区、切换后展示追加区”断言；入库流程用例新增切换辅助步骤，覆盖“追加模式下打开全模块视图、追加入库、取消后重开、重复覆盖 diff”链路，确保新布局不影响既有入库行为（`tests/ui/casegen_layout_zones.spec.js`、`tests/ui/casegen_db_store.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/casesgen.js scripts/core/casesGenCore.js scripts/core/appRuntime.js scripts/modules/app.js scripts/modules/pageGuide.js tests/ui/casegen_layout_zones.spec.js tests/ui/casegen_db_store.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_layout_zones.spec.js tests/ui/casegen_db_store.spec.js --reporter=line`（通过，25/25）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_*.spec.js --reporter=line`（通过，31/31）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082`（测试库启动）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line`（通过，2/2）
+
+- 更新记录：2026-03-25 修复 AI 用例生成“要求选择区”状态时序问题：生成提示词改为在本轮生成启动时锁定全局要求快照，避免批量生成过程中途勾选/取消勾选导致后续模块读取到不同要求；单模块/补全生成同样改为在点击启动时固定使用当时的要求状态，后续切换仅影响下一轮生成（`scripts/core/casesGenCore.js`）。
+- 更新记录：2026-03-25 补充“取消勾选不残留 / 批量生成快照锁定”UI 回归：新增断言覆盖“要求取消勾选后，重新拼装提示词不再包含已移除部件”以及“全模块生成开始后，中途取消勾选不影响本轮未启动模块”两条链路（`tests/ui/casegen_settings_prompt.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/casesGenCore.js tests/ui/casegen_settings_prompt.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_settings_prompt.spec.js --reporter=line`（通过，4/4）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_*.spec.js --reporter=line`（通过，33/33）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082`（测试库启动）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line`（通过，2/2）
+
+- 更新记录：2026-03-26 优化 AI 用例生成“生成模块”页单模块入口：模块卡片中的【生成用例】改为两步抽屉流程，第一步先展示当前模块信息（测试场景/测试要点/耦合模块）并让用户选择“走全局配置生成”或“单独配置当前模块”；若选择独立配置，则进入第二个抽屉填写“额外要求填写”并勾选边界/移动端/特殊场景要求，且这些独立配置只对当前模块这一次生成生效，不写入全局，也不会被其他模块复用（`index.html`、`ai-workflow.html`、`style.css`、`scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`scripts/modules/casesgen.js`、`scripts/modules/pageGuide.js`）。
+- 更新记录：2026-03-26 明确 AI 用例生成“全局优先级 / 模块优先级 / 模块补全例外”规则：全局入口下的批量生成继续使用已确认的全局配置；单模块入口下若用户选择独立配置，则本次该模块生成优先使用独立配置并覆盖全局；模块卡片中的【补全生成】则不再继承全局或模块独立勾选，仅按已有用例 + 生成建议执行补全逻辑，避免补全提示被额外要求污染（`scripts/core/casesGenCore.js`、`scripts/modules/casesgen.js`）。
+- 更新记录：2026-03-26 补充模块入口作用域 UI 回归：新增自动化断言覆盖“单模块生成先打开选择抽屉并展示模块信息”“选择走全局配置时沿用当前全局提示词”“选择独立配置时覆盖全局但不污染全局设置”“单模块补全生成不继承全局勾选”四条链路，并保留整组 `casegen` 回归，确保布局、入库、导出与进度跳转不受影响（`tests/ui/casegen_settings_prompt.spec.js`、`tests/ui/casegen_layout_zones.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/casesGenCore.js scripts/modules/casesgen.js scripts/core/appRuntime.js scripts/modules/app.js scripts/modules/pageGuide.js tests/ui/casegen_settings_prompt.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_settings_prompt.spec.js --reporter=line`（通过，9/9）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_layout_zones.spec.js --reporter=line`（通过，2/2）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_*.spec.js --reporter=line`（通过，38/38）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082`（测试库启动）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line`（通过，2/2）
+- 更新记录：2026-03-26 优化功能指派页手动保存反馈：点击顶部或底部【保存指派】按钮后，统一显示“指派已保存”悬浮提示，并在 3 秒后自动消失；模型下拉切换触发的自动保存链路保持静默，避免频繁打扰（`scripts/modules/models.js`、`scripts/modules/assign.js`）。
+- 更新记录：2026-03-26 补充功能指派保存提示 UI 回归：新增自动化断言覆盖“顶部保存按钮显示 3 秒提示”“底部保存按钮显示 3 秒提示”以及“切换模型自动保存时不弹该提示”，确保手动保存与自动保存反馈边界清晰（`tests/ui/models_settings.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/assign.js scripts/modules/models.js tests/ui/models_settings.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/models_settings.spec.js -g "功能指派页点击保存指派后显示 3 秒悬浮提示" --reporter=line`（通过，1/1）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/models_settings.spec.js --reporter=line`（通过，8/8）
+- 更新记录：2026-03-26 优化 AI 用例生成批量生成确认流：在“生成操作区”抽屉中点击【确认并生成 / 确认并补全 / 确认并执行】后，页面会自动切换到“生成模块”页签，方便用户立即查看模块列表与生成进度；单模块抽屉入口保持原有行为，不额外切页（`scripts/core/casesGenCore.js`）。
+- 更新记录：2026-03-26 补充批量生成确认后自动切页 UI 回归：更新抽屉打开辅助逻辑，确保自动切页后仍能稳定回到设置页继续覆盖其他生成场景；新增断言覆盖“批量生成确认后自动切换到生成模块页签”链路（`tests/ui/casegen_settings_prompt.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/casesGenCore.js tests/ui/casegen_settings_prompt.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_settings_prompt.spec.js --reporter=line`（通过，10/10）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_layout_zones.spec.js --reporter=line`（通过，2/2）
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082`（测试库启动）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js --reporter=line`（通过，1/1）

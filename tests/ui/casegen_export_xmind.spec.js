@@ -13,6 +13,7 @@ async function prepareCaseGen(page, requirementLabel) {
     }
   }, requirementLabel);
   await page.click('#goUsecaseGen');
+  await page.click('#caseGenModulesTabBtn');
   const moduleId = await page.evaluate(() => {
     const state = window.app && window.app.state;
     return state && state.caseGenModules && state.caseGenModules.length ? state.caseGenModules[0].id : '';
@@ -74,6 +75,7 @@ test.describe('用例生成导出 XMind', () => {
 
   test('导出生成用例使用需求标识命名 XMind', async ({ page }) => {
     await prepareCaseGen(page, '需求1');
+    await page.click('#caseGenSettingsTabBtn');
     const [download] = await Promise.all([
       page.waitForEvent('download', { timeout: 20000 }),
       page.click('#exportCaseGen'),
@@ -93,6 +95,7 @@ test.describe('用例生成导出 XMind', () => {
     if (await closeDrawerBtn.isVisible()) {
       await closeDrawerBtn.click();
     }
+    await page.click('#caseGenSettingsTabBtn');
     const exportBtn = page.locator('#exportCaseGenXmind');
     await expect(exportBtn).toBeEnabled();
     const [download] = await Promise.all([

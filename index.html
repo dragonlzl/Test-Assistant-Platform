@@ -1539,54 +1539,115 @@
   <div class="card-body">
   <p class="hint">根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。</p>
   <div class="casegen-zones">
-    <div class="casegen-zone" data-casegen-zone="general">
-      <div class="casegen-zone-head">
-        <div class="casegen-zone-title">通用操作区</div>
-        <div class="hint" style="margin:0;">导出/跳转等通用操作</div>
-      </div>
-      <div class="actions casegen-zone-actions">
-        <button class="secondary" id="caseGenAllGenerateBtn">全模块直接生成</button>
-        <button class="secondary" id="caseGenAllTopupBtn">全模块补全生成</button>
-        <button class="secondary" id="caseGenSuggestionGenerateBtn">仅补全用例</button>
-        <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
-        <button class="secondary" id="exportCaseGenXmind">导出全部勾选用例XMind</button>
-        <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
-      </div>
+    <div class="casegen-tabbar" role="tablist" aria-label="用例生成功能页签">
+      <button class="casegen-tab is-active" id="caseGenSettingsTabBtn" type="button" data-casegen-view-tab="settings" aria-selected="true" aria-controls="casegenSettingsPanel">用例生成设置</button>
+      <button class="casegen-tab" id="caseGenModulesTabBtn" type="button" data-casegen-view-tab="modules" aria-selected="false" aria-controls="casegenModulesPanel">生成模块</button>
     </div>
 
-    <div class="casegen-zone" data-casegen-zone="store">
-      <div class="casegen-zone-head">
-        <div class="casegen-zone-title">入库操作区</div>
-        <div class="hint" style="margin:0;">新用例入库 / 旧用例追加入库</div>
-      </div>
-      <div class="actions casegen-zone-actions casegen-store-actions">
-        <div class="casegen-store-row">
-          <button class="pill accent" id="caseGenAllViewBtn" type="button">全模块用例视图</button>
-          <span class="hint" style="margin:0;" id="caseGenStoreActionHint">在【全模块用例视图】中勾选用例</span>
+    <div class="casegen-tabpanel is-active" id="casegenSettingsPanel" data-casegen-view-panel="settings" role="tabpanel" aria-labelledby="caseGenSettingsTabBtn">
+      <div class="casegen-settings-grid">
+        <div class="casegen-zone" data-casegen-zone="general">
+          <div class="casegen-zone-head">
+            <div class="casegen-zone-title">生成操作区</div>
+            <div class="hint" style="margin:0;">点击按钮后会先打开右侧抽屉填写额外要求并确认要求，再执行生成</div>
+          </div>
+          <div class="casegen-action-list">
+            <div class="casegen-action-item">
+              <button class="secondary" id="caseGenAllGenerateBtn">全模块直接生成</button>
+              <p class="hint casegen-action-desc">先在右侧抽屉选择边界/移动端/特殊场景要求，再对当前未运行模块执行完整生成；若已有结果，会继续给出覆盖确认。</p>
+            </div>
+            <div class="casegen-action-item">
+              <button class="secondary" id="caseGenAllTopupBtn">全模块补全生成</button>
+              <p class="hint casegen-action-desc">先确认本轮要求，再仅对已有生成结果的模块补充新增用例，不覆盖原有结果。</p>
+            </div>
+            <div class="casegen-action-item">
+              <button class="secondary" id="caseGenSuggestionGenerateBtn">仅补全用例</button>
+              <p class="hint casegen-action-desc">先确认本轮要求，再只执行填写了“生成建议”的模块，适合定向补充和局部重跑。</p>
+            </div>
+          </div>
         </div>
-        <div class="casegen-store-row">
-          <span class="hint" style="margin:0;">新用例入库后</span>
-          <select id="caseGenStoreActionSelect" class="casegen-store-action-select">
-            <option value="">请选择</option>
-            <option value="store">直接入库</option>
-            <option value="store_to_exec">入库并转到执行</option>
-          </select>
-          <button class="pill primary" disabled id="caseGenStoreNewBtn">新用例入库</button>
+
+        <div class="casegen-zone casegen-store-zone" data-casegen-zone="store">
+          <div class="casegen-zone-head">
+            <div class="casegen-zone-title">入库操作区</div>
+            <div class="hint" style="margin:0;">先勾选全模块用例，再切换入库方式</div>
+          </div>
+          <div class="actions casegen-zone-actions casegen-store-actions">
+            <div class="casegen-store-section">
+              <div class="casegen-store-section-head">
+                <div class="casegen-store-section-title">第一步：全模块勾选</div>
+                <span class="casegen-store-badge">必做</span>
+              </div>
+              <div class="casegen-store-row">
+                <button class="pill accent" id="caseGenAllViewBtn" type="button">全模块用例视图</button>
+                <span class="hint" style="margin:0;" id="caseGenStoreActionHint">先进入【全模块用例视图】勾选要入库的用例</span>
+              </div>
+            </div>
+            <div class="casegen-store-section">
+              <div class="casegen-store-section-head">
+                <div class="casegen-store-section-title">第二步：选择入库方式</div>
+                <span class="hint" style="margin:0;">切换后只展示对应操作区</span>
+              </div>
+              <div class="casegen-store-mode-switch" role="tablist" aria-label="入库方式切换">
+                <button class="casegen-store-mode-btn is-active" id="caseGenStoreModeNewBtn" type="button" data-casegen-store-mode="new" aria-selected="true" aria-controls="caseGenStoreModeNewPanel">新用例入库</button>
+                <button class="casegen-store-mode-btn" id="caseGenStoreModeAppendBtn" type="button" data-casegen-store-mode="append" aria-selected="false" aria-controls="caseGenStoreModeAppendPanel">追加到已有旧用例</button>
+              </div>
+              <div class="casegen-store-panels">
+                <div class="casegen-store-panel is-active" id="caseGenStoreModeNewPanel" data-casegen-store-panel="new" role="tabpanel" aria-labelledby="caseGenStoreModeNewBtn">
+                  <div class="casegen-store-row">
+                    <span class="hint" style="margin:0;">新用例入库后</span>
+                    <select id="caseGenStoreActionSelect" class="casegen-store-action-select">
+                      <option value="">请选择</option>
+                      <option value="store">直接入库</option>
+                      <option value="store_to_exec">入库并转到执行</option>
+                    </select>
+                  </div>
+                  <div class="casegen-store-row">
+                    <button class="pill primary" disabled id="caseGenStoreNewBtn">新用例入库</button>
+                    <span class="hint" style="margin:0;">将当前勾选用例作为新的用例文件入库</span>
+                  </div>
+                </div>
+                <div class="casegen-store-panel" id="caseGenStoreModeAppendPanel" data-casegen-store-panel="append" role="tabpanel" aria-labelledby="caseGenStoreModeAppendBtn">
+                  <div class="casegen-store-row">
+                    <button class="pill secondary" disabled id="caseGenStoreAppendBtn">旧用例追加入库</button>
+                    <span class="hint" style="margin:0;">将当前勾选用例追加到已有旧用例文件</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="casegen-store-row">
-          <button class="pill secondary" disabled id="caseGenStoreAppendBtn">旧用例追加入库</button>
+
+        <div class="casegen-zone" data-casegen-zone="other">
+          <div class="casegen-zone-head">
+            <div class="casegen-zone-title">其他操作区</div>
+            <div class="hint" style="margin:0;">导出与回到上游模块</div>
+          </div>
+          <div class="casegen-action-list">
+            <div class="casegen-action-item compact">
+              <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
+            </div>
+            <div class="casegen-action-item compact">
+              <button class="secondary" id="exportCaseGenXmind">导出全部勾选用例XMind</button>
+            </div>
+            <div class="casegen-action-item compact">
+              <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
+            </div>
+          </div>
         </div>
       </div>
       <p class="status" id="caseGenStatus"></p>
     </div>
 
-    <div class="casegen-zone" data-casegen-zone="modules">
-      <div class="casegen-zone-head">
-        <div class="casegen-zone-title">模块区</div>
-        <div class="hint" style="margin:0;">按模块生成/勾选/导出用例</div>
+    <div class="casegen-tabpanel" id="casegenModulesPanel" data-casegen-view-panel="modules" role="tabpanel" aria-labelledby="caseGenModulesTabBtn">
+      <div class="casegen-zone casegen-modules-zone" data-casegen-zone="modules">
+        <div class="casegen-zone-head">
+          <div class="casegen-zone-title">模块区</div>
+          <div class="hint" style="margin:0;">按模块生成/勾选/导出用例，当前布局为每行两个模块</div>
+        </div>
+        <div class="usecase-modules" id="casesGenerationContainer"></div>
+        <p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
       </div>
-      <div class="usecase-modules" id="casesGenerationContainer"></div>
-      <p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
     </div>
   </div>
   </div>
@@ -1657,6 +1718,196 @@
         <button class="ghost-btn" id="caseGenRequirementDrawerCancelBtn" type="button">取消</button>
       </div>
       <p class="status" id="caseGenRequirementDrawerStatus"></p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseGenModuleGenerateDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="caseGenModuleGenerateDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseGenModuleGenerateDrawerTitle">模块生成方式确认</h3>
+      <button class="link-toggle" id="closeCaseGenModuleGenerateDrawerBtn" data-drawer-close="caseGenModuleGenerateDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" id="caseGenModuleGenerateDrawerHint" style="margin:0 0 10px;"></p>
+      <div class="casegen-module-drawer-card">
+        <div class="casegen-module-drawer-head">
+          <span class="casegen-module-drawer-label">当前生成模块</span>
+          <strong id="caseGenModuleGenerateDrawerModuleTitle">-</strong>
+        </div>
+        <div class="casegen-module-drawer-grid">
+          <div class="casegen-module-drawer-item">
+            <span class="casegen-module-drawer-item-title">测试场景</span>
+            <p id="caseGenModuleGenerateDrawerScenarios">-</p>
+          </div>
+          <div class="casegen-module-drawer-item">
+            <span class="casegen-module-drawer-item-title">测试要点</span>
+            <p id="caseGenModuleGenerateDrawerPoints">-</p>
+          </div>
+          <div class="casegen-module-drawer-item">
+            <span class="casegen-module-drawer-item-title">耦合模块</span>
+            <p id="caseGenModuleGenerateDrawerCoupled">-</p>
+          </div>
+        </div>
+      </div>
+      <div class="casegen-tabbar casegen-module-drawer-tabbar" role="tablist" aria-label="模块生成方式页签">
+        <button class="casegen-tab is-active" id="caseGenModuleGenerateGlobalTabBtn" type="button" data-casegen-module-tab="global" aria-selected="true" aria-controls="caseGenModuleGenerateGlobalPanel">全局配置优先</button>
+        <button class="casegen-tab" id="caseGenModuleGenerateLocalTabBtn" type="button" data-casegen-module-tab="local" aria-selected="false" aria-controls="caseGenModuleGenerateLocalPanel">独立配置优先</button>
+        <button class="casegen-tab" id="caseGenModuleGenerateTopupTabBtn" type="button" data-casegen-module-tab="topup" aria-selected="false" aria-controls="caseGenModuleGenerateTopupPanel">补全生成</button>
+      </div>
+      <div class="casegen-tabpanel casegen-module-drawer-panel is-active" id="caseGenModuleGenerateGlobalPanel" data-casegen-module-panel="global" role="tabpanel" aria-labelledby="caseGenModuleGenerateGlobalTabBtn">
+        <div class="casegen-module-drawer-card">
+          <div class="casegen-module-drawer-head">
+            <span class="casegen-module-drawer-label">当前全局生成配置</span>
+          </div>
+          <p class="hint casegen-module-drawer-summary" id="caseGenModuleGenerateDrawerGlobalSummary">当前全局配置未填写额外要求，也未勾选任何选项，将按基础提示词正常生成。</p>
+        </div>
+        <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+          <button class="pill primary" id="caseGenModuleGenerateGlobalConfirmBtn" type="button">确认并生成</button>
+          <button class="ghost-btn" data-drawer-close="caseGenModuleGenerateDrawer" type="button">取消</button>
+        </div>
+      </div>
+      <div class="casegen-tabpanel casegen-module-drawer-panel" id="caseGenModuleGenerateLocalPanel" data-casegen-module-panel="local" role="tabpanel" aria-labelledby="caseGenModuleGenerateLocalTabBtn">
+        <div class="casegen-generate-drawer-field">
+          <label class="casegen-generate-drawer-field-title" for="caseGenModuleLocalRequirement">额外要求填写</label>
+          <textarea id="caseGenModuleLocalRequirement" placeholder="非必填，如果没有特殊要求就走正常生成，"></textarea>
+          <p class="hint casegen-generate-drawer-field-hint">仅当前模块本次生成生效，不写入全局，也不会被其他模块复用。</p>
+        </div>
+        <div class="casegen-option-list">
+          <label class="casegen-option" for="caseGenModuleLocalNeedBoundary">
+            <input id="caseGenModuleLocalNeedBoundary" type="checkbox"/>
+            <span class="casegen-option-body">
+              <span class="casegen-option-title">是否需要考虑边界</span>
+              <span class="hint">覆盖上下限、临界状态、空值与异常边界。</span>
+            </span>
+          </label>
+          <label class="casegen-option" for="caseGenModuleLocalNeedMobile">
+            <input id="caseGenModuleLocalNeedMobile" type="checkbox"/>
+            <span class="casegen-option-body">
+              <span class="casegen-option-title">是否需要考虑移动设备操作</span>
+              <span class="hint">补充点击、长按、滑动、横竖屏等手机交互场景。</span>
+            </span>
+          </label>
+          <label class="casegen-option" for="caseGenModuleLocalNeedSpecial">
+            <input id="caseGenModuleLocalNeedSpecial" type="checkbox"/>
+            <span class="casegen-option-body">
+              <span class="casegen-option-title">是否需要考虑特殊场景</span>
+              <span class="hint">可继续勾选下方特殊场景明细。</span>
+            </span>
+          </label>
+          <div class="casegen-suboptions" id="caseGenModuleLocalSpecialOptions">
+            <div class="casegen-suboptions-title">选择要考虑的特殊场景</div>
+            <div class="casegen-suboptions-grid">
+              <label class="casegen-suboption" for="caseGenModuleLocalSpecialRepeatOperation">
+                <input id="caseGenModuleLocalSpecialRepeatOperation" type="checkbox"/>
+                <span>重复操作</span>
+              </label>
+              <label class="casegen-suboption" for="caseGenModuleLocalSpecialMultiTouch">
+                <input id="caseGenModuleLocalSpecialMultiTouch" type="checkbox"/>
+                <span>多点触控</span>
+              </label>
+              <label class="casegen-suboption" for="caseGenModuleLocalSpecialRepeatExecution">
+                <input id="caseGenModuleLocalSpecialRepeatExecution" type="checkbox"/>
+                <span>重复执行</span>
+              </label>
+              <label class="casegen-suboption" for="caseGenModuleLocalSpecialWeakNetwork">
+                <input id="caseGenModuleLocalSpecialWeakNetwork" type="checkbox"/>
+                <span>弱网</span>
+              </label>
+              <label class="casegen-suboption" for="caseGenModuleLocalSpecialInterruptResume">
+                <input id="caseGenModuleLocalSpecialInterruptResume" type="checkbox"/>
+                <span>中断恢复</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+          <button class="pill primary" id="caseGenModuleGenerateLocalConfirmBtn" type="button">确认并生成</button>
+          <button class="ghost-btn" data-drawer-close="caseGenModuleGenerateDrawer" type="button">取消</button>
+        </div>
+      </div>
+      <div class="casegen-tabpanel casegen-module-drawer-panel" id="caseGenModuleGenerateTopupPanel" data-casegen-module-panel="topup" role="tabpanel" aria-labelledby="caseGenModuleGenerateTopupTabBtn">
+        <div class="casegen-generate-drawer-field">
+          <label class="casegen-generate-drawer-field-title" for="caseGenModuleTopupSuggestion">生成建议</label>
+          <textarea id="caseGenModuleTopupSuggestion" placeholder="可输入补充说明/限制条件..."></textarea>
+          <p class="hint casegen-generate-drawer-field-hint" id="caseGenModuleTopupHint">补全生成只使用当前模块的生成建议和已有用例，不继承全局或独立配置勾选。</p>
+        </div>
+        <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
+          <button class="pill primary" id="caseGenModuleGenerateTopupConfirmBtn" type="button">确认并生成</button>
+          <button class="ghost-btn" data-drawer-close="caseGenModuleGenerateDrawer" type="button">取消</button>
+        </div>
+      </div>
+      <p class="status" id="caseGenModuleGenerateDrawerStatus"></p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseGenActionDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="caseGenActionDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseGenActionDrawerTitle">生成前确认</h3>
+      <button class="link-toggle" id="closeCaseGenActionDrawerBtn" data-drawer-close="caseGenActionDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" id="caseGenActionDrawerHint" style="margin:0 0 10px;"></p>
+      <div class="casegen-generate-drawer-field">
+        <label class="casegen-generate-drawer-field-title" for="caseGenCustomRequirement">额外要求填写</label>
+        <textarea id="caseGenCustomRequirement" placeholder="非必填，如果没有特殊要求就走正常生成，"></textarea>
+        <p class="hint casegen-generate-drawer-field-hint">默认留空；如需补充本轮生成约束，请在这里填写。</p>
+      </div>
+      <div class="casegen-option-list">
+        <label class="casegen-option" for="caseGenNeedBoundary">
+          <input id="caseGenNeedBoundary" type="checkbox"/>
+          <span class="casegen-option-body">
+            <span class="casegen-option-title">是否需要考虑边界</span>
+            <span class="hint">覆盖上下限、临界状态、空值与异常边界。</span>
+          </span>
+        </label>
+        <label class="casegen-option" for="caseGenNeedMobile">
+          <input id="caseGenNeedMobile" type="checkbox"/>
+          <span class="casegen-option-body">
+            <span class="casegen-option-title">是否需要考虑移动设备操作</span>
+            <span class="hint">补充点击、长按、滑动、横竖屏等手机交互场景。</span>
+          </span>
+        </label>
+        <label class="casegen-option" for="caseGenNeedSpecial">
+          <input id="caseGenNeedSpecial" type="checkbox"/>
+          <span class="casegen-option-body">
+            <span class="casegen-option-title">是否需要考虑特殊场景</span>
+            <span class="hint">可继续勾选下方特殊场景明细。</span>
+          </span>
+        </label>
+        <div class="casegen-suboptions" id="caseGenSpecialOptions">
+          <div class="casegen-suboptions-title">选择要考虑的特殊场景</div>
+          <div class="casegen-suboptions-grid">
+            <label class="casegen-suboption" for="caseGenSpecialRepeatOperation">
+              <input id="caseGenSpecialRepeatOperation" type="checkbox"/>
+              <span>重复操作</span>
+            </label>
+            <label class="casegen-suboption" for="caseGenSpecialMultiTouch">
+              <input id="caseGenSpecialMultiTouch" type="checkbox"/>
+              <span>多点触控</span>
+            </label>
+            <label class="casegen-suboption" for="caseGenSpecialRepeatExecution">
+              <input id="caseGenSpecialRepeatExecution" type="checkbox"/>
+              <span>重复执行</span>
+            </label>
+            <label class="casegen-suboption" for="caseGenSpecialWeakNetwork">
+              <input id="caseGenSpecialWeakNetwork" type="checkbox"/>
+              <span>弱网</span>
+            </label>
+            <label class="casegen-suboption" for="caseGenSpecialInterruptResume">
+              <input id="caseGenSpecialInterruptResume" type="checkbox"/>
+              <span>中断恢复</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
+        <button class="pill primary" id="caseGenActionDrawerConfirmBtn" type="button">确认并执行</button>
+        <button class="ghost-btn" id="caseGenActionDrawerCancelBtn" data-drawer-close="caseGenActionDrawer" type="button">取消</button>
+      </div>
+      <p class="status" id="caseGenActionDrawerStatus"></p>
     </div>
   </div>
 </div>

@@ -207,6 +207,7 @@
         caseGenSource: state.caseGenSource || '',
         caseGenModules: cloneJson(state.caseGenModules, []),
         caseGenResults: cloneJson(state.caseGenResults, {}),
+        caseGenSettings: cloneJson(state.caseGenSettings, {}),
         caseGenSuggestions: cloneJson(state.caseGenSuggestions, {}),
         caseGenModuleStatus: cloneJson(state.caseGenModuleStatus, {}),
         caseGenProgress: cloneJson(state.caseGenProgress, {}),
@@ -263,6 +264,13 @@
       if (Array.isArray(data.importedCases) && data.importedCases.length) return true;
       if (Array.isArray(data.caseGenModules) && data.caseGenModules.length) return true;
       if (data.reviewClarifications && data.reviewClarifications.length) return true;
+      if (data.caseGenSettings && typeof data.caseGenSettings === 'object') {
+        if (hasText(data.caseGenSettings.customRequirement)) return true;
+        if (data.caseGenSettings.needBoundary || data.caseGenSettings.needMobile || data.caseGenSettings.needSpecial) return true;
+        if (data.caseGenSettings.specialRepeatOperation || data.caseGenSettings.specialMultiTouch || data.caseGenSettings.specialRepeatExecution || data.caseGenSettings.specialWeakNetwork || data.caseGenSettings.specialInterruptResume) {
+          return true;
+        }
+      }
       if (data.caseGenSuggestions && typeof data.caseGenSuggestions === 'object') {
         var hasSug = Object.keys(data.caseGenSuggestions).some(function(key) {
           return hasText(data.caseGenSuggestions[key]);
@@ -354,6 +362,7 @@
       state.caseGenSource = data.caseGenSource || '';
       state.caseGenModules = Array.isArray(data.caseGenModules) ? data.caseGenModules : [];
       state.caseGenResults = (data.caseGenResults && typeof data.caseGenResults === 'object') ? data.caseGenResults : {};
+      state.caseGenSettings = (data.caseGenSettings && typeof data.caseGenSettings === 'object') ? data.caseGenSettings : {};
       state.caseGenSuggestions = (data.caseGenSuggestions && typeof data.caseGenSuggestions === 'object') ? data.caseGenSuggestions : {};
       state.caseGenModuleStatus = (data.caseGenModuleStatus && typeof data.caseGenModuleStatus === 'object') ? data.caseGenModuleStatus : {};
       state.caseGenProgress = (data.caseGenProgress && typeof data.caseGenProgress === 'object') ? data.caseGenProgress : {};
@@ -1279,6 +1288,15 @@
       appendSelectedCasesToImported: appendSelectedCasesToImported,
       refreshAppendExistingButton: api.refreshAppendExistingButton || function() {},
       refreshCaseGenBatchButtons: api.refreshCaseGenBatchButtons || function() {},
+      ensureCaseGenSettings: api.ensureCaseGenSettings || function() { return {}; },
+      setCaseGenSettingValue: api.setCaseGenSettingValue || function() {},
+      syncCaseGenSpecialOptionsState: api.syncCaseGenSpecialOptionsState || function() {},
+      setCaseGenViewTab: api.setCaseGenViewTab || function() {},
+      setCaseGenStoreMode: api.setCaseGenStoreMode || function() {},
+      openCaseGenBatchActionDrawer: api.openCaseGenBatchActionDrawer || function() {},
+      openCaseGenModuleGenerateDrawer: api.openCaseGenModuleGenerateDrawer || function() {},
+      getCaseGenPromptComponents: api.getCaseGenPromptComponents || function() { return []; },
+      buildCaseGenPrompt: api.buildCaseGenPrompt || function() { return ''; },
       refreshExportCaseGenXmindButton: api.refreshExportCaseGenXmindButton || function() {},
       setCaseGenDbStoreNewAction: api.setCaseGenDbStoreNewAction || function() {},
       clearCaseGenDbStoreNewActionError: api.clearCaseGenDbStoreNewActionError || function() {},
@@ -1297,7 +1315,10 @@
       exportSelectedCasesToXmind: 1, exportSelectedModulesToXmind: 1, transferModuleToTempExec: 1, importModuleCases: 1, clearModuleCases: 1, topUpCasesForModule: 1,
       topUpAllCaseGenModules: 1,
       appendSelectedCasesToImported: 1, transferSelectedCasesToExec: 1,
-      refreshAppendExistingButton: 1, refreshCaseGenBatchButtons: 1, refreshExportCaseGenXmindButton: 1,
+      refreshAppendExistingButton: 1, refreshCaseGenBatchButtons: 1,
+      ensureCaseGenSettings: 1, setCaseGenSettingValue: 1, syncCaseGenSpecialOptionsState: 1, setCaseGenViewTab: 1, setCaseGenStoreMode: 1, openCaseGenBatchActionDrawer: 1, openCaseGenModuleGenerateDrawer: 1,
+      getCaseGenPromptComponents: 1, buildCaseGenPrompt: 1,
+      refreshExportCaseGenXmindButton: 1,
       setCaseGenDbStoreNewAction: 1, clearCaseGenDbStoreNewActionError: 1,
       openCaseGenAllView: 1, openCaseGenDbStoreNewDrawer: 1, openCaseGenDbStoreAppendDrawer: 1,
       handleCaseSelectionChange: 1, handleCaseSelectAll: 1, handleCaseSelectAllModules: 1,

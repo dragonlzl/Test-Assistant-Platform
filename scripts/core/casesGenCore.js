@@ -47,6 +47,10 @@
     var caseGenStoreActionSelect = document.getElementById('caseGenStoreActionSelect');
     var caseGenStoreNewBtn = document.getElementById('caseGenStoreNewBtn');
     var caseGenStoreAppendBtn = document.getElementById('caseGenStoreAppendBtn');
+    var caseGenStoreModeNewBtn = document.getElementById('caseGenStoreModeNewBtn');
+    var caseGenStoreModeAppendBtn = document.getElementById('caseGenStoreModeAppendBtn');
+    var caseGenStoreModeNewPanel = document.getElementById('caseGenStoreModeNewPanel');
+    var caseGenStoreModeAppendPanel = document.getElementById('caseGenStoreModeAppendPanel');
     var caseGenDbStoreDrawerTitle = document.getElementById('caseGenDbStoreDrawerTitle');
     var caseGenDbStoreProjectSelect = document.getElementById('caseGenDbStoreProjectSelect');
     var caseGenDbStoreVersionSelect = document.getElementById('caseGenDbStoreVersionSelect');
@@ -62,10 +66,60 @@
     var caseGenRequirementDrawerStatus = document.getElementById('caseGenRequirementDrawerStatus');
     var caseGenRequirementDrawer = null;
     var caseGenRequirementDrawerExternal = null;
+    var caseGenModuleGenerateDrawerTitle = document.getElementById('caseGenModuleGenerateDrawerTitle');
+    var caseGenModuleGenerateDrawerHint = document.getElementById('caseGenModuleGenerateDrawerHint');
+    var caseGenModuleGenerateDrawerModuleTitle = document.getElementById('caseGenModuleGenerateDrawerModuleTitle');
+    var caseGenModuleGenerateDrawerScenarios = document.getElementById('caseGenModuleGenerateDrawerScenarios');
+    var caseGenModuleGenerateDrawerPoints = document.getElementById('caseGenModuleGenerateDrawerPoints');
+    var caseGenModuleGenerateDrawerCoupled = document.getElementById('caseGenModuleGenerateDrawerCoupled');
+    var caseGenModuleGenerateGlobalTabBtn = document.getElementById('caseGenModuleGenerateGlobalTabBtn');
+    var caseGenModuleGenerateLocalTabBtn = document.getElementById('caseGenModuleGenerateLocalTabBtn');
+    var caseGenModuleGenerateTopupTabBtn = document.getElementById('caseGenModuleGenerateTopupTabBtn');
+    var caseGenModuleGenerateGlobalPanel = document.getElementById('caseGenModuleGenerateGlobalPanel');
+    var caseGenModuleGenerateLocalPanel = document.getElementById('caseGenModuleGenerateLocalPanel');
+    var caseGenModuleGenerateTopupPanel = document.getElementById('caseGenModuleGenerateTopupPanel');
+    var caseGenModuleGenerateDrawerGlobalSummary = document.getElementById('caseGenModuleGenerateDrawerGlobalSummary');
+    var caseGenModuleGenerateGlobalConfirmBtn = document.getElementById('caseGenModuleGenerateGlobalConfirmBtn');
+    var caseGenModuleLocalRequirementEl = document.getElementById('caseGenModuleLocalRequirement');
+    var caseGenModuleLocalNeedBoundaryEl = document.getElementById('caseGenModuleLocalNeedBoundary');
+    var caseGenModuleLocalNeedMobileEl = document.getElementById('caseGenModuleLocalNeedMobile');
+    var caseGenModuleLocalNeedSpecialEl = document.getElementById('caseGenModuleLocalNeedSpecial');
+    var caseGenModuleLocalSpecialOptionsEl = document.getElementById('caseGenModuleLocalSpecialOptions');
+    var caseGenModuleLocalSpecialRepeatOperationEl = document.getElementById('caseGenModuleLocalSpecialRepeatOperation');
+    var caseGenModuleLocalSpecialMultiTouchEl = document.getElementById('caseGenModuleLocalSpecialMultiTouch');
+    var caseGenModuleLocalSpecialRepeatExecutionEl = document.getElementById('caseGenModuleLocalSpecialRepeatExecution');
+    var caseGenModuleLocalSpecialWeakNetworkEl = document.getElementById('caseGenModuleLocalSpecialWeakNetwork');
+    var caseGenModuleLocalSpecialInterruptResumeEl = document.getElementById('caseGenModuleLocalSpecialInterruptResume');
+    var caseGenModuleGenerateLocalConfirmBtn = document.getElementById('caseGenModuleGenerateLocalConfirmBtn');
+    var caseGenModuleTopupSuggestionEl = document.getElementById('caseGenModuleTopupSuggestion');
+    var caseGenModuleTopupHint = document.getElementById('caseGenModuleTopupHint');
+    var caseGenModuleGenerateTopupConfirmBtn = document.getElementById('caseGenModuleGenerateTopupConfirmBtn');
+    var caseGenModuleGenerateDrawerStatus = document.getElementById('caseGenModuleGenerateDrawerStatus');
+    var caseGenModuleGenerateDrawer = null;
+    var caseGenActionDrawerTitle = document.getElementById('caseGenActionDrawerTitle');
+    var caseGenActionDrawerHint = document.getElementById('caseGenActionDrawerHint');
+    var caseGenActionDrawerRequirementSummary = document.getElementById('caseGenActionDrawerRequirementSummary');
+    var caseGenActionDrawerConfirmBtn = document.getElementById('caseGenActionDrawerConfirmBtn');
+    var caseGenActionDrawerStatus = document.getElementById('caseGenActionDrawerStatus');
+    var caseGenActionDrawer = null;
     var exportCaseGenXmindBtn = dom.exportCaseGenXmindBtn || dom.exportCaseGenXmind;
     var caseGenAllGenerateBtn = document.getElementById('caseGenAllGenerateBtn');
     var caseGenAllTopupBtn = document.getElementById('caseGenAllTopupBtn');
     var caseGenSuggestionGenerateBtn = document.getElementById('caseGenSuggestionGenerateBtn');
+    var caseGenSettingsTabBtn = document.getElementById('caseGenSettingsTabBtn');
+    var caseGenModulesTabBtn = document.getElementById('caseGenModulesTabBtn');
+    var casegenSettingsPanel = document.getElementById('casegenSettingsPanel');
+    var casegenModulesPanel = document.getElementById('casegenModulesPanel');
+    var caseGenCustomRequirementEl = document.getElementById('caseGenCustomRequirement');
+    var caseGenNeedBoundaryEl = document.getElementById('caseGenNeedBoundary');
+    var caseGenNeedMobileEl = document.getElementById('caseGenNeedMobile');
+    var caseGenNeedSpecialEl = document.getElementById('caseGenNeedSpecial');
+    var caseGenSpecialOptionsEl = document.getElementById('caseGenSpecialOptions');
+    var caseGenSpecialRepeatOperationEl = document.getElementById('caseGenSpecialRepeatOperation');
+    var caseGenSpecialMultiTouchEl = document.getElementById('caseGenSpecialMultiTouch');
+    var caseGenSpecialRepeatExecutionEl = document.getElementById('caseGenSpecialRepeatExecution');
+    var caseGenSpecialWeakNetworkEl = document.getElementById('caseGenSpecialWeakNetwork');
+    var caseGenSpecialInterruptResumeEl = document.getElementById('caseGenSpecialInterruptResume');
     var caseGenViewDrawerBody = dom.caseGenViewDrawerBody;
     var caseGenViewDrawerTitle = dom.caseGenViewDrawerTitle;
     var caseGenAllSelectBtn = dom.caseGenAllSelectBtn || document.getElementById('caseGenAllSelectBtn');
@@ -73,6 +127,9 @@
     var activeCaseViewModuleId = '';
     var ALL_CASE_VIEW_ID = '__casegen_all__';
     var pendingCaseGenDbStoreAction = '';
+    var pendingCaseGenActionContext = null;
+    var pendingCaseGenModuleGenerateState = null;
+    var caseGenActionDrawerDraftSettings = null;
 
     var setStatus = ctx.setStatus || function() {};
     var downloadText = handlers.downloadText || function() {};
@@ -294,6 +351,526 @@
       return caseGenRequirementDrawer;
     }
 
+    function syncCaseGenActionDrawerSummary() {
+      if (!caseGenActionDrawerRequirementSummary) return;
+      var settings = normalizeCaseGenPromptSettings(caseGenActionDrawerDraftSettings || ensureCaseGenSettings());
+      caseGenActionDrawerRequirementSummary.textContent = describeCaseGenPromptSettings(settings, '未填写，将按默认要求生成。');
+    }
+
+    function findCaseGenModule(moduleId) {
+      if (!moduleId || !Array.isArray(state.caseGenModules)) return null;
+      for (var i = 0; i < state.caseGenModules.length; i += 1) {
+        var mod = state.caseGenModules[i];
+        if (mod && String(mod.id || '') === String(moduleId)) return mod;
+      }
+      return null;
+    }
+
+    function formatCaseGenModuleField(value) {
+      if (Array.isArray(value)) {
+        var list = value.map(function(item) { return stringifyCaseField(item || ''); }).filter(Boolean);
+        return list.length ? list.join('、') : '未填写';
+      }
+      var text = stringifyCaseField(value || '');
+      return text || '未填写';
+    }
+
+    function describeCaseGenPromptSettings(settingsSource, emptyText) {
+      var settings = normalizeCaseGenPromptSettings(settingsSource || {});
+      var labels = [];
+      var customRequirement = stringifyCaseField(settings.customRequirement || '');
+      var specialNames = [];
+      if (customRequirement) labels.push('额外要求：' + customRequirement);
+      if (settings.needBoundary) labels.push('考虑边界');
+      if (settings.needMobile) labels.push('考虑移动设备操作');
+      if (settings.needSpecial) {
+        if (settings.specialRepeatOperation) specialNames.push('重复操作');
+        if (settings.specialMultiTouch) specialNames.push('多点触控');
+        if (settings.specialRepeatExecution) specialNames.push('重复执行');
+        if (settings.specialWeakNetwork) specialNames.push('弱网');
+        if (settings.specialInterruptResume) specialNames.push('中断恢复');
+        labels.push(specialNames.length ? ('特殊场景：' + specialNames.join(' / ')) : '考虑特殊场景');
+      }
+      return labels.length ? labels.join('；') : (emptyText || '未填写，将按默认要求生成。');
+    }
+
+    function normalizeCaseGenActionContext(context) {
+      var source = context && typeof context === 'object' ? context : {};
+      if (source.type === 'module-local') {
+        return {
+          type: 'module-local',
+          action: 'generate',
+          moduleId: String(source.moduleId || ''),
+        };
+      }
+      return {
+        type: 'batch',
+        action: source.action === 'topup' ? 'topup' : (source.action === 'suggested' ? 'suggested' : 'generate'),
+      };
+    }
+
+    function getCaseGenActionMeta(context) {
+      var ctxMeta = normalizeCaseGenActionContext(context);
+      if (ctxMeta.type === 'module-local') {
+        var moduleInfo = findCaseGenModule(ctxMeta.moduleId);
+        var moduleTitle = resolveModuleTitle(moduleInfo && (moduleInfo.title || moduleInfo.module));
+        return {
+          action: 'generate',
+          title: '模块独立生成确认',
+          hint: '当前只对【' + moduleTitle + '】生效；以下额外要求仅用于这一次生成，不会写入全局设置，也不会被其他模块复用。',
+          confirmText: '确认并生成',
+        };
+      }
+      if (ctxMeta.action === 'topup') {
+        return {
+          action: 'topup',
+          title: '全模块补全生成确认',
+          hint: '请填写本轮额外要求，并确认是否需要考虑边界、移动端和特殊场景；确认后再执行全模块补全生成。',
+          confirmText: '确认并补全',
+        };
+      }
+      if (ctxMeta.action === 'suggested') {
+        return {
+          action: 'suggested',
+          title: '仅补全用例确认',
+          hint: '请填写本轮额外要求，并确认是否需要考虑边界、移动端和特殊场景；确认后只执行填写了生成建议的模块。',
+          confirmText: '确认并执行',
+        };
+      }
+      return {
+        action: 'generate',
+        title: '全模块直接生成确认',
+        hint: '请填写本轮额外要求，并确认是否需要考虑边界、移动端和特殊场景；确认后再执行全模块直接生成。',
+        confirmText: '确认并生成',
+      };
+    }
+
+    function runCaseGenBatchAction(action) {
+      if (action === 'topup') return topUpAllCaseGenModules();
+      if (action === 'suggested') return generateSuggestedCaseGenModules();
+      return generateAllCaseGenModules();
+    }
+
+    function executeCaseGenActionContext(context, promptSettingsSnapshot) {
+      var ctxMeta = normalizeCaseGenActionContext(context);
+      if (ctxMeta.type === 'module-local') {
+        if (!ctxMeta.moduleId) return false;
+        return generateCasesForModule(ctxMeta.moduleId, {
+          promptSettingsSnapshot: normalizeCaseGenPromptSettings(promptSettingsSnapshot || createEmptyCaseGenPromptSettings()),
+        });
+      }
+      setCaseGenViewTab('modules');
+      return runCaseGenBatchAction(ctxMeta.action);
+    }
+
+    function normalizeCaseGenModuleDrawerTab(tab) {
+      if (tab === 'local' || tab === 'topup') return tab;
+      return 'global';
+    }
+
+    function createCaseGenModuleGenerateState(moduleId) {
+      return {
+        moduleId: String(moduleId || ''),
+        activeTab: 'global',
+        localSettings: createEmptyCaseGenPromptSettings(),
+        topupSuggestion: getModuleSuggestion(moduleId),
+      };
+    }
+
+    function setCaseGenModuleSuggestionDraft(moduleId, value, persist) {
+      if (!moduleId) return;
+      if (!state.caseGenSuggestions || typeof state.caseGenSuggestions !== 'object') {
+        state.caseGenSuggestions = {};
+      }
+      state.caseGenSuggestions[moduleId] = String(value || '');
+      var suggestionArea = casesGenerationContainer && casesGenerationContainer.querySelector('textarea[data-suggestion="' + moduleId + '"]');
+      if (suggestionArea) suggestionArea.value = state.caseGenSuggestions[moduleId];
+      if (persist === true) {
+        persistWorkflowState();
+      }
+      renderCaseGenProgressBoard();
+      refreshCaseGenBatchButtons();
+    }
+
+    function syncCaseGenModuleLocalSpecialOptionsState(settingsSource) {
+      var settings = normalizeCaseGenPromptSettings(settingsSource || {});
+      var enabled = settings.needSpecial === true;
+      var inputs = [
+        caseGenModuleLocalSpecialRepeatOperationEl,
+        caseGenModuleLocalSpecialMultiTouchEl,
+        caseGenModuleLocalSpecialRepeatExecutionEl,
+        caseGenModuleLocalSpecialWeakNetworkEl,
+        caseGenModuleLocalSpecialInterruptResumeEl,
+      ];
+      if (caseGenModuleLocalSpecialOptionsEl && caseGenModuleLocalSpecialOptionsEl.classList) {
+        caseGenModuleLocalSpecialOptionsEl.classList.toggle('is-disabled', !enabled);
+      }
+      inputs.forEach(function(input) {
+        if (!input) return;
+        input.disabled = !enabled;
+      });
+    }
+
+    function syncCaseGenModuleLocalInputs(settingsSource) {
+      var settings = normalizeCaseGenPromptSettings(settingsSource || {});
+      if (caseGenModuleLocalRequirementEl) caseGenModuleLocalRequirementEl.value = settings.customRequirement || '';
+      if (caseGenModuleLocalNeedBoundaryEl) caseGenModuleLocalNeedBoundaryEl.checked = settings.needBoundary === true;
+      if (caseGenModuleLocalNeedMobileEl) caseGenModuleLocalNeedMobileEl.checked = settings.needMobile === true;
+      if (caseGenModuleLocalNeedSpecialEl) caseGenModuleLocalNeedSpecialEl.checked = settings.needSpecial === true;
+      if (caseGenModuleLocalSpecialRepeatOperationEl) caseGenModuleLocalSpecialRepeatOperationEl.checked = settings.specialRepeatOperation === true;
+      if (caseGenModuleLocalSpecialMultiTouchEl) caseGenModuleLocalSpecialMultiTouchEl.checked = settings.specialMultiTouch === true;
+      if (caseGenModuleLocalSpecialRepeatExecutionEl) caseGenModuleLocalSpecialRepeatExecutionEl.checked = settings.specialRepeatExecution === true;
+      if (caseGenModuleLocalSpecialWeakNetworkEl) caseGenModuleLocalSpecialWeakNetworkEl.checked = settings.specialWeakNetwork === true;
+      if (caseGenModuleLocalSpecialInterruptResumeEl) caseGenModuleLocalSpecialInterruptResumeEl.checked = settings.specialInterruptResume === true;
+      syncCaseGenModuleLocalSpecialOptionsState(settings);
+    }
+
+    function setCaseGenModuleLocalSettingValue(key, value) {
+      if (!pendingCaseGenModuleGenerateState) return null;
+      var settings = pendingCaseGenModuleGenerateState.localSettings || createEmptyCaseGenPromptSettings();
+      if (key === 'customRequirement') {
+        settings.customRequirement = String(value || '');
+      } else {
+        settings[key] = value === true;
+        if (key === 'needSpecial' && value !== true) {
+          settings.specialRepeatOperation = false;
+          settings.specialMultiTouch = false;
+          settings.specialRepeatExecution = false;
+          settings.specialWeakNetwork = false;
+          settings.specialInterruptResume = false;
+        }
+      }
+      pendingCaseGenModuleGenerateState.localSettings = normalizeCaseGenPromptSettings(settings);
+      syncCaseGenModuleLocalInputs(pendingCaseGenModuleGenerateState.localSettings);
+      return pendingCaseGenModuleGenerateState.localSettings;
+    }
+
+    function getCaseGenModuleGenerateHasResult(moduleId) {
+      return getCaseListForModule(moduleId).length > 0;
+    }
+
+    function setCaseGenModuleGenerateDrawerTab(tab) {
+      var normalizedTab = normalizeCaseGenModuleDrawerTab(tab);
+      var moduleState = pendingCaseGenModuleGenerateState;
+      var moduleId = moduleState && moduleState.moduleId ? moduleState.moduleId : '';
+      var hasResult = moduleId ? getCaseGenModuleGenerateHasResult(moduleId) : false;
+      if (moduleState) {
+        moduleState.activeTab = normalizedTab;
+      }
+      if (caseGenModuleGenerateGlobalTabBtn && caseGenModuleGenerateGlobalTabBtn.classList) {
+        caseGenModuleGenerateGlobalTabBtn.classList.toggle('is-active', normalizedTab === 'global');
+        caseGenModuleGenerateGlobalTabBtn.setAttribute('aria-selected', normalizedTab === 'global' ? 'true' : 'false');
+      }
+      if (caseGenModuleGenerateLocalTabBtn && caseGenModuleGenerateLocalTabBtn.classList) {
+        caseGenModuleGenerateLocalTabBtn.classList.toggle('is-active', normalizedTab === 'local');
+        caseGenModuleGenerateLocalTabBtn.setAttribute('aria-selected', normalizedTab === 'local' ? 'true' : 'false');
+      }
+      if (caseGenModuleGenerateTopupTabBtn && caseGenModuleGenerateTopupTabBtn.classList) {
+        caseGenModuleGenerateTopupTabBtn.classList.toggle('is-active', normalizedTab === 'topup');
+        caseGenModuleGenerateTopupTabBtn.setAttribute('aria-selected', normalizedTab === 'topup' ? 'true' : 'false');
+      }
+      if (caseGenModuleGenerateGlobalPanel && caseGenModuleGenerateGlobalPanel.classList) {
+        caseGenModuleGenerateGlobalPanel.classList.toggle('is-active', normalizedTab === 'global');
+      }
+      if (caseGenModuleGenerateLocalPanel && caseGenModuleGenerateLocalPanel.classList) {
+        caseGenModuleGenerateLocalPanel.classList.toggle('is-active', normalizedTab === 'local');
+      }
+      if (caseGenModuleGenerateTopupPanel && caseGenModuleGenerateTopupPanel.classList) {
+        caseGenModuleGenerateTopupPanel.classList.toggle('is-active', normalizedTab === 'topup');
+      }
+      if (normalizedTab === 'global') {
+        if (caseGenModuleGenerateDrawerHint) {
+          caseGenModuleGenerateDrawerHint.textContent = '当前模块将直接沿用已确认的全局生成配置；模块自身的测试场景、测试要点、耦合模块与生成建议仍会照常参与本次生成。';
+        }
+      } else if (normalizedTab === 'local') {
+        if (caseGenModuleGenerateDrawerHint) {
+          caseGenModuleGenerateDrawerHint.textContent = '当前模块可单独配置本次生成要求；该配置优先于全局，但只在这一次生效，不会写回全局设置。';
+        }
+        syncCaseGenModuleLocalInputs(moduleState && moduleState.localSettings ? moduleState.localSettings : createEmptyCaseGenPromptSettings());
+      } else {
+        if (caseGenModuleGenerateDrawerHint) {
+          caseGenModuleGenerateDrawerHint.textContent = '补全生成只使用当前模块的生成建议与已有用例，不继承全局或独立配置勾选。';
+        }
+        if (caseGenModuleTopupSuggestionEl) {
+          caseGenModuleTopupSuggestionEl.value = moduleState ? String(moduleState.topupSuggestion || '') : '';
+        }
+        if (caseGenModuleTopupHint) {
+          caseGenModuleTopupHint.textContent = hasResult
+            ? '补全生成会在当前模块已有用例基础上，结合这里的生成建议补充新增用例。'
+            : '当前模块暂无已生成用例，无法执行补全生成；请先通过“全局配置优先”或“独立配置优先”生成用例。';
+        }
+        if (caseGenModuleGenerateTopupConfirmBtn) {
+          caseGenModuleGenerateTopupConfirmBtn.disabled = !hasResult;
+        }
+      }
+      if (normalizedTab !== 'topup' && caseGenModuleGenerateTopupConfirmBtn) {
+        caseGenModuleGenerateTopupConfirmBtn.disabled = !hasResult;
+      }
+      if (caseGenModuleGenerateDrawerStatus) setStatus(caseGenModuleGenerateDrawerStatus, '', '');
+    }
+
+    function syncCaseGenModuleGenerateDrawer(moduleId) {
+      var mod = findCaseGenModule(moduleId);
+      if (!mod) return false;
+      if (!pendingCaseGenModuleGenerateState || pendingCaseGenModuleGenerateState.moduleId !== String(moduleId || '')) {
+        pendingCaseGenModuleGenerateState = createCaseGenModuleGenerateState(moduleId);
+      }
+      if (caseGenModuleGenerateDrawerTitle) caseGenModuleGenerateDrawerTitle.textContent = '模块生成方式确认';
+      if (caseGenModuleGenerateDrawerModuleTitle) {
+        caseGenModuleGenerateDrawerModuleTitle.textContent = resolveModuleTitle(mod.title || mod.module || '');
+      }
+      if (caseGenModuleGenerateDrawerScenarios) {
+        caseGenModuleGenerateDrawerScenarios.textContent = formatCaseGenModuleField(mod.scenarios);
+      }
+      if (caseGenModuleGenerateDrawerPoints) {
+        caseGenModuleGenerateDrawerPoints.textContent = formatCaseGenModuleField(mod.points);
+      }
+      if (caseGenModuleGenerateDrawerCoupled) {
+        caseGenModuleGenerateDrawerCoupled.textContent = formatCaseGenModuleField(mod.coupled);
+      }
+      if (caseGenModuleGenerateDrawerGlobalSummary) {
+        caseGenModuleGenerateDrawerGlobalSummary.textContent = describeCaseGenPromptSettings(
+          createCaseGenPromptSettingsSnapshot(),
+          '当前全局配置未填写额外要求，也未勾选任何选项，将按基础提示词正常生成。'
+        );
+      }
+      syncCaseGenModuleLocalInputs(pendingCaseGenModuleGenerateState.localSettings);
+      if (caseGenModuleTopupSuggestionEl) {
+        caseGenModuleTopupSuggestionEl.value = String(pendingCaseGenModuleGenerateState.topupSuggestion || '');
+      }
+      setCaseGenModuleGenerateDrawerTab(pendingCaseGenModuleGenerateState.activeTab || 'global');
+      return true;
+    }
+
+    function ensureCaseGenModuleGenerateDrawer() {
+      if (caseGenModuleGenerateDrawer) return caseGenModuleGenerateDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      caseGenModuleGenerateDrawer = window.app.drawer.createDrawer({
+        drawerId: 'caseGenModuleGenerateDrawer',
+        closeButtons: ['closeCaseGenModuleGenerateDrawerBtn'],
+        onOpen: function() {
+          if (pendingCaseGenModuleGenerateState && pendingCaseGenModuleGenerateState.moduleId) {
+            syncCaseGenModuleGenerateDrawer(pendingCaseGenModuleGenerateState.moduleId);
+          }
+        },
+        onClose: function() {
+          pendingCaseGenModuleGenerateState = null;
+          if (caseGenModuleGenerateDrawerStatus) setStatus(caseGenModuleGenerateDrawerStatus, '', '');
+        },
+      });
+      if (caseGenModuleGenerateGlobalTabBtn) {
+        caseGenModuleGenerateGlobalTabBtn.addEventListener('click', function() {
+          setCaseGenModuleGenerateDrawerTab('global');
+        });
+      }
+      if (caseGenModuleGenerateLocalTabBtn) {
+        caseGenModuleGenerateLocalTabBtn.addEventListener('click', function() {
+          setCaseGenModuleGenerateDrawerTab('local');
+        });
+      }
+      if (caseGenModuleGenerateTopupTabBtn) {
+        caseGenModuleGenerateTopupTabBtn.addEventListener('click', function() {
+          setCaseGenModuleGenerateDrawerTab('topup');
+        });
+      }
+      if (caseGenModuleLocalRequirementEl) {
+        caseGenModuleLocalRequirementEl.addEventListener('input', function() {
+          setCaseGenModuleLocalSettingValue('customRequirement', caseGenModuleLocalRequirementEl.value || '');
+        });
+      }
+      if (caseGenModuleLocalNeedBoundaryEl) {
+        caseGenModuleLocalNeedBoundaryEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('needBoundary', caseGenModuleLocalNeedBoundaryEl.checked === true);
+        });
+      }
+      if (caseGenModuleLocalNeedMobileEl) {
+        caseGenModuleLocalNeedMobileEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('needMobile', caseGenModuleLocalNeedMobileEl.checked === true);
+        });
+      }
+      if (caseGenModuleLocalNeedSpecialEl) {
+        caseGenModuleLocalNeedSpecialEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('needSpecial', caseGenModuleLocalNeedSpecialEl.checked === true);
+        });
+      }
+      if (caseGenModuleLocalSpecialRepeatOperationEl) {
+        caseGenModuleLocalSpecialRepeatOperationEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('specialRepeatOperation', caseGenModuleLocalSpecialRepeatOperationEl.checked === true);
+        });
+      }
+      if (caseGenModuleLocalSpecialMultiTouchEl) {
+        caseGenModuleLocalSpecialMultiTouchEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('specialMultiTouch', caseGenModuleLocalSpecialMultiTouchEl.checked === true);
+        });
+      }
+      if (caseGenModuleLocalSpecialRepeatExecutionEl) {
+        caseGenModuleLocalSpecialRepeatExecutionEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('specialRepeatExecution', caseGenModuleLocalSpecialRepeatExecutionEl.checked === true);
+        });
+      }
+      if (caseGenModuleLocalSpecialWeakNetworkEl) {
+        caseGenModuleLocalSpecialWeakNetworkEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('specialWeakNetwork', caseGenModuleLocalSpecialWeakNetworkEl.checked === true);
+        });
+      }
+      if (caseGenModuleLocalSpecialInterruptResumeEl) {
+        caseGenModuleLocalSpecialInterruptResumeEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('specialInterruptResume', caseGenModuleLocalSpecialInterruptResumeEl.checked === true);
+        });
+      }
+      if (caseGenModuleTopupSuggestionEl) {
+        caseGenModuleTopupSuggestionEl.addEventListener('input', function() {
+          if (!pendingCaseGenModuleGenerateState) return;
+          pendingCaseGenModuleGenerateState.topupSuggestion = String(caseGenModuleTopupSuggestionEl.value || '');
+        });
+      }
+      if (caseGenModuleGenerateGlobalConfirmBtn) {
+        caseGenModuleGenerateGlobalConfirmBtn.addEventListener('click', function() {
+          var moduleState = pendingCaseGenModuleGenerateState;
+          var moduleId = moduleState && moduleState.moduleId ? moduleState.moduleId : '';
+          pendingCaseGenModuleGenerateState = null;
+          if (caseGenModuleGenerateDrawer && typeof caseGenModuleGenerateDrawer.close === 'function') {
+            caseGenModuleGenerateDrawer.close();
+          }
+          if (!moduleId) return;
+          setTimeout(function() {
+            generateCasesForModule(moduleId, {
+              promptSettingsSnapshot: createCaseGenPromptSettingsSnapshot(),
+            });
+          }, 0);
+        });
+      }
+      if (caseGenModuleGenerateLocalConfirmBtn) {
+        caseGenModuleGenerateLocalConfirmBtn.addEventListener('click', function() {
+          var moduleState = pendingCaseGenModuleGenerateState;
+          var moduleId = moduleState && moduleState.moduleId ? moduleState.moduleId : '';
+          var localSettings = moduleState && moduleState.localSettings
+            ? normalizeCaseGenPromptSettings(moduleState.localSettings)
+            : createEmptyCaseGenPromptSettings();
+          pendingCaseGenModuleGenerateState = null;
+          if (caseGenModuleGenerateDrawer && typeof caseGenModuleGenerateDrawer.close === 'function') {
+            caseGenModuleGenerateDrawer.close();
+          }
+          if (!moduleId) return;
+          setTimeout(function() {
+            generateCasesForModule(moduleId, {
+              promptSettingsSnapshot: localSettings,
+            });
+          }, 0);
+        });
+      }
+      if (caseGenModuleGenerateTopupConfirmBtn) {
+        caseGenModuleGenerateTopupConfirmBtn.addEventListener('click', function() {
+          var moduleState = pendingCaseGenModuleGenerateState;
+          var moduleId = moduleState && moduleState.moduleId ? moduleState.moduleId : '';
+          var topupSuggestion = moduleState ? String(moduleState.topupSuggestion || '') : '';
+          pendingCaseGenModuleGenerateState = null;
+          if (caseGenModuleGenerateDrawer && typeof caseGenModuleGenerateDrawer.close === 'function') {
+            caseGenModuleGenerateDrawer.close();
+          }
+          if (!moduleId) return;
+          setCaseGenModuleSuggestionDraft(moduleId, topupSuggestion, true);
+          setTimeout(function() {
+            topUpCasesForModule(moduleId, {
+              promptSettingsSnapshot: createEmptyCaseGenPromptSettings(),
+            });
+          }, 0);
+        });
+      }
+      return caseGenModuleGenerateDrawer;
+    }
+
+    function ensureCaseGenActionDrawer() {
+      if (caseGenActionDrawer) return caseGenActionDrawer;
+      if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
+      caseGenActionDrawer = window.app.drawer.createDrawer({
+        drawerId: 'caseGenActionDrawer',
+        closeButtons: ['closeCaseGenActionDrawerBtn', 'caseGenActionDrawerCancelBtn'],
+        onOpen: function() {
+          if (!caseGenActionDrawerDraftSettings) {
+            caseGenActionDrawerDraftSettings = createEmptyCaseGenPromptSettings();
+          }
+          syncCaseGenPromptInputs(caseGenActionDrawerDraftSettings);
+          syncCaseGenActionDrawerSummary();
+          if (caseGenActionDrawerStatus) setStatus(caseGenActionDrawerStatus, '', '');
+        },
+        onClose: function() {
+          pendingCaseGenActionContext = null;
+          caseGenActionDrawerDraftSettings = null;
+          syncCaseGenPromptInputs(ensureCaseGenSettings());
+          if (caseGenActionDrawerStatus) setStatus(caseGenActionDrawerStatus, '', '');
+        },
+      });
+      if (caseGenActionDrawerConfirmBtn) {
+        caseGenActionDrawerConfirmBtn.addEventListener('click', function() {
+          var context = normalizeCaseGenActionContext(pendingCaseGenActionContext);
+          var promptSettingsSnapshot = null;
+          pendingCaseGenActionContext = null;
+          if (caseGenActionDrawerDraftSettings) {
+            if (caseGenCustomRequirementEl) {
+              caseGenActionDrawerDraftSettings.customRequirement = String(caseGenCustomRequirementEl.value || '');
+            }
+            promptSettingsSnapshot = normalizeCaseGenPromptSettings(caseGenActionDrawerDraftSettings);
+            if (context.type === 'batch') {
+              applyCaseGenPromptSettings(promptSettingsSnapshot);
+            }
+            caseGenActionDrawerDraftSettings = null;
+          }
+          if (caseGenActionDrawer && typeof caseGenActionDrawer.close === 'function') {
+            caseGenActionDrawer.close();
+          }
+          setTimeout(function() {
+            executeCaseGenActionContext(context, promptSettingsSnapshot);
+          }, 0);
+        });
+      }
+      return caseGenActionDrawer;
+    }
+
+    function openCaseGenActionDrawerByContext(context) {
+      var normalizedContext = normalizeCaseGenActionContext(context);
+      var meta = getCaseGenActionMeta(normalizedContext);
+      var drawer = ensureCaseGenActionDrawer();
+      if (!drawer || typeof drawer.open !== 'function') {
+        return executeCaseGenActionContext(normalizedContext, createEmptyCaseGenPromptSettings());
+      }
+      pendingCaseGenActionContext = normalizedContext;
+      caseGenActionDrawerDraftSettings = createEmptyCaseGenPromptSettings();
+      if (caseGenActionDrawerTitle) caseGenActionDrawerTitle.textContent = meta.title;
+      if (caseGenActionDrawerHint) caseGenActionDrawerHint.textContent = meta.hint;
+      if (caseGenActionDrawerConfirmBtn) caseGenActionDrawerConfirmBtn.textContent = meta.confirmText;
+      syncCaseGenPromptInputs(caseGenActionDrawerDraftSettings);
+      syncCaseGenActionDrawerSummary();
+      if (caseGenActionDrawerStatus) setStatus(caseGenActionDrawerStatus, '', '');
+      drawer.open();
+      return true;
+    }
+
+    function openCaseGenBatchActionDrawer(action) {
+      return openCaseGenActionDrawerByContext({
+        type: 'batch',
+        action: action,
+      });
+    }
+
+    function openCaseGenModuleGenerateDrawer(moduleId) {
+      var mod = findCaseGenModule(moduleId);
+      if (!mod) {
+        setStatus(caseGenStatus, '未找到对应模块，无法继续生成', 'warn');
+        return false;
+      }
+      var drawer = ensureCaseGenModuleGenerateDrawer();
+      if (!drawer || typeof drawer.open !== 'function') {
+        return generateCasesForModule(moduleId, {
+          promptSettingsSnapshot: createCaseGenPromptSettingsSnapshot(),
+        });
+      }
+      pendingCaseGenModuleGenerateState = createCaseGenModuleGenerateState(moduleId);
+      syncCaseGenModuleGenerateDrawer(moduleId);
+      drawer.open();
+      return true;
+    }
+
     function promptRequirementLabelByDrawer(promptText) {
       var drawer = ensureCaseGenRequirementDrawer();
       if (!drawer || typeof drawer.open !== 'function') {
@@ -449,6 +1026,265 @@
       if (text === undefined || text === null) return '';
       return text.toString().trim();
     };
+
+    function createDefaultCaseGenSettings() {
+      return {
+        activeTab: 'settings',
+        storeMode: 'new',
+        customRequirement: '',
+        needBoundary: false,
+        needMobile: false,
+        needSpecial: false,
+        specialRepeatOperation: false,
+        specialMultiTouch: false,
+        specialRepeatExecution: false,
+        specialWeakNetwork: false,
+        specialInterruptResume: false,
+      };
+    }
+
+    function normalizeCaseGenPromptSettings(raw) {
+      var source = raw && typeof raw === 'object' ? raw : {};
+      return {
+        customRequirement: String(source.customRequirement || ''),
+        needBoundary: source.needBoundary === true,
+        needMobile: source.needMobile === true,
+        needSpecial: source.needSpecial === true,
+        specialRepeatOperation: source.specialRepeatOperation === true,
+        specialMultiTouch: source.specialMultiTouch === true,
+        specialRepeatExecution: source.specialRepeatExecution === true,
+        specialWeakNetwork: source.specialWeakNetwork === true,
+        specialInterruptResume: source.specialInterruptResume === true,
+      };
+    }
+
+    function ensureCaseGenSettings() {
+      var defaults = createDefaultCaseGenSettings();
+      if (!state.caseGenSettings || typeof state.caseGenSettings !== 'object') {
+        state.caseGenSettings = defaults;
+        return state.caseGenSettings;
+      }
+      Object.keys(defaults).forEach(function(key) {
+        if (state.caseGenSettings[key] === undefined || state.caseGenSettings[key] === null) {
+          state.caseGenSettings[key] = defaults[key];
+        }
+      });
+      state.caseGenSettings.activeTab = state.caseGenSettings.activeTab === 'modules' ? 'modules' : 'settings';
+      state.caseGenSettings.storeMode = state.caseGenSettings.storeMode === 'append' ? 'append' : 'new';
+      state.caseGenSettings.customRequirement = String(state.caseGenSettings.customRequirement || '');
+      state.caseGenSettings.needBoundary = state.caseGenSettings.needBoundary === true;
+      state.caseGenSettings.needMobile = state.caseGenSettings.needMobile === true;
+      state.caseGenSettings.needSpecial = state.caseGenSettings.needSpecial === true;
+      state.caseGenSettings.specialRepeatOperation = state.caseGenSettings.specialRepeatOperation === true;
+      state.caseGenSettings.specialMultiTouch = state.caseGenSettings.specialMultiTouch === true;
+      state.caseGenSettings.specialRepeatExecution = state.caseGenSettings.specialRepeatExecution === true;
+      state.caseGenSettings.specialWeakNetwork = state.caseGenSettings.specialWeakNetwork === true;
+      state.caseGenSettings.specialInterruptResume = state.caseGenSettings.specialInterruptResume === true;
+      return state.caseGenSettings;
+    }
+
+    function createCaseGenPromptSettingsSnapshot() {
+      return normalizeCaseGenPromptSettings(ensureCaseGenSettings());
+    }
+
+    function createEmptyCaseGenPromptSettings() {
+      return normalizeCaseGenPromptSettings({});
+    }
+
+    function syncCaseGenPromptInputs(settingsSource) {
+      var settings = normalizeCaseGenPromptSettings(settingsSource || ensureCaseGenSettings());
+      if (caseGenCustomRequirementEl) caseGenCustomRequirementEl.value = settings.customRequirement || '';
+      if (caseGenNeedBoundaryEl) caseGenNeedBoundaryEl.checked = settings.needBoundary === true;
+      if (caseGenNeedMobileEl) caseGenNeedMobileEl.checked = settings.needMobile === true;
+      if (caseGenNeedSpecialEl) caseGenNeedSpecialEl.checked = settings.needSpecial === true;
+      if (caseGenSpecialRepeatOperationEl) caseGenSpecialRepeatOperationEl.checked = settings.specialRepeatOperation === true;
+      if (caseGenSpecialMultiTouchEl) caseGenSpecialMultiTouchEl.checked = settings.specialMultiTouch === true;
+      if (caseGenSpecialRepeatExecutionEl) caseGenSpecialRepeatExecutionEl.checked = settings.specialRepeatExecution === true;
+      if (caseGenSpecialWeakNetworkEl) caseGenSpecialWeakNetworkEl.checked = settings.specialWeakNetwork === true;
+      if (caseGenSpecialInterruptResumeEl) caseGenSpecialInterruptResumeEl.checked = settings.specialInterruptResume === true;
+      syncCaseGenSpecialOptionsState(settings);
+    }
+
+    function applyCaseGenPromptSettings(settingsSource) {
+      var settings = ensureCaseGenSettings();
+      var normalized = normalizeCaseGenPromptSettings(settingsSource);
+      settings.customRequirement = normalized.customRequirement;
+      settings.needBoundary = normalized.needBoundary;
+      settings.needMobile = normalized.needMobile;
+      settings.needSpecial = normalized.needSpecial;
+      settings.specialRepeatOperation = normalized.specialRepeatOperation;
+      settings.specialMultiTouch = normalized.specialMultiTouch;
+      settings.specialRepeatExecution = normalized.specialRepeatExecution;
+      settings.specialWeakNetwork = normalized.specialWeakNetwork;
+      settings.specialInterruptResume = normalized.specialInterruptResume;
+      syncCaseGenPromptInputs(settings);
+      persistWorkflowState();
+      return settings;
+    }
+
+    function setCaseGenSettingValue(key, value) {
+      var settings = ensureCaseGenSettings();
+      if (key === 'customRequirement') {
+        if (caseGenActionDrawerDraftSettings) {
+          caseGenActionDrawerDraftSettings.customRequirement = String(value || '');
+          syncCaseGenActionDrawerSummary();
+          return caseGenActionDrawerDraftSettings;
+        }
+        settings.customRequirement = String(value || '');
+        syncCaseGenActionDrawerSummary();
+        persistWorkflowState();
+        return settings;
+      }
+      if (
+        key === 'needBoundary' ||
+        key === 'needMobile' ||
+        key === 'needSpecial' ||
+        key === 'specialRepeatOperation' ||
+        key === 'specialMultiTouch' ||
+        key === 'specialRepeatExecution' ||
+        key === 'specialWeakNetwork' ||
+        key === 'specialInterruptResume'
+      ) {
+        if (caseGenActionDrawerDraftSettings) {
+          caseGenActionDrawerDraftSettings[key] = value === true;
+          if (key === 'needSpecial' && value !== true) {
+            caseGenActionDrawerDraftSettings.specialRepeatOperation = false;
+            caseGenActionDrawerDraftSettings.specialMultiTouch = false;
+            caseGenActionDrawerDraftSettings.specialRepeatExecution = false;
+            caseGenActionDrawerDraftSettings.specialWeakNetwork = false;
+            caseGenActionDrawerDraftSettings.specialInterruptResume = false;
+            syncCaseGenPromptInputs(caseGenActionDrawerDraftSettings);
+            return caseGenActionDrawerDraftSettings;
+          }
+          syncCaseGenSpecialOptionsState(caseGenActionDrawerDraftSettings);
+          return caseGenActionDrawerDraftSettings;
+        }
+        settings[key] = value === true;
+        if (key === 'needSpecial' && value !== true) {
+          settings.specialRepeatOperation = false;
+          settings.specialMultiTouch = false;
+          settings.specialRepeatExecution = false;
+          settings.specialWeakNetwork = false;
+          settings.specialInterruptResume = false;
+          syncCaseGenPromptInputs(settings);
+          persistWorkflowState();
+          return settings;
+        }
+        syncCaseGenSpecialOptionsState(settings);
+        persistWorkflowState();
+        return settings;
+      }
+      settings[key] = value;
+      persistWorkflowState();
+      return settings;
+    }
+
+    function syncCaseGenSpecialOptionsState(settingsSource) {
+      var settings = normalizeCaseGenPromptSettings(settingsSource || caseGenActionDrawerDraftSettings || ensureCaseGenSettings());
+      var enabled = settings.needSpecial === true;
+      var inputs = [
+        caseGenSpecialRepeatOperationEl,
+        caseGenSpecialMultiTouchEl,
+        caseGenSpecialRepeatExecutionEl,
+        caseGenSpecialWeakNetworkEl,
+        caseGenSpecialInterruptResumeEl,
+      ];
+      if (caseGenSpecialOptionsEl && caseGenSpecialOptionsEl.classList) {
+        caseGenSpecialOptionsEl.classList.toggle('is-disabled', !enabled);
+      }
+      inputs.forEach(function(input) {
+        if (!input) return;
+        input.disabled = !enabled;
+      });
+    }
+
+    function setCaseGenViewTab(tab, options) {
+      var settings = ensureCaseGenSettings();
+      var next = tab === 'modules' ? 'modules' : 'settings';
+      var changed = settings.activeTab !== next;
+      settings.activeTab = next;
+      if (caseGenSettingsTabBtn && caseGenSettingsTabBtn.classList) {
+        caseGenSettingsTabBtn.classList.toggle('is-active', next === 'settings');
+        caseGenSettingsTabBtn.setAttribute('aria-selected', next === 'settings' ? 'true' : 'false');
+      }
+      if (caseGenModulesTabBtn && caseGenModulesTabBtn.classList) {
+        caseGenModulesTabBtn.classList.toggle('is-active', next === 'modules');
+        caseGenModulesTabBtn.setAttribute('aria-selected', next === 'modules' ? 'true' : 'false');
+      }
+      if (casegenSettingsPanel && casegenSettingsPanel.classList) {
+        casegenSettingsPanel.classList.toggle('is-active', next === 'settings');
+      }
+      if (casegenModulesPanel && casegenModulesPanel.classList) {
+        casegenModulesPanel.classList.toggle('is-active', next === 'modules');
+      }
+      if (changed && (!options || options.persist !== false)) {
+        persistWorkflowState();
+      }
+    }
+
+    function setCaseGenStoreMode(mode, options) {
+      var settings = ensureCaseGenSettings();
+      var next = mode === 'append' ? 'append' : 'new';
+      var changed = settings.storeMode !== next;
+      settings.storeMode = next;
+      if (caseGenStoreModeNewBtn && caseGenStoreModeNewBtn.classList) {
+        caseGenStoreModeNewBtn.classList.toggle('is-active', next === 'new');
+        caseGenStoreModeNewBtn.setAttribute('aria-selected', next === 'new' ? 'true' : 'false');
+      }
+      if (caseGenStoreModeAppendBtn && caseGenStoreModeAppendBtn.classList) {
+        caseGenStoreModeAppendBtn.classList.toggle('is-active', next === 'append');
+        caseGenStoreModeAppendBtn.setAttribute('aria-selected', next === 'append' ? 'true' : 'false');
+      }
+      if (caseGenStoreModeNewPanel && caseGenStoreModeNewPanel.classList) {
+        caseGenStoreModeNewPanel.classList.toggle('is-active', next === 'new');
+      }
+      if (caseGenStoreModeAppendPanel && caseGenStoreModeAppendPanel.classList) {
+        caseGenStoreModeAppendPanel.classList.toggle('is-active', next === 'append');
+      }
+      if (changed && (!options || options.persist !== false)) {
+        persistWorkflowState();
+      }
+    }
+
+    function getCaseGenPromptComponents(settingsOverride) {
+      var settings = normalizeCaseGenPromptSettings(settingsOverride || ensureCaseGenSettings());
+      var parts = [];
+      var customRequirement = stringifyCaseField(settings.customRequirement || '');
+      if (customRequirement) {
+        parts.push('用户附加要求：' + customRequirement);
+      }
+      if (settings.needBoundary) {
+        parts.push('生成时需要考虑边界场景，覆盖数值上下限、临界条件、空值、满值、阈值切换和异常边界。');
+      }
+      if (settings.needMobile) {
+        parts.push('生成时需要考虑移动设备操作，覆盖点击、长按、滑动、拖拽、横竖屏切换和系统手势干扰等手机交互场景。');
+      }
+      if (settings.needSpecial) {
+        parts.push('生成时需要考虑特殊场景，补充异常路径、非理想环境和非常规用户操作下的用例。');
+        if (settings.specialRepeatOperation) {
+          parts.push('特殊场景需包含重复操作，例如连续点击、重复领取、重复提交、重复进入或重复处理。');
+        }
+        if (settings.specialMultiTouch) {
+          parts.push('特殊场景需包含多点触控，例如双指缩放、双指拖拽、误触连击和多点同时操作。');
+        }
+        if (settings.specialRepeatExecution) {
+          parts.push('特殊场景需包含重复执行，例如反复进入退出、重复触发流程、重复执行同一任务后的稳定性。');
+        }
+        if (settings.specialWeakNetwork) {
+          parts.push('特殊场景需包含弱网环境，例如高延迟、丢包、断续连接、请求超时和重试恢复。');
+        }
+        if (settings.specialInterruptResume) {
+          parts.push('特殊场景需包含中断恢复，例如来电、切后台、锁屏、应用重启后的恢复与状态一致性。');
+        }
+      }
+      return parts;
+    }
+
+    function buildCaseGenPrompt(basePrompt, settingsOverride) {
+      var prompt = stringifyCaseField(basePrompt || '');
+      var parts = getCaseGenPromptComponents(settingsOverride);
+      return [prompt].concat(parts).filter(Boolean).join('\n\n');
+    }
 
     function resolveModuleTitle(name) {
       var text = stringifyCaseField(name || '');
@@ -797,14 +1633,11 @@
 
     function updateSupplementButtons(moduleId, hasResult) {
       if (!casesGenerationContainer) return;
-      var topupBtn = casesGenerationContainer.querySelector('[data-topup="' + moduleId + '"]');
       var transferBtn = casesGenerationContainer.querySelector('[data-tempexec="' + moduleId + '"]');
       var busy = isCaseModuleRunning(moduleId);
       var selection = state.caseSelections[moduleId];
       var hasSelection = selection && selection.size > 0;
-      var topupDisabled = !hasResult || busy;
       var transferDisabled = !hasResult || busy || !hasSelection;
-      if (topupBtn) topupBtn.disabled = topupDisabled;
       if (transferBtn) transferBtn.disabled = transferDisabled;
     }
 
@@ -1027,6 +1860,9 @@
         }
         var skipped = meta.filter(function(entry) { return entry && entry.running; }).length;
         var concurrency = resolveCaseGenBatchConcurrency(candidates.length);
+        var caseGenPromptValue = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
+        var promptBase = caseGenPromptValue || defaultPrompts.casegen || '';
+        var promptSettingsSnapshot = createCaseGenPromptSettingsSnapshot();
         var hint = '已触发全模块' + actionLabel + '（' + candidates.length + '个模块，并发 ' + concurrency + '）';
         if (skipped) hint += '，已跳过' + skipped + '个生成中的模块';
         setStatus(caseGenStatus, hint, 'ok');
@@ -1034,7 +1870,10 @@
           if (!entry || !entry.id) return Promise.resolve(false);
           var runTask = action === 'topup' ? topUpCasesForModule : generateCasesForModule;
           return Promise.resolve().then(function() {
-            return runTask(entry.id);
+            return runTask(entry.id, {
+              promptBase: promptBase,
+              promptSettingsSnapshot: promptSettingsSnapshot,
+            });
           }).catch(function(err) {
             var title = entry && entry.title ? String(entry.title) : '当前模块';
             var msg = err && err.message ? err.message : '未知异常';
@@ -1072,13 +1911,19 @@
         return entry && entry.hasSuggestion && entry.running;
       }).length;
       var concurrency = resolveCaseGenBatchConcurrency(candidates.length);
+      var caseGenPromptValue = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
+      var promptBase = caseGenPromptValue || defaultPrompts.casegen || '';
+      var promptSettingsSnapshot = createCaseGenPromptSettingsSnapshot();
       var hint = '已触发仅补全用例（' + candidates.length + '个模块，并发 ' + concurrency + '）';
       if (skipped) hint += '，已跳过' + skipped + '个生成中的模块';
       setStatus(caseGenStatus, hint, 'ok');
       return runConcurrent(candidates, concurrency, function(entry) {
         if (!entry || !entry.id) return Promise.resolve(false);
         return Promise.resolve().then(function() {
-          return generateCasesForModule(entry.id);
+          return generateCasesForModule(entry.id, {
+            promptBase: promptBase,
+            promptSettingsSnapshot: promptSettingsSnapshot,
+          });
         }).catch(function(err) {
           var title = entry && entry.title ? String(entry.title) : '当前模块';
           var msg = err && err.message ? err.message : '未知异常';
@@ -1328,6 +2173,9 @@
     }
 
     function openCaseViewForSelectionHint(action) {
+      if (action === 'new' || action === 'append') {
+        setCaseGenStoreMode(action, { persist: false });
+      }
       if (caseGenDbStoreDrawer && caseGenDbStoreDrawer.element && caseGenDbStoreDrawer.element.classList.contains('open')) {
         caseGenDbStoreDrawer.close();
       }
@@ -1371,7 +2219,7 @@
       return Promise.resolve({ ok: ok });
     }
     function resolveCaseGenActiveDrawer() {
-      var candidates = [caseGenDbStoreDrawer, caseGenViewDrawer];
+      var candidates = [caseGenActionDrawer, caseGenModuleGenerateDrawer, caseGenDbStoreDrawer, caseGenViewDrawer];
       for (var i = 0; i < candidates.length; i += 1) {
         var drawer = candidates[i];
         var el = drawer && drawer.element ? drawer.element : null;
@@ -1776,6 +2624,7 @@
     }
 
     function openCaseGenDbStoreNewDrawer() {
+      setCaseGenStoreMode('new', { persist: false });
       var st = ensureDbStoreState();
       var action = st.newAction || (caseGenStoreActionSelect ? caseGenStoreActionSelect.value : '');
       action = String(action || '');
@@ -1800,6 +2649,7 @@
     }
 
     function openCaseGenDbStoreAppendDrawer() {
+      setCaseGenStoreMode('append', { persist: false });
       if (!hasSelectedGeneratedCases()) {
         if (!hasGeneratedCases()) {
           setStatus(caseGenStatus, '请先生成用例后再追加入库', 'warn');
@@ -2346,9 +3196,7 @@
           '<div class="suggestion-panel">' +
             '<label>生成建议</label>' +
             '<textarea data-suggestion="' + mod.id + '" placeholder="可输入补充说明/限制条件...">' + escapeHtml(state.caseGenSuggestions[mod.id] || '') + '</textarea>' +
-            '<div class="actions suggestion-actions">' +
-              '<button class="secondary" data-topup="' + mod.id + '" ' + (hasResult ? '' : 'disabled') + '>补全生成</button>' +
-            '</div>' +
+            '<p class="hint suggestion-panel-hint">如需补全生成，请点击上方【生成用例】后，在抽屉的【补全生成】页签中执行。</p>' +
           '</div>' +
         '</div>';
       }).join('');
@@ -2373,7 +3221,8 @@
       persistWorkflowState();
     }
 
-    async function generateCasesForModule(moduleId) {
+    async function generateCasesForModule(moduleId, options) {
+      options = options || {};
       var mod = state.caseGenModules.find(function(m) { return m.id === moduleId; });
       if (!mod) return;
       var requirementLabel = ensureRequirementLabel('请输入需求标识后再生成用例');
@@ -2397,20 +3246,28 @@
       var textarea = casesGenerationContainer && casesGenerationContainer.querySelector('textarea[data-result="' + moduleId + '"]');
       if (textarea) textarea.value = '';
       var generateBtn = casesGenerationContainer && casesGenerationContainer.querySelector('button[data-generate="' + moduleId + '"]');
-      var topupBtn = casesGenerationContainer && casesGenerationContainer.querySelector('button[data-topup="' + moduleId + '"]');
       if (generateBtn) {
         generateBtn.disabled = true;
         generateBtn.textContent = '生成中...';
       }
-      if (topupBtn) topupBtn.disabled = true;
       setCaseModuleStatus(moduleId, '正在生成【' + mod.title + '】的测试用例...', '');
       clearCaseProgress(moduleId);
       updateSupplementButtons(moduleId, false);
       var hasResult = false;
       var overallStart = Date.now();
       try {
-        var caseGenPromptValue = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
-        var prompt = caseGenPromptValue || defaultPrompts.casegen || '';
+        var promptBase = options.promptBase;
+        if (promptBase === undefined || promptBase === null || promptBase === '') {
+          promptBase = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
+          promptBase = promptBase || defaultPrompts.casegen || '';
+        }
+        var promptSettingsSnapshot = options.promptSettingsSnapshot;
+        if (promptSettingsSnapshot === undefined || promptSettingsSnapshot === null) {
+          promptSettingsSnapshot = createCaseGenPromptSettingsSnapshot();
+        } else {
+          promptSettingsSnapshot = normalizeCaseGenPromptSettings(promptSettingsSnapshot);
+        }
+        var prompt = buildCaseGenPrompt(promptBase, promptSettingsSnapshot);
         var ref = {
           module: mod.title,
           key_scenarios: mod.scenarios,
@@ -2509,14 +3366,14 @@
           generateBtn.disabled = false;
           generateBtn.textContent = '生成用例';
         }
-        if (topupBtn) topupBtn.disabled = !hasResult;
         setCaseModuleRunning(moduleId, false);
         updateSupplementButtons(moduleId, hasResult);
         renderCaseGeneration();
       }
     }
 
-    async function topUpCasesForModule(moduleId) {
+    async function topUpCasesForModule(moduleId, options) {
+      options = options || {};
       var mod = state.caseGenModules.find(function(m) { return m.id === moduleId; });
       if (!mod) return;
       var existingList = getCaseListForModule(moduleId);
@@ -2539,19 +3396,27 @@
       setCaseModuleRunning(moduleId, true);
       refreshCaseGenBatchButtons();
       updateSupplementButtons(moduleId, false);
-      var topupBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-topup="' + moduleId + '"]');
       var generateBtn = casesGenerationContainer && casesGenerationContainer.querySelector('button[data-generate="' + moduleId + '"]');
-      if (topupBtn) {
-        topupBtn.disabled = true;
-        topupBtn.textContent = '补全中...';
+      if (generateBtn) {
+        generateBtn.disabled = true;
+        generateBtn.textContent = '补全中...';
       }
-      if (generateBtn) generateBtn.disabled = true;
       setCaseModuleStatus(moduleId, '正在补全【' + mod.title + '】的测试用例...', '');
       clearCaseProgress(moduleId);
       var overallStart = Date.now();
       try {
-        var caseGenPromptValue = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
-        var prompt = caseGenPromptValue || defaultPrompts.casegen || '';
+        var promptBase = options.promptBase;
+        if (promptBase === undefined || promptBase === null || promptBase === '') {
+          promptBase = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
+          promptBase = promptBase || defaultPrompts.casegen || '';
+        }
+        var promptSettingsSnapshot = options.promptSettingsSnapshot;
+        if (promptSettingsSnapshot === undefined || promptSettingsSnapshot === null) {
+          promptSettingsSnapshot = createEmptyCaseGenPromptSettings();
+        } else {
+          promptSettingsSnapshot = normalizeCaseGenPromptSettings(promptSettingsSnapshot);
+        }
+        var prompt = buildCaseGenPrompt(promptBase, promptSettingsSnapshot);
         var ref = {
           module: mod.title,
           key_scenarios: mod.scenarios,
@@ -2637,11 +3502,10 @@
         updateModelTiming(caseGenTimingEl);
         setCaseModuleTiming(moduleId);
       } finally {
-        if (topupBtn) {
-          topupBtn.disabled = false;
-          topupBtn.textContent = '补全生成';
+        if (generateBtn) {
+          generateBtn.disabled = false;
+          generateBtn.textContent = '生成用例';
         }
-        if (generateBtn) generateBtn.disabled = false;
         setCaseModuleRunning(moduleId, false);
         updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
         renderCaseGeneration();
@@ -3491,6 +4355,15 @@
       updateSupplementButtons: updateSupplementButtons,
       refreshAppendExistingButton: refreshAppendExistingButton,
       refreshCaseGenBatchButtons: refreshCaseGenBatchButtons,
+      ensureCaseGenSettings: ensureCaseGenSettings,
+      setCaseGenSettingValue: setCaseGenSettingValue,
+      syncCaseGenSpecialOptionsState: syncCaseGenSpecialOptionsState,
+      setCaseGenViewTab: setCaseGenViewTab,
+      setCaseGenStoreMode: setCaseGenStoreMode,
+      openCaseGenBatchActionDrawer: openCaseGenBatchActionDrawer,
+      openCaseGenModuleGenerateDrawer: openCaseGenModuleGenerateDrawer,
+      getCaseGenPromptComponents: getCaseGenPromptComponents,
+      buildCaseGenPrompt: buildCaseGenPrompt,
       setCaseGenDbStoreNewAction: setCaseGenDbStoreNewAction,
       clearCaseGenDbStoreNewActionError: clearCaseGenDbStoreNewActionError,
       openCaseGenDbStoreNewDrawer: function() { bindCaseGenDbStoreEvents(); return openCaseGenDbStoreNewDrawer(); },

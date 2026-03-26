@@ -33,6 +33,7 @@ test.describe('用例生成展示格式', () => {
       }
     });
     await page.click('#goUsecaseGen');
+    await page.click('#caseGenModulesTabBtn');
 
     const importBtn = page.locator('#casesGenerationContainer button[data-import]').first();
     const [chooser] = await Promise.all([

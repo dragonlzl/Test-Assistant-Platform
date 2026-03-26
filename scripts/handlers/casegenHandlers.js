@@ -61,10 +61,30 @@
       }
     }
 
+    function ensureCasegenModulesView() {
+      try {
+        if (window.app && typeof window.app.switchTab === 'function') {
+          window.app.switchTab('casesgen');
+        } else if (typeof switchTab === 'function') {
+          switchTab('casesgen');
+        }
+      } catch (errTab) {
+        // ignore
+      }
+      try {
+        if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
+          window.app.casesGenApi.setCaseGenViewTab('modules', { persist: false });
+        }
+      } catch (errView) {
+        // ignore
+      }
+    }
+
     if (caseGenProgressList && typeof goCasesGenAndScroll === 'function') {
       caseGenProgressList.addEventListener('click', function(e) {
         var item = e.target && e.target.closest ? e.target.closest('[data-casegen-module]') : null;
         var moduleId = item && item.dataset ? item.dataset.casegenModule : '';
+        ensureCasegenModulesView();
         goCasesGenAndScroll(moduleId || '');
       });
     }
@@ -91,6 +111,7 @@
         if (toggleBtn) return;
         var item = e.target && e.target.closest ? e.target.closest('[data-casegen-module]') : null;
         if (item) return;
+        ensureCasegenModulesView();
         goCasesGenAndScroll('');
       });
     }
