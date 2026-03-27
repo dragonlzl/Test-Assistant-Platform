@@ -40,13 +40,19 @@ test.describe('对比完整性触发 Case Assistant', () => {
         localStorage.setItem('tap-e2e-skip-auth', '1');
       } catch (_) {}
       window.__electronCalls = [];
+      window.__electronInvokeDelayMs = 0;
       window.electronAPI = {
         invokeChannel: function(channel, payload) {
           window.__electronCalls.push({ channel: channel, payload: payload });
-          return Promise.resolve({
-            status: true,
-            msg: 'ok',
-            data: '补全后的完整需求文案（由代码实现与预期需求合并）',
+          var delay = Number(window.__electronInvokeDelayMs || 0);
+          return new Promise(function(resolve) {
+            setTimeout(function() {
+              resolve({
+                status: true,
+                msg: 'ok',
+                data: '补全后的完整需求文案（由代码实现与预期需求合并）',
+              });
+            }, delay > 0 ? delay : 0);
           });
         },
       };
@@ -100,10 +106,21 @@ test.describe('对比完整性触发 Case Assistant', () => {
 
   test('手动点击对比后触发 Electron 接口并回写需求文案', async ({ page }) => {
     await prepareCompareInputs(page, 'E:/workspace/demo-project');
+    await page.evaluate(() => { window.__electronInvokeDelayMs = 180; });
+
+    await expect(page.locator('#compareCaseAssistantStatus')).toContainText('接口未被调用');
+    await expect(page.locator('#compareCaseAssistantStatus')).toHaveAttribute('data-state', 'idle');
 
     await page.click('#compareBtn');
 
+    await expect.poll(async () => {
+      return page.locator('#compareCaseAssistantStatus').getAttribute('data-state');
+    }).toBe('running');
+    await expect(page.locator('#compareCaseAssistantStatus')).toContainText('正在调用中');
+
     await expect(page.locator('#compareStatus')).toContainText('已融合代码实现补全需求');
+    await expect(page.locator('#compareCaseAssistantStatus')).toContainText('调用完毕');
+    await expect(page.locator('#compareCaseAssistantStatus')).toHaveAttribute('data-state', 'done');
     await expect.poll(async () => {
       return page.evaluate(() => (window.__electronCalls || []).length);
     }).toBe(1);
@@ -120,9 +137,12 @@ test.describe('对比完整性触发 Case Assistant', () => {
   test('项目路径为空或非法时不调用 Electron 接口，流程保持正常', async ({ page }) => {
     await prepareCompareInputs(page, 'relative/path/not-absolute');
 
+    await expect(page.locator('#compareCaseAssistantStatus')).toBeHidden();
+
     await page.click('#compareBtn');
 
     await expect(page.locator('#compareStatus')).toContainText('对比完成');
+    await expect(page.locator('#compareCaseAssistantStatus')).toBeHidden();
     await expect.poll(async () => {
       return page.evaluate(() => (window.__electronCalls || []).length);
     }).toBe(0);

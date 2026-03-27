@@ -3191,6 +3191,7 @@
       state.inProgressSteps = {};
       state.failedSteps = {};
       state.waitingSteps = {};
+      state.compareCaseAssistantStatus = 'idle';
       state.validationFailedSteps = {};
       state.failedReasons = {};
       state.waitingReasons = {};

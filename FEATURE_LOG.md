@@ -4482,3 +4482,11 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_layout_zones.spec.js --reporter=line`（通过，2/2）
   - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082`（测试库启动）
   - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js --reporter=line`（通过，1/1）
+- 更新记录：2026-03-26 优化功能流程页“对比完整性”卡片中的 Case Assistant 反馈：不再展示流式日志，改为仅在满足 Electron 调用前置条件时展示三态文案“接口未被调用 / 正在调用中 / 调用完毕”；状态位跟随覆盖对比流程切换，并在成功完成后随工作流快照一并恢复，便于刷新后继续识别当前清洗结果是否已由代码补全链路产出（`index.html`、`ai-workflow.html`、`config/domConfig.js`、`scripts/core/compareCore.js`、`scripts/core/appRuntime.js`、`scripts/base/state.js`、`scripts/modules/app.js`）。
+- 更新记录：2026-03-26 补充 Case Assistant 三态 UI 回归：新增断言覆盖“满足路径 + Electron 条件时展示未调用→调用中→调用完毕”以及“不满足调用条件时状态位隐藏”两条链路，确保覆盖对比卡片内的新展示不影响现有对比结果与清洗结果回写（`tests/ui/compare_case_assistant_electron.spec.js`）。
+- 更新记录：2026-03-26 强化覆盖对比卡片内的 Case Assistant 三态展示：为“接口未被调用 / 正在调用中 / 调用完毕”补充独立颜色、状态图标与更醒目的徽标样式，并兼容明暗主题；状态位继续仅在满足 Electron 调用前置条件时展示，运行中保持旋转图标，完成后显示勾选图标（`style.css`、`scripts/core/compareCore.js`、`index.html`、`ai-workflow.html`）。
+- 更新记录：2026-03-26 扩展 Case Assistant 三态回归断言：在原有文案链路基础上，新增 `data-state=idle/running/done` 状态标记断言，确保视觉层状态与实际调用生命周期保持同步（`tests/ui/compare_case_assistant_electron.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/core/compareCore.js scripts/core/appRuntime.js scripts/modules/app.js scripts/base/state.js config/domConfig.js tests/ui/compare_case_assistant_electron.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/compare_case_assistant_electron.spec.js --reporter=line`（通过，2/2）
+  - 本次改动未新增或变更后端 HTTP 接口，未新增 API 用例

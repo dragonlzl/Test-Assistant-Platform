@@ -197,6 +197,7 @@
         reviewResult: dom.reviewResultEl && dom.reviewResultEl.value ? dom.reviewResultEl.value : '',
         cleanedText: dom.cleanedTextEl && dom.cleanedTextEl.value ? dom.cleanedTextEl.value : '',
         compareResult: dom.compareResultEl && dom.compareResultEl.value ? dom.compareResultEl.value : '',
+        compareCaseAssistantStatus: state.compareCaseAssistantStatus || 'idle',
         splitResult: dom.splitResultEl && dom.splitResultEl.value ? dom.splitResultEl.value : '',
         casesCompareResult: dom.casesCompareResultEl && dom.casesCompareResultEl.value ? dom.casesCompareResultEl.value : '',
         caseText: dom.caseTextEl && dom.caseTextEl.value ? dom.caseTextEl.value : '',
@@ -350,6 +351,7 @@
       if (dom.reviewResultEl) dom.reviewResultEl.value = data.reviewResult || '';
       if (dom.cleanedTextEl) dom.cleanedTextEl.value = data.cleanedText || '';
       if (dom.compareResultEl) dom.compareResultEl.value = data.compareResult || '';
+      state.compareCaseAssistantStatus = data.compareCaseAssistantStatus || 'idle';
       if (dom.splitResultEl) dom.splitResultEl.value = data.splitResult || '';
       if (dom.casesCompareResultEl) dom.casesCompareResultEl.value = data.casesCompareResult || '';
       if (dom.caseTextEl) dom.caseTextEl.value = data.caseText || '';

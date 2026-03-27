@@ -40,6 +40,7 @@
     var casesGoUsecaseGenBtn = pickEl(dom.casesGoUsecaseGenBtn, 'casesGoUsecaseGen');
     var compareResultEl = pickEl(dom.compareResultEl, 'compareResult');
     var compareStatus = pickEl(dom.compareStatus, 'compareStatus');
+    var compareCaseAssistantStatusEl = pickEl(dom.compareCaseAssistantStatusEl, 'compareCaseAssistantStatus');
     var compareTimingEl = pickEl(dom.compareTimingEl, 'compareTiming');
     var compareBtnEl = pickEl(dom.compareBtnEl, 'compareBtn');
     var cleanedTextEl = pickEl(dom.cleanedTextEl, 'cleanedText');
@@ -98,6 +99,15 @@
     };
     var codexChannelName = 'case-assistant:request';
     var caseAssistantTimeoutMs = 30 * 60 * 1000;
+    var compareCaseAssistantStateMap = {
+      idle: '接口未被调用',
+      running: '正在调用中',
+      done: '调用完毕',
+    };
+
+    function normalizeCompareCaseAssistantStatus(value) {
+      return value === 'running' || value === 'done' ? value : 'idle';
+    }
 
     function isElectronRendererEnv() {
       if (typeof window === 'undefined') return false;
@@ -141,6 +151,32 @@
         };
       }
       return null;
+    }
+
+    function canInvokeCaseAssistantAfterCompare() {
+      var projectRoot = getCaseAssistantProjectRoot();
+      if (!projectRoot) return false;
+      if (!isLikelyAbsoluteDirectoryPath(projectRoot)) return false;
+      return Boolean(getElectronInvokeChannel());
+    }
+
+    function syncCompareCaseAssistantStatus() {
+      if (!compareCaseAssistantStatusEl) return;
+      if (!canInvokeCaseAssistantAfterCompare()) {
+        compareCaseAssistantStatusEl.setAttribute('data-state', 'idle');
+        compareCaseAssistantStatusEl.classList.add('hidden');
+        compareCaseAssistantStatusEl.textContent = '代码补全状态：' + compareCaseAssistantStateMap.idle;
+        return;
+      }
+      compareCaseAssistantStatusEl.classList.remove('hidden');
+      var status = normalizeCompareCaseAssistantStatus(state.compareCaseAssistantStatus);
+      compareCaseAssistantStatusEl.setAttribute('data-state', status);
+      compareCaseAssistantStatusEl.textContent = '代码补全状态：' + (compareCaseAssistantStateMap[status] || compareCaseAssistantStateMap.idle);
+    }
+
+    function setCompareCaseAssistantStatus(status) {
+      state.compareCaseAssistantStatus = normalizeCompareCaseAssistantStatus(status);
+      syncCompareCaseAssistantStatus();
     }
 
     function generateCaseAssistantRequestId() {
@@ -201,26 +237,31 @@
       if (!isLikelyAbsoluteDirectoryPath(projectRoot)) return { applied: false, reason: 'invalid_project_root' };
       var invokeChannel = getElectronInvokeChannel();
       if (!invokeChannel) return { applied: false, reason: 'invoke_unavailable' };
-      var payload = {
-        projectRoot: projectRoot,
-        userPrompt: buildCaseAssistantPrompt(projectRoot, raw, cleaned, compareData),
-        requestId: generateCaseAssistantRequestId(),
-        timestamp: Date.now(),
-        streamOutput: false,
-        timeoutMs: caseAssistantTimeoutMs,
-      };
-      var response = await invokeChannel(codexChannelName, payload);
-      if (!response || typeof response !== 'object') return { applied: false, reason: 'invalid_response' };
-      if (response.status !== true) {
-        return { applied: false, reason: 'status_false', message: response.msg || '' };
+      setCompareCaseAssistantStatus('running');
+      try {
+        var payload = {
+          projectRoot: projectRoot,
+          userPrompt: buildCaseAssistantPrompt(projectRoot, raw, cleaned, compareData),
+          requestId: generateCaseAssistantRequestId(),
+          timestamp: Date.now(),
+          streamOutput: false,
+          timeoutMs: caseAssistantTimeoutMs,
+        };
+        var response = await invokeChannel(codexChannelName, payload);
+        if (!response || typeof response !== 'object') return { applied: false, reason: 'invalid_response' };
+        if (response.status !== true) {
+          return { applied: false, reason: 'status_false', message: response.msg || '' };
+        }
+        var nextRequirementText = normalizeCaseAssistantResponseData(response.data);
+        if (!nextRequirementText) return { applied: false, reason: 'empty_data', message: response.msg || '' };
+        if (cleanedTextEl) {
+          cleanedTextEl.value = wrapTextWithRequirement(nextRequirementText, 'clean');
+          triggerTextInput(cleanedTextEl);
+        }
+        return { applied: true };
+      } finally {
+        setCompareCaseAssistantStatus('done');
       }
-      var nextRequirementText = normalizeCaseAssistantResponseData(response.data);
-      if (!nextRequirementText) return { applied: false, reason: 'empty_data', message: response.msg || '' };
-      if (cleanedTextEl) {
-        cleanedTextEl.value = wrapTextWithRequirement(nextRequirementText, 'clean');
-        triggerTextInput(cleanedTextEl);
-      }
-      return { applied: true };
     }
 
     function clampCoveragePercent(value) {
@@ -271,6 +312,14 @@
       if (typeof persistWorkflowState === 'function') {
         persistWorkflowState();
       }
+    }
+
+    syncCompareCaseAssistantStatus();
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('app-tab-activated', function(e) {
+        var detail = e && e.detail ? e.detail : null;
+        if (detail && detail.tab === 'clean') syncCompareCaseAssistantStatus();
+      });
     }
 
     function aggregateModuleCompareResults(results, moduleList) {
@@ -970,6 +1019,7 @@
           return;
         }
         compareResultEl.value = JSON.stringify(wrapDataWithRequirement(parsed, 'compare'), null, 2);
+        setCompareCaseAssistantStatus('idle');
         setStatus(compareStatus, '已导入对比结果', 'ok');
         if (typeof resetAutoCompareUserInputs === 'function') resetAutoCompareUserInputs();
         if (typeof syncAutoCompareStatus === 'function') syncAutoCompareStatus();
@@ -1021,6 +1071,7 @@
         setStatus(compareStatus, '请先完成清洗并生成结果', 'warn');
         return;
       }
+      setCompareCaseAssistantStatus('idle');
       if (compareBtnEl) compareBtnEl.setAttribute('disabled', 'disabled');
       setStepInProgress('compare');
       var model;
@@ -1060,6 +1111,7 @@
           var caseAssistantResult = await invokeCaseAssistantAfterCompare(raw, cleaned, compareData);
           caseAssistantApplied = Boolean(caseAssistantResult && caseAssistantResult.applied);
         } catch (err2) {
+          if (canInvokeCaseAssistantAfterCompare()) setCompareCaseAssistantStatus('done');
           console.warn('Case Assistant 补全调用失败，已自动跳过', err2);
         }
         if (caseAssistantApplied) {

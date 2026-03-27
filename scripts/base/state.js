@@ -128,6 +128,7 @@
         specialWeakNetwork: false,
         specialInterruptResume: false,
       },
+      compareCaseAssistantStatus: 'idle',
       caseGenSuggestions: {},
       caseGenModuleStatus: {},
       caseGenProgress: {},
