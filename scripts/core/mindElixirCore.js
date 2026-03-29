@@ -843,7 +843,8 @@
       var restoreNoticeSignature = opts && opts.restoreNoticeSignature
         ? String(opts.restoreNoticeSignature)
         : '';
-      var editing = opts && opts.initialEditing === true;
+      var allowEdit = !(opts && opts.allowEdit === false);
+      var editing = allowEdit && opts && opts.initialEditing === true;
       var pendingSave = false;
       var applyingHistory = false;
       var recordTimer = 0;
@@ -888,12 +889,16 @@
       };
       var ctrlModifierPressed = false;
       var zoomMinScale = minScale;
+      var ctrlWheelMinScale = minScale;
       var nodeContextMenuEl = null;
+      var nodeContextMenuMeta = null;
       var clickNodeEditTimer = 0;
       var clickNodeEditDelay = 220;
       var beginEditSelectionMode = 'select-all';
       var beginEditSelectionResetTimer = 0;
       var pendingKeyboardNodeEditPayload = null;
+      var nodeDecorateTimer = 0;
+      var nodeDecorateObserver = null;
       var drawerEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer') : null;
       var drawerPanelEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer-panel') : null;
       var drawerFullscreenClassName = 'xmind-drawer-fullscreen';
@@ -919,6 +924,91 @@
           return;
         }
         showMindToast(message, type || '', durationMs || 3000);
+      }
+
+      function buildNodeMeta(nodeEl) {
+        var nodeObj = nodeEl && nodeEl.nodeObj ? nodeEl.nodeObj : null;
+        if (!nodeObj) return null;
+        var path = [];
+        var cursor = nodeObj;
+        var guard = 0;
+        while (cursor && guard < 64) {
+          var topic = cursor.topic === null || cursor.topic === undefined
+            ? ''
+            : String(cursor.topic).trim();
+          path.unshift(topic);
+          cursor = cursor.parent || null;
+          guard += 1;
+        }
+        var inst = getInstance();
+        var rootTopic = inst && inst.nodeData && inst.nodeData.topic !== null && inst.nodeData.topic !== undefined
+          ? String(inst.nodeData.topic).trim()
+          : '';
+        if (rootTopic && path.length && path[0] === rootTopic) {
+          path = path.slice(1);
+        }
+        return {
+          nodeId: nodeObj.id === undefined || nodeObj.id === null ? '' : String(nodeObj.id),
+          topic: nodeObj.topic === undefined || nodeObj.topic === null ? '' : String(nodeObj.topic),
+          path: path,
+          meta: nodeObj.xmindMeta && typeof nodeObj.xmindMeta === 'object' ? nodeObj.xmindMeta : {},
+          nodeObj: nodeObj,
+          nodeEl: nodeEl || null,
+        };
+      }
+
+      function normalizeActionList(list) {
+        if (!Array.isArray(list)) return [];
+        return list.map(function(item) {
+          if (!item || typeof item !== 'object') return null;
+          var actionId = item.id === undefined || item.id === null ? '' : String(item.id);
+          if (!actionId) return null;
+          return {
+            id: actionId,
+            label: item.label === undefined || item.label === null ? actionId : String(item.label),
+            disabled: item.disabled === true,
+          };
+        }).filter(Boolean);
+      }
+
+      function getNodeActionsForMeta(nodeMeta) {
+        if (!nodeMeta || !opts || typeof opts.getNodeActions !== 'function') return [];
+        try {
+          return normalizeActionList(opts.getNodeActions(nodeMeta));
+        } catch (err) {
+          return [];
+        }
+      }
+
+      function getNodeQuickActionForMeta(nodeMeta) {
+        if (!nodeMeta || !opts || typeof opts.getNodeQuickAction !== 'function') return null;
+        try {
+          var action = opts.getNodeQuickAction(nodeMeta);
+          if (!action) return null;
+          if (typeof action === 'string') {
+            return { id: action, label: '+AI', disabled: false };
+          }
+          if (typeof action !== 'object') return null;
+          var actionId = action.id === undefined || action.id === null ? '' : String(action.id);
+          if (!actionId) return null;
+          return {
+            id: actionId,
+            label: action.label === undefined || action.label === null ? '+AI' : String(action.label),
+            disabled: action.disabled === true,
+          };
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function requestNodeAction(actionId, nodeMeta) {
+        if (!actionId || !opts || typeof opts.onNodeAction !== 'function') return false;
+        try {
+          opts.onNodeAction(String(actionId), nodeMeta || null);
+          return true;
+        } catch (err) {
+          return false;
+        }
       }
 
       function notifyEditStateChange() {
@@ -1251,6 +1341,22 @@
         }
       }
 
+      function syncCtrlWheelMinScaleWithCurrent(inst, forceReset) {
+        var current = resolveScale(inst || getInstance());
+        if (!isFinite(current) || current <= 0) return;
+        var normalized = Number(current);
+        if (!isFinite(normalized)) return;
+        if (normalized > maxScale) normalized = maxScale;
+        if (normalized < minScale) normalized = minScale;
+        if (forceReset === true || normalized > ctrlWheelMinScale) {
+          ctrlWheelMinScale = normalized;
+          return;
+        }
+        if (normalized < ctrlWheelMinScale) {
+          ctrlWheelMinScale = normalized;
+        }
+      }
+
       function canToggleDrawerFullscreen() {
         return Boolean(
           drawerEl &&
@@ -1314,7 +1420,11 @@
         if (!isFinite(sensitivity) || sensitivity <= 0) sensitivity = defaultScaleStep;
         var step = deltaY < 0 ? sensitivity : -sensitivity;
         var current = resolveScale(inst);
-        var next = clampScale(current + step, zoomMinScale, maxScale);
+        var lowerBound = ctrlWheelMinScale;
+        if (!isFinite(lowerBound) || lowerBound <= 0) lowerBound = zoomMinScale;
+        if (!isFinite(lowerBound) || lowerBound <= 0) lowerBound = minScale;
+        if (current < lowerBound) lowerBound = current;
+        var next = clampScale(current + step, lowerBound, maxScale);
         var center = {
           x: isFinite(Number(e.clientX)) ? Number(e.clientX) : getCanvasCenterPoint().x,
           y: isFinite(Number(e.clientY)) ? Number(e.clientY) : getCanvasCenterPoint().y,
@@ -1348,9 +1458,23 @@
 
       function zoomFit() {
         var inst = getInstance();
+        var fitCenterNodeId = '';
+        if (inst && inst.nodeData && inst.nodeData.id !== undefined && inst.nodeData.id !== null) {
+          fitCenterNodeId = String(inst.nodeData.id);
+        }
         if (inst && typeof inst.scaleFit === 'function') {
           inst.scaleFit();
           syncZoomMinScaleWithCurrent(inst);
+          syncCtrlWheelMinScaleWithCurrent(inst, true);
+          if (fitCenterNodeId) {
+            centerMindNode(inst, fitCenterNodeId);
+            [0, 16, 48].forEach(function(delayMs) {
+              setTimeout(function() {
+                if (!viewerEl || !viewerEl.isConnected) return;
+                centerMindNode(inst, fitCenterNodeId);
+              }, delayMs);
+            });
+          }
         }
         updateViewerDragState(viewerEl, inst, false);
       }
@@ -1456,6 +1580,49 @@
         return out;
       }
 
+      function applyNodeDecorations() {
+        if (!viewerEl || !viewerEl.querySelectorAll) return;
+        var nodes = viewerEl.querySelectorAll('me-tpc');
+        if (!nodes || !nodes.length) return;
+        Array.prototype.forEach.call(nodes, function(nodeEl) {
+          if (!nodeEl || !nodeEl.nodeObj) return;
+          var quickButtons = nodeEl.querySelectorAll ? nodeEl.querySelectorAll('.xmind-node-quick-action') : [];
+          if (quickButtons && quickButtons.length) {
+            Array.prototype.forEach.call(quickButtons, function(btn) {
+              if (!btn || !btn.parentNode) return;
+              btn.parentNode.removeChild(btn);
+            });
+          }
+          var nodeMeta = buildNodeMeta(nodeEl);
+          if (!nodeMeta) return;
+          var quickAction = getNodeQuickActionForMeta(nodeMeta);
+          if (quickAction && nodeEl.appendChild && !(editing && allowEdit)) {
+            var quickBtn = document.createElement('button');
+            quickBtn.type = 'button';
+            quickBtn.className = 'xmind-node-quick-action';
+            quickBtn.textContent = quickAction.label || '+AI';
+            quickBtn.setAttribute('data-mind-node-quick', quickAction.id);
+            if (quickAction.disabled) quickBtn.disabled = true;
+            nodeEl.appendChild(quickBtn);
+          }
+          if (opts && typeof opts.decorateNodeElement === 'function') {
+            try {
+              opts.decorateNodeElement(nodeEl, nodeMeta);
+            } catch (err) {
+              // ignore
+            }
+          }
+        });
+      }
+
+      function scheduleNodeDecorations() {
+        if (nodeDecorateTimer) clearTimeout(nodeDecorateTimer);
+        nodeDecorateTimer = setTimeout(function() {
+          nodeDecorateTimer = 0;
+          applyNodeDecorations();
+        }, 0);
+      }
+
       function syncMindSelectionFromBox() {
         var inst = getInstance();
         if (!inst || typeof inst.selectNodes !== 'function' || !viewerEl || !viewerEl.querySelectorAll) return;
@@ -1499,9 +1666,6 @@
         var el = document.createElement('div');
         el.className = 'xmind-node-context-menu';
         el.setAttribute('aria-hidden', 'true');
-        el.innerHTML = ''
-          + '<button type="button" class="xmind-node-context-menu-btn" data-mind-node-menu="node-add">新增节点</button>'
-          + '<button type="button" class="xmind-node-context-menu-btn" data-mind-node-menu="node-delete">删除节点</button>';
         el.addEventListener('click', onNodeContextMenuClick);
         document.body.appendChild(el);
         nodeContextMenuEl = el;
@@ -1512,25 +1676,24 @@
         if (!nodeContextMenuEl || !nodeContextMenuEl.classList) return;
         nodeContextMenuEl.classList.remove('is-open');
         nodeContextMenuEl.setAttribute('aria-hidden', 'true');
+        nodeContextMenuMeta = null;
       }
 
-      function showNodeContextMenu(clientX, clientY) {
+      function showNodeContextMenu(clientX, clientY, payload) {
         var menu = ensureNodeContextMenuEl();
         if (!menu || !menu.style) return;
-        var menuAddBtn = menu.querySelector ? menu.querySelector('[data-mind-node-menu="node-add"]') : null;
-        var menuDeleteBtn = menu.querySelector ? menu.querySelector('[data-mind-node-menu="node-delete"]') : null;
-        var selected = collectSelectedNodes();
-        var canAdd = editing && !pendingSave && selected.length === 1;
-        var canDelete = editing && !pendingSave && selected.some(function(node) {
-          return Boolean(node && node.nodeObj && node.nodeObj.parent);
-        });
-        if (menuAddBtn) {
-          menuAddBtn.disabled = !canAdd;
+        var items = payload && Array.isArray(payload.items) ? payload.items : [];
+        if (!items.length) {
+          hideNodeContextMenu();
+          return;
         }
-        if (menuDeleteBtn) {
-          menuDeleteBtn.style.display = canDelete ? '' : 'none';
-          menuDeleteBtn.disabled = !canDelete;
-        }
+        nodeContextMenuMeta = payload && payload.meta ? payload.meta : null;
+        menu.innerHTML = items.map(function(item) {
+          var disabledAttr = item && item.disabled ? ' disabled' : '';
+          var label = item && item.label ? String(item.label) : '';
+          var actionId = item && item.id ? String(item.id) : '';
+          return '<button type="button" class="xmind-node-context-menu-btn" data-mind-node-menu="' + actionId + '"' + disabledAttr + '>' + label + '</button>';
+        }).join('');
         menu.style.left = '0px';
         menu.style.top = '0px';
         menu.classList.add('is-open');
@@ -1610,6 +1773,33 @@
         return null;
       }
 
+      function resolveContextMenuPayload(nodeEl) {
+        var nodeMeta = buildNodeMeta(nodeEl);
+        if (!nodeMeta) return null;
+        var customActions = getNodeActionsForMeta(nodeMeta);
+        if (customActions.length) {
+          return {
+            meta: nodeMeta,
+            items: customActions,
+          };
+        }
+        if (!allowEdit || !editing || pendingSave) return null;
+        var selected = collectSelectedNodes();
+        var canAdd = selected.length === 1;
+        var canDelete = selected.some(function(node) {
+          return Boolean(node && node.nodeObj && node.nodeObj.parent);
+        });
+        var items = [];
+        items.push({ id: 'node-add', label: '新增节点', disabled: !canAdd });
+        if (canDelete) {
+          items.push({ id: 'node-delete', label: '删除节点', disabled: !canDelete });
+        }
+        return items.length ? {
+          meta: nodeMeta,
+          items: items,
+        } : null;
+      }
+
       function onNodeContextMenuClick(e) {
         var target = e && e.target && e.target.closest
           ? e.target.closest('[data-mind-node-menu]')
@@ -1622,6 +1812,10 @@
         } else if (action === 'node-delete') {
           hideNodeContextMenu();
           runDeleteNodes();
+        } else if (action) {
+          var meta = nodeContextMenuMeta;
+          hideNodeContextMenu();
+          requestNodeAction(action, meta);
         }
       }
 
@@ -1637,6 +1831,55 @@
         else if (e.stopPropagation) e.stopPropagation();
       }
 
+      function findScrollableWheelAncestor() {
+        if (!viewerEl || !viewerEl.parentElement || typeof window === 'undefined' || !window.getComputedStyle) {
+          return null;
+        }
+        var current = viewerEl.parentElement;
+        while (current && current !== document.body) {
+          var style = window.getComputedStyle(current);
+          var overflowY = style && style.overflowY ? String(style.overflowY) : '';
+          var canScrollY = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+          if (canScrollY && current.scrollHeight > current.clientHeight + 1) {
+            return current;
+          }
+          current = current.parentElement;
+        }
+        return null;
+      }
+
+      function shouldAllowAncestorWheelScroll(e) {
+        if (!e || e.ctrlKey || e.metaKey) return false;
+        var deltaY = Number(e.deltaY);
+        if (!isFinite(deltaY) || deltaY === 0) return false;
+        var scrollAncestor = findScrollableWheelAncestor();
+        if (!scrollAncestor) return false;
+        var maxScrollTop = Number(scrollAncestor.scrollHeight - scrollAncestor.clientHeight);
+        var currentScrollTop = Number(scrollAncestor.scrollTop || 0);
+        if (!isFinite(maxScrollTop) || maxScrollTop <= 1) return false;
+        if (!isFinite(currentScrollTop)) currentScrollTop = 0;
+        if (deltaY > 0) {
+          return currentScrollTop < maxScrollTop - 1;
+        }
+        return currentScrollTop > 1;
+      }
+
+      function applyAncestorWheelScroll(e) {
+        if (!shouldAllowAncestorWheelScroll(e)) return false;
+        var scrollAncestor = findScrollableWheelAncestor();
+        if (!scrollAncestor) return false;
+        var deltaY = Number(e.deltaY);
+        if (!isFinite(deltaY) || deltaY === 0) return false;
+        var nextScrollTop = Number(scrollAncestor.scrollTop || 0) + deltaY;
+        var maxScrollTop = Number(scrollAncestor.scrollHeight - scrollAncestor.clientHeight);
+        if (!isFinite(nextScrollTop)) nextScrollTop = Number(scrollAncestor.scrollTop || 0);
+        if (!isFinite(maxScrollTop) || maxScrollTop < 0) maxScrollTop = 0;
+        if (nextScrollTop < 0) nextScrollTop = 0;
+        if (nextScrollTop > maxScrollTop) nextScrollTop = maxScrollTop;
+        scrollAncestor.scrollTop = nextScrollTop;
+        return true;
+      }
+
       function blockCanvasNativeGesture(e) {
         if (!e) return;
         if (isEventInsideMindControls(e.target)) return;
@@ -1645,6 +1888,12 @@
         if (!insideCanvas && !insideViewer) return;
         if (e.cancelable === false) return;
         if (e.type === 'wheel') {
+          if (applyAncestorWheelScroll(e)) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            else if (e.stopPropagation) e.stopPropagation();
+            return;
+          }
           var usedWheelAction = false;
           if (e.ctrlKey || e.metaKey) {
             usedWheelAction = zoomByWheelEvent(e);
@@ -1728,13 +1977,12 @@
       function onViewerMouseDownGestureGuard(e) {
         if (!e || e.button !== 2) return;
         if (isEventInsideMindControls(e.target)) return;
-        if (editing) {
-          var nodeEl = resolveContextMenuTargetNode(e.target);
-          if (nodeEl && isNodeCurrentlySelected(nodeEl)) {
-            showNodeContextMenu(e.clientX, e.clientY);
-            if (e.preventDefault) e.preventDefault();
-            return;
-          }
+        var nodeEl = resolveContextMenuTargetNode(e.target);
+        var menuPayload = nodeEl ? resolveContextMenuPayload(nodeEl) : null;
+        if (menuPayload && nodeEl && isNodeCurrentlySelected(nodeEl)) {
+          showNodeContextMenu(e.clientX, e.clientY, menuPayload);
+          if (e.preventDefault) e.preventDefault();
+          return;
         }
         if (!isEventInsideMindCanvas(e.target)) return;
         hideNodeContextMenu();
@@ -1785,14 +2033,13 @@
       function onViewerContextMenu(e) {
         if (!e) return;
         if (isEventInsideMindControls(e.target)) return;
-        if (editing) {
-          var nodeEl = resolveContextMenuTargetNode(e.target);
-          if (nodeEl && isNodeCurrentlySelected(nodeEl)) {
-            if (e.preventDefault) e.preventDefault();
-            if (e.stopPropagation) e.stopPropagation();
-            showNodeContextMenu(e.clientX, e.clientY);
-            return;
-          }
+        var nodeEl = resolveContextMenuTargetNode(e.target);
+        var menuPayload = nodeEl ? resolveContextMenuPayload(nodeEl) : null;
+        if (menuPayload && nodeEl && isNodeCurrentlySelected(nodeEl)) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          showNodeContextMenu(e.clientX, e.clientY, menuPayload);
+          return;
         }
         if (isEventInsideMindCanvas(e.target)) {
           hideNodeContextMenu();
@@ -2045,6 +2292,7 @@
       }
 
       function enterEditMode() {
+        if (!allowEdit) return;
         if (editing) return;
         editing = true;
         pendingSave = false;
@@ -2534,6 +2782,7 @@
         if (!target || isTypingTarget(target)) return null;
         if (isEventInsideMindControls(target)) return null;
         if (target.closest && target.closest('.xmind-node-context-menu')) return null;
+        if (target.closest && target.closest('.xmind-node-quick-action')) return null;
         var nodeEl = target.closest ? target.closest('me-tpc') : null;
         if (!nodeEl || !nodeEl.nodeObj) return null;
         return nodeEl;
@@ -2594,6 +2843,18 @@
       }
 
       function onViewerClick(e) {
+        var quickBtn = e && e.target && e.target.closest
+          ? e.target.closest('.xmind-node-quick-action')
+          : null;
+        if (quickBtn) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          var hostNode = quickBtn.closest ? quickBtn.closest('me-tpc') : null;
+          var quickMeta = buildNodeMeta(hostNode);
+          var actionId = quickBtn.getAttribute ? quickBtn.getAttribute('data-mind-node-quick') : '';
+          requestNodeAction(actionId, quickMeta);
+          return;
+        }
         hideNodeContextMenu();
         clearClickNodeEditTimer();
         updateEditButtons();
@@ -3458,6 +3719,7 @@
         }
         clearValidationMarks();
         scheduleRecordSnapshot();
+        scheduleNodeDecorations();
       }
 
       initializeHistory();
@@ -3532,12 +3794,26 @@
         instance.__tapSyncZoomMinScale = function() {
           syncZoomMinScaleWithCurrent(getInstance());
         };
+        instance.__tapSyncCtrlWheelMinScale = function(forceReset) {
+          syncCtrlWheelMinScaleWithCurrent(getInstance(), forceReset === true);
+        };
+      }
+      if (typeof MutationObserver !== 'undefined' && canvasEl) {
+        nodeDecorateObserver = new MutationObserver(function() {
+          scheduleNodeDecorations();
+        });
+        try {
+          nodeDecorateObserver.observe(canvasEl, { childList: true, subtree: true });
+        } catch (err3) {
+          nodeDecorateObserver = null;
+        }
       }
 
       setSearchCount();
       syncInstanceScaleBounds(instance, zoomMinScale);
       updateViewerDragState(viewerEl, instance, false);
       syncFullscreenButtonState();
+      scheduleNodeDecorations();
 
       if (editing) {
         if (instance && typeof instance.enableEdit === 'function') {
@@ -3560,10 +3836,20 @@
       return function cleanup() {
         // Flush pending snapshots before unbinding to avoid losing the latest unsaved edits.
         flushPendingEditSnapshot();
-        setDrawerFullscreen(false);
+        var preserveDrawerFullscreen = Boolean(
+          instance &&
+          instance.__tapPreserveDrawerFullscreenOnDestroy === true
+        );
+        if (!preserveDrawerFullscreen) {
+          setDrawerFullscreen(false);
+        }
         if (recordTimer) {
           clearTimeout(recordTimer);
           recordTimer = 0;
+        }
+        if (nodeDecorateTimer) {
+          clearTimeout(nodeDecorateTimer);
+          nodeDecorateTimer = 0;
         }
         clearClickNodeEditTimer();
         if (beginEditSelectionResetTimer) {
@@ -3644,10 +3930,19 @@
         }
         if (instance && typeof instance === 'object') {
           try {
+            delete instance.__tapPreserveDrawerFullscreenOnDestroy;
+          } catch (err4a) {
+            instance.__tapPreserveDrawerFullscreenOnDestroy = null;
+          }
+          try {
             delete instance.__tapSyncZoomMinScale;
           } catch (err4) {
             instance.__tapSyncZoomMinScale = null;
           }
+        }
+        if (nodeDecorateObserver && typeof nodeDecorateObserver.disconnect === 'function') {
+          nodeDecorateObserver.disconnect();
+          nodeDecorateObserver = null;
         }
         if (boxRectEl && boxRectEl.parentNode) {
           boxRectEl.parentNode.removeChild(boxRectEl);
@@ -3698,6 +3993,167 @@
       }
     }
 
+    function captureMindViewState(instance) {
+      if (!instance || !instance.map || !instance.container) return null;
+      var transform = '';
+      if (instance.map.style && instance.map.style.transform) {
+        transform = String(instance.map.style.transform || '');
+      }
+      return {
+        transform: transform,
+        scaleVal: resolveScale(instance),
+        scrollLeft: Number(instance.container.scrollLeft || 0),
+        scrollTop: Number(instance.container.scrollTop || 0),
+      };
+    }
+
+    function resolveMindAnchorElement(nodeEl) {
+      if (!nodeEl) return null;
+      if (nodeEl.querySelector) {
+        var topicText = nodeEl.querySelector('.text');
+        if (topicText && topicText.getBoundingClientRect) {
+          return topicText;
+        }
+      }
+      return nodeEl && nodeEl.getBoundingClientRect ? nodeEl : null;
+    }
+
+    function parseMindTransformState(transformText) {
+      var text = transformText === undefined || transformText === null ? '' : String(transformText);
+      var translateMatch = text.match(/translate3d\(\s*(-?\d+(?:\.\d+)?)px\s*,\s*(-?\d+(?:\.\d+)?)px\s*,\s*[^)]*\)/i);
+      if (!translateMatch) {
+        translateMatch = text.match(/translate\(\s*(-?\d+(?:\.\d+)?)px\s*,\s*(-?\d+(?:\.\d+)?)px\s*\)/i);
+      }
+      var scaleMatch = text.match(/scale\(\s*(-?\d+(?:\.\d+)?)\s*\)/i);
+      return {
+        x: translateMatch ? Number(translateMatch[1] || 0) : 0,
+        y: translateMatch ? Number(translateMatch[2] || 0) : 0,
+        scale: scaleMatch ? Number(scaleMatch[1] || 1) : 1,
+      };
+    }
+
+    function writeMindTransformState(instance, transformState) {
+      if (!instance || !instance.map || !instance.map.style || !transformState) return false;
+      var scaleVal = Number(transformState.scale);
+      if (!isFinite(scaleVal) || scaleVal <= 0) {
+        scaleVal = resolveScale(instance);
+      }
+      if (!isFinite(scaleVal) || scaleVal <= 0) scaleVal = 1;
+      var x = Number(transformState.x);
+      var y = Number(transformState.y);
+      if (!isFinite(x)) x = 0;
+      if (!isFinite(y)) y = 0;
+      instance.map.style.transform = 'translate3d(' + x + 'px, ' + y + 'px, 0px) scale(' + scaleVal + ')';
+      return true;
+    }
+
+    function captureMindAnchorState(instance, anchorNodeId) {
+      if (!instance || !anchorNodeId) return null;
+      var nodeEl = findMindNodeElement(instance, anchorNodeId);
+      var anchorEl = resolveMindAnchorElement(nodeEl);
+      if (!anchorEl || !anchorEl.getBoundingClientRect) return null;
+      var nodeRect = anchorEl.getBoundingClientRect();
+      return {
+        nodeId: String(anchorNodeId),
+        centerX: Number(nodeRect.left + (nodeRect.width / 2)),
+        centerY: Number(nodeRect.top + (nodeRect.height / 2)),
+      };
+    }
+
+    function captureMindDrawerState(instance) {
+      if (!instance || !instance.container || typeof instance.container.closest !== 'function') return null;
+      var drawerEl = instance.container.closest('.drawer');
+      if (!drawerEl || !drawerEl.classList) return null;
+      return {
+        fullscreen: drawerEl.classList.contains('xmind-drawer-fullscreen'),
+      };
+    }
+
+    function restoreMindViewState(instance, viewState) {
+      if (!instance || !instance.map || !instance.container || !viewState) return false;
+      if (instance.container) {
+        instance.container.scrollLeft = Number(viewState.scrollLeft || 0);
+        instance.container.scrollTop = Number(viewState.scrollTop || 0);
+      }
+      if (viewState.transform && instance.map.style) {
+        instance.map.style.transform = String(viewState.transform);
+      }
+      var scaleVal = Number(viewState.scaleVal);
+      if (isFinite(scaleVal) && scaleVal > 0) {
+        instance.scaleVal = scaleVal;
+      }
+      if (typeof instance.__tapSyncZoomMinScale === 'function') {
+        instance.__tapSyncZoomMinScale();
+      }
+      if (typeof instance.__tapSyncCtrlWheelMinScale === 'function') {
+        instance.__tapSyncCtrlWheelMinScale(true);
+      }
+      return true;
+    }
+
+    function restoreMindAnchorState(instance, anchorState) {
+      if (!instance || !anchorState || !anchorState.nodeId) {
+        return false;
+      }
+      var nodeEl = findMindNodeElement(instance, anchorState.nodeId);
+      var anchorEl = resolveMindAnchorElement(nodeEl);
+      if (!anchorEl || !anchorEl.getBoundingClientRect) return false;
+      var nodeRect = anchorEl.getBoundingClientRect();
+      var currentCenterX = Number(nodeRect.left + (nodeRect.width / 2));
+      var currentCenterY = Number(nodeRect.top + (nodeRect.height / 2));
+      var desiredCenterX = Number(anchorState.centerX);
+      var desiredCenterY = Number(anchorState.centerY);
+      if (!isFinite(currentCenterX) || !isFinite(currentCenterY) || !isFinite(desiredCenterX) || !isFinite(desiredCenterY)) {
+        return false;
+      }
+      var deltaX = desiredCenterX - currentCenterX;
+      var deltaY = desiredCenterY - currentCenterY;
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return true;
+      var transformState = parseMindTransformState(instance.map && instance.map.style ? instance.map.style.transform : '');
+      transformState.x += deltaX;
+      transformState.y += deltaY;
+      return writeMindTransformState(instance, transformState);
+    }
+
+    function scheduleMindAnchorRestore(instance, anchorState) {
+      if (!instance || !anchorState) return;
+      [0, 16, 48, 96].forEach(function(delayMs) {
+        setTimeout(function() {
+          if (!instance || !instance.map || !instance.el || !instance.el.isConnected) return;
+          restoreMindAnchorState(instance, anchorState);
+        }, delayMs);
+      });
+    }
+
+    function centerMindNode(instance, nodeId) {
+      if (!instance || !nodeId || !instance.map) {
+        return false;
+      }
+      var nodeEl = findMindNodeElement(instance, nodeId);
+      var anchorEl = resolveMindAnchorElement(nodeEl);
+      if (!anchorEl || !anchorEl.getBoundingClientRect) return false;
+      var viewerEl = instance.el && instance.el.getBoundingClientRect
+        ? instance.el
+        : (instance.container && instance.container.getBoundingClientRect ? instance.container : null);
+      if (!viewerEl || !viewerEl.getBoundingClientRect) return false;
+      var nodeRect = anchorEl.getBoundingClientRect();
+      var viewerRect = viewerEl.getBoundingClientRect();
+      var currentCenterX = Number(nodeRect.left + (nodeRect.width / 2));
+      var currentCenterY = Number(nodeRect.top + (nodeRect.height / 2));
+      var desiredCenterX = Number(viewerRect.left + (viewerRect.width / 2));
+      var desiredCenterY = Number(viewerRect.top + (viewerRect.height / 2));
+      if (!isFinite(currentCenterX) || !isFinite(currentCenterY) || !isFinite(desiredCenterX) || !isFinite(desiredCenterY)) {
+        return false;
+      }
+      var deltaX = desiredCenterX - currentCenterX;
+      var deltaY = desiredCenterY - currentCenterY;
+      if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return true;
+      var transformState = parseMindTransformState(instance.map && instance.map.style ? instance.map.style.transform : '');
+      transformState.x += deltaX;
+      transformState.y += deltaY;
+      return writeMindTransformState(instance, transformState);
+    }
+
     function renderMindMap(container, mindData, options) {
       var opts = options || {};
       var ctor = getMindCtor();
@@ -3705,11 +4161,30 @@
       if (!container) throw new Error('缺少思维导图容器');
       if (!mindData || !mindData.nodeData) throw new Error('缺少思维导图数据');
 
+      var preservedViewState = opts && opts.preserveViewState === true
+        ? captureMindViewState(opts.instance || null)
+        : null;
+      var preservedAnchorState = opts && opts.preserveViewState === true && opts.preserveAnchorNodeId
+        ? captureMindAnchorState(opts.instance || null, opts.preserveAnchorNodeId)
+        : null;
+      var preservedDrawerState = opts && opts.preserveViewState === true
+        ? captureMindDrawerState(opts.instance || null)
+        : null;
+      if (
+        opts &&
+        opts.instance &&
+        preservedDrawerState &&
+        preservedDrawerState.fullscreen === true
+      ) {
+        opts.instance.__tapPreserveDrawerFullscreenOnDestroy = true;
+      }
       destroyMindMap(opts.instance || null);
       container.innerHTML = '';
 
+      var allowEdit = !(opts && opts.allowEdit === false);
       var exportEnabled = Boolean(opts && typeof opts.onExportXmind === 'function');
       var exportDisabledAttr = exportEnabled ? '' : ' disabled';
+      var editGroupClass = allowEdit ? 'xmind-edit-group' : 'xmind-edit-group is-disabled';
       var controlsHtml = ''
         + '<div class="xmind-structure-controls" data-mind-controls>'
         + '<div class="xmind-search-group">'
@@ -3727,7 +4202,7 @@
         + '<button class="secondary xmind-zoom-btn xmind-fullscreen-btn" type="button" data-mind-action="drawer-fullscreen" title="全屏" aria-pressed="false">全屏</button>'
         + '<button class="secondary xmind-zoom-btn xmind-export-btn" type="button" data-mind-action="export-xmind" title="导出当前XMind"' + exportDisabledAttr + '>导出XMind</button>'
         + '</div>'
-        + '<div class="xmind-edit-group">'
+        + '<div class="' + editGroupClass + '">'
         + '<button class="secondary xmind-edit-btn" type="button" data-mind-action="edit-enter">编辑</button>'
         + '<button class="secondary xmind-edit-btn hidden" type="button" data-mind-action="edit-cancel">取消</button>'
         + '<button class="secondary xmind-edit-btn hidden" type="button" data-mind-action="edit-save">确认保存</button>'
@@ -3751,7 +4226,7 @@
       var initialMindData = restoredCurrent || cloneMindDataObject(mindData) || mindData;
       var restoredEditing = Boolean(restoredSession && restoredSession.editing === true && restoredCurrent && restoredCurrent.nodeData);
       var forcedEditing = Boolean(opts && opts.initialEditing === true && initialMindData && initialMindData.nodeData);
-      var initialEditing = Boolean(restoredEditing || forcedEditing);
+      var initialEditing = Boolean(allowEdit && (restoredEditing || forcedEditing));
       var restoreCurrentSignature = buildMindDataSignature(restoredCurrent);
       var restoreNoticeSignature = restoredSession && restoredSession.restoreNoticeSignature
         ? String(restoredSession.restoreNoticeSignature)
@@ -3766,6 +4241,7 @@
       var baseMindData = restoredSession && restoredSession.baseData && restoredSession.baseData.nodeData
         ? cloneMindDataObject(restoredSession.baseData)
         : cloneMindDataObject(mindData);
+      var initialCenterNodeId = opts && opts.initialCenterNodeId ? String(opts.initialCenterNodeId) : '';
 
       var darkMode = typeof opts.darkMode === 'boolean' ? opts.darkMode : resolveDarkMode();
       var theme = buildTheme(darkMode);
@@ -3808,6 +4284,7 @@
 
       var cleanup = bindViewerInteractions(container, canvasEl, instance, Object.assign({}, opts, {
         direction: direction,
+        allowEdit: allowEdit,
         editableSessionKey: sessionKey,
         restoredSession: restoredSession,
         restoreNoticeSignature: restoreNoticeSignatureForSession,
@@ -3826,6 +4303,15 @@
           opts.onInstanceChange(instance);
         } catch (err2) {
           // ignore
+        }
+      }
+
+      var restoredViewState = false;
+      if (preservedViewState && !initialEditing) {
+        restoredViewState = restoreMindViewState(instance, preservedViewState);
+        if (restoredViewState && preservedAnchorState) {
+          restoreMindAnchorState(instance, preservedAnchorState);
+          scheduleMindAnchorRestore(instance, preservedAnchorState);
         }
       }
       if (showRestoreNotice) {
@@ -3847,11 +4333,11 @@
 
       var initialAutoFitScale = 0;
       function runAutoScaleFitIfStable(forceRun) {
-        if (!instance || typeof instance.scaleFit !== 'function') return;
+        if (!instance || typeof instance.scaleFit !== 'function') return false;
         if (!forceRun) {
           var current = resolveScale(instance);
           if (initialAutoFitScale > 0 && Math.abs(current - initialAutoFitScale) > 0.03) {
-            return;
+            return false;
           }
         }
         try {
@@ -3859,11 +4345,16 @@
           if (typeof instance.__tapSyncZoomMinScale === 'function') {
             instance.__tapSyncZoomMinScale();
           }
+          if (typeof instance.__tapSyncCtrlWheelMinScale === 'function') {
+            instance.__tapSyncCtrlWheelMinScale(true);
+          }
           initialAutoFitScale = resolveScale(instance);
           updateViewerDragState(container, instance, false);
+          return true;
         } catch (err3) {
           // ignore
         }
+        return false;
       }
 
       setTimeout(function() {
@@ -3871,12 +4362,22 @@
           updateViewerDragState(container, instance, false);
           return;
         }
+        if (restoredViewState) {
+          updateViewerDragState(container, instance, false);
+          return;
+        }
         runAutoScaleFitIfStable(true);
+        if (initialCenterNodeId) {
+          centerMindNode(instance, initialCenterNodeId);
+        }
       }, 0);
 
       setTimeout(function() {
-        if (initialEditing) return;
+        if (initialEditing || restoredViewState) return;
         runAutoScaleFitIfStable(false);
+        if (initialCenterNodeId) {
+          centerMindNode(instance, initialCenterNodeId);
+        }
       }, 420);
       return instance;
     }
@@ -3905,6 +4406,7 @@
       buildPathsFromCases: buildPathsFromCases,
       buildMindDataFromCases: buildMindDataFromCases,
       buildMindDataFromPaths: buildMindDataFromPaths,
+      centerMindNode: centerMindNode,
       renderMindMap: renderMindMap,
       refreshMindTheme: refreshMindTheme,
       destroyMindMap: destroyMindMap,

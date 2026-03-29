@@ -173,6 +173,68 @@
       });
     }
 
+    function convertMindElixirNodeToXmind(node) {
+      if (!node || typeof node !== 'object') return null;
+      var title = formatXmindNodeValue(node.topic);
+      var xmindNode = createXmindNode(title);
+      var children = Array.isArray(node.children) ? node.children : [];
+      children.forEach(function(child) {
+        var converted = convertMindElixirNodeToXmind(child);
+        if (!converted) return;
+        if (!xmindNode.children) xmindNode.children = { attached: [] };
+        xmindNode.children.attached.push(converted);
+      });
+      return finalizeXmindNode(xmindNode);
+    }
+
+    function buildXmindPackageFromMindData(mindData, fileBaseName) {
+      return new Promise(function(resolve, reject) {
+        if (!JSZipCtor) {
+          reject(new Error('缺少 JSZip 依赖，无法导出 XMind'));
+          return;
+        }
+        var rootNode = mindData && mindData.nodeData ? mindData.nodeData : null;
+        if (!rootNode) {
+          reject(new Error('缺少可导出的思维导图数据'));
+          return;
+        }
+        var rootTopic = formatXmindNodeValue(rootNode.topic || '用例');
+        var rootTopicNode = convertMindElixirNodeToXmind(rootNode);
+        if (!rootTopicNode) {
+          reject(new Error('思维导图转换失败'));
+          return;
+        }
+        rootTopicNode.title = rootTopic;
+        var compactTs = formatCompactTimestamp();
+        var safeName = getSafeFileBaseName(fileBaseName || rootTopic, 'usecase');
+        var sheetId = generateXmindId();
+        var content = [{
+          id: sheetId,
+          class: 'sheet',
+          title: rootTopic,
+          rootTopic: rootTopicNode,
+        }];
+        var metadata = {
+          dataStructureVersion: '2',
+          creator: { name: '用例助手', version: '1.0' },
+          activeSheetId: sheetId,
+          layoutEngineVersion: '3',
+        };
+        var manifest = { 'file-entries': { 'content.json': {}, 'metadata.json': {} } };
+        var zip = new JSZipCtor();
+        zip.file('content.json', JSON.stringify(content, null, 2));
+        zip.file('metadata.json', JSON.stringify(metadata, null, 2));
+        zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+        zip.generateAsync({ type: 'blob' }).then(function(blob) {
+          resolve({
+            blob: blob,
+            fileName: safeName + '_' + compactTs + '.xmind',
+            count: 1,
+          });
+        }).catch(reject);
+      });
+    }
+
     function normalizeTempExecNodeText(text) {
       if (text === undefined || text === null) return '';
       var str = text.toString().trim();
@@ -490,6 +552,7 @@
     getOrCreateChildNode: getOrCreateChildNode,
     finalizeXmindNode: finalizeXmindNode,
     buildXmindPackageFromCases: buildXmindPackageFromCases,
+    buildXmindPackageFromMindData: buildXmindPackageFromMindData,
     buildTempExecXmindPackage: buildTempExecXmindPackage,
     parseXmindFile: parseXmindFile,
     buildXmindOutlineFromJson: buildXmindOutlineFromJson,

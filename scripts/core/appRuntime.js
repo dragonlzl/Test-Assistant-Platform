@@ -118,6 +118,7 @@
     var appendSelectedCasesToImported = api.appendSelectedCasesToImported || function() {};
     var handleCaseSelectionChange = api.handleCaseSelectionChange || function() {};
     var handleCaseSelectAll = api.handleCaseSelectAll || function() {};
+    var xmindCasegenModule = null;
     var exportCaseGenerationResults = api.exportCaseGenerationResults || function() {};
     var sidebarBlockersBound = false;
     var workflowStorageKey = ctx.workflowStorageKey
@@ -213,6 +214,7 @@
         caseGenModuleStatus: cloneJson(state.caseGenModuleStatus, {}),
         caseGenProgress: cloneJson(state.caseGenProgress, {}),
         caseGenProgressNotice: cloneJson(state.caseGenProgressNotice, {}),
+        xmindCaseGen: cloneJson(state.xmindCaseGen, {}),
         caseSelections: serializeCaseSelections(state.caseSelections),
         missingSelections: serializeNumberSet(state.missingSelections),
       };
@@ -369,10 +371,24 @@
       state.caseGenModuleStatus = (data.caseGenModuleStatus && typeof data.caseGenModuleStatus === 'object') ? data.caseGenModuleStatus : {};
       state.caseGenProgress = (data.caseGenProgress && typeof data.caseGenProgress === 'object') ? data.caseGenProgress : {};
       state.caseGenProgressNotice = (data.caseGenProgressNotice && typeof data.caseGenProgressNotice === 'object') ? data.caseGenProgressNotice : {};
+      state.xmindCaseGen = (data.xmindCaseGen && typeof data.xmindCaseGen === 'object') ? data.xmindCaseGen : {
+        mode: 'modules',
+        treeSourceSignature: '',
+        hasModuleSkeleton: false,
+        nextSnapshotId: 1,
+        snapshots: [],
+        modules: {},
+      };
       if (!state.caseGenProgressNotice.lastStates || typeof state.caseGenProgressNotice.lastStates !== 'object') {
         state.caseGenProgressNotice.lastStates = {};
       }
       state.caseGenProgressNotice.dotVisible = state.caseGenProgressNotice.dotVisible === true;
+      if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
+      if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') state.xmindCaseGen.modules = {};
+      if (!Number.isFinite(Number(state.xmindCaseGen.nextSnapshotId))) state.xmindCaseGen.nextSnapshotId = 1;
+      state.xmindCaseGen.mode = state.xmindCaseGen.mode === 'full' ? 'full' : 'modules';
+      state.xmindCaseGen.treeSourceSignature = String(state.xmindCaseGen.treeSourceSignature || '');
+      state.xmindCaseGen.hasModuleSkeleton = state.xmindCaseGen.hasModuleSkeleton === true;
       state.caseSelections = restoreCaseSelections(data.caseSelections);
       state.missingSelections = restoreNumberSet(data.missingSelections);
       state.missingRowCache = [];
@@ -989,6 +1005,9 @@
     }
 
     function switchTab(name, options) {
+      if (name === 'xmind-casegen') {
+        name = 'casesgen';
+      }
       var mappedToOtherPage = false;
       if (name) {
         var mappedPage = resolveTabPage(name);
@@ -1297,8 +1316,15 @@
       setCaseGenStoreMode: api.setCaseGenStoreMode || function() {},
       openCaseGenBatchActionDrawer: api.openCaseGenBatchActionDrawer || function() {},
       openCaseGenModuleGenerateDrawer: api.openCaseGenModuleGenerateDrawer || function() {},
+      openCaseGenSettingsDrawer: api.openCaseGenSettingsDrawer || function() {},
       getCaseGenPromptComponents: api.getCaseGenPromptComponents || function() { return []; },
       buildCaseGenPrompt: api.buildCaseGenPrompt || function() { return ''; },
+      buildModuleCases: api.buildModuleCases || function() { return Promise.resolve(null); },
+      buildModuleTopup: api.buildModuleTopup || function() { return Promise.resolve(null); },
+      commitModuleCases: api.commitModuleCases || function() { return null; },
+      snapshotModuleCases: api.snapshotModuleCases || function() { return null; },
+      rollbackModuleCases: api.rollbackModuleCases || function() { return false; },
+      getCaseListForModule: api.getCaseListForModule || function() { return []; },
       refreshExportCaseGenXmindButton: api.refreshExportCaseGenXmindButton || function() {},
       setCaseGenDbStoreNewAction: api.setCaseGenDbStoreNewAction || function() {},
       clearCaseGenDbStoreNewActionError: api.clearCaseGenDbStoreNewActionError || function() {},
@@ -1319,7 +1345,9 @@
       appendSelectedCasesToImported: 1, transferSelectedCasesToExec: 1,
       refreshAppendExistingButton: 1, refreshCaseGenBatchButtons: 1,
       ensureCaseGenSettings: 1, setCaseGenSettingValue: 1, syncCaseGenSpecialOptionsState: 1, setCaseGenViewTab: 1, setCaseGenStoreMode: 1, openCaseGenBatchActionDrawer: 1, openCaseGenModuleGenerateDrawer: 1,
-      getCaseGenPromptComponents: 1, buildCaseGenPrompt: 1,
+      openCaseGenSettingsDrawer: 1, getCaseGenPromptComponents: 1, buildCaseGenPrompt: 1,
+      buildModuleCases: 1, buildModuleTopup: 1, commitModuleCases: 1, snapshotModuleCases: 1, rollbackModuleCases: 1,
+      getCaseListForModule: 1,
       refreshExportCaseGenXmindButton: 1,
       setCaseGenDbStoreNewAction: 1, clearCaseGenDbStoreNewActionError: 1,
       openCaseGenAllView: 1, openCaseGenDbStoreNewDrawer: 1, openCaseGenDbStoreAppendDrawer: 1,
@@ -1536,7 +1564,17 @@
 
     renderCaseGenProgressBoard();
 
-    const moduleContext = { state: state, config: window.app.config, utils: appUtils, core: core, tempExecApi: tempExecApi, casesGenApi: casesGenApi };
+    const moduleContext = {
+      state: state,
+      config: window.app.config,
+      utils: appUtils,
+      core: core,
+      tempExecApi: tempExecApi,
+      casesGenApi: casesGenApi,
+      xmindCoreApi: window.app.xmindCoreApi || null,
+      mindElixirCoreApi: window.app.mindElixirCoreApi || null,
+      casesCoreApi: window.app.casesCoreApi || null,
+    };
     const autoContext = {
       state: state,
       config: window.app.config,
@@ -1606,6 +1644,9 @@
     syncAutoCompareStatus(false);
     if (window.app.casesgen && typeof window.app.casesgen.init === 'function') {
       window.app.casesgen.init(moduleContext);
+    }
+    if (window.app.xmindCasegen && typeof window.app.xmindCasegen.init === 'function') {
+      xmindCasegenModule = window.app.xmindCasegen.init(moduleContext) || null;
     }
     if (window.app.tempexec && typeof window.app.tempexec.init === 'function') {
       window.app.tempexec.init(moduleContext);

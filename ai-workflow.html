@@ -160,6 +160,7 @@
 })();
 </script>
 <link rel="stylesheet" href="./style.css"/>
+<link rel="stylesheet" href="./scripts/vendor/mind-elixir.css"/>
 </head>
 <body data-page="ai-workflow">
 <div class="app-layout">
@@ -871,6 +872,9 @@
     <div class="casegen-tabbar" role="tablist" aria-label="用例生成功能页签">
       <button class="casegen-tab is-active" id="caseGenSettingsTabBtn" type="button" data-casegen-view-tab="settings" aria-selected="true" aria-controls="casegenSettingsPanel">用例生成设置</button>
       <button class="casegen-tab" id="caseGenModulesTabBtn" type="button" data-casegen-view-tab="modules" aria-selected="false" aria-controls="casegenModulesPanel">生成模块</button>
+      <div class="casegen-tabbar-actions">
+        <button class="secondary casegen-tabbar-action-btn" id="xmindCaseGenOpenBtn" type="button">XMind用例生成</button>
+      </div>
     </div>
 
     <div class="casegen-tabpanel is-active" id="casegenSettingsPanel" data-casegen-view-panel="settings" role="tabpanel" aria-labelledby="caseGenSettingsTabBtn">
@@ -993,6 +997,66 @@
     </div>
     <div class="drawer-body" id="caseGenViewDrawerBody">
       <p class="hint" style="margin:0;">请选择模块查看用例</p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="xmindCaseGenDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="xmindCaseGenDrawer"></div>
+  <div class="drawer-panel drawer-panel-wide drawer-panel-xmind">
+    <div class="drawer-header">
+      <h3 id="xmindCaseGenDrawerTitle">XMind 用例生成</h3>
+      <button class="link-toggle" id="closeXmindCaseGenDrawerBtn" data-drawer-close="xmindCaseGenDrawer">收起</button>
+    </div>
+    <div class="drawer-body is-mind-viewer" id="xmindCaseGenDrawerBody">
+      <div class="xmind-casegen-shell xmind-casegen-drawer-shell">
+        <div class="xmind-casegen-toolbar xmind-casegen-toolbar-bank" id="xmindCaseGenToolbar" hidden aria-hidden="true">
+          <div class="xmind-casegen-actions">
+            <button class="secondary" id="xmindCaseGenSummaryBtn" type="button" aria-expanded="false" title="查看当前需求与参考用例摘要">查看摘要</button>
+            <button class="secondary" id="xmindCaseGenImportRequirementBtn" type="button" title="导入需求">导入需求</button>
+            <button class="secondary" id="xmindCaseGenImportCasesBtn" type="button" title="导入参考用例">导入用例</button>
+            <button class="secondary case-library-import-btn" id="xmindCaseGenSelectCasesBtn" type="button" title="从用例库选择参考用例">从用例库选择</button>
+            <button class="secondary" id="xmindCaseGenGenerateModulesBtn" type="button" title="仅生成模块骨架">仅生成模块</button>
+            <button class="secondary" id="xmindCaseGenGenerateFullBtn" type="button" title="生成完整用例">生成完整用例</button>
+            <button class="secondary" id="xmindCaseGenExportBtn" type="button" title="导出当前XMind">导出当前XMind</button>
+            <button class="secondary" id="xmindCaseGenPromptBtn" type="button" title="设置生成要求">生成要求</button>
+          </div>
+          <p class="status" id="xmindCaseGenStatus"></p>
+        </div>
+        <div class="xmind-casegen-canvas-shell">
+          <div class="xmind-structure-viewer xmind-casegen-viewer" id="xmindCaseGenMindContainer"></div>
+        </div>
+        <div class="xmind-casegen-summary-overlay hidden" id="xmindCaseGenSummaryOverlay" aria-hidden="true">
+          <div class="xmind-casegen-summary-dialog" id="xmindCaseGenSummaryDialog" role="dialog" aria-modal="true" aria-labelledby="xmindCaseGenSummaryDialogTitle">
+            <div class="xmind-casegen-summary-dialog-head">
+              <div class="xmind-casegen-summary-dialog-copy">
+                <strong class="xmind-casegen-summary-dialog-title" id="xmindCaseGenSummaryDialogTitle">当前需求 / 参考用例摘要</strong>
+                <p class="hint xmind-casegen-summary-dialog-desc">这部分内容仅作为生成上下文和去重依据，不会并入当前 XMind 主树。</p>
+              </div>
+              <button class="link-toggle" id="xmindCaseGenSummaryCloseBtn" type="button">关闭</button>
+            </div>
+            <div class="xmind-casegen-summary-dialog-body" id="xmindCaseGenSummaryDialogBody">
+              <div class="xmind-casegen-summary-grid">
+                <div class="xmind-casegen-summary-card">
+                  <div class="xmind-casegen-summary-head">
+                    <span class="xmind-casegen-summary-label">当前需求</span>
+                    <span class="badge" id="xmindCaseGenRequirementBadge">未导入</span>
+                  </div>
+                  <strong class="xmind-casegen-summary-title" id="xmindCaseGenRequirementSummary">未导入需求</strong>
+                  <p class="hint xmind-casegen-summary-meta" id="xmindCaseGenRequirementMeta">请先导入或填写需求，再生成模块骨架。</p>
+                </div>
+                <div class="xmind-casegen-summary-card">
+                  <div class="xmind-casegen-summary-head">
+                    <span class="xmind-casegen-summary-label">参考用例</span>
+                    <span class="badge" id="xmindCaseGenCasesBadge">0 份</span>
+                  </div>
+                  <strong class="xmind-casegen-summary-title" id="xmindCaseGenCasesSummary">未导入参考用例</strong>
+                  <p class="hint xmind-casegen-summary-meta" id="xmindCaseGenCasesMeta">导入的用例只参与上下文与去重，不会并入当前 XMind 主树。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1462,6 +1526,7 @@
 </div>
 </div>
 <script src="./scripts/vendor/jszip.min.js" defer></script>
+<script src="./scripts/vendor/mind-elixir.iife.js" defer></script>
 <script src="./config/constants.js" defer></script>
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>
@@ -1473,6 +1538,7 @@
 <script src="./scripts/core/casesCore.js" defer></script>
 <script src="./scripts/core/autoCore.js" defer></script>
 <script src="./scripts/core/xmindCore.js" defer></script>
+<script src="./scripts/core/mindElixirCore.js" defer></script>
 <script src="./scripts/core/xlsxCore.js" defer></script>
 <script src="./scripts/core/tempexecDefaults.js" defer></script>
 <script src="./scripts/core/tempexecCore.js" defer></script>
@@ -1506,6 +1572,7 @@
 <script src="./scripts/handlers/layoutHandlers.js" defer></script>
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>
+<script src="./scripts/modules/xmindCasegen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
 <script src="./scripts/modules/caseLibrary.js" defer></script>
 <script src="./scripts/modules/caseArchive.js" defer></script>

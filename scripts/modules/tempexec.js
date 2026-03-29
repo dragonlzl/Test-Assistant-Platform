@@ -117,6 +117,19 @@
       return window.app && window.app.mindElixirCoreApi ? window.app.mindElixirCoreApi : null;
     }
 
+    function ensureMindElixirApiReady() {
+      var readyApi = getMindElixirApi();
+      if (readyApi && typeof readyApi.renderMindMap === 'function') {
+        return Promise.resolve(readyApi);
+      }
+      if (window.app && typeof window.app.ensureMindElixirCoreApi === 'function') {
+        return window.app.ensureMindElixirCoreApi().then(function() {
+          return getMindElixirApi();
+        });
+      }
+      return Promise.resolve(readyApi);
+    }
+
     function setXmindDrawerBodyViewerMode(enabled) {
       if (!xmindStructureDrawerBody || !xmindStructureDrawerBody.classList) return;
       if (enabled) xmindStructureDrawerBody.classList.add('is-mind-viewer');
@@ -661,8 +674,8 @@
       });
     }
 
-    function openTempExecXmindStructure() {
-      var mindApi = getMindElixirApi();
+    async function openTempExecXmindStructure() {
+      var mindApi = await ensureMindElixirApiReady();
       if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
         setStatus(tempExecStatus, 'XMind 结构渲染依赖未就绪', 'err');
         return;

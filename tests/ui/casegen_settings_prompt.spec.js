@@ -234,6 +234,32 @@ async function installCaseGenPromptCapture(page) {
   });
 }
 
+async function clickXmindNodeQuickAction(page, topicText) {
+  await page.waitForFunction((topic) => {
+    const nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+    return Array.prototype.some.call(nodes, function(node) {
+      const content = node && node.textContent ? String(node.textContent).replace(/\s+/g, ' ').trim() : '';
+      return content.indexOf(topic) !== -1 && Boolean(node.querySelector && node.querySelector('.xmind-node-quick-action'));
+    });
+  }, topicText, { timeout: 15000 });
+  const clicked = await page.evaluate((topic) => {
+    const nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+    let target = null;
+    Array.prototype.some.call(nodes, function(node) {
+      const content = node && node.textContent ? String(node.textContent).replace(/\s+/g, ' ').trim() : '';
+      if (content.indexOf(topic) === -1) return false;
+      target = node;
+      return true;
+    });
+    if (!target || !target.querySelector) return false;
+    const btn = target.querySelector('.xmind-node-quick-action');
+    if (!btn || btn.disabled || typeof btn.click !== 'function') return false;
+    btn.click();
+    return true;
+  }, topicText);
+  expect(clicked).toBeTruthy();
+}
+
 test.describe('用例生成-设置项与跳转', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -705,5 +731,56 @@ test.describe('用例生成-设置项与跳转', () => {
     expect(box).not.toBeNull();
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.y).toBeLessThan(720);
+  });
+
+  test('XMind 用例生成抽屉复用同一套生成要求拼装', async ({ page }) => {
+    const token = 'token-casegen-settings-xmind';
+    const user = { id: 8, username: 'demo_user_8', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      caseGenPrompt: '基础提示词-XMind页',
+    });
+
+    await gotoIndex(page);
+    await seedCaseGenModules(page, [
+      { module: '登录模块', key_scenarios: ['账号登录'], test_points: ['账号密码'], coupled_modules: ['用户中心'] },
+    ]);
+    await waitCaseGenModelAssigned(page, mockInfo.modelId);
+
+    await page.click('.tab-group-btn[data-group="ai"]');
+    await page.click('[data-tab-btn="casesgen"]');
+    await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
+    await page.click('#caseGenModulesTabBtn');
+    await page.click('#xmindCaseGenOpenBtn');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+
+    await page.click('#xmindCaseGenPromptBtn');
+    await expect(page.locator('#caseGenActionDrawer')).toHaveClass(/open/);
+    await page.fill('#caseGenCustomRequirement', 'XMind 页面专用要求');
+    await page.check('#caseGenNeedBoundary');
+    await page.check('#caseGenNeedSpecial');
+    await page.check('#caseGenSpecialWeakNetwork');
+    await confirmCaseGenActionDrawer(page);
+
+    await installCaseGenPromptCapture(page);
+    await page.click('#xmindCaseGenGenerateModulesBtn');
+    await page.waitForFunction(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      return state && Array.isArray(state.caseGenModules) && state.caseGenModules.length === 1;
+    }, {}, { timeout: 8000 });
+    await clickXmindNodeQuickAction(page, '登录');
+
+    await page.waitForFunction(() => {
+      return Array.isArray(window.__casegenPromptSnapshots) && window.__casegenPromptSnapshots.length > 0;
+    }, {}, { timeout: 15000 });
+
+    const lastPrompt = await page.evaluate(() => {
+      const list = Array.isArray(window.__casegenPromptSnapshots) ? window.__casegenPromptSnapshots : [];
+      return list.length ? list[list.length - 1] : null;
+    });
+    expect(lastPrompt).not.toBeNull();
+    expect(String(lastPrompt.prompt || '')).toContain('基础提示词-XMind页');
+    expect(String(lastPrompt.prompt || '')).toContain('用户附加要求：XMind 页面专用要求');
+    expect(String(lastPrompt.prompt || '')).toContain('生成时需要考虑边界场景');
+    expect(String(lastPrompt.prompt || '')).toContain('特殊场景需包含弱网环境');
   });
 });

@@ -257,6 +257,50 @@
       return state.caseGenDbStore;
     }
 
+    function ensureXmindCaseGenState() {
+      if (!state.xmindCaseGen || typeof state.xmindCaseGen !== 'object') {
+        state.xmindCaseGen = {
+          mode: 'modules',
+          treeSourceSignature: '',
+          hasModuleSkeleton: false,
+          nextSnapshotId: 1,
+          snapshots: [],
+          modules: {},
+        };
+      }
+      if (!Array.isArray(state.xmindCaseGen.snapshots)) {
+        state.xmindCaseGen.snapshots = [];
+      }
+      if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') {
+        state.xmindCaseGen.modules = {};
+      }
+      if (!Number.isFinite(Number(state.xmindCaseGen.nextSnapshotId))) {
+        state.xmindCaseGen.nextSnapshotId = 1;
+      }
+      state.xmindCaseGen.mode = state.xmindCaseGen.mode === 'full' ? 'full' : 'modules';
+      state.xmindCaseGen.treeSourceSignature = String(state.xmindCaseGen.treeSourceSignature || '');
+      state.xmindCaseGen.hasModuleSkeleton = state.xmindCaseGen.hasModuleSkeleton === true;
+      return state.xmindCaseGen;
+    }
+
+    function ensureXmindCaseGenModuleState(moduleId) {
+      var rootState = ensureXmindCaseGenState();
+      var key = String(moduleId || '');
+      if (!key) return null;
+      if (!rootState.modules[key] || typeof rootState.modules[key] !== 'object') {
+        rootState.modules[key] = {
+          lastAction: '',
+          running: false,
+          snapshotId: '',
+          status: '',
+          error: '',
+          hideResults: false,
+          updatedAt: 0,
+        };
+      }
+      return rootState.modules[key];
+    }
+
     function isDbStoreReady() {
       return Boolean(
         apiClient &&
@@ -396,6 +440,12 @@
 
     function normalizeCaseGenActionContext(context) {
       var source = context && typeof context === 'object' ? context : {};
+      if (source.type === 'settings') {
+        return {
+          type: 'settings',
+          action: 'settings',
+        };
+      }
       if (source.type === 'module-local') {
         return {
           type: 'module-local',
@@ -411,6 +461,14 @@
 
     function getCaseGenActionMeta(context) {
       var ctxMeta = normalizeCaseGenActionContext(context);
+      if (ctxMeta.type === 'settings') {
+        return {
+          action: 'settings',
+          title: '生成要求确认',
+          hint: '在这里维护当前 XMind 用例生成与全模块生成共用的额外要求；保存后不会立即触发生成。',
+          confirmText: '保存要求',
+        };
+      }
       if (ctxMeta.type === 'module-local') {
         var moduleInfo = findCaseGenModule(ctxMeta.moduleId);
         var moduleTitle = resolveModuleTitle(moduleInfo && (moduleInfo.title || moduleInfo.module));
@@ -453,6 +511,10 @@
 
     function executeCaseGenActionContext(context, promptSettingsSnapshot) {
       var ctxMeta = normalizeCaseGenActionContext(context);
+      if (ctxMeta.type === 'settings') {
+        applyCaseGenPromptSettings(normalizeCaseGenPromptSettings(promptSettingsSnapshot || createEmptyCaseGenPromptSettings()));
+        return true;
+      }
       if (ctxMeta.type === 'module-local') {
         if (!ctxMeta.moduleId) return false;
         return generateCasesForModule(ctxMeta.moduleId, {
@@ -853,6 +915,12 @@
       });
     }
 
+    function openCaseGenSettingsDrawer() {
+      return openCaseGenActionDrawerByContext({
+        type: 'settings',
+      });
+    }
+
     function openCaseGenModuleGenerateDrawer(moduleId) {
       var mod = findCaseGenModule(moduleId);
       if (!mod) {
@@ -945,6 +1013,25 @@
         map[moduleId] = durationMs;
       }
       syncCaseModuleTiming(moduleId);
+    }
+
+    function cloneJsonValue(value, fallback) {
+      if (value === undefined) return fallback;
+      try {
+        return JSON.parse(JSON.stringify(value));
+      } catch (err) {
+        return fallback;
+      }
+    }
+
+    function cloneSelectionSet(selection) {
+      if (!selection || typeof selection.forEach !== 'function') return [];
+      var result = [];
+      selection.forEach(function(idx) {
+        var num = Number(idx);
+        if (Number.isFinite(num)) result.push(num);
+      });
+      return result;
     }
 
     function setPendingCaseGenDbStoreAction(action) {
@@ -3062,6 +3149,364 @@
       return list.filter(function(item) { return item && typeof item === 'object'; });
     }
 
+    function snapshotModuleCases(moduleId) {
+      if (!moduleId) return '';
+      var xmindState = ensureXmindCaseGenState();
+      var moduleState = ensureXmindCaseGenModuleState(moduleId);
+      var snapshotId = 'snap-' + String(xmindState.nextSnapshotId);
+      xmindState.nextSnapshotId += 1;
+      xmindState.snapshots.push({
+        id: snapshotId,
+        moduleId: String(moduleId),
+        rawResult: state.caseGenResults && Object.prototype.hasOwnProperty.call(state.caseGenResults, moduleId)
+          ? String(state.caseGenResults[moduleId] || '')
+          : null,
+        selection: cloneSelectionSet(state.caseSelections && state.caseSelections[moduleId]),
+        status: cloneJsonValue(ensureCaseModuleStatusState()[moduleId], null),
+        progress: cloneJsonValue(state.caseGenProgress && state.caseGenProgress[moduleId], null),
+        timing: cloneJsonValue(ensureCaseModuleTimingState()[moduleId], null),
+        createdAt: Date.now(),
+      });
+      moduleState.snapshotId = snapshotId;
+      moduleState.updatedAt = Date.now();
+      return snapshotId;
+    }
+
+    function findModuleSnapshot(moduleId, snapshotId) {
+      var xmindState = ensureXmindCaseGenState();
+      var targetId = snapshotId ? String(snapshotId) : '';
+      for (var i = xmindState.snapshots.length - 1; i >= 0; i -= 1) {
+        var item = xmindState.snapshots[i];
+        if (!item || String(item.moduleId || '') !== String(moduleId || '')) continue;
+        if (targetId && String(item.id || '') !== targetId) continue;
+        return item;
+      }
+      return null;
+    }
+
+    function restoreSelectionSet(list) {
+      var set = new Set();
+      if (!Array.isArray(list)) return set;
+      list.forEach(function(idx) {
+        var num = Number(idx);
+        if (Number.isFinite(num)) set.add(num);
+      });
+      return set;
+    }
+
+    function rollbackModuleCases(moduleId) {
+      if (!moduleId) return false;
+      var moduleState = ensureXmindCaseGenModuleState(moduleId);
+      var snapshot = findModuleSnapshot(moduleId, moduleState.snapshotId || '');
+      if (!snapshot) return false;
+      if (snapshot.rawResult === null || snapshot.rawResult === undefined) {
+        delete state.caseGenResults[moduleId];
+      } else {
+        state.caseGenResults[moduleId] = String(snapshot.rawResult || '');
+      }
+      state.caseSelections[moduleId] = restoreSelectionSet(snapshot.selection);
+      if (snapshot.status && typeof snapshot.status === 'object') {
+        ensureCaseModuleStatusState()[moduleId] = snapshot.status;
+      } else {
+        delete ensureCaseModuleStatusState()[moduleId];
+      }
+      if (snapshot.progress && typeof snapshot.progress === 'object') {
+        state.caseGenProgress[moduleId] = snapshot.progress;
+      } else if (state.caseGenProgress) {
+        delete state.caseGenProgress[moduleId];
+      }
+      if (snapshot.timing === null || snapshot.timing === undefined) {
+        setCaseModuleTiming(moduleId);
+      } else {
+        setCaseModuleTiming(moduleId, Number(snapshot.timing));
+      }
+      moduleState.running = false;
+      moduleState.status = '';
+      moduleState.error = '';
+      moduleState.hideResults = false;
+      moduleState.lastAction = 'rollback';
+      moduleState.snapshotId = '';
+      moduleState.updatedAt = Date.now();
+      closeCaseViewIfActive(moduleId);
+      refreshCaseSelectionUI(moduleId);
+      updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
+      renderCaseGeneration();
+      persistWorkflowState();
+      return true;
+    }
+
+    function commitModuleCases(moduleId, payload) {
+      if (!moduleId || !payload || payload.shouldCommit === false) return null;
+      var rawResult = payload.rawResult;
+      if (rawResult === undefined || rawResult === null) {
+        rawResult = JSON.stringify(Array.isArray(payload.list) ? payload.list : [], null, 2);
+      } else {
+        rawResult = String(rawResult);
+      }
+      state.caseGenResults[moduleId] = rawResult;
+      if (payload.selectionMode === 'keep-valid') {
+        var currentSelection = state.caseSelections[moduleId];
+        if (!currentSelection || typeof currentSelection.forEach !== 'function') {
+          state.caseSelections[moduleId] = new Set();
+        } else {
+          var currentList = getCaseListForModule(moduleId);
+          var validSelection = new Set();
+          currentSelection.forEach(function(idx) {
+            var num = Number(idx);
+            if (Number.isFinite(num) && currentList[num]) validSelection.add(num);
+          });
+          state.caseSelections[moduleId] = validSelection;
+        }
+      } else {
+        state.caseSelections[moduleId] = new Set();
+      }
+      if (payload.timingMs === null || payload.timingMs === undefined) {
+        setCaseModuleTiming(moduleId);
+      } else {
+        setCaseModuleTiming(moduleId, Number(payload.timingMs));
+      }
+      if (payload.statusText !== undefined) {
+        setCaseModuleStatus(moduleId, String(payload.statusText || ''), payload.statusType || '');
+      }
+      if (payload.finalizeStep) {
+        setCaseProgressStep(moduleId, 'finalize', payload.finalizeStep);
+      }
+      closeCaseViewIfActive(moduleId);
+      refreshCaseSelectionUI(moduleId);
+      updateSupplementButtons(moduleId, payload.hasResult === true || getCaseListForModule(moduleId).length > 0);
+      renderCaseGeneration();
+      return {
+        hasResult: getCaseListForModule(moduleId).length > 0,
+        rawResult: rawResult,
+      };
+    }
+
+    async function buildModuleCases(moduleId, options) {
+      options = options || {};
+      var mod = state.caseGenModules.find(function(m) { return m.id === moduleId; });
+      if (!mod) return null;
+      var requirementLabel = ensureRequirementLabel('请输入需求标识后再生成用例');
+      if (!requirementLabel) {
+        return {
+          cancelled: true,
+          statusText: '已取消生成：需求标识为空',
+          statusType: 'warn',
+        };
+      }
+      var cleanedContext = getCleanedTextForModel();
+      var suggestion = getModuleSuggestion(moduleId);
+      var model = getAssignedModel('casegen');
+      var promptBase = options.promptBase;
+      if (promptBase === undefined || promptBase === null || promptBase === '') {
+        promptBase = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
+        promptBase = promptBase || defaultPrompts.casegen || '';
+      }
+      var promptSettingsSnapshot = options.promptSettingsSnapshot;
+      if (promptSettingsSnapshot === undefined || promptSettingsSnapshot === null) {
+        promptSettingsSnapshot = createCaseGenPromptSettingsSnapshot();
+      } else {
+        promptSettingsSnapshot = normalizeCaseGenPromptSettings(promptSettingsSnapshot);
+      }
+      var prompt = buildCaseGenPrompt(promptBase, promptSettingsSnapshot);
+      var ref = {
+        module: mod.title,
+        key_scenarios: mod.scenarios,
+        test_points: mod.points,
+        coupled_modules: mod.coupled,
+      };
+      var suggestionText = suggestion ? '\n\n用户附加要求：' + suggestion : '';
+      var baseContext = cleanedContext
+        ? '清洗后需求上下文：\n' + cleanedContext + '\n\n目标测试模块（JSON）：' + JSON.stringify(ref)
+        : '测试模块信息（JSON）：' + JSON.stringify(ref);
+      var userContent = baseContext + suggestionText + '\n请输出符合提示词要求的 JSON 数组。';
+      var reasoning = getReasoningForType('casegen');
+      var temperature = getTemperatureForType('casegen');
+      var overallStart = Date.now();
+      var startTime = Date.now();
+      var content = await callCaseGenModelWithGuard(function() {
+        return callModelWithConfig(model, userContent, prompt, reasoning, temperature);
+      });
+      var durationMs = Date.now() - startTime;
+      var parsedInfo = parseGeneratedCases(content);
+      var parsed = parsedInfo.parsed;
+      var normalized = parsedInfo.normalized;
+      var hadRecovery = parsedInfo.hadRecovery;
+      if (!parsed.length) {
+        if (state.caseGenProgress[moduleId]) {
+          markAllCaseProgressGroups(moduleId, 'error');
+          setCaseProgressStep(moduleId, 'dedupe', 'error');
+          setCaseProgressStep(moduleId, 'finalize', 'error');
+        }
+        return {
+          action: 'generate',
+          shouldCommit: true,
+          rawResult: '[]',
+          list: [],
+          hasResult: false,
+          timingMs: durationMs,
+          statusText: '生成结果为空，请重新生成',
+          statusType: 'warn',
+          finalizeStep: 'error',
+        };
+      }
+      var dedupInfo = { list: parsed, removed: 0, hadError: false, skipped: true };
+      if (hasImportedCases()) {
+        dedupInfo = await filterCasesAgainstImported(mod, parsed, '用例生成');
+      } else {
+        initCaseProgress(moduleId, chunkArray(parsed, 5));
+        markAllCaseProgressGroups(moduleId, 'done');
+        setCaseProgressStep(moduleId, 'dedupe', 'done');
+      }
+      if (!dedupInfo.skipped) {
+        setCaseProgressStep(moduleId, 'finalize', 'running');
+      }
+      var filteredList = dedupInfo.list || [];
+      var removedByFilter = dedupInfo.removed || 0;
+      var filterHadError = dedupInfo.hadError || false;
+      if (!filteredList.length) {
+        if (!dedupInfo.skipped) setCaseProgressStep(moduleId, 'finalize', 'error');
+        return {
+          action: 'generate',
+          shouldCommit: true,
+          rawResult: '[]',
+          list: [],
+          hasResult: false,
+          timingMs: durationMs,
+          statusText: '生成的用例与导入用例重复，未保留新的用例',
+          statusType: 'warn',
+          finalizeStep: 'error',
+        };
+      }
+      var finalJson = dedupInfo.skipped ? normalized : JSON.stringify(filteredList, null, 2);
+      var durationSec = Math.max(1, Math.round((Date.now() - overallStart) / 1000));
+      var parts = ['【' + mod.title + '】用例已生成 ' + filteredList.length + ' 条', '耗时 ' + durationSec + ' 秒'];
+      if (removedByFilter) parts.push('剔除 ' + removedByFilter + ' 条重复用例');
+      var message = hadRecovery
+        ? parts.join('，') + '（检测到部分数据不完整，已保留完整条目）'
+        : parts.join('，');
+      return {
+        action: 'generate',
+        shouldCommit: true,
+        rawResult: finalJson,
+        list: filteredList,
+        hasResult: true,
+        timingMs: durationMs,
+        statusText: message,
+        statusType: hadRecovery || filterHadError ? 'warn' : 'ok',
+        finalizeStep: 'done',
+      };
+    }
+
+    async function buildModuleTopup(moduleId, options) {
+      options = options || {};
+      var mod = state.caseGenModules.find(function(m) { return m.id === moduleId; });
+      if (!mod) return null;
+      var existingList = getCaseListForModule(moduleId);
+      if (!existingList.length) {
+        return {
+          cancelled: true,
+          statusText: '【' + resolveModuleTitle(mod.title || mod.module || '') + '】暂无原始用例，无法补全',
+          statusType: 'warn',
+        };
+      }
+      var cleanedContext = getCleanedTextForModel();
+      var suggestion = getModuleSuggestion(moduleId);
+      var model = getAssignedModel('casegen');
+      var promptBase = options.promptBase;
+      if (promptBase === undefined || promptBase === null || promptBase === '') {
+        promptBase = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
+        promptBase = promptBase || defaultPrompts.casegen || '';
+      }
+      var promptSettingsSnapshot = options.promptSettingsSnapshot;
+      if (promptSettingsSnapshot === undefined || promptSettingsSnapshot === null) {
+        promptSettingsSnapshot = createEmptyCaseGenPromptSettings();
+      } else {
+        promptSettingsSnapshot = normalizeCaseGenPromptSettings(promptSettingsSnapshot);
+      }
+      var prompt = buildCaseGenPrompt(promptBase, promptSettingsSnapshot);
+      var ref = {
+        module: mod.title,
+        key_scenarios: mod.scenarios,
+        test_points: mod.points,
+        coupled_modules: mod.coupled,
+      };
+      var baseContext = cleanedContext
+        ? '清洗后需求上下文：\n' + cleanedContext + '\n\n目标测试模块（JSON）：' + JSON.stringify(ref)
+        : '测试模块信息（JSON）：' + JSON.stringify(ref);
+      var existingJson = JSON.stringify(sanitizeCasesForExport(existingList));
+      var suggestionText = suggestion ? '\n\n额外要求：' + suggestion : '';
+      var userContent = baseContext + '\n\n已有用例(JSON)：' + existingJson + '\n请在不重复的前提下补充新的测试用例，仅返回新增用例的 JSON 数组。' + suggestionText;
+      var reasoning = getReasoningForType('casegen');
+      var temperature = getTemperatureForType('casegen');
+      var overallStart = Date.now();
+      var startTime = Date.now();
+      var content = await callCaseGenModelWithGuard(function() {
+        return callModelWithConfig(model, userContent, prompt, reasoning, temperature);
+      });
+      var durationMs = Date.now() - startTime;
+      var parsedInfo = parseGeneratedCases(content);
+      var parsed = parsedInfo.parsed;
+      var hadRecovery = parsedInfo.hadRecovery;
+      if (!parsed.length) {
+        if (state.caseGenProgress[moduleId]) {
+          markAllCaseProgressGroups(moduleId, 'error');
+          setCaseProgressStep(moduleId, 'dedupe', 'error');
+          setCaseProgressStep(moduleId, 'finalize', 'error');
+        }
+        return {
+          action: 'topup',
+          shouldCommit: false,
+          hasResult: existingList.length > 0,
+          timingMs: durationMs,
+          statusText: '未补充到新的用例，请调整提示后重试',
+          statusType: 'warn',
+          finalizeStep: 'error',
+        };
+      }
+      var dedupInfo = { list: parsed, removed: 0, hadError: false, skipped: true };
+      if (hasImportedCases()) {
+        dedupInfo = await filterCasesAgainstImported(mod, parsed, '补全');
+      } else {
+        initCaseProgress(moduleId, chunkArray(parsed, 5));
+        markAllCaseProgressGroups(moduleId, 'done');
+        setCaseProgressStep(moduleId, 'dedupe', 'done');
+      }
+      if (!dedupInfo.skipped) setCaseProgressStep(moduleId, 'finalize', 'running');
+      var filteredList = dedupInfo.list || [];
+      if (!filteredList.length) {
+        setCaseProgressStep(moduleId, 'finalize', 'error');
+        return {
+          action: 'topup',
+          shouldCommit: false,
+          hasResult: existingList.length > 0,
+          timingMs: durationMs,
+          statusText: '补全的用例与导入用例重复，已全部过滤',
+          statusType: 'warn',
+          finalizeStep: 'error',
+        };
+      }
+      var appended = filteredList.map(function(item) { return Object.assign({}, item, { remark: '后补' }); });
+      var updatedList = existingList.concat(appended);
+      var durationSec = Math.max(1, Math.round((Date.now() - overallStart) / 1000));
+      var parts = ['【' + mod.title + '】已补全 ' + appended.length + ' 条用例', '耗时 ' + durationSec + ' 秒'];
+      if (dedupInfo.removed) {
+        parts.push('剔除 ' + dedupInfo.removed + ' 条重复用例');
+      }
+      return {
+        action: 'topup',
+        shouldCommit: true,
+        rawResult: JSON.stringify(updatedList, null, 2),
+        list: updatedList,
+        addedList: appended,
+        hasResult: true,
+        timingMs: durationMs,
+        selectionMode: 'keep-valid',
+        statusText: hadRecovery ? parts.join('，') + '（检测到结构异常，已保留有效条目）' : parts.join('，'),
+        statusType: hadRecovery || dedupInfo.hadError ? 'warn' : 'ok',
+        finalizeStep: 'done',
+      };
+    }
+
     function filterCasesAgainstImported(module, cases, actionLabel) {
       var moduleTitle = module && module.title ? module.title : '当前模块';
       var moduleId = module && module.id ? module.id : '';
@@ -3225,21 +3670,6 @@
       options = options || {};
       var mod = state.caseGenModules.find(function(m) { return m.id === moduleId; });
       if (!mod) return;
-      var requirementLabel = ensureRequirementLabel('请输入需求标识后再生成用例');
-      if (!requirementLabel) {
-        setCaseModuleStatus(moduleId, '已取消生成：需求标识为空', 'warn');
-        return;
-      }
-      var cleanedContext = getCleanedTextForModel();
-      var suggestion = getModuleSuggestion(moduleId);
-      var model;
-      try {
-        model = getAssignedModel('casegen');
-      } catch (err) {
-        setCaseModuleStatus(moduleId, err.message, 'warn');
-        updateModelTiming(caseGenTimingEl);
-        return;
-      }
       setCaseModuleTiming(moduleId);
       setCaseModuleRunning(moduleId, true);
       refreshCaseGenBatchButtons();
@@ -3254,105 +3684,19 @@
       clearCaseProgress(moduleId);
       updateSupplementButtons(moduleId, false);
       var hasResult = false;
-      var overallStart = Date.now();
       try {
-        var promptBase = options.promptBase;
-        if (promptBase === undefined || promptBase === null || promptBase === '') {
-          promptBase = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
-          promptBase = promptBase || defaultPrompts.casegen || '';
-        }
-        var promptSettingsSnapshot = options.promptSettingsSnapshot;
-        if (promptSettingsSnapshot === undefined || promptSettingsSnapshot === null) {
-          promptSettingsSnapshot = createCaseGenPromptSettingsSnapshot();
-        } else {
-          promptSettingsSnapshot = normalizeCaseGenPromptSettings(promptSettingsSnapshot);
-        }
-        var prompt = buildCaseGenPrompt(promptBase, promptSettingsSnapshot);
-        var ref = {
-          module: mod.title,
-          key_scenarios: mod.scenarios,
-          test_points: mod.points,
-          coupled_modules: mod.coupled,
-        };
-        var suggestionText = suggestion ? '\n\n用户附加要求：' + suggestion : '';
-        var baseContext = cleanedContext
-          ? '清洗后需求上下文：\n' + cleanedContext + '\n\n目标测试模块（JSON）：' + JSON.stringify(ref)
-          : '测试模块信息（JSON）：' + JSON.stringify(ref);
-        var userContent = baseContext + suggestionText + '\n请输出符合提示词要求的 JSON 数组。';
-        var reasoning = getReasoningForType('casegen');
-        var temperature = getTemperatureForType('casegen');
-        var startTime = Date.now();
-        var content = await callCaseGenModelWithGuard(function() {
-          return callModelWithConfig(model, userContent, prompt, reasoning, temperature);
-        });
-        var durationMs = Date.now() - startTime;
-        updateModelTiming(caseGenTimingEl, durationMs);
-        setCaseModuleTiming(moduleId, durationMs);
-        var parsedInfo = parseGeneratedCases(content);
-        var parsed = parsedInfo.parsed;
-        var normalized = parsedInfo.normalized;
-        var hadRecovery = parsedInfo.hadRecovery;
-        if (!parsed.length) {
-          setCaseModuleStatus(moduleId, '生成结果为空，请重新生成', 'warn');
-          state.caseGenResults[moduleId] = '[]';
-          state.caseSelections[moduleId] = new Set();
-          if (textarea) textarea.value = '[]';
-          if (state.caseGenProgress[moduleId]) {
-            markAllCaseProgressGroups(moduleId, 'error');
-            setCaseProgressStep(moduleId, 'dedupe', 'error');
-            setCaseProgressStep(moduleId, 'finalize', 'error');
-          }
+        var buildResult = await buildModuleCases(moduleId, options);
+        if (!buildResult) {
           hasResult = false;
+        } else if (buildResult.cancelled) {
+          setCaseModuleStatus(moduleId, buildResult.statusText || '已取消生成', buildResult.statusType || 'warn');
+          updateModelTiming(caseGenTimingEl);
+          hasResult = getCaseListForModule(moduleId).length > 0;
         } else {
-          var dedupInfo = { list: parsed, removed: 0, hadError: false, skipped: true };
-          if (hasImportedCases()) {
-            dedupInfo = await filterCasesAgainstImported(mod, parsed, '用例生成');
-          } else {
-            initCaseProgress(moduleId, chunkArray(parsed, 5));
-            markAllCaseProgressGroups(moduleId, 'done');
-            setCaseProgressStep(moduleId, 'dedupe', 'done');
-          }
-          if (!dedupInfo.skipped) {
-            setCaseProgressStep(moduleId, 'finalize', 'running');
-          }
-          var filteredList = dedupInfo.list || [];
-          var removedByFilter = dedupInfo.removed || 0;
-          var filterHadError = dedupInfo.hadError || false;
-          if (!filteredList.length) {
-            setCaseModuleStatus(moduleId, '生成的用例与导入用例重复，未保留新的用例', 'warn');
-            state.caseGenResults[moduleId] = '[]';
-            state.caseSelections[moduleId] = new Set();
-            if (textarea) textarea.value = '[]';
-            hasResult = false;
-            if (!dedupInfo.skipped) setCaseProgressStep(moduleId, 'finalize', 'error');
-          } else {
-            var finalJson = dedupInfo.skipped ? normalized : JSON.stringify(filteredList, null, 2);
-            state.caseGenResults[moduleId] = finalJson;
-            state.caseSelections[moduleId] = new Set();
-            if (textarea) textarea.value = finalJson;
-            var durationSec = Math.max(1, Math.round((Date.now() - overallStart) / 1000));
-            var parts = ['【' + mod.title + '】用例已生成 ' + filteredList.length + ' 条', '耗时 ' + durationSec + ' 秒'];
-            if (removedByFilter) parts.push('剔除 ' + removedByFilter + ' 条重复用例');
-            var message = hadRecovery
-              ? parts.join('，') + '（检测到部分数据不完整，已保留完整条目）'
-              : parts.join('，');
-            var statusType = hadRecovery || filterHadError ? 'warn' : 'ok';
-            setCaseModuleStatus(moduleId, message, statusType);
-            hasResult = true;
-            setCaseProgressStep(moduleId, 'finalize', 'done');
-          }
+          updateModelTiming(caseGenTimingEl, buildResult.timingMs);
+          commitModuleCases(moduleId, buildResult);
+          hasResult = buildResult.hasResult === true;
         }
-        var viewBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view="' + moduleId + '"]');
-        if (viewBtn) {
-          viewBtn.disabled = !hasResult;
-          viewBtn.textContent = '用例视图';
-        }
-        closeCaseViewIfActive(moduleId);
-        refreshCaseSelectionUI(moduleId);
-        var exportBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-export="' + moduleId + '"]');
-        if (exportBtn) exportBtn.disabled = !hasResult;
-        var clearBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-clear="' + moduleId + '"]');
-        if (clearBtn) clearBtn.disabled = !hasResult;
       } catch (err) {
         console.error(err);
         setCaseModuleStatus(moduleId, '生成失败：' + err.message, 'err');
@@ -3376,22 +3720,6 @@
       options = options || {};
       var mod = state.caseGenModules.find(function(m) { return m.id === moduleId; });
       if (!mod) return;
-      var existingList = getCaseListForModule(moduleId);
-      if (!existingList.length) {
-        var modTitle = mod && mod.title ? mod.title : '';
-        setCaseModuleStatus(moduleId, '【' + modTitle + '】暂无原始用例，无法补全', 'warn');
-        return;
-      }
-      var cleanedContext = getCleanedTextForModel();
-      var suggestion = getModuleSuggestion(moduleId);
-      var model;
-      try {
-        model = getAssignedModel('casegen');
-      } catch (err) {
-        setCaseModuleStatus(moduleId, err.message, 'warn');
-        updateModelTiming(caseGenTimingEl);
-        return;
-      }
       setCaseModuleTiming(moduleId);
       setCaseModuleRunning(moduleId, true);
       refreshCaseGenBatchButtons();
@@ -3403,94 +3731,20 @@
       }
       setCaseModuleStatus(moduleId, '正在补全【' + mod.title + '】的测试用例...', '');
       clearCaseProgress(moduleId);
-      var overallStart = Date.now();
       try {
-        var promptBase = options.promptBase;
-        if (promptBase === undefined || promptBase === null || promptBase === '') {
-          promptBase = state.assignments && state.assignments.caseGenPrompt ? state.assignments.caseGenPrompt.trim() : '';
-          promptBase = promptBase || defaultPrompts.casegen || '';
-        }
-        var promptSettingsSnapshot = options.promptSettingsSnapshot;
-        if (promptSettingsSnapshot === undefined || promptSettingsSnapshot === null) {
-          promptSettingsSnapshot = createEmptyCaseGenPromptSettings();
+        var buildResult = await buildModuleTopup(moduleId, options);
+        if (!buildResult) {
+          updateModelTiming(caseGenTimingEl);
+        } else if (buildResult.cancelled) {
+          setCaseModuleStatus(moduleId, buildResult.statusText || '已取消补全', buildResult.statusType || 'warn');
+          updateModelTiming(caseGenTimingEl);
         } else {
-          promptSettingsSnapshot = normalizeCaseGenPromptSettings(promptSettingsSnapshot);
-        }
-        var prompt = buildCaseGenPrompt(promptBase, promptSettingsSnapshot);
-        var ref = {
-          module: mod.title,
-          key_scenarios: mod.scenarios,
-          test_points: mod.points,
-          coupled_modules: mod.coupled,
-        };
-        var baseContext = cleanedContext
-          ? '清洗后需求上下文：\n' + cleanedContext + '\n\n目标测试模块（JSON）：' + JSON.stringify(ref)
-          : '测试模块信息（JSON）：' + JSON.stringify(ref);
-        var existingJson = JSON.stringify(sanitizeCasesForExport(existingList));
-        var suggestionText = suggestion ? '\n\n额外要求：' + suggestion : '';
-        var userContent = baseContext + '\n\n已有用例(JSON)：' + existingJson + '\n请在不重复的前提下补充新的测试用例，仅返回新增用例的 JSON 数组。' + suggestionText;
-        var reasoning = getReasoningForType('casegen');
-        var temperature = getTemperatureForType('casegen');
-        var startTime = Date.now();
-        var content = await callCaseGenModelWithGuard(function() {
-          return callModelWithConfig(model, userContent, prompt, reasoning, temperature);
-        });
-        var durationMs = Date.now() - startTime;
-        updateModelTiming(caseGenTimingEl, durationMs);
-        setCaseModuleTiming(moduleId, durationMs);
-        var parsedInfo = parseGeneratedCases(content);
-        var parsed = parsedInfo.parsed;
-        var hadRecovery = parsedInfo.hadRecovery;
-        if (!parsed.length) {
-          setCaseModuleStatus(moduleId, '未补充到新的用例，请调整提示后重试', 'warn');
-          if (state.caseGenProgress[moduleId]) {
-            markAllCaseProgressGroups(moduleId, 'error');
-            setCaseProgressStep(moduleId, 'dedupe', 'error');
-            setCaseProgressStep(moduleId, 'finalize', 'error');
-          }
-        } else {
-          var dedupInfo = { list: parsed, removed: 0, hadError: false, skipped: true };
-          if (hasImportedCases()) {
-            dedupInfo = await filterCasesAgainstImported(mod, parsed, '补全');
+          updateModelTiming(caseGenTimingEl, buildResult.timingMs);
+          if (buildResult.shouldCommit === false) {
+            setCaseModuleStatus(moduleId, buildResult.statusText || '未补充到新的用例，请调整提示后重试', buildResult.statusType || 'warn');
+            if (buildResult.finalizeStep) setCaseProgressStep(moduleId, 'finalize', buildResult.finalizeStep);
           } else {
-            initCaseProgress(moduleId, chunkArray(parsed, 5));
-            markAllCaseProgressGroups(moduleId, 'done');
-            setCaseProgressStep(moduleId, 'dedupe', 'done');
-          }
-          if (!dedupInfo.skipped) setCaseProgressStep(moduleId, 'finalize', 'running');
-          var filteredList = dedupInfo.list || [];
-          if (!filteredList.length) {
-            setCaseModuleStatus(moduleId, '补全的用例与导入用例重复，已全部过滤', 'warn');
-            setCaseProgressStep(moduleId, 'finalize', 'error');
-          } else {
-            var appended = filteredList.map(function(item) { return Object.assign({}, item, { remark: '后补' }); });
-            var updatedList = existingList.concat(appended);
-            state.caseGenResults[moduleId] = JSON.stringify(updatedList, null, 2);
-            var textarea = casesGenerationContainer && casesGenerationContainer.querySelector('textarea[data-result="' + moduleId + '"]');
-            if (textarea) textarea.value = state.caseGenResults[moduleId];
-            if (!state.caseSelections[moduleId]) {
-              state.caseSelections[moduleId] = new Set();
-            } else {
-              var validSelection = new Set();
-              updatedList.forEach(function(_, idx) {
-                if (state.caseSelections[moduleId].has(idx)) validSelection.add(idx);
-              });
-              state.caseSelections[moduleId] = validSelection;
-            }
-            var durationSec = Math.max(1, Math.round((Date.now() - overallStart) / 1000));
-            var parts = ['【' + mod.title + '】已补全 ' + appended.length + ' 条用例', '耗时 ' + durationSec + ' 秒'];
-            if (dedupInfo.removed) {
-              parts.push('剔除 ' + dedupInfo.removed + ' 条重复用例');
-            }
-            setCaseModuleStatus(
-              moduleId,
-              hadRecovery ? parts.join('，') + '（检测到结构异常，已保留有效条目）' : parts.join('，'),
-              hadRecovery || dedupInfo.hadError ? 'warn' : 'ok'
-            );
-            closeCaseViewIfActive(moduleId);
-            refreshCaseSelectionUI(moduleId);
-            setCaseProgressStep(moduleId, 'finalize', 'done');
-            updateSupplementButtons(moduleId, true);
+            commitModuleCases(moduleId, buildResult);
           }
         }
       } catch (err) {
@@ -4362,8 +4616,14 @@
       setCaseGenStoreMode: setCaseGenStoreMode,
       openCaseGenBatchActionDrawer: openCaseGenBatchActionDrawer,
       openCaseGenModuleGenerateDrawer: openCaseGenModuleGenerateDrawer,
+      openCaseGenSettingsDrawer: openCaseGenSettingsDrawer,
       getCaseGenPromptComponents: getCaseGenPromptComponents,
       buildCaseGenPrompt: buildCaseGenPrompt,
+      buildModuleCases: buildModuleCases,
+      buildModuleTopup: buildModuleTopup,
+      commitModuleCases: commitModuleCases,
+      snapshotModuleCases: snapshotModuleCases,
+      rollbackModuleCases: rollbackModuleCases,
       setCaseGenDbStoreNewAction: setCaseGenDbStoreNewAction,
       clearCaseGenDbStoreNewActionError: clearCaseGenDbStoreNewActionError,
       openCaseGenDbStoreNewDrawer: function() { bindCaseGenDbStoreEvents(); return openCaseGenDbStoreNewDrawer(); },
