@@ -90,7 +90,10 @@
     var escapeHtmlPreserve = ctx.escapeHtmlPreserve;
     var formatCompactTimestamp = ctx.formatCompactTimestamp || function() { return ''; };
     var callModelWithConfig = ctx.callModelWithConfig || function() { return Promise.reject(); };
+    var callModelWithContent = ctx.callModelWithContent || function() { return Promise.reject(); };
     var getAssignedModel = ctx.getAssignedModel || function() {};
+    var getReasoningForType = ctx.getReasoningForType || function() { return ''; };
+    var getTemperatureForType = ctx.getTemperatureForType || function() { return 0.2; };
     var updateModelTiming = ctx.updateModelTiming || function() {};
     var downloadBlob = ctx.downloadBlob || function() {};
     var parseXmindFile = ctx.parseXmindFile || function() { return Promise.resolve({ text: '', list: [] }); };
@@ -375,6 +378,26 @@
         mode: 'modules',
         treeSourceSignature: '',
         hasModuleSkeleton: false,
+        hasImportedBaseline: false,
+        rootSnapshotId: '',
+        rootSnapshots: [],
+        root: {
+          lastAction: '',
+          running: false,
+          snapshotId: '',
+          status: '',
+          error: '',
+          updatedAt: 0,
+        },
+        summaryCollapsed: false,
+        prep: {
+          step: 1,
+          requirementMode: '',
+          requirementSupplement: '',
+          manualRequirementBlocks: [],
+          caseImportMode: '',
+          completed: false,
+        },
         nextSnapshotId: 1,
         snapshots: [],
         modules: {},
@@ -384,11 +407,41 @@
       }
       state.caseGenProgressNotice.dotVisible = state.caseGenProgressNotice.dotVisible === true;
       if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
+      if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) state.xmindCaseGen.rootSnapshots = [];
       if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') state.xmindCaseGen.modules = {};
+      if (!state.xmindCaseGen.root || typeof state.xmindCaseGen.root !== 'object') {
+        state.xmindCaseGen.root = {
+          lastAction: '',
+          running: false,
+          snapshotId: '',
+          status: '',
+          error: '',
+          updatedAt: 0,
+        };
+      }
       if (!Number.isFinite(Number(state.xmindCaseGen.nextSnapshotId))) state.xmindCaseGen.nextSnapshotId = 1;
       state.xmindCaseGen.mode = state.xmindCaseGen.mode === 'full' ? 'full' : 'modules';
       state.xmindCaseGen.treeSourceSignature = String(state.xmindCaseGen.treeSourceSignature || '');
       state.xmindCaseGen.hasModuleSkeleton = state.xmindCaseGen.hasModuleSkeleton === true;
+      state.xmindCaseGen.hasImportedBaseline = state.xmindCaseGen.hasImportedBaseline === true;
+      state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
+      state.xmindCaseGen.summaryCollapsed = state.xmindCaseGen.summaryCollapsed === true;
+      if (!state.xmindCaseGen.prep || typeof state.xmindCaseGen.prep !== 'object') {
+        state.xmindCaseGen.prep = {
+          step: 1,
+          requirementMode: '',
+          requirementSupplement: '',
+          manualRequirementBlocks: [],
+          caseImportMode: '',
+          completed: false,
+        };
+      }
+      state.xmindCaseGen.prep.step = Math.max(1, Math.min(3, Number(state.xmindCaseGen.prep.step) || 1));
+      state.xmindCaseGen.prep.requirementMode = state.xmindCaseGen.prep.requirementMode === 'manual' ? 'manual' : (state.xmindCaseGen.prep.requirementMode === 'document' ? 'document' : '');
+      state.xmindCaseGen.prep.requirementSupplement = String(state.xmindCaseGen.prep.requirementSupplement || '');
+      if (!Array.isArray(state.xmindCaseGen.prep.manualRequirementBlocks)) state.xmindCaseGen.prep.manualRequirementBlocks = [];
+      state.xmindCaseGen.prep.caseImportMode = state.xmindCaseGen.prep.caseImportMode === 'import' ? 'import' : (state.xmindCaseGen.prep.caseImportMode === 'skip' ? 'skip' : '');
+      state.xmindCaseGen.prep.completed = state.xmindCaseGen.prep.completed === true;
       state.caseSelections = restoreCaseSelections(data.caseSelections);
       state.missingSelections = restoreNumberSet(data.missingSelections);
       state.missingRowCache = [];
@@ -1324,6 +1377,8 @@
       commitModuleCases: api.commitModuleCases || function() { return null; },
       snapshotModuleCases: api.snapshotModuleCases || function() { return null; },
       rollbackModuleCases: api.rollbackModuleCases || function() { return false; },
+      snapshotAllCaseGenState: api.snapshotAllCaseGenState || function() { return null; },
+      rollbackAllCaseGenState: api.rollbackAllCaseGenState || function() { return false; },
       getCaseListForModule: api.getCaseListForModule || function() { return []; },
       refreshExportCaseGenXmindButton: api.refreshExportCaseGenXmindButton || function() {},
       setCaseGenDbStoreNewAction: api.setCaseGenDbStoreNewAction || function() {},
@@ -1347,6 +1402,7 @@
       ensureCaseGenSettings: 1, setCaseGenSettingValue: 1, syncCaseGenSpecialOptionsState: 1, setCaseGenViewTab: 1, setCaseGenStoreMode: 1, openCaseGenBatchActionDrawer: 1, openCaseGenModuleGenerateDrawer: 1,
       openCaseGenSettingsDrawer: 1, getCaseGenPromptComponents: 1, buildCaseGenPrompt: 1,
       buildModuleCases: 1, buildModuleTopup: 1, commitModuleCases: 1, snapshotModuleCases: 1, rollbackModuleCases: 1,
+      snapshotAllCaseGenState: 1, rollbackAllCaseGenState: 1,
       getCaseListForModule: 1,
       refreshExportCaseGenXmindButton: 1,
       setCaseGenDbStoreNewAction: 1, clearCaseGenDbStoreNewActionError: 1,
@@ -1571,6 +1627,34 @@
       core: core,
       tempExecApi: tempExecApi,
       casesGenApi: casesGenApi,
+      prepApi: {
+        reviewRequirements: api.reviewRequirements,
+        runCleaning: api.runCleaning,
+        compareCoverage: api.compareCoverage || compareCoverage,
+        splitModules: api.splitModules,
+        compareCasesCoverage: api.compareCasesCoverage,
+        runAutoWorkflow: api.runAutoWorkflow,
+        buildAutoWorkflowSteps: api.buildAutoWorkflowSteps,
+        executeAutoWorkflowSteps: api.executeAutoWorkflowSteps,
+        interruptActiveExecutions: api.interruptActiveExecutions,
+        resetWorkflowData: api.resetWorkflowData,
+        hasCaseSource: hasCaseSource,
+        switchTab: switchTab,
+        scrollToSection: scrollToSection,
+        updateFlowStatus: updateFlowStatus,
+      },
+      xmindGenApi: {
+        callModelWithConfig: callModelWithConfig,
+        callModelWithContent: callModelWithContent,
+        getAssignedModel: getAssignedModel,
+        getReasoningForType: getReasoningForType,
+        getTemperatureForType: getTemperatureForType,
+        deriveCaseListFromText: deriveCaseListFromText,
+        parseCaseList: parseCaseList,
+        getCombinedCaseList: getCombinedCaseList,
+        getCombinedCaseText: getCombinedCaseText,
+        hasCaseSource: hasCaseSource,
+      },
       xmindCoreApi: window.app.xmindCoreApi || null,
       mindElixirCoreApi: window.app.mindElixirCoreApi || null,
       casesCoreApi: window.app.casesCoreApi || null,

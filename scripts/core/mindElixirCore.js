@@ -28,7 +28,9 @@
       return (Date.now().toString(16) + Math.random().toString(16).slice(2)).slice(0, 16);
     }
 
-    function stringifyCaseField(value) {
+    function stringifyCaseField(value, options) {
+      var opts = options || {};
+      var arraySeparator = typeof opts.arraySeparator === 'string' ? opts.arraySeparator : ' / ';
       if (Array.isArray(value)) {
         var textArr = value
           .map(function(v) {
@@ -36,7 +38,7 @@
             return base.toString().trim();
           })
           .filter(Boolean);
-        return textArr.join(' / ');
+        return textArr.join(arraySeparator);
       }
       if (value && typeof value === 'object') {
         try {
@@ -49,12 +51,16 @@
       return value.toString().trim();
     }
 
-    function formatCaseText(value) {
+    function formatCaseText(value, options) {
+      var opts = options || {};
       if (xmindApi && typeof xmindApi.formatXmindNodeValue === 'function') {
-        return xmindApi.formatXmindNodeValue(value);
+        return xmindApi.formatXmindNodeValue(value, opts);
       }
-      var text = stringifyCaseField(value);
+      var text = stringifyCaseField(value, opts);
       if (!text) return '-';
+      if (opts.preserveLineBreaks) {
+        return text.replace(/\r\n?/g, '\n').replace(/[ \t]*\n+[ \t]*/g, '\n').trim() || '-';
+      }
       return text.replace(/\s*\n+\s*/g, ' / ').trim() || '-';
     }
 
@@ -64,7 +70,10 @@
       var title = formatCaseText(row.title || row.case_title || row['用例标题'] || moduleName);
       var priority = formatCaseText(row.priority || row.level || row['优先级'] || 'P1');
       var preconditions = formatCaseText(row.preconditions || row.precondition || row['前提条件']);
-      var steps = formatCaseText(row.steps || row.actions || row['操作步骤']);
+      var steps = formatCaseText(row.steps || row.actions || row['操作步骤'], {
+        preserveLineBreaks: true,
+        arraySeparator: '\n',
+      });
       var expected = formatCaseText(row.expected || row.result || row['预期结果']);
       return [moduleName, title, priority, preconditions, steps, expected];
     }
@@ -115,7 +124,7 @@
         var fields = buildCaseFields(item || {}, fallbackModule);
         if (!Array.isArray(fields)) return [];
         return fields.map(function(seg) {
-          var text = formatCaseText(seg);
+          var text = typeof seg === 'string' ? seg.trim() : formatCaseText(seg);
           return text || '-';
         });
       }).filter(function(path) {

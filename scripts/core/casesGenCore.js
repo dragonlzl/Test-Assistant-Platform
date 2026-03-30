@@ -263,6 +263,26 @@
           mode: 'modules',
           treeSourceSignature: '',
           hasModuleSkeleton: false,
+          hasImportedBaseline: false,
+          rootSnapshotId: '',
+          rootSnapshots: [],
+          root: {
+            lastAction: '',
+            running: false,
+            snapshotId: '',
+            status: '',
+            error: '',
+            updatedAt: 0,
+          },
+          summaryCollapsed: false,
+          prep: {
+            step: 1,
+            requirementMode: '',
+            requirementSupplement: '',
+            manualRequirementBlocks: [],
+            caseImportMode: '',
+            completed: false,
+          },
           nextSnapshotId: 1,
           snapshots: [],
           modules: {},
@@ -271,8 +291,31 @@
       if (!Array.isArray(state.xmindCaseGen.snapshots)) {
         state.xmindCaseGen.snapshots = [];
       }
+      if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) {
+        state.xmindCaseGen.rootSnapshots = [];
+      }
       if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') {
         state.xmindCaseGen.modules = {};
+      }
+      if (!state.xmindCaseGen.root || typeof state.xmindCaseGen.root !== 'object') {
+        state.xmindCaseGen.root = {
+          lastAction: '',
+          running: false,
+          snapshotId: '',
+          status: '',
+          error: '',
+          updatedAt: 0,
+        };
+      }
+      if (!state.xmindCaseGen.prep || typeof state.xmindCaseGen.prep !== 'object') {
+        state.xmindCaseGen.prep = {
+          step: 1,
+          requirementMode: '',
+          requirementSupplement: '',
+          manualRequirementBlocks: [],
+          caseImportMode: '',
+          completed: false,
+        };
       }
       if (!Number.isFinite(Number(state.xmindCaseGen.nextSnapshotId))) {
         state.xmindCaseGen.nextSnapshotId = 1;
@@ -280,6 +323,21 @@
       state.xmindCaseGen.mode = state.xmindCaseGen.mode === 'full' ? 'full' : 'modules';
       state.xmindCaseGen.treeSourceSignature = String(state.xmindCaseGen.treeSourceSignature || '');
       state.xmindCaseGen.hasModuleSkeleton = state.xmindCaseGen.hasModuleSkeleton === true;
+      state.xmindCaseGen.hasImportedBaseline = state.xmindCaseGen.hasImportedBaseline === true;
+      state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
+      state.xmindCaseGen.summaryCollapsed = state.xmindCaseGen.summaryCollapsed === true;
+      state.xmindCaseGen.prep.step = Math.max(1, Math.min(3, Number(state.xmindCaseGen.prep.step) || 1));
+      state.xmindCaseGen.prep.requirementMode = state.xmindCaseGen.prep.requirementMode === 'manual'
+        ? 'manual'
+        : (state.xmindCaseGen.prep.requirementMode === 'document' ? 'document' : '');
+      state.xmindCaseGen.prep.requirementSupplement = String(state.xmindCaseGen.prep.requirementSupplement || '');
+      if (!Array.isArray(state.xmindCaseGen.prep.manualRequirementBlocks)) {
+        state.xmindCaseGen.prep.manualRequirementBlocks = [];
+      }
+      state.xmindCaseGen.prep.caseImportMode = state.xmindCaseGen.prep.caseImportMode === 'import'
+        ? 'import'
+        : (state.xmindCaseGen.prep.caseImportMode === 'skip' ? 'skip' : '');
+      state.xmindCaseGen.prep.completed = state.xmindCaseGen.prep.completed === true;
       return state.xmindCaseGen;
     }
 
@@ -3153,11 +3211,21 @@
       if (!moduleId) return '';
       var xmindState = ensureXmindCaseGenState();
       var moduleState = ensureXmindCaseGenModuleState(moduleId);
+      var moduleRecord = findCaseGenModule(moduleId);
+      var moduleIndex = -1;
+      if (moduleRecord && Array.isArray(state.caseGenModules)) {
+        moduleIndex = state.caseGenModules.findIndex(function(item) {
+          return item && String(item.id || '') === String(moduleId || '');
+        });
+      }
       var snapshotId = 'snap-' + String(xmindState.nextSnapshotId);
       xmindState.nextSnapshotId += 1;
       xmindState.snapshots.push({
         id: snapshotId,
         moduleId: String(moduleId),
+        moduleExistsBefore: Boolean(moduleRecord),
+        moduleRecord: cloneJsonValue(moduleRecord, null),
+        moduleIndex: moduleIndex,
         rawResult: state.caseGenResults && Object.prototype.hasOwnProperty.call(state.caseGenResults, moduleId)
           ? String(state.caseGenResults[moduleId] || '')
           : null,
@@ -3199,6 +3267,17 @@
       var moduleState = ensureXmindCaseGenModuleState(moduleId);
       var snapshot = findModuleSnapshot(moduleId, moduleState.snapshotId || '');
       if (!snapshot) return false;
+      if (snapshot.moduleRecord && !findCaseGenModule(moduleId) && Array.isArray(state.caseGenModules)) {
+        var moduleIndex = Number(snapshot.moduleIndex);
+        var insertIndex = Number.isFinite(moduleIndex)
+          ? Math.max(0, Math.min(state.caseGenModules.length, moduleIndex))
+          : state.caseGenModules.length;
+        state.caseGenModules.splice(insertIndex, 0, cloneJsonValue(snapshot.moduleRecord, null));
+      } else if (!snapshot.moduleExistsBefore && Array.isArray(state.caseGenModules)) {
+        state.caseGenModules = state.caseGenModules.filter(function(item) {
+          return !(item && String(item.id || '') === String(moduleId || ''));
+        });
+      }
       if (snapshot.rawResult === null || snapshot.rawResult === undefined) {
         delete state.caseGenResults[moduleId];
       } else {
@@ -3230,6 +3309,82 @@
       closeCaseViewIfActive(moduleId);
       refreshCaseSelectionUI(moduleId);
       updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
+      renderCaseGeneration();
+      persistWorkflowState();
+      return true;
+    }
+
+    function snapshotAllCaseGenState() {
+      var xmindState = ensureXmindCaseGenState();
+      var snapshotId = 'root-snap-' + String(xmindState.nextSnapshotId);
+      xmindState.nextSnapshotId += 1;
+      xmindState.rootSnapshots.push({
+        id: snapshotId,
+        caseGenModules: cloneJsonValue(state.caseGenModules, []),
+        caseGenResults: cloneJsonValue(state.caseGenResults, {}),
+        caseSelections: (function() {
+          var result = {};
+          var source = state.caseSelections && typeof state.caseSelections === 'object'
+            ? state.caseSelections
+            : {};
+          Object.keys(source).forEach(function(key) {
+            result[key] = cloneSelectionSet(source[key]);
+          });
+          return result;
+        })(),
+        caseGenSuggestions: cloneJsonValue(state.caseGenSuggestions, {}),
+        caseGenModuleStatus: cloneJsonValue(ensureCaseModuleStatusState(), {}),
+        caseGenProgress: cloneJsonValue(state.caseGenProgress, {}),
+        caseGenTiming: cloneJsonValue(ensureCaseModuleTimingState(), {}),
+        caseGenSource: String(state.caseGenSource || ''),
+        createdAt: Date.now(),
+      });
+      xmindState.rootSnapshotId = snapshotId;
+      xmindState.root.snapshotId = snapshotId;
+      xmindState.root.updatedAt = Date.now();
+      return snapshotId;
+    }
+
+    function rollbackAllCaseGenState() {
+      var xmindState = ensureXmindCaseGenState();
+      var snapshotId = xmindState.rootSnapshotId || (xmindState.root && xmindState.root.snapshotId) || '';
+      if (!snapshotId) return false;
+      var snapshot = null;
+      for (var i = xmindState.rootSnapshots.length - 1; i >= 0; i -= 1) {
+        var item = xmindState.rootSnapshots[i];
+        if (!item || String(item.id || '') !== String(snapshotId)) continue;
+        snapshot = item;
+        break;
+      }
+      if (!snapshot) return false;
+      state.caseGenModules = cloneJsonValue(snapshot.caseGenModules, []);
+      state.caseGenResults = cloneJsonValue(snapshot.caseGenResults, {});
+      state.caseSelections = {};
+      Object.keys(snapshot.caseSelections || {}).forEach(function(key) {
+        state.caseSelections[key] = restoreSelectionSet(snapshot.caseSelections[key]);
+      });
+      state.caseGenSuggestions = cloneJsonValue(snapshot.caseGenSuggestions, {});
+      state.caseGenModuleStatus = cloneJsonValue(snapshot.caseGenModuleStatus, {});
+      state.caseGenProgress = cloneJsonValue(snapshot.caseGenProgress, {});
+      state.caseGenTiming = cloneJsonValue(snapshot.caseGenTiming, {});
+      state.caseGenSource = String(snapshot.caseGenSource || '');
+      xmindState.hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
+      xmindState.root.lastAction = 'rollback';
+      xmindState.root.running = false;
+      xmindState.root.status = '';
+      xmindState.root.error = '';
+      xmindState.root.snapshotId = '';
+      xmindState.rootSnapshotId = '';
+      xmindState.root.updatedAt = Date.now();
+      Object.keys(xmindState.modules || {}).forEach(function(key) {
+        var moduleState = ensureXmindCaseGenModuleState(key);
+        moduleState.running = false;
+        moduleState.status = '';
+        moduleState.error = '';
+        moduleState.hideResults = false;
+        moduleState.updatedAt = Date.now();
+      });
+      closeCaseViewIfActive(ALL_CASE_VIEW_ID);
       renderCaseGeneration();
       persistWorkflowState();
       return true;
@@ -4624,6 +4779,8 @@
       commitModuleCases: commitModuleCases,
       snapshotModuleCases: snapshotModuleCases,
       rollbackModuleCases: rollbackModuleCases,
+      snapshotAllCaseGenState: snapshotAllCaseGenState,
+      rollbackAllCaseGenState: rollbackAllCaseGenState,
       setCaseGenDbStoreNewAction: setCaseGenDbStoreNewAction,
       clearCaseGenDbStoreNewActionError: clearCaseGenDbStoreNewActionError,
       openCaseGenDbStoreNewDrawer: function() { bindCaseGenDbStoreEvents(); return openCaseGenDbStoreNewDrawer(); },

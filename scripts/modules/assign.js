@@ -21,6 +21,7 @@
     var splitModelSelect = pick(dom.splitModelSelect, 'splitModelSelect');
     var casesModelSelect = pick(dom.casesModelSelect, 'casesModelSelect');
     var caseGenModelSelect = pick(dom.caseGenModelSelect, 'caseGenModelSelect');
+    var xmindCaseGenModelSelect = pick(dom.xmindCaseGenModelSelect, 'xmindCaseGenModelSelect');
     var caseFilterModelSelect = pick(dom.caseFilterModelSelect, 'caseFilterModelSelect');
     var missingReminderModelSelect = pick(dom.missingReminderModelSelect, 'missingReminderModelSelect');
     var caseLibraryGenModelSelect = pick(dom.caseLibraryGenModelSelect, 'caseLibraryGenModelSelect');
@@ -30,6 +31,7 @@
     var splitAssignStatus = pick(dom.splitAssignStatus, 'splitAssignStatus');
     var casesAssignStatus = pick(dom.casesAssignStatus, 'casesAssignStatus');
     var caseGenAssignStatus = pick(dom.caseGenAssignStatus, 'caseGenAssignStatus');
+    var xmindCaseGenAssignStatus = pick(dom.xmindCaseGenAssignStatus, 'xmindCaseGenAssignStatus');
     var caseFilterAssignStatus = pick(dom.caseFilterAssignStatus, 'caseFilterAssignStatus');
     var missingReminderAssignStatus = pick(dom.missingReminderAssignStatus, 'missingReminderAssignStatus');
     var caseLibraryGenAssignStatus = pick(dom.caseLibraryGenAssignStatus, 'caseLibraryGenAssignStatus');
@@ -39,6 +41,7 @@
     var splitPromptEl = pick(dom.splitPromptEl, 'splitPrompt');
     var casesPromptEl = pick(dom.casesPromptEl, 'casesPrompt');
     var caseGenPromptEl = pick(dom.caseGenPromptEl, 'caseGenPrompt');
+    var xmindCaseGenPromptEl = pick(dom.xmindCaseGenPromptEl, 'xmindCaseGenPrompt');
     var caseFilterPromptEl = pick(dom.caseFilterPromptEl, 'caseFilterPrompt');
     var missingReminderPromptEl = pick(dom.missingReminderPromptEl, 'missingReminderPrompt');
     var caseLibraryGenPromptEl = pick(dom.caseLibraryGenPromptEl, 'caseLibraryGenPrompt');
@@ -48,6 +51,7 @@
     var splitReasoningSelect = pick(dom.splitReasoningSelect, 'splitReasoning');
     var casesReasoningSelect = pick(dom.casesReasoningSelect, 'casesReasoning');
     var caseGenReasoningSelect = pick(dom.caseGenReasoningSelect, 'caseGenReasoning');
+    var xmindCaseGenReasoningSelect = pick(dom.xmindCaseGenReasoningSelect, 'xmindCaseGenReasoning');
     var caseFilterReasoningSelect = pick(dom.caseFilterReasoningSelect, 'caseFilterReasoning');
     var missingReminderReasoningSelect = pick(dom.missingReminderReasoningSelect, 'missingReminderReasoning');
     var caseLibraryGenReasoningSelect = pick(dom.caseLibraryGenReasoningSelect, 'caseLibraryGenReasoning');
@@ -57,6 +61,7 @@
     var splitTemperatureEl = pick(dom.splitTemperatureEl, 'splitTemperature');
     var casesTemperatureEl = pick(dom.casesTemperatureEl, 'casesTemperature');
     var caseGenTemperatureEl = pick(dom.caseGenTemperatureEl, 'caseGenTemperature');
+    var xmindCaseGenTemperatureEl = pick(dom.xmindCaseGenTemperatureEl, 'xmindCaseGenTemperature');
     var caseFilterTemperatureEl = pick(dom.caseFilterTemperatureEl, 'caseFilterTemperature');
     var missingReminderTemperatureEl = pick(dom.missingReminderTemperatureEl, 'missingReminderTemperature');
     var caseLibraryGenTemperatureEl = pick(dom.caseLibraryGenTemperatureEl, 'caseLibraryGenTemperature');
@@ -71,11 +76,12 @@
     var testSplitModelBtn = pick(dom.testSplitModelBtn, 'testSplitModel');
     var testCasesModelBtn = pick(dom.testCasesModelBtn, 'testCasesModel');
     var testCaseGenModelBtn = pick(dom.testCaseGenModelBtn, 'testCaseGenModel');
+    var testXmindCaseGenModelBtn = pick(dom.testXmindCaseGenModelBtn, 'testXmindCaseGenModel');
     var testCaseFilterModelBtn = pick(dom.testCaseFilterModelBtn, 'testCaseFilterModel');
     var testMissingReminderModelBtn = pick(dom.testMissingReminderModelBtn, 'testMissingReminderModel');
     var testCaseLibraryGenModelBtn = pick(dom.testCaseLibraryGenModelBtn, 'testCaseLibraryGenModel');
-    var assignmentIdKeys = ['cleanId', 'reviewId', 'compareId', 'splitId', 'casesId', 'caseGenId', 'caseFilterId', 'missingReminderId', 'caseLibraryGenId'];
-    var reasoningTypes = ['clean', 'review', 'compare', 'split', 'cases', 'casegen', 'casefilter', 'missingreminder', 'caselibrarygen'];
+    var assignmentIdKeys = ['cleanId', 'reviewId', 'compareId', 'splitId', 'casesId', 'caseGenId', 'xmindCaseGenId', 'caseFilterId', 'missingReminderId', 'caseLibraryGenId'];
+    var reasoningTypes = ['clean', 'review', 'compare', 'split', 'cases', 'casegen', 'xmindcasegen', 'casefilter', 'missingreminder', 'caselibrarygen'];
 
     function setAssignmentId(key, value) {
       if (!state.assignments) state.assignments = {};
@@ -165,6 +171,7 @@
       if (splitModelSelect) splitModelSelect.value = targetId;
       if (casesModelSelect) casesModelSelect.value = targetId;
       if (caseGenModelSelect) caseGenModelSelect.value = targetId;
+      if (xmindCaseGenModelSelect) xmindCaseGenModelSelect.value = targetId;
       if (caseFilterModelSelect) caseFilterModelSelect.value = targetId;
       if (missingReminderModelSelect) missingReminderModelSelect.value = targetId;
       if (caseLibraryGenModelSelect) caseLibraryGenModelSelect.value = targetId;
@@ -187,6 +194,7 @@
     bindModelSelect(casesModelSelect, 'casesId', 'cases', casesAssignStatus);
     bindModelSelect(caseFilterModelSelect, 'caseFilterId', 'casefilter', caseFilterAssignStatus);
     bindModelSelect(caseGenModelSelect, 'caseGenId', 'casegen', caseGenAssignStatus);
+    bindModelSelect(xmindCaseGenModelSelect, 'xmindCaseGenId', 'xmindcasegen', xmindCaseGenAssignStatus);
     bindModelSelect(missingReminderModelSelect, 'missingReminderId', 'missingreminder', missingReminderAssignStatus);
     bindModelSelect(caseLibraryGenModelSelect, 'caseLibraryGenId', 'caselibrarygen', caseLibraryGenAssignStatus);
 
@@ -196,6 +204,7 @@
     bindPromptInput(splitPromptEl, 'splitPrompt');
     bindPromptInput(casesPromptEl, 'casesPrompt');
     bindPromptInput(caseGenPromptEl, 'caseGenPrompt');
+    bindPromptInput(xmindCaseGenPromptEl, 'xmindCaseGenPrompt');
     bindPromptInput(caseFilterPromptEl, 'caseFilterPrompt');
     bindPromptInput(missingReminderPromptEl, 'missingReminderPrompt');
     bindPromptInput(caseLibraryGenPromptEl, 'caseLibraryGenPrompt');
@@ -206,6 +215,7 @@
     bindReasoningSelect(splitReasoningSelect, 'splitReasoning');
     bindReasoningSelect(casesReasoningSelect, 'casesReasoning');
     bindReasoningSelect(caseGenReasoningSelect, 'caseGenReasoning');
+    bindReasoningSelect(xmindCaseGenReasoningSelect, 'xmindCaseGenReasoning');
     bindReasoningSelect(caseFilterReasoningSelect, 'caseFilterReasoning');
     bindReasoningSelect(missingReminderReasoningSelect, 'missingReminderReasoning');
     bindReasoningSelect(caseLibraryGenReasoningSelect, 'caseLibraryGenReasoning');
@@ -215,6 +225,7 @@
     bindTemperatureInput(splitTemperatureEl, 'splitTemperature');
     bindTemperatureInput(casesTemperatureEl, 'casesTemperature');
     bindTemperatureInput(caseGenTemperatureEl, 'caseGenTemperature');
+    bindTemperatureInput(xmindCaseGenTemperatureEl, 'xmindCaseGenTemperature');
     bindTemperatureInput(caseFilterTemperatureEl, 'caseFilterTemperature');
     bindTemperatureInput(missingReminderTemperatureEl, 'missingReminderTemperature');
     bindTemperatureInput(caseLibraryGenTemperatureEl, 'caseLibraryGenTemperature');
@@ -256,6 +267,9 @@
     });
     if (testCaseGenModelBtn && testModel) testCaseGenModelBtn.addEventListener('click', function() {
       testModel(caseGenModelSelect ? caseGenModelSelect.value : '', caseGenAssignStatus);
+    });
+    if (testXmindCaseGenModelBtn && testModel) testXmindCaseGenModelBtn.addEventListener('click', function() {
+      testModel(xmindCaseGenModelSelect ? xmindCaseGenModelSelect.value : '', xmindCaseGenAssignStatus);
     });
     if (testCaseFilterModelBtn && testModel) testCaseFilterModelBtn.addEventListener('click', function() {
       testModel(caseFilterModelSelect ? caseFilterModelSelect.value : '', caseFilterAssignStatus);

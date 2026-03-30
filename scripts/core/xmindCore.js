@@ -7,7 +7,9 @@
     var JSZipCtor = (deps && deps.JSZip) || (typeof JSZip !== 'undefined' ? JSZip : null);
     var deriveCaseListFromText = deps && deps.deriveCaseListFromText ? deps.deriveCaseListFromText : function() { return []; };
 
-    function stringifyCaseField(value) {
+    function stringifyCaseField(value, options) {
+      var opts = options || {};
+      var arraySeparator = typeof opts.arraySeparator === 'string' ? opts.arraySeparator : ' / ';
       if (Array.isArray(value)) {
         var textArr = value
           .map(function(v) {
@@ -15,7 +17,7 @@
             return base.toString().trim();
           })
           .filter(Boolean);
-        return textArr.join(' / ');
+        return textArr.join(arraySeparator);
       }
       if (value && typeof value === 'object') {
         try {
@@ -28,9 +30,13 @@
       return value.toString().trim();
     }
 
-    function formatXmindNodeValue(value) {
-      var text = stringifyCaseField(value);
+    function formatXmindNodeValue(value, options) {
+      var opts = options || {};
+      var text = stringifyCaseField(value, opts);
       if (!text) return '-';
+      if (opts.preserveLineBreaks) {
+        return text.replace(/\r\n?/g, '\n').replace(/[ \t]*\n+[ \t]*/g, '\n').trim() || '-';
+      }
       return text.replace(/\s*\n+\s*/g, ' / ').trim() || '-';
     }
 
@@ -39,7 +45,10 @@
       var title = formatXmindNodeValue(item.title || item.case_title || item['用例标题'] || moduleName);
       var priority = formatXmindNodeValue(item.priority || item.level || item['优先级'] || 'P1');
       var preconditions = formatXmindNodeValue(item.preconditions || item.precondition || item['前提条件']);
-      var steps = formatXmindNodeValue(item.steps || item.actions || item['操作步骤']);
+      var steps = formatXmindNodeValue(item.steps || item.actions || item['操作步骤'], {
+        preserveLineBreaks: true,
+        arraySeparator: '\n',
+      });
       var expected = formatXmindNodeValue(item.expected || item.result || item['预期结果']);
       return [moduleName, title, priority, preconditions, steps, expected];
     }

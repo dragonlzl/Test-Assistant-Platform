@@ -165,10 +165,23 @@ test.describe('settings/models/features + ops api', () => {
     // feature assignments
     const createUserFeature = await ctx.post(`${apiBase}/api/features`, {
       headers: userHeaders,
-      data: { name: 'feature-user-' + Date.now(), config_json: { temperature: 0.2 } },
+      data: {
+        name: 'feature-user-' + Date.now(),
+        config_json: {
+          temperature: 0.2,
+          xmindCaseGenId: String(userModel.id),
+          xmindCaseGenPrompt: '基础提示词-XMind页',
+          xmindCaseGenReasoning: 'medium',
+          xmindCaseGenTemperature: 0.35,
+        },
+      },
     });
     expect(createUserFeature.status()).toBe(201);
     const userFeature = await createUserFeature.json();
+    expect(userFeature.config_json.xmindCaseGenId).toBe(String(userModel.id));
+    expect(userFeature.config_json.xmindCaseGenPrompt).toBe('基础提示词-XMind页');
+    expect(userFeature.config_json.xmindCaseGenReasoning).toBe('medium');
+    expect(userFeature.config_json.xmindCaseGenTemperature).toBe(0.35);
 
     const denyGlobalFeature = await ctx.post(`${apiBase}/api/features`, {
       headers: userHeaders,
@@ -178,18 +191,37 @@ test.describe('settings/models/features + ops api', () => {
 
     const createGlobalFeature = await ctx.post(`${apiBase}/api/features`, {
       headers: adminHeaders,
-      data: { name: 'feature-global-' + Date.now(), scope: 'global', config_json: { prompt: 'p' } },
+      data: {
+        name: 'feature-global-' + Date.now(),
+        scope: 'global',
+        config_json: {
+          prompt: 'p',
+          xmindCaseGenPrompt: 'global-xmind-prompt',
+        },
+      },
     });
     expect(createGlobalFeature.status()).toBe(201);
     const globalFeature = await createGlobalFeature.json();
 
     const updateUserFeature = await ctx.patch(`${apiBase}/api/features/${userFeature.id}`, {
       headers: userHeaders,
-      data: { config_json: { temperature: 0.3 } },
+      data: {
+        config_json: {
+          temperature: 0.3,
+          xmindCaseGenId: String(globalModel.id),
+          xmindCaseGenPrompt: '更新后的 XMind 提示词',
+          xmindCaseGenReasoning: 'high',
+          xmindCaseGenTemperature: 0.55,
+        },
+      },
     });
     expect(updateUserFeature.status()).toBe(200);
     const updatedFeature = await updateUserFeature.json();
     expect(updatedFeature.config_json.temperature).toBe(0.3);
+    expect(updatedFeature.config_json.xmindCaseGenId).toBe(String(globalModel.id));
+    expect(updatedFeature.config_json.xmindCaseGenPrompt).toBe('更新后的 XMind 提示词');
+    expect(updatedFeature.config_json.xmindCaseGenReasoning).toBe('high');
+    expect(updatedFeature.config_json.xmindCaseGenTemperature).toBe(0.55);
 
     const denyUpdateGlobalFeature = await ctx.patch(`${apiBase}/api/features/${globalFeature.id}`, {
       headers: userHeaders,

@@ -3393,6 +3393,26 @@
         mode: 'modules',
         treeSourceSignature: '',
         hasModuleSkeleton: false,
+        hasImportedBaseline: false,
+        rootSnapshotId: '',
+        rootSnapshots: [],
+        root: {
+          lastAction: '',
+          running: false,
+          snapshotId: '',
+          status: '',
+          error: '',
+          updatedAt: 0,
+        },
+        summaryCollapsed: false,
+        prep: {
+          step: 1,
+          requirementMode: '',
+          requirementSupplement: '',
+          manualRequirementBlocks: [],
+          caseImportMode: '',
+          completed: false,
+        },
         nextSnapshotId: 1,
         snapshots: [],
         modules: {},
@@ -3422,6 +3442,9 @@
       triggerUpdateFlowStatus();
       requestPersistWorkflowStateNow();
     }
+
+    api.resetWorkflowData = resetWorkflowData;
+    api.interruptActiveExecutions = interruptActiveExecutions;
 
     function guardRequirementImport() {
       var hasRunningTask = false;
@@ -3621,7 +3644,10 @@
         escapeHtmlPreserve,
         formatCompactTimestamp,
         callModelWithConfig,
+        callModelWithContent,
         getAssignedModel,
+        getReasoningForType,
+        getTemperatureForType,
         updateModelTiming,
         downloadBlob,
         parseXmindFile,

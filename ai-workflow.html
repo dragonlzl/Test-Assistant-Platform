@@ -1011,14 +1011,14 @@
       <div class="xmind-casegen-shell xmind-casegen-drawer-shell">
         <div class="xmind-casegen-toolbar xmind-casegen-toolbar-bank" id="xmindCaseGenToolbar" hidden aria-hidden="true">
           <div class="xmind-casegen-actions">
-            <button class="secondary" id="xmindCaseGenSummaryBtn" type="button" aria-expanded="false" title="查看当前需求与参考用例摘要">查看摘要</button>
+            <button class="secondary" id="xmindCaseGenSummaryBtn" type="button" aria-expanded="false" title="打开生成前置准备">生成前置准备</button>
             <button class="secondary" id="xmindCaseGenImportRequirementBtn" type="button" title="导入需求">导入需求</button>
             <button class="secondary" id="xmindCaseGenImportCasesBtn" type="button" title="导入参考用例">导入用例</button>
             <button class="secondary case-library-import-btn" id="xmindCaseGenSelectCasesBtn" type="button" title="从用例库选择参考用例">从用例库选择</button>
-            <button class="secondary" id="xmindCaseGenGenerateModulesBtn" type="button" title="仅生成模块骨架">仅生成模块</button>
-            <button class="secondary" id="xmindCaseGenGenerateFullBtn" type="button" title="生成完整用例">生成完整用例</button>
+            <button class="secondary" id="xmindCaseGenGenerateModulesBtn" type="button" title="生成全量模块">生成全量模块</button>
+            <button class="secondary" id="xmindCaseGenGenerateFullBtn" type="button" title="生成全量用例">生成全量用例</button>
             <button class="secondary" id="xmindCaseGenExportBtn" type="button" title="导出当前XMind">导出当前XMind</button>
-            <button class="secondary" id="xmindCaseGenPromptBtn" type="button" title="设置生成要求">生成要求</button>
+            <button class="secondary" id="xmindCaseGenPromptBtn" type="button" title="打开生成选项">生成选项</button>
           </div>
           <p class="status" id="xmindCaseGenStatus"></p>
         </div>
@@ -1029,31 +1029,15 @@
           <div class="xmind-casegen-summary-dialog" id="xmindCaseGenSummaryDialog" role="dialog" aria-modal="true" aria-labelledby="xmindCaseGenSummaryDialogTitle">
             <div class="xmind-casegen-summary-dialog-head">
               <div class="xmind-casegen-summary-dialog-copy">
-                <strong class="xmind-casegen-summary-dialog-title" id="xmindCaseGenSummaryDialogTitle">当前需求 / 参考用例摘要</strong>
-                <p class="hint xmind-casegen-summary-dialog-desc">这部分内容仅作为生成上下文和去重依据，不会并入当前 XMind 主树。</p>
+                <strong class="xmind-casegen-summary-dialog-title" id="xmindCaseGenSummaryDialogTitle">生成前置准备</strong>
+                <p class="hint xmind-casegen-summary-dialog-desc">按 3 步完成需求导入、参考用例选择与生成选项配置，然后回到画布触发生成。</p>
               </div>
-              <button class="link-toggle" id="xmindCaseGenSummaryCloseBtn" type="button">关闭</button>
-            </div>
-            <div class="xmind-casegen-summary-dialog-body" id="xmindCaseGenSummaryDialogBody">
-              <div class="xmind-casegen-summary-grid">
-                <div class="xmind-casegen-summary-card">
-                  <div class="xmind-casegen-summary-head">
-                    <span class="xmind-casegen-summary-label">当前需求</span>
-                    <span class="badge" id="xmindCaseGenRequirementBadge">未导入</span>
-                  </div>
-                  <strong class="xmind-casegen-summary-title" id="xmindCaseGenRequirementSummary">未导入需求</strong>
-                  <p class="hint xmind-casegen-summary-meta" id="xmindCaseGenRequirementMeta">请先导入或填写需求，再生成模块骨架。</p>
-                </div>
-                <div class="xmind-casegen-summary-card">
-                  <div class="xmind-casegen-summary-head">
-                    <span class="xmind-casegen-summary-label">参考用例</span>
-                    <span class="badge" id="xmindCaseGenCasesBadge">0 份</span>
-                  </div>
-                  <strong class="xmind-casegen-summary-title" id="xmindCaseGenCasesSummary">未导入参考用例</strong>
-                  <p class="hint xmind-casegen-summary-meta" id="xmindCaseGenCasesMeta">导入的用例只参与上下文与去重，不会并入当前 XMind 主树。</p>
-                </div>
+              <div class="xmind-casegen-summary-dialog-actions">
+                <button class="secondary" id="xmindCaseGenPrepResetBtn" type="button">重置前置准备</button>
+                <button class="link-toggle" id="xmindCaseGenSummaryCloseBtn" type="button">关闭</button>
               </div>
             </div>
+            <div class="xmind-casegen-summary-dialog-body" id="xmindCaseGenSummaryDialogBody"></div>
           </div>
         </div>
       </div>

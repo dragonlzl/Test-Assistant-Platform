@@ -40,6 +40,7 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
   const modelRemoteId = opts.modelRemoteId || 901;
   const featureId = opts.featureId || 5001;
   const caseGenPrompt = opts.caseGenPrompt || '请仅输出 JSON 数组';
+  const xmindCaseGenPrompt = opts.xmindCaseGenPrompt || '请仅输出 XMind JSON';
   const modelId = String(modelRemoteId);
 
   await page.addInitScript((tk) => {
@@ -86,6 +87,8 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
         config_json: {
           caseGenId: modelId,
           caseGenPrompt: caseGenPrompt,
+          xmindCaseGenId: modelId,
+          xmindCaseGenPrompt: xmindCaseGenPrompt,
         },
       }]);
     }
@@ -201,16 +204,36 @@ async function installCaseGenPromptCapture(page) {
         prompt: promptText,
         user: userText,
       });
-      const match = userText.match(/"module":"([^"]+)"/);
+      const match = userText.match(/"targetModule"\s*:\s*"([^"]+)"/) || userText.match(/"module":"([^"]+)"/);
       const moduleName = match && match[1] ? match[1] : '模块';
-      const content = JSON.stringify([{
-        module: moduleName,
-        title: moduleName + '-用例',
-        priority: 'P1',
-        preconditions: '前置条件',
-        steps: ['步骤1'],
-        expected: '预期结果',
-      }]);
+      const isXmind = promptText.indexOf('operation_contract') !== -1
+        || promptText.indexOf('XMind 用例生成页面') !== -1
+        || promptText.indexOf('{modules:[') !== -1;
+      const content = isXmind
+        ? JSON.stringify({
+            modules: [{
+              module: moduleName,
+              key_scenarios: ['账号登录'],
+              test_points: ['账号密码'],
+              coupled_modules: ['用户中心'],
+              cases: [{
+                module: moduleName,
+                title: moduleName + '-用例',
+                priority: 'P1',
+                preconditions: '前置条件',
+                steps: ['1、步骤一'],
+                expected: '预期结果',
+              }],
+            }],
+          })
+        : JSON.stringify([{
+            module: moduleName,
+            title: moduleName + '-用例',
+            priority: 'P1',
+            preconditions: '前置条件',
+            steps: ['步骤1'],
+            expected: '预期结果',
+          }]);
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           resolve({
@@ -733,41 +756,98 @@ test.describe('用例生成-设置项与跳转', () => {
     expect(box.y).toBeLessThan(720);
   });
 
-  test('XMind 用例生成抽屉复用同一套生成要求拼装', async ({ page }) => {
+  test('XMind 用例生成抽屉使用专属指派与提示词拼装', async ({ page }) => {
     const token = 'token-casegen-settings-xmind';
     const user = { id: 8, username: 'demo_user_8', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
-      caseGenPrompt: '基础提示词-XMind页',
+      caseGenPrompt: '普通用例提示词',
+      xmindCaseGenPrompt: '基础提示词-XMind页',
     });
 
-    await gotoIndex(page);
-    await seedCaseGenModules(page, [
-      { module: '登录模块', key_scenarios: ['账号登录'], test_points: ['账号密码'], coupled_modules: ['用户中心'] },
-    ]);
-    await waitCaseGenModelAssigned(page, mockInfo.modelId);
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/ai-workflow.html?tab=casesgen&_=' + Date.now().toString(36));
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await page.waitForFunction(() => {
+      const api = window.app && window.app.mindElixirCoreApi ? window.app.mindElixirCoreApi : null;
+      let globalObj = null;
+      if (typeof MindElixir !== 'undefined') globalObj = MindElixir;
+      else if (window && window.MindElixir) globalObj = window.MindElixir;
+      const hasCtor = typeof globalObj === 'function' || Boolean(globalObj && typeof globalObj.default === 'function');
+      return Boolean(api && typeof api.renderMindMap === 'function' && hasCtor);
+    }, {}, { timeout: 20000 });
+    await page.waitForFunction((modelId) => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      return Boolean(
+        state &&
+        state.assignments &&
+        String(state.assignments.xmindCaseGenId || '') === String(modelId || '')
+      );
+    }, mockInfo.modelId, { timeout: 10000 });
 
-    await page.click('.tab-group-btn[data-group="ai"]');
-    await page.click('[data-tab-btn="casesgen"]');
     await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
     await page.click('#caseGenModulesTabBtn');
     await page.click('#xmindCaseGenOpenBtn');
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await page.waitForTimeout(500);
+    await page.waitForFunction(() => {
+      const controls = document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]');
+      const debug = window.app && window.app.__xmindCasegenDebug ? window.app.__xmindCasegenDebug : null;
+      if (controls && controls.getBoundingClientRect && controls.getBoundingClientRect().width > 0) return true;
+      return Boolean(debug && (debug.phase === 'render-success' || /error/.test(String(debug.phase || ''))));
+    }, {}, { timeout: 15000 });
+    const renderInfo = await page.evaluate(() => {
+      const controls = document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]');
+      const rect = controls && controls.getBoundingClientRect ? controls.getBoundingClientRect() : null;
+      return {
+        debug: window.app && window.app.__xmindCasegenDebug ? window.app.__xmindCasegenDebug : null,
+        hasControls: Boolean(rect && rect.width > 0 && rect.height > 0),
+        containerText: document.getElementById('xmindCaseGenMindContainer')
+          ? String(document.getElementById('xmindCaseGenMindContainer').textContent || '').trim()
+          : '',
+      };
+    });
+    expect(renderInfo.debug && renderInfo.debug.phase, JSON.stringify(renderInfo)).toBe('render-success');
+    expect(renderInfo.hasControls, JSON.stringify(renderInfo)).toBeTruthy();
 
-    await page.click('#xmindCaseGenPromptBtn');
-    await expect(page.locator('#caseGenActionDrawer')).toHaveClass(/open/);
-    await page.fill('#caseGenCustomRequirement', 'XMind 页面专用要求');
-    await page.check('#caseGenNeedBoundary');
-    await page.check('#caseGenNeedSpecial');
-    await page.check('#caseGenSpecialWeakNetwork');
-    await confirmCaseGenActionDrawer(page);
+    await page.evaluate(() => {
+      const rawTextEl = document.getElementById('rawText');
+      if (rawTextEl) {
+        rawTextEl.removeAttribute('readonly');
+        rawTextEl.value = '这是 XMind 专属提示词拼装测试需求。';
+        rawTextEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (window.app && window.app.state) {
+        window.app.state.requirementLabel = 'XMind提示词需求';
+        window.app.state.requirementLabelSource = 'ui-test';
+        window.app.state.xmindCaseGen = window.app.state.xmindCaseGen || {};
+        window.app.state.xmindCaseGen.prep = {
+          step: 3,
+          requirementMode: 'document',
+          requirementSupplement: '补充说明',
+          manualRequirementBlocks: [],
+          caseImportMode: 'skip',
+          completed: true,
+        };
+      }
+    });
+
+    await page.evaluate(() => {
+      const btn = document.getElementById('xmindCaseGenPromptBtn');
+      if (btn && typeof btn.click === 'function') btn.click();
+    });
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.fill('#xmindCaseGenOptionCustomRequirement', 'XMind 页面专用要求');
+    await page.check('input[data-casegen-setting="needBoundary"]');
+    await page.check('input[data-casegen-setting="needSpecial"]');
+    await page.check('input[data-casegen-setting="specialWeakNetwork"]');
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
 
     await installCaseGenPromptCapture(page);
-    await page.click('#xmindCaseGenGenerateModulesBtn');
-    await page.waitForFunction(() => {
-      const state = window.app && window.app.state ? window.app.state : null;
-      return state && Array.isArray(state.caseGenModules) && state.caseGenModules.length === 1;
-    }, {}, { timeout: 8000 });
-    await clickXmindNodeQuickAction(page, '登录');
+    await page.evaluate(() => {
+      const btn = document.getElementById('xmindCaseGenGenerateFullBtn');
+      if (btn && typeof btn.click === 'function') btn.click();
+    });
 
     await page.waitForFunction(() => {
       return Array.isArray(window.__casegenPromptSnapshots) && window.__casegenPromptSnapshots.length > 0;
@@ -782,5 +862,9 @@ test.describe('用例生成-设置项与跳转', () => {
     expect(String(lastPrompt.prompt || '')).toContain('用户附加要求：XMind 页面专用要求');
     expect(String(lastPrompt.prompt || '')).toContain('生成时需要考虑边界场景');
     expect(String(lastPrompt.prompt || '')).toContain('特殊场景需包含弱网环境');
+    expect(String(lastPrompt.prompt || '')).toContain('用例标题 title 必须简洁明了');
+    expect(String(lastPrompt.prompt || '')).toContain('steps 必须是数组');
+    expect(String(lastPrompt.prompt || '')).toContain('1、xxx');
+    expect(String(lastPrompt.prompt || '')).not.toContain('普通用例提示词');
   });
 });

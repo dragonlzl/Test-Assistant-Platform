@@ -17,6 +17,7 @@
       'memoPadPanel', 'memoPadToggle', 'memoTabLayer', 'memoTabList', 'memoTabAddBtn', 'memoPadBody', 'memoTabProgress',
       'cleanStatus', 'compareStatus', 'compareCaseAssistantStatus',
       'splitStatus', 'casesCoverageStatus', 'caseGenStatus', 'autoWorkflowStatus', 'casesModuleProgress', 'exportCaseGen', 'exportCaseGenXmind',
+      'xmindCaseGenModelSelect', 'xmindCaseGenPrompt', 'xmindCaseGenTemperature', 'xmindCaseGenReasoning', 'testXmindCaseGenModel', 'xmindCaseGenAssignStatus',
       'toSplitFromCaseGen', 'appendToExistingCases', 'appendTargetSelect', 'transferSelectedToExec', 'saveRawDebugBtn', 'importRawDebugBtn', 'saveCleanDebugBtn', 'importCleanDebugBtn', 'saveSplitDebugBtn',
       'importSplitDebugBtn', 'saveCaseDebugBtn', 'importCaseDebugBtn', 'scrollTopBtn', 'scrollBottomBtn', 'currentPath', 'currentPathText', 'xmindStructureToggle',
       'xmindStructureCard', 'caseFileInput', 'caseDropZone', 'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint',

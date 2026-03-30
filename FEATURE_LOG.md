@@ -19,6 +19,268 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 已有模块补全用例为已有用例模块保留独立虚线框
+- 功能描述：收口 XMind 用例生成抽屉中根节点 `已有模块补全用例` 的增量高亮语义。现在当模块原本已经有用例，再通过根节点补全出新的缺漏用例时，新增的那一批仍会像追加生成一样保留独立虚线框高亮；同时高亮 token 改为带模块标识的前缀，避免不同模块的本轮新增区域在极端情况下串组为同一个虚线框。
+- 操作方式：
+  - 在 XMind 用例生成抽屉中，先让多个模块已经存在旧用例；
+  - 右键根节点执行 `已有模块补全用例`；
+  - 新补出的用例会直接追加在各自模块旧用例后方；
+  - 若这些新增区域当前处于可视区内，会分别显示各自独立的“本轮追加用例”虚线框。
+- 使用效果：
+  - 已有旧用例的模块在根节点补全后，用户可以直观看到“哪些是这次新补出来的用例”，不再和原有内容混在一起；
+  - 多个模块同时补出新用例时，虚线框会按模块分组，不会误合并成一个高亮区域；
+  - 在点击 `全览` 后，可稳定看到各模块新增区域的独立虚线框效果。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：将模块追加高亮 token 收口为带模块标识的稳定前缀，降低多模块高亮串组风险；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增根节点 `已有模块补全用例` 场景回归，验证已有用例模块补全后仍会渲染独立虚线框；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有根节点 `已有模块补全用例` 提示词契约、共享 `caseGenResults` 真源、XMind 节点高亮渲染层与 `全览` 视图能力；本次仅增强高亮分组稳定性并补足 UI 回归覆盖。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（8/8 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-30 为根节点 `已有模块补全用例` 增加已有用例模块的独立虚线框回归保障，并将高亮 token 收口为模块级稳定前缀。
+
+- 功能名称：XMind 操作步骤节点保留多行展示
+- 功能描述：修正 XMind 用例生成抽屉和结构视图中“操作步骤”节点的文本格式化方式。现在步骤数组会按原顺序保留为多行展示，不再被统一拼接成带 ` / ` 的单行文本；同时去掉了 MindElixir 构树时对已格式化节点的二次重写，避免步骤节点再次被打回斜杠展示。
+- 操作方式：
+  - 在 XMind 用例生成抽屉中生成或查看任意带多步骤的用例；
+  - 展开到 `操作步骤` 节点时，每个步骤会按 `1、xxx`、`2、xxx` 的形式自然换行展示；
+  - 刷新页面、重新打开抽屉，或从共享结果导出当前 XMind 时，步骤节点都会继续保持多行格式。
+- 使用效果：
+  - `操作步骤` 节点不再出现 `1、xxx / 2、xxx` 这类被斜杠硬拼接的阅读噪音；
+  - 步骤展示和当前 XMind 专属提示词中要求的编号数组格式保持一致，更容易核对生成内容；
+  - 修复同时覆盖 XMind 结构视图构树链路，避免后续在其他复用场景里再次被二次格式化回斜杠样式。
+- 新增内容/接口/组件：
+  - `scripts/core/xmindCore.js`：为 XMind 节点格式化增加可选“保留换行”参数，步骤字段按换行拼装；
+  - `scripts/core/mindElixirCore.js`：同步支持多行步骤格式，并移除对已格式化字段的二次斜杠化处理；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充断言，验证 XMind 步骤节点不再包含 ` / `；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 XMind 节点构树、共享结果真源和导出链路，仅在前端展示层为步骤字段增加多行格式化能力，没有改动生成数据结构和后端接口。
+- 测试与验证：
+  - `node --check scripts/core/xmindCore.js`（通过）
+  - `node --check scripts/core/mindElixirCore.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（7/7 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-30 修正 XMind `操作步骤` 节点的斜杠拼接展示，收口为保留多行编号步骤。
+
+- 功能名称：XMind 根节点重新生成全量用例时先清空旧 AI 层
+- 功能描述：收口 XMind 用例生成抽屉中根节点 `重新生成全量用例` 的执行语义。现在当根节点已有 AI 模块/用例时，点击 `重新生成全量用例` 会先把当前整层 AI 模块从 XMind 画布中收起，而不是只隐藏旧用例；同时，这次重生成发给模型的上下文不再包含旧 AI 模块和旧 AI 用例，只保留非 AI 层的可见上下文，再重新按需求全量生成模块与用例。
+- 操作方式：
+  - 在 XMind 用例生成抽屉中，先通过根节点生成出一批 AI 模块和用例；
+  - 右键根节点点击 `重新生成全量用例`；
+  - 触发后，当前 AI 模块节点会先整体从画布中消失，只保留根节点生成中状态；
+  - 模型返回后，新的一整套模块与用例重新展示；若失败，则自动恢复原有 AI 模块层和结果。
+- 使用效果：
+  - 根节点 `重新生成全量用例` 的表现与“抹掉旧结果后重生”一致，不会再让旧模块骨架留在画布上干扰判断；
+  - 重生成时不再把旧 AI 模块/用例继续拼进 prompt，能减少无效上下文和请求体体积；
+  - 对你提到的 `/api/model-proxy` 503，这次前端已把旧 AI 层从重生成上下文里排除，理论上能降低因上下文膨胀带来的失败概率；但这部分我无法在本地复现真实上游服务，因此未对线上模型服务可用性做实机验证。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：将根节点 `重新生成全量用例` 也纳入“重建 AI 层”语义，运行时先隐藏旧 AI 模块层，并在构造模型上下文时排除旧 AI 层；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充根节点 `重新生成全量用例` 的 UI 断言，验证旧模块会先消失，再重新展示新模块与用例；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 root snapshot/rollback、XMind 画布渲染、共享结果真源与根节点动作编排；本次仅把 `重新生成全量用例` 收口到与 `重新生成模块` 一致的前端运行态语义，并复用现有 `buildVisibleModuleContext({ includeAiLayer: false })` 作为重生上下文。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（7/7 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-30 将根节点 `重新生成全量用例` 的执行收口为“先隐藏整层旧 AI 模块，再排除旧 AI 上下文重生全量模块+用例”。
+
+- 功能名称：XMind 根节点重新生成模块时先清空旧模块层
+- 功能描述：收口 XMind 用例生成抽屉中根节点 `重新生成模块` 的执行语义。现在点击后不会只隐藏旧 AI 用例，而是会先将当前 AI 模块层整体从 XMind 画布上收起，只保留根节点生成中的状态；待模型返回后，再用新生成的模块骨架整体替换旧模块层。若本轮失败，则恢复原有模块层。
+- 操作方式：
+  - 在 XMind 用例生成抽屉中，先通过根节点生成出一批 AI 模块或完整用例；
+  - 右键根节点点击 `重新生成模块`；
+  - 触发后，当前 AI 模块节点会先从画布中消失，只保留根节点生成中状态；
+  - 生成成功后，新的模块骨架重新显示；若失败，则自动恢复原有模块层和结果。
+- 使用效果：
+  - 根节点 `重新生成模块` 的表现更符合“抹掉旧模块后重新执行”的预期；
+  - 重生成过程中不会让旧模块骨架继续留在画布上造成误解；
+  - 失败兜底仍保留原模块层，不会因为本轮失败丢失已有结果。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：在根节点运行态增加临时隐藏 AI 模块层的前端控制，只在 `重新生成模块` 执行期间生效；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充根节点 `重新生成模块` 的 UI 断言，验证触发后旧模块会先从画布消失，再展示新模块骨架；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 root snapshot/rollback、XMind 画布渲染、共享结果真源和根节点动作编排；本次仅补充前端运行态下的 AI 模块层可见性控制，不改模型调用与提交链路。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（7/7 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-30 将根节点 `重新生成模块` 的运行态表现从“只隐藏旧用例”收口为“先隐藏整个旧 AI 模块层，再重新生成模块骨架”。
+
+- 功能名称：XMind 空模块禁用追加生成
+- 功能描述：收口 XMind 用例生成抽屉中模块节点的动作矩阵。当模块当前没有任何可见用例时，右键菜单中的 `追加生成` 不再可点击，避免用户在“没有现成用例可追加”的前提下误触补全动作；此时仍保留 `生成全量用例` 作为主入口。
+- 操作方式：
+  - 在 XMind 用例生成抽屉中，选中一个当前还没有任何用例子节点的模块；
+  - 右键打开模块菜单时，仍会看到 `生成全量用例`、`追加生成`、`放弃本次生成` 三个动作；
+  - 若该模块当前没有任何可见用例，`追加生成` 会直接置灰不可点，`放弃本次生成` 仍按现有快照规则决定是否可点；
+  - 当该模块先生成出用例后，再次打开右键菜单，`追加生成` 会恢复可点。
+- 使用效果：
+  - 避免在空模块上误触 `追加生成`，让“先生成一版，再补充追加”的语义更清晰；
+  - `+AI` 默认动作在空模块场景下保持为 `生成全量用例`，不受影响；
+  - 已有用例后的追加生成、回滚和根节点并发规则保持原样。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：在现有 `getModuleActions()` 里复用可见用例判断，新增“无可见用例时禁用模块追加生成”的前端动作判定；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充空模块右键菜单禁用 `追加生成` 的 UI 断言，并同步更新相关并发用例预期与右键 helper 稳定性；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 `getVisibleCasesForModuleEntry()`、模块节点动作矩阵、`+AI` 默认动作和共享结果真源；本次仅在前端动作可执行判定中增加一层已有用例校验。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（7/7 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-30 新增空模块禁用 `追加生成` 的动作判定，避免模块在没有现成用例时误走追加流程。
+
+- 功能名称：XMind 根节点补全模块+用例的多模块追加高亮修复
+- 功能描述：修复 XMind 用例生成抽屉中，根节点执行 `补全模块+用例` 且一次补出多个中文模块时，新增区域的“本轮追加用例”虚线高亮会错误合并成一组的问题。现在每个新补出的模块都会保留各自独立的追加高亮 token，避免多个模块被同一个虚线框错误圈选。
+- 操作方式：
+  - 在 XMind 用例生成抽屉中，先让根节点处于可执行 `补全模块+用例` 的状态；
+  - 对根节点执行 `补全模块+用例`，当本轮返回多个新增模块且每个模块都带有新增用例时；
+  - 画布会按模块分别记录本轮追加高亮，当前视口内可见的新增区域会各自显示独立的“本轮追加用例 · N 条”虚线框；
+  - 若某个新增区域当前不在视口中，则对应虚线框仍可不显示，但其高亮分组不会与其他模块合并。
+- 使用效果：
+  - 根节点一次补出多个中文模块时，不再出现“两个模块共用一个追加虚线框”的误导性展示；
+  - 每个新增模块的追加高亮分组彼此独立，后续滚动或重新渲染时不会因为 token 冲突被错误并组；
+  - 现有模块级追加高亮、回滚和共享结果同步逻辑保持不变。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：将模块追加高亮 token 的生成改为本地唯一 ID，避免中文模块名在旧 token 构造中被清洗后发生碰撞；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充“根节点补全模块+用例一次返回两个中文模块，各自保留独立追加高亮分组”的 UI 回归，并同步收紧 `+AI` 快捷按钮测试 helper；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 XMind 追加高亮绘制层、`caseGenModules` / `caseGenResults` 共享真源、现有根节点动作编排和 `mindElixir` 渲染钩子；本次仅修复前端高亮分组 token 冲突和对应 UI 回归。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（7/7 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-30 修复根节点 `补全模块+用例` 在多个中文新增模块场景下的追加高亮 token 冲突，避免多个模块被合并到同一组虚线高亮中。
+
+- 功能名称：XMind 根节点重新生成模块
+- 功能描述：在 XMind 用例生成抽屉的根节点菜单中新增 `重新生成模块`。该动作用于在已有 AI 模块层的基础上重新生成模块骨架：点击后会先将当前 AI 模块下已生成的 AI 用例从树上收起，再按“重生成模块”语义重新请求模块拆分，生成完成后用新的模块骨架替换当前 AI 模块层；若失败，则恢复原有 AI 用例显示。
+- 操作方式：
+  - 根节点已有 AI 模块后，右键菜单会新增 `重新生成模块`；
+  - 点击该动作后，当前 AI 模块下已生成的 AI 用例会先从 XMind 画布中隐藏，再显示根节点生成中的状态；
+  - 模型返回后，旧 AI 模块层会被新的模块骨架整体替换，仅保留模块节点，不保留旧 AI 用例；
+  - 若本轮重生成失败，则恢复原有模块下的 AI 用例显示。
+- 使用效果：
+  - 用户可以在不走“补全模块”语义的情况下，直接对根节点做一次完整的模块重生；
+  - 重生成模块前会先清掉旧 AI 用例的可视干扰，避免模块重生过程与旧结果混在一起；
+  - 导入参考用例基线仍保持不变，重生成模块只作用于 AI 生成层。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增根节点动作 `root-regenerate-modules`，扩展对应的操作契约、根节点动作矩阵、运行前旧 AI 用例收起、重生成模块的上下文组装与提交逻辑；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增根节点 `重新生成模块` 菜单断言，并覆盖“点击后旧 AI 用例先消失、完成后仅保留模块骨架”的 UI 回归；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 XMind 专属模型调用、`caseGenModules` / `caseGenResults` 真源、现有 root snapshot/rollback 和共享导出链路；仅在根节点动作编排中新增一种前端动作语义。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（6/6 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+- 更新记录：
+  - 2026-03-30 新增根节点 `重新生成模块`，并将其交互定义为“先收起当前 AI 用例，再重生成模块骨架”。
+
+- 功能名称：XMind 重新生成全量用例语义收口
+- 功能描述：将 XMind 抽屉中的“生成全量用例”在已有 AI 结果的场景下明确改为“重新生成全量用例”。点击后会先在当前作用范围内隐藏已有 AI 用例，再进入新的生成流程，避免用户误以为是“在旧结果基础上继续补充”；成功后用新结果替换，失败时恢复原有结果显示。
+- 操作方式：
+  - 根节点在已经存在 AI 用例时，右键菜单中的 `生成全量用例` 会显示为 `重新生成全量用例`；
+  - 模块节点在该模块已经存在 AI 用例时，右键菜单中的 `生成全量用例` 会显示为 `重新生成全量用例`；
+  - 点击 `重新生成全量用例` 后，当前作用范围内已有的 AI 用例会先从 XMind 树上隐藏，再展示生成中的状态，生成完成后直接替换为新结果；
+  - 若生成失败，旧结果会恢复显示，不会因为本轮重生成失败而永久丢失。
+- 使用效果：
+  - 用户能明确区分“初次生成”和“覆盖旧结果重生”两类动作；
+  - 重生成时树内表现更自然，不会出现旧用例与新生成过程同时并列造成误解；
+  - 失败兜底仍保留原结果，避免误操作导致已有结果瞬时丢失。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增全量用例动作动态文案、运行期旧 AI 用例隐藏逻辑，以及成功/失败后的显示恢复；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增根节点/模块节点“重新生成全量用例”标签与“点击后先隐藏旧结果再生成”的 UI 断言；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 `caseGenModules` / `caseGenResults` 真源、现有快照/回滚链路、现有根节点/模块节点动作 ID 与模型调用逻辑；仅收口文案和运行态显示，不改后端与数据结构。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（6/6 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+- 更新记录：
+  - 2026-03-30 在已有 AI 用例时，将根节点/模块节点“生成全量用例”改为“重新生成全量用例”，并将交互改为先隐藏旧结果再生成。
+
+- 功能名称：XMind 用例生成并发规则优化
+- 功能描述：将 XMind 用例生成从“任一任务运行即全局阻塞”调整为“按动作影响面判定冲突”。现在模块与模块之间的独立用例生成可并发执行；根节点的“补全模块 / 补全模块+用例”这类只新增模块或仅给新增模块出用例的动作，也可与现有模块的独立用例生成并行。会覆盖或补全现有模块用例的动作，如 `生成全量用例`、`已有模块补全用例`、`追加生成全部模块+用例`，仍会在运行期间阻塞相关模块操作，避免相互覆盖结果。
+- 操作方式：
+  - 在 XMind 用例生成抽屉中，对不同模块分别点击 `+AI` 或右键执行 `生成全量用例` / `追加生成`，可并行触发多个模块的独立生成；
+  - 当某个模块正在生成时，根节点右键菜单里仍可继续执行 `补全模块`、`补全模块+用例` 这类不影响现有模块结果的动作；
+  - 当根节点正在执行 `追加生成全部模块+用例`、`生成全量用例`、`已有模块补全用例` 等会作用于现有模块用例的动作时，模块节点的用例生成动作会自动置灰；
+  - 同一模块在自身生成进行中时，仍保持串行，不允许重复触发该模块的另一轮用例生成。
+- 使用效果：
+  - 两个无依赖模块现在可以各自独立生成，不再因为另一个模块运行中而被整页锁死；
+  - 根节点补模块类动作可以与已有模块的独立生成并行执行，整体等待时间更短；
+  - 对会覆盖或补齐现有模块用例的动作继续保留阻塞，避免出现根节点批量生成与模块局部生成互相覆盖的结果竞争。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增动作作用面/冲突矩阵 helper，统一收口根节点与模块节点的可执行判定；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增“模块并发生成 + 根节点补模块并行”和“根节点追加全部期间阻塞模块生成”两条 UI 回归；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 `state.xmindCaseGen.root/modules` 运行态、`caseGenModules` / `caseGenResults` 共享结果真源、现有节点右键菜单与 `+AI` 入口；仅替换动作禁用判断，不改模型调用链路和结果提交接口。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（6/6 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+- 更新记录：
+  - 2026-03-30 新增按动作影响面区分的并发规则，放开模块级独立生成与根节点补模块类动作的并行执行，同时保留对全量生成/追加全部等冲突动作的阻塞。
+
+- 功能名称：XMind 用例生成规则重构
+- 功能描述：将 XMind 用例生成从“复用普通用例生成链路”重构为“XMind 专属模型指派 + 专属基础提示词 + 专属生成编排”，同时保留共享结果真源、XMind 渲染、导出、去重设置和工作流持久化。前置准备弹窗固定为 3 步：`需求导入` → `是否导入用例` → `生成选项`；根节点和模块节点动作矩阵按最新规则收口为全量生成、补全模块、补全模块+用例、已有模块补全用例、追加生成、放弃本次生成等操作，输出统一归一化到 XMind 专属 JSON schema，再提交回现有 `caseGenModules` / `caseGenResults`。
+- 操作方式：
+  - 进入“AI 功能 → 用例生成 → XMind 用例生成抽屉”，点击工具栏中的 `生成前置准备`；
+  - 第 1 步选择 `导入需求文档` 或 `填写需求描述`：导文档时可额外填写“需求补充”，手填描述支持文本 + 图片块；
+  - 第 2 步选择是否导入参考用例：不导入时，XMind 主树只有 AI 生成层；导入时，参考用例仅作为 XMind 主树基线显示和补全判断，不写入 `caseGenResults`；
+  - 第 3 步配置生成选项：继续复用全局额外要求、边界、移动设备、特殊场景等设置项，确认后仅标记前置准备完成，不自动生成；
+  - 根节点右键或 `+AI` 可执行当前第一可用动作：`生成全量用例`、`生成全量模块`、`已有模块补全用例`、`补全模块`、`补全模块+用例`、`追加生成全部模块+用例`、`放弃本次生成`；
+  - 模块节点固定显示 `生成全量用例`、`追加生成`、`放弃本次生成`；默认 `+AI` 在无 AI 用例时走全量生成，有 AI 用例时走追加生成；
+  - 追加生成时保留原结果，在新增区域以虚线框和“本轮追加用例”标签标识本轮新增内容；放弃本次生成时按根节点或模块节点最近一次快照回滚。
+- 使用效果：
+  - XMind 页不再混用普通用例生成 prompt，而是始终携带 XMind 专属基础约束，并额外拼装共享设置项和操作契约；
+  - 用例标题被统一约束为简洁标题，`steps` 最终落库稳定为带中文序号的数组元素，如 `1、进入页面`；
+  - 导入参考用例后，XMind 页面可直接以其作为可视基线做补全判断，但不会污染共享 AI 生成结果；
+  - 根节点和模块节点的动作矩阵、回滚入口、追加高亮和刷新恢复都与共享结果保持同步，不再出现“抽屉里能看见、旧页看不见”或“根节点回滚无效”的分叉状态。
+- 新增内容/接口/组件：
+  - 指派与默认提示词：
+    - `config/constants.js`：新增 `defaultPrompts.xmindcasegen`；
+    - `scripts/base/state.js`：新增 `xmindCaseGenId`、`xmindCaseGenPrompt`、`xmindCaseGenReasoning`、`xmindCaseGenTemperature`；
+    - `scripts/handlers/assignHandlers.js`、`scripts/modules/assign.js`、`scripts/modules/models.js`、`ai-tools.html`：新增 XMind 用例生成专属功能指派卡与统一指派支持；
+  - 共享状态与运行时：
+    - `scripts/core/casesGenCore.js`：补齐 XMind 页共享的 `buildModuleCases`、`buildModuleTopup`、`commitModuleCases`、`snapshotModuleCases`、`rollbackModuleCases`、`snapshotAllCaseGenState`、`rollbackAllCaseGenState`；
+    - `scripts/core/appRuntime.js`：向 XMind 页透传 `prepApi`、`xmindGenApi`、root/module snapshot/rollback 等共享接口，并扩展 `state.xmindCaseGen.prep`/root snapshot 结构；
+  - XMind 页控制器：
+    - `scripts/modules/xmindCasegen.js`：重写前置准备 3 步流、需求上下文组装、XMind 专属 prompt 拼装、动作契约分发、统一 schema 归一化、根节点/模块节点动作矩阵、根/模块快照回滚、参考基线层渲染以及追加高亮呈现；
+  - 自动化测试：
+    - `tests/ui/xmind_casegen_flow.spec.js`：覆盖 3 步前置准备、导文档/手填需求、基线导入、动作矩阵、`+AI` 默认动作、根/模块回滚、追加高亮；
+    - `tests/ui/casegen_settings_prompt.spec.js`：补充 XMind 专属指派与 prompt 拼装断言；
+    - `tests/api/settings_models.spec.js`：覆盖 `xmindCaseGen*` 设置项读写；
+    - `tests/api/xmind_casegen_no_new_endpoint.spec.js`：确认未新增后端端点。
+- 复用说明：结果真源仍严格复用 `caseGenModules` / `caseGenResults`，导出继续复用现有 XMind 导出链路，生成选项继续复用 `casesGenCore.getCaseGenPromptComponents()`，右键菜单与 `+AI` 继续复用 `mindElixirCore` 钩子，工作流持久化继续落在现有 `state.xmindCaseGen`；未新增后端接口、路由或存储表。
+- 测试与验证：
+  - `node --check scripts/core/appRuntime.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js tests/api/settings_models.spec.js`（通过）
+  - `node --check tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js tests/ui/casegen_export_xmind.spec.js tests/ui/xmind_structure_view_buttons.spec.js`（21/21 通过）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js`（2/2 通过）
+- 更新记录：
+  - 2026-03-30 首次完成 XMind 用例生成规则重构：切换为 XMind 专属模型指派与基础提示词，前置准备改为固定 3 步流，导入用例改为仅作 XMind 主树基线，补齐根节点/模块节点动作矩阵与 root/module rollback，并统一要求用例标题简洁、`steps` 数组元素按 `1、xxxx` 编号格式落库。
+
 - 功能名称：XMind 用例生成抽屉入口
 - 功能描述：将 XMind 用例生成从独立页签调整为“AI 功能 → 用例生成”页内入口，位置放在“生成模块”页签右侧；点击后打开抽屉，在抽屉内完成需求/参考用例复用、模块骨架生成、完整生成、局部重生成、追加生成、放弃回滚和当前树导出。抽屉内仍复用同一张 XMind 画布、根节点/模块节点 `+AI` 快捷动作和右键菜单；生成状态不再插入额外分支，而是直接显示在目标节点旁，且生成前后保持当前导图视图位置与缩放不跳变，结果继续与旧 `casesgen` 页共享同一份 `caseGenResults`。
 - 操作方式：
@@ -65,6 +327,17 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js tests/ui/casegen_export_xmind.spec.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line`（19/19 通过）
   - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` + `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line`（2/2 通过）
 - 更新记录：
+  - 2026-03-30 调整 XMind 用例生成“生成前置准备”弹窗里当前步骤依赖项的视觉表达：将原本依赖标签的弱提示样式改为显式状态标签，`导入需求 / 导入用例` 等依赖项在已满足时显示绿色 `✓`，未满足时显示红色 `✕`，并将依赖文案从“已导入/已生成”这类完成态描述收口为中性动作名，避免出现“红叉 + 已导入”的冲突语义；同步补齐深色主题下的绿勾/红叉样式，并更新 XMind 抽屉 UI 回归断言，验证自动流程依赖区会正确显示 `导入需求` 绿勾和 `导入用例` 红叉（`scripts/modules/xmindCasegen.js`、`style.css`、`tests/ui/xmind_casegen_flow.spec.js`；`node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js` 通过、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line` 8/8 通过）。
+  - 2026-03-30 修正 XMind 用例生成“重置前置准备”只清 UI 不清实际数据的问题：前置准备弹窗中的“重置前置准备”现在直接复用现有 `resetWorkflowData()` 与执行中断能力，不再仅重置 `state.xmindCaseGen.prep`，而是连同已导入需求、参考用例、前置流程结果和当前 XMind 用例生成结果一起清空；确认文案同步调整为真实的全量清空语义，并补充专项 UI 断言，验证重置后 `rawText`、`caseText`、`state.importedCases` 以及摘要区文案都会回到空状态（`scripts/modules/app.js`、`scripts/core/appRuntime.js`、`scripts/modules/xmindCasegen.js`、`tests/ui/xmind_casegen_flow.spec.js`；`node --check scripts/modules/app.js scripts/core/appRuntime.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js` 通过、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js tests/ui/casegen_export_xmind.spec.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line` 25/25 通过、`API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line` 2/2 通过）。
+  - 2026-03-30 继续完善 XMind 用例生成抽屉“生成前置准备”弹窗的交互闭环：1）禁止点击弹窗蒙层空白处直接关闭，避免误触丢失当前上下文；2）从前置准备里触发“导入需求 / 导入用例 / 从用例库选择”时，不再关闭 `xmindCaseGenDrawer` 或前置准备弹窗，其中“从用例库选择”复用现有 `drawer` 关闭保护标记保留 XMind 抽屉；3）将前置准备的模式选择、是否已进入流程页、各模式当前步骤索引和跳过记录持久化到共享 `state.xmindCaseGen.prep`，关闭后重进可回到最近状态；4）新增“重置前置准备”按钮，并通过现有确认弹窗做二次确认，确认后仅重置前置准备 UI 状态，不清空已导入需求、参考用例和流程结果。同步补充 XMind 抽屉专项 UI 回归，覆盖外点不关闭、文件导入不关闭、用例库抽屉打开时 XMind/前置准备保持打开、关闭后重进恢复到最近步骤，以及重置确认后回到初始落地页；并串行补跑共享 UI/API 回归（`index.html`、`ai-workflow.html`、`scripts/modules/xmindCasegen.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`、`style.css`、`tests/ui/xmind_casegen_flow.spec.js`、`FEATURE_LOG.md`；`node --check scripts/modules/xmindCasegen.js scripts/core/appRuntime.js scripts/modules/app.js tests/ui/xmind_casegen_flow.spec.js` 通过、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line` 8/8 通过、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js tests/ui/casegen_export_xmind.spec.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line` 25/25 通过、`API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line` 2/2 通过）。
+  - 2026-03-30 继续精简 XMind 用例生成抽屉“生成前置准备”弹窗中一键流程顶部推荐卡的引导语：去掉“建议从【导入需求】开始”、“建议从【导入参考用例】开始”和“先补齐前置条件，再执行当前步骤”这类说明式标题，统一改为更中性的当前步骤标题或“已完成”状态，减少重复引导文案；同时补齐流程详情卡右上角 `前置未满足 / 已跳过` 状态徽标在黑色主题下的背景、边框和文字颜色，避免深色界面中继续显示浅底徽标。同步补充 UI 断言，验证顶部推荐卡不再出现上述文案，且 `html[data-theme="dark"]` 下阻塞态徽标会切换为深色背景与浅色文本，并重新通过 `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js` 与 `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（7/7 通过）（`scripts/modules/xmindCasegen.js`、`style.css`、`tests/ui/xmind_casegen_flow.spec.js`、`FEATURE_LOG.md`）。
+  - 2026-03-30 继续精简 XMind 用例生成抽屉“生成前置准备”弹窗首屏文案：将落地页标题从“先选择进入方式”改为“step1：选择生成方式”，并移除“这里只先决定你要走一键流程还是分步操作，选定后点击下一步进入对应流程。”这句说明，避免在只做模式选择的首屏继续堆叠重复指引，保留更直接的步骤标题与模式按钮即可（`index.html`、`ai-workflow.html`、`FEATURE_LOG.md`）。
+  - 2026-03-29 修复 XMind 用例生成抽屉“生成前置准备”流程页顶部提示块未兼容黑色主题的问题：为 `.xmind-casegen-prep-start-note` 补齐暗色主题下的背景、边框、文字和轻微内阴影样式，避免在深色界面中继续使用浅底浅字导致提示区域发白、对比度不足。同步补充 XMind 抽屉专项 UI 断言，直接校验该提示块在 `html[data-theme="dark"]` 下会切换为深色背景与浅色文本，并重新通过 `node --check tests/ui/xmind_casegen_flow.spec.js` 与 `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（7/7 通过）（`style.css`、`tests/ui/xmind_casegen_flow.spec.js`、`FEATURE_LOG.md`）。
+  - 2026-03-29 继续精简 XMind 用例生成抽屉“生成前置准备”流程页的操作入口：将顶部推荐卡中的“继续下一步 / 查看下一步 / 返回上一步 / 完成前置准备”等按钮全部移除，顶部区域改为纯信息摘要，只保留模式标签、当前建议说明、进度数和“请在下方当前步骤卡片中操作”的提示；流程推进、跳过与返回统一收口到下方当前步骤卡片，避免弹窗内同时出现多处“下一步”造成认知干扰。同步补充 UI 断言，验证顶部推荐卡不再渲染 `data-prep-nav=\"next\"`，并重新通过 `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js` 与 `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（7/7 通过）（`scripts/modules/xmindCasegen.js`、`style.css`、`tests/ui/xmind_casegen_flow.spec.js`、`FEATURE_LOG.md`）。
+  - 2026-03-29 继续收口 XMind 用例生成抽屉“生成前置准备”弹窗的首屏信息密度：弹窗首次打开时不再直接展示推荐开始卡、步骤列表、当前步骤详情和已准备数据，而是先只显示“一键流程 / 分步操作”模式选择页与“下一步”按钮；用户明确选定模式后，才进入对应流程页查看步骤导航、当前步骤操作和上下文摘要，避免首屏把所有信息一次性堆给用户。实现上新增 `#xmindCaseGenPrepLanding` / `#xmindCaseGenPrepFlow` 双层容器，并通过 `prepMode` + `prepFlowEntered` 控制进入流程页；每次重新打开弹窗都会重置回模式选择页。同时修正起始推荐卡按钮 HTML 拼接里误写的一元 `+`，避免弹窗出现 `NaN`。底层仍严格复用现有 `reviewRequirements`、`runCleaning`、`compareCoverage`、`splitModules`、`compareCasesCoverage`、`runAutoWorkflow` 等链路，不新增后端接口，也未引入第二套状态源或结果仓库。同步补跑并通过 `node --check scripts/core/appRuntime.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js tests/ui/casegen_export_xmind.spec.js tests/ui/xmind_structure_view_buttons.spec.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js tests/ui/casegen_export_xmind.spec.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line`（24/24 通过）和 `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line`（2/2 通过）（`index.html`、`ai-workflow.html`、`scripts/modules/xmindCasegen.js`、`style.css`、`tests/ui/xmind_casegen_flow.spec.js`、`FEATURE_LOG.md`）。
+  - 2026-03-29 修复 XMind 用例生成抽屉“生成前置准备”弹窗的两个交互问题：1）修正起始推荐卡按钮拼接时误用了字符串到数字的一元 `+`，导致完成态场景出现 `NaN` 文本；2）将“一键流程 / 分步操作”模式切换区提升到弹窗内容最上方，使用户进入弹窗后先选模式，再查看推荐开始卡与步骤内容，符合“先决定走哪条流程，再开始操作”的顺序。同步补充 UI 断言，验证弹窗内不再出现 `NaN`，且模式切换区位置高于推荐开始卡；并重新通过 `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js` 与 `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（7/7 通过）（`index.html`、`ai-workflow.html`、`scripts/modules/xmindCasegen.js`、`tests/ui/xmind_casegen_flow.spec.js`）。
+  - 2026-03-29 继续优化 XMind 用例生成抽屉“生成前置准备”弹窗的信息层级：将原先同层堆叠的需求/参考用例摘要、流程概览、模式选择、步骤列表和当前步骤重排为“推荐从这里开始”起始卡片 + 模式选择 + 左侧步骤导航 / 右侧当前步骤详情 + 下方已准备数据摘要区。这样用户打开弹窗后会先看到当前模式下建议的第一步与主操作按钮，而不是被全部状态卡片同时包围；需求/参考用例与清洗/拆分/覆盖对比状态则下沉为次级信息区，降低首屏密度并强化“先从哪一步开始”的指引。实现继续复用现有前置流程依赖与执行逻辑，未新增后端接口或第二套状态源。同步补跑并通过 `node --check scripts/modules/xmindCasegen.js` 与 `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（7/7 通过）（`index.html`、`ai-workflow.html`、`scripts/modules/xmindCasegen.js`、`style.css`）。
+  - 2026-03-29 将 XMind 用例生成抽屉中的工具栏入口从“查看摘要”升级为“生成前置准备”，并把原摘要浮层重构为可执行的前置流程弹窗：弹窗内新增“一键流程 / 分步操作”双模式、当前需求/参考用例/清洗/拆分/覆盖对比概览、步骤导引、真实依赖校验、跳过/下一步导航和原地执行按钮；执行仍严格复用现有 `reviewRequirements`、`runCleaning`、`compareCoverage`、`splitModules`、`compareCasesCoverage`、`runAutoWorkflow` 等既有链路，不新增后端接口，也不改变 `caseGenModules` / `caseGenResults` 真源。同步补充 XMind 抽屉 UI 回归，覆盖模式切换与依赖/跳过逻辑，并重新通过语法检查、24 条 UI 回归与 2 条 API 回归（`index.html`、`ai-workflow.html`、`scripts/core/appRuntime.js`、`scripts/modules/xmindCasegen.js`、`style.css`、`tests/ui/xmind_casegen_flow.spec.js`；`node --check scripts/core/appRuntime.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js` 通过、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js tests/ui/casegen_export_xmind.spec.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line` 24/24 通过、`API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line` 2/2 通过）。
   - 2026-03-27 首次完成 XMind 用例生成能力，复用 `casesGenCore` / `mindElixirCore` / `xmindCore` 实现模块级生成、追加、回滚、树内状态占位和当前树导出，并补齐 UI/API 自动化验证。
   - 2026-03-27 根据最新交互调整，将入口从独立页签收口到 `casesgen` 页内抽屉，补齐旧会话 `xmind-casegen` 到 `casesgen` 的兼容回落，更新相关 UI/API 测试并重新通过全量回归（`index.html`、`ai-workflow.html`、`config/domConfig.js`、`style.css`、`scripts/core/appRuntime.js`、`scripts/modules/xmindCasegen.js`、`tests/ui/xmind_casegen_flow.spec.js`、`tests/ui/casegen_settings_prompt.spec.js`、`tests/ui/casegen_export_xmind.spec.js`、`tests/api/xmind_casegen_no_new_endpoint.spec.js`）。
   - 2026-03-27 调整 XMind 生成态呈现与重绘体验：去掉“生成中”状态子分支，改为节点旁状态徽标；同时为 `mindElixirCore` 增加视口 transform 保留，确保生成、追加、回滚前后都保持当前导图位置与缩放不跳变，并补跑 UI/API 回归（`scripts/core/mindElixirCore.js`、`scripts/modules/xmindCasegen.js`、`tests/ui/xmind_casegen_flow.spec.js`、`tests/api/xmind_casegen_no_new_endpoint.spec.js`、`tests/api/settings_models.spec.js`）。

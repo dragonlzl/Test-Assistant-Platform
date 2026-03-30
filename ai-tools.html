@@ -563,6 +563,36 @@
 <p class="status" id="caseGenAssignStatus"></p>
 </div>
 <div class="model-card">
+<strong>XMind 用例生成功能</strong>
+<div class="row">
+<label for="xmindCaseGenModelSelect">使用模型</label>
+<select id="xmindCaseGenModelSelect"></select>
+</div>
+<div class="row column">
+<label for="xmindCaseGenPrompt">提示词</label>
+<textarea class="small-textarea" id="xmindCaseGenPrompt" placeholder="为空则使用默认 XMind 用例生成提示词"></textarea>
+</div>
+<div class="row">
+<label for="xmindCaseGenTemperature">Temperature</label>
+<input id="xmindCaseGenTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
+</div>
+<div class="row hidden" data-reasoning="xmindcasegen">
+<label for="xmindCaseGenReasoning">Reasoning Effort</label>
+<select id="xmindCaseGenReasoning">
+<option value="">默认</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+</select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+</div>
+<div class="actions">
+<button class="secondary" id="testXmindCaseGenModel">测试连通性</button>
+</div>
+<p class="status" id="xmindCaseGenAssignStatus"></p>
+</div>
+<div class="model-card">
 <strong>用例相似对比</strong>
 <div class="row">
 <label for="caseFilterModelSelect">使用模型</label>
