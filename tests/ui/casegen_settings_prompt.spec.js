@@ -7,6 +7,13 @@ async function gotoIndex(page) {
   return base;
 }
 
+async function setCasegenToggle(page, inputId, checked) {
+  const input = page.locator('#' + inputId);
+  const current = await input.isChecked();
+  if (current === (checked === true)) return;
+  await page.locator('label[for="' + inputId + '"]').click();
+}
+
 async function mockBasicApis(page, token, user) {
   await page.addInitScript((tk) => {
     try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
@@ -304,17 +311,19 @@ test.describe('用例生成-设置项与跳转', () => {
 
     await openCaseGenActionDrawer(page, 'generate');
     await expect(page.locator('#caseGenCustomRequirement')).toHaveValue('');
+    await expect(page.locator('#caseGenNeedFunctionCondition')).toBeChecked();
+    await expect(page.locator('#caseGenNeedNumericValidation')).toBeChecked();
     await expect(page.locator('#caseGenNeedBoundary')).not.toBeChecked();
     await expect(page.locator('#caseGenNeedMobile')).not.toBeChecked();
     await expect(page.locator('#caseGenNeedSpecial')).not.toBeChecked();
     await page.fill('#caseGenCustomRequirement', '标题尽量短，优先覆盖活动奖励回收。');
     await expect(page.locator('#caseGenSpecialRepeatOperation')).toBeDisabled();
-    await page.check('#caseGenNeedBoundary');
-    await page.check('#caseGenNeedMobile');
-    await page.check('#caseGenNeedSpecial');
+    await setCasegenToggle(page, 'caseGenNeedBoundary', true);
+    await setCasegenToggle(page, 'caseGenNeedMobile', true);
+    await setCasegenToggle(page, 'caseGenNeedSpecial', true);
     await expect(page.locator('#caseGenSpecialRepeatOperation')).toBeEnabled();
-    await page.check('#caseGenSpecialRepeatOperation');
-    await page.check('#caseGenSpecialWeakNetwork');
+    await setCasegenToggle(page, 'caseGenSpecialRepeatOperation', true);
+    await setCasegenToggle(page, 'caseGenSpecialWeakNetwork', true);
     await confirmCaseGenActionDrawer(page);
     await expect(page.locator('#caseGenModulesTabBtn')).toHaveClass(/is-active/);
     await expect(page.locator('#casegenModulesPanel')).toHaveClass(/is-active/);
@@ -325,6 +334,8 @@ test.describe('用例生成-设置项与跳转', () => {
       const settings = state && state.caseGenSettings ? state.caseGenSettings : null;
       return settings
         && settings.customRequirement === '标题尽量短，优先覆盖活动奖励回收。'
+        && settings.needFunctionCondition === true
+        && settings.needNumericValidation === true
         && settings.needBoundary === true
         && settings.needMobile === true
         && settings.needSpecial === true
@@ -346,16 +357,20 @@ test.describe('用例生成-设置项与跳转', () => {
     expect(promptInfo).not.toBeNull();
     expect(promptInfo.prompt).toContain('基础提示词');
     expect(promptInfo.prompt).toContain('用户附加要求：标题尽量短，优先覆盖活动奖励回收。');
+    expect(promptInfo.prompt).toContain('生成时需要考虑功能使用条件');
+    expect(promptInfo.prompt).toContain('生成时需要考虑数值验证');
     expect(promptInfo.prompt).toContain('生成时需要考虑边界场景');
     expect(promptInfo.prompt).toContain('生成时需要考虑移动设备操作');
     expect(promptInfo.prompt).toContain('生成时需要考虑特殊场景');
     expect(promptInfo.prompt).toContain('特殊场景需包含重复操作');
     expect(promptInfo.prompt).toContain('特殊场景需包含弱网环境');
     expect(promptInfo.prompt).not.toContain('特殊场景需包含多点触控');
-    expect(promptInfo.parts.length).toBeGreaterThanOrEqual(5);
+    expect(promptInfo.parts.length).toBeGreaterThanOrEqual(7);
 
     await openCaseGenActionDrawer(page, 'generate');
     await expect(page.locator('#caseGenCustomRequirement')).toHaveValue('');
+    await expect(page.locator('#caseGenNeedFunctionCondition')).toBeChecked();
+    await expect(page.locator('#caseGenNeedNumericValidation')).toBeChecked();
     await expect(page.locator('#caseGenNeedBoundary')).not.toBeChecked();
     await expect(page.locator('#caseGenNeedMobile')).not.toBeChecked();
     await expect(page.locator('#caseGenNeedSpecial')).not.toBeChecked();
@@ -396,11 +411,11 @@ test.describe('用例生成-设置项与跳转', () => {
     await seedCaseGenModules(page);
 
     await openCaseGenActionDrawer(page, 'generate');
-    await page.check('#caseGenNeedBoundary');
-    await page.check('#caseGenNeedSpecial');
-    await page.check('#caseGenSpecialWeakNetwork');
-    await page.uncheck('#caseGenNeedBoundary');
-    await page.uncheck('#caseGenNeedSpecial');
+    await setCasegenToggle(page, 'caseGenNeedBoundary', true);
+    await setCasegenToggle(page, 'caseGenNeedSpecial', true);
+    await setCasegenToggle(page, 'caseGenSpecialWeakNetwork', true);
+    await setCasegenToggle(page, 'caseGenNeedBoundary', false);
+    await setCasegenToggle(page, 'caseGenNeedSpecial', false);
     await confirmCaseGenActionDrawer(page);
 
     const promptInfo = await page.evaluate(() => {
@@ -430,7 +445,8 @@ test.describe('用例生成-设置项与跳转', () => {
     await expect(page.locator('#caseGenModuleGenerateDrawerScenarios')).toContainText('账号登录');
     await expect(page.locator('#caseGenModuleGenerateDrawerPoints')).toContainText('账号密码');
     await expect(page.locator('#caseGenModuleGenerateDrawerCoupled')).toContainText('用户中心');
-    await expect(page.locator('#caseGenModuleGenerateDrawerGlobalSummary')).toContainText('当前全局配置未填写额外要求');
+    await expect(page.locator('#caseGenModuleGenerateDrawerGlobalSummary')).toContainText('考虑功能使用条件');
+    await expect(page.locator('#caseGenModuleGenerateDrawerGlobalSummary')).toContainText('数值验证');
     await expect(page.locator('#caseGenModuleGenerateGlobalTabBtn')).toBeVisible();
     await expect(page.locator('#caseGenModuleGenerateLocalTabBtn')).toBeVisible();
     await expect(page.locator('#caseGenModuleGenerateTopupTabBtn')).toBeVisible();
@@ -499,11 +515,13 @@ test.describe('用例生成-设置项与跳转', () => {
     await openModuleGenerateDrawer(page);
     await chooseModuleGenerateUseLocal(page);
     await expect(page.locator('#caseGenModuleLocalRequirement')).toHaveValue('');
+    await expect(page.locator('#caseGenModuleLocalNeedFunctionCondition')).toBeChecked();
+    await expect(page.locator('#caseGenModuleLocalNeedNumericValidation')).toBeChecked();
     await expect(page.locator('#caseGenModuleLocalNeedBoundary')).not.toBeChecked();
     await expect(page.locator('#caseGenModuleLocalNeedMobile')).not.toBeChecked();
 
     await page.fill('#caseGenModuleLocalRequirement', '仅当前模块考虑移动端手势。');
-    await page.check('#caseGenModuleLocalNeedMobile');
+    await setCasegenToggle(page, 'caseGenModuleLocalNeedMobile', true);
     await confirmModuleGenerateUseLocal(page);
 
     await page.waitForFunction(() => {
@@ -599,8 +617,8 @@ test.describe('用例生成-设置项与跳转', () => {
 
     await openCaseGenActionDrawer(page, 'generate');
     await page.fill('#caseGenCustomRequirement', '这次不要保留');
-    await page.check('#caseGenNeedBoundary');
-    await page.check('#caseGenNeedSpecial');
+    await setCasegenToggle(page, 'caseGenNeedBoundary', true);
+    await setCasegenToggle(page, 'caseGenNeedSpecial', true);
     await cancelCaseGenActionDrawer(page);
 
     const promptInfo = await page.evaluate(() => {
@@ -682,7 +700,9 @@ test.describe('用例生成-设置项与跳转', () => {
     });
 
     await openCaseGenActionDrawer(page, 'generate');
-    await page.check('#caseGenNeedBoundary');
+    await expect(page.locator('#caseGenNeedFunctionCondition')).toBeChecked();
+    await expect(page.locator('#caseGenNeedNumericValidation')).toBeChecked();
+    await setCasegenToggle(page, 'caseGenNeedBoundary', true);
     await confirmCaseGenActionDrawer(page);
 
     await page.evaluate(() => {
@@ -837,9 +857,11 @@ test.describe('用例生成-设置项与跳转', () => {
     });
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
     await page.fill('#xmindCaseGenOptionCustomRequirement', 'XMind 页面专用要求');
-    await page.check('input[data-casegen-setting="needBoundary"]');
-    await page.check('input[data-casegen-setting="needSpecial"]');
-    await page.check('input[data-casegen-setting="specialWeakNetwork"]');
+    await expect(page.locator('[data-casegen-setting-card="needFunctionCondition"]')).toHaveClass(/is-on/);
+    await expect(page.locator('[data-casegen-setting-card="needNumericValidation"]')).toHaveClass(/is-on/);
+    await page.locator('input[data-casegen-setting="needBoundary"]').check({ force: true });
+    await page.locator('input[data-casegen-setting="needSpecial"]').check({ force: true });
+    await page.locator('input[data-casegen-setting="specialWeakNetwork"]').check({ force: true });
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
 
@@ -860,6 +882,8 @@ test.describe('用例生成-设置项与跳转', () => {
     expect(lastPrompt).not.toBeNull();
     expect(String(lastPrompt.prompt || '')).toContain('基础提示词-XMind页');
     expect(String(lastPrompt.prompt || '')).toContain('用户附加要求：XMind 页面专用要求');
+    expect(String(lastPrompt.prompt || '')).toContain('生成时需要考虑功能使用条件');
+    expect(String(lastPrompt.prompt || '')).toContain('生成时需要考虑数值验证');
     expect(String(lastPrompt.prompt || '')).toContain('生成时需要考虑边界场景');
     expect(String(lastPrompt.prompt || '')).toContain('特殊场景需包含弱网环境');
     expect(String(lastPrompt.prompt || '')).toContain('用例标题 title 必须简洁明了');

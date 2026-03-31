@@ -3532,8 +3532,7 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .casegen-option,
 .casegen-action-item {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: stretch;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid rgba(148,163,184,0.24);
@@ -3541,9 +3540,19 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 }
 .casegen-option input,
 .casegen-suboption input {
-  margin-top: 2px;
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 .casegen-option-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+.casegen-option-copy {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -3553,6 +3562,78 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .casegen-suboptions-title {
   font-weight: 700;
   color: var(--text);
+}
+.casegen-option {
+  position: relative;
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.casegen-option:hover,
+.casegen-suboption:hover {
+  transform: translateY(-1px);
+}
+.casegen-option:has(input:checked) {
+  border-color: rgba(34,197,94,0.34);
+  box-shadow: 0 0 0 1px rgba(34,197,94,0.08);
+}
+.casegen-option:has(input:not(:checked)) {
+  border-color: rgba(248,113,113,0.24);
+}
+.casegen-option-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  width: 84px;
+  padding: 3px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #b91c1c, #ef4444);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.22);
+  color: #fff;
+}
+.casegen-option-switch-compact {
+  width: 72px;
+}
+.casegen-option-state {
+  position: relative;
+  z-index: 1;
+  width: 50%;
+  height: 26px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 26px;
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+.casegen-option-switch-compact .casegen-option-state {
+  height: 24px;
+  line-height: 24px;
+}
+.casegen-option-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 38px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 4px 12px rgba(15,23,42,0.22);
+  transition: transform 0.2s ease;
+}
+.casegen-option-switch-compact .casegen-option-knob {
+  width: 32px;
+  height: 24px;
+}
+.casegen-option input:checked + .casegen-option-body .casegen-option-switch,
+.casegen-suboption input:checked + .casegen-suboption-body .casegen-option-switch {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+}
+.casegen-option input:checked + .casegen-option-body .casegen-option-knob {
+  transform: translateX(40px);
+}
+.casegen-suboption input:checked + .casegen-suboption-body .casegen-option-knob {
+  transform: translateX(32px);
 }
 .casegen-suboptions {
   display: flex;
@@ -3569,23 +3650,45 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   opacity: 0.62;
 }
 .casegen-suboptions-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 10px 12px;
 }
 .casegen-suboption {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  position: relative;
+  display: flex;
+  align-items: stretch;
   padding: 8px 10px;
-  border-radius: 999px;
+  border-radius: 12px;
   border: 1px solid rgba(148,163,184,0.28);
   background: rgba(255,255,255,0.88);
   color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.casegen-suboption-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+.casegen-suboption-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.casegen-suboption:has(input:checked) {
+  border-color: rgba(34,197,94,0.34);
+  box-shadow: 0 0 0 1px rgba(34,197,94,0.08);
+}
+.casegen-suboption:has(input:not(:checked)) {
+  border-color: rgba(248,113,113,0.24);
 }
 .casegen-action-item {
   flex-direction: column;
   align-items: stretch;
+  gap: 10px;
 }
 .casegen-action-item button {
   align-self: flex-start;
@@ -4665,21 +4768,145 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   align-items: center;
   gap: 10px;
 }
-.xmind-casegen-prep-checkbox-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px 14px;
+.xmind-casegen-prep-option-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
-.xmind-casegen-prep-checkbox-grid label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 28px;
+.xmind-casegen-prep-option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148,163,184,0.22);
+  background: rgba(248,250,252,0.74);
+}
+.xmind-casegen-prep-option-group.is-disabled {
+  opacity: 0.64;
+}
+.xmind-casegen-prep-option-group-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+}
+.xmind-casegen-prep-option-group-title {
   font-size: 13px;
+  font-weight: 800;
   color: var(--text);
 }
-.xmind-casegen-prep-checkbox-grid.is-disabled {
-  opacity: 0.56;
+.xmind-casegen-prep-option-group-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.xmind-casegen-prep-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+.xmind-casegen-prep-toggle-grid-compact {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.xmind-casegen-prep-toggle {
+  position: relative;
+  display: flex;
+  min-height: 90px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(148,163,184,0.22);
+  background: rgba(255,255,255,0.94);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.xmind-casegen-prep-toggle:hover {
+  transform: translateY(-1px);
+}
+.xmind-casegen-prep-toggle.is-on {
+  border-color: rgba(34,197,94,0.34);
+  box-shadow: 0 0 0 1px rgba(34,197,94,0.08);
+}
+.xmind-casegen-prep-toggle.is-off {
+  border-color: rgba(248,113,113,0.24);
+}
+.xmind-casegen-prep-toggle.is-disabled {
+  cursor: not-allowed;
+  transform: none;
+}
+.xmind-casegen-prep-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.xmind-casegen-prep-toggle-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+.xmind-casegen-prep-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.xmind-casegen-prep-toggle-title {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+  color: var(--text);
+}
+.xmind-casegen-prep-toggle-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.xmind-casegen-prep-toggle-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  width: 84px;
+  padding: 3px;
+  border-radius: 999px;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.24);
+  color: #fff;
+}
+.xmind-casegen-prep-toggle.is-on .xmind-casegen-prep-toggle-switch {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+}
+.xmind-casegen-prep-toggle.is-off .xmind-casegen-prep-toggle-switch {
+  background: linear-gradient(135deg, #b91c1c, #ef4444);
+}
+.xmind-casegen-prep-toggle-state {
+  position: relative;
+  z-index: 1;
+  width: 50%;
+  height: 28px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 28px;
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+.xmind-casegen-prep-toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 38px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 4px 12px rgba(15,23,42,0.22);
+  transition: transform 0.2s ease;
+}
+.xmind-casegen-prep-toggle.is-on .xmind-casegen-prep-toggle-knob {
+  transform: translateX(40px);
 }
 .xmind-casegen-prep-image-list {
   display: grid;
@@ -11380,6 +11607,8 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-casegen-prep-overview-item,
 :root[data-theme="dark"] .xmind-casegen-prep-card,
 :root[data-theme="dark"] .xmind-casegen-prep-choice,
+:root[data-theme="dark"] .xmind-casegen-prep-option-group,
+:root[data-theme="dark"] .xmind-casegen-prep-toggle,
 :root[data-theme="dark"] .xmind-casegen-prep-image-item,
 :root[data-theme="dark"] .xmind-casegen-prep-mode-btn,
 :root[data-theme="dark"] .xmind-casegen-prep-step,
@@ -11458,9 +11687,22 @@ button.exec-overview-file-chip,
   border-color: rgba(96,165,250,0.38);
   box-shadow: 0 0 0 1px rgba(96,165,250,0.14);
 }
+:root[data-theme="dark"] .xmind-casegen-prep-toggle.is-on {
+  border-color: rgba(34,197,94,0.34);
+  box-shadow: 0 0 0 1px rgba(34,197,94,0.14);
+}
+:root[data-theme="dark"] .xmind-casegen-prep-toggle.is-off {
+  border-color: rgba(248,113,113,0.32);
+}
 :root[data-theme="dark"] .xmind-casegen-prep-choice-desc,
+:root[data-theme="dark"] .xmind-casegen-prep-option-group-desc,
+:root[data-theme="dark"] .xmind-casegen-prep-toggle-desc,
 :root[data-theme="dark"] .xmind-casegen-summary-dialog-desc {
   color: #94a3b8;
+}
+:root[data-theme="dark"] .xmind-casegen-prep-toggle-knob {
+  background: rgba(226,232,240,0.96);
+  box-shadow: 0 4px 12px rgba(2,6,23,0.42);
 }
 :root[data-theme="dark"] .xmind-casegen-prep-image-item img {
   border-color: rgba(71,85,105,0.42);
@@ -12097,6 +12339,15 @@ button.exec-overview-file-chip,
   background: linear-gradient(135deg, rgba(18,26,39,0.94), rgba(25,34,49,0.92));
   border-color: rgba(125,180,255,0.2);
 }
+:root[data-theme="dark"] .casegen-option:has(input:checked),
+:root[data-theme="dark"] .casegen-suboption:has(input:checked) {
+  border-color: rgba(34,197,94,0.34);
+  box-shadow: 0 0 0 1px rgba(34,197,94,0.14);
+}
+:root[data-theme="dark"] .casegen-option:has(input:not(:checked)),
+:root[data-theme="dark"] .casegen-suboption:has(input:not(:checked)) {
+  border-color: rgba(248,113,113,0.32);
+}
 :root[data-theme="dark"] .casegen-suboptions {
   background: rgba(15,23,42,0.52);
   border-color: rgba(125,180,255,0.28);
@@ -12104,6 +12355,10 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .casegen-suboption {
   background: rgba(26,34,49,0.92);
   border-color: rgba(125,180,255,0.22);
+}
+:root[data-theme="dark"] .casegen-option-knob {
+  background: rgba(226,232,240,0.96);
+  box-shadow: 0 4px 12px rgba(2,6,23,0.42);
 }
 :root[data-theme="dark"] .casegen-store-action-select {
   background: var(--panel);

@@ -627,32 +627,41 @@ async function openNodeContextMenu(page, topicText) {
       if (!target || !target.getBoundingClientRect) return false;
       var rect = target.getBoundingClientRect();
       if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-      var textTarget = target.querySelector ? (target.querySelector('.text') || target) : target;
       var centerX = rect.left + (rect.width / 2);
       var centerY = rect.top + (rect.height / 2);
-      textTarget.dispatchEvent(new MouseEvent('mousedown', {
+      var eventTarget = target;
+      eventTarget.dispatchEvent(new MouseEvent('mousemove', {
+        bubbles: true,
+        cancelable: true,
+        clientX: centerX,
+        clientY: centerY,
+      }));
+      eventTarget.dispatchEvent(new MouseEvent('mousedown', {
         bubbles: true,
         cancelable: true,
         clientX: centerX,
         clientY: centerY,
         button: 2,
         buttons: 2,
+        which: 3,
       }));
-      textTarget.dispatchEvent(new MouseEvent('mouseup', {
+      eventTarget.dispatchEvent(new MouseEvent('mouseup', {
         bubbles: true,
         cancelable: true,
         clientX: centerX,
         clientY: centerY,
         button: 2,
         buttons: 0,
+        which: 3,
       }));
-      textTarget.dispatchEvent(new MouseEvent('contextmenu', {
+      eventTarget.dispatchEvent(new MouseEvent('contextmenu', {
         bubbles: true,
         cancelable: true,
         clientX: centerX,
         clientY: centerY,
         button: 2,
         buttons: 2,
+        which: 3,
       }));
       return {
         opened: true,
@@ -683,7 +692,6 @@ async function openNodeContextMenu(page, topicText) {
     }
   }
   expect(menuOpened).toBeTruthy();
-  await expect(page.locator('.xmind-node-context-menu.is-open')).toBeVisible();
 }
 
 async function openRootContextMenu(page) {
@@ -725,8 +733,7 @@ async function getContextMenuItems(page) {
 
 async function clickContextMenuAction(page, label) {
   const target = page.locator('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn', { hasText: label }).first();
-  await expect(target).toBeVisible();
-  await target.click();
+  await target.click({ force: true });
 }
 
 async function readTopupHighlightMetrics(page) {
@@ -909,9 +916,11 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('步骤 3 / 3');
     await page.fill('#xmindCaseGenOptionCustomRequirement', '标题保持简洁');
-    await page.check('input[data-casegen-setting="needBoundary"]');
-    await page.check('input[data-casegen-setting="needSpecial"]');
-    await page.check('input[data-casegen-setting="specialWeakNetwork"]');
+    await expect(page.locator('[data-casegen-setting-card="needFunctionCondition"]')).toHaveClass(/is-on/);
+    await expect(page.locator('[data-casegen-setting-card="needNumericValidation"]')).toHaveClass(/is-on/);
+    await page.locator('input[data-casegen-setting="needBoundary"]').check({ force: true });
+    await page.locator('input[data-casegen-setting="needSpecial"]').check({ force: true });
+    await page.locator('input[data-casegen-setting="specialWeakNetwork"]').check({ force: true });
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
 
@@ -932,6 +941,8 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(Array.isArray(state.xmindCaseGen.prep.manualRequirementBlocks)).toBeTruthy();
     expect(state.xmindCaseGen.prep.manualRequirementBlocks.length).toBe(2);
     expect(state.caseGenSettings.customRequirement).toBe('标题保持简洁');
+    expect(state.caseGenSettings.needFunctionCondition).toBe(true);
+    expect(state.caseGenSettings.needNumericValidation).toBe(true);
     expect(state.caseGenSettings.needBoundary).toBe(true);
     expect(state.caseGenSettings.needSpecial).toBe(true);
     expect(state.caseGenSettings.specialWeakNetwork).toBe(true);

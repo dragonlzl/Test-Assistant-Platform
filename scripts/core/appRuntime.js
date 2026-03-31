@@ -271,9 +271,29 @@
       if (Array.isArray(data.caseGenModules) && data.caseGenModules.length) return true;
       if (data.reviewClarifications && data.reviewClarifications.length) return true;
       if (data.caseGenSettings && typeof data.caseGenSettings === 'object') {
-        if (hasText(data.caseGenSettings.customRequirement)) return true;
-        if (data.caseGenSettings.needBoundary || data.caseGenSettings.needMobile || data.caseGenSettings.needSpecial) return true;
-        if (data.caseGenSettings.specialRepeatOperation || data.caseGenSettings.specialMultiTouch || data.caseGenSettings.specialRepeatExecution || data.caseGenSettings.specialWeakNetwork || data.caseGenSettings.specialInterruptResume) {
+        var defaultCaseGenSettings = {
+          customRequirement: '',
+          needFunctionCondition: true,
+          needNumericValidation: true,
+          needBoundary: false,
+          needMobile: false,
+          needSpecial: false,
+          specialRepeatOperation: false,
+          specialMultiTouch: false,
+          specialRepeatExecution: false,
+          specialWeakNetwork: false,
+          specialInterruptResume: false,
+        };
+        var caseGenSettingKeys = Object.keys(defaultCaseGenSettings);
+        var hasCaseGenSettingDiff = caseGenSettingKeys.some(function(key) {
+          var currentValue = data.caseGenSettings[key];
+          var defaultValue = defaultCaseGenSettings[key];
+          if (typeof defaultValue === 'string') {
+            return String(currentValue || '') !== defaultValue;
+          }
+          return (currentValue === true) !== (defaultValue === true);
+        });
+        if (hasCaseGenSettingDiff) {
           return true;
         }
       }

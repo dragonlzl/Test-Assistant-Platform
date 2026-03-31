@@ -81,6 +81,8 @@
     var caseGenModuleGenerateDrawerGlobalSummary = document.getElementById('caseGenModuleGenerateDrawerGlobalSummary');
     var caseGenModuleGenerateGlobalConfirmBtn = document.getElementById('caseGenModuleGenerateGlobalConfirmBtn');
     var caseGenModuleLocalRequirementEl = document.getElementById('caseGenModuleLocalRequirement');
+    var caseGenModuleLocalNeedFunctionConditionEl = document.getElementById('caseGenModuleLocalNeedFunctionCondition');
+    var caseGenModuleLocalNeedNumericValidationEl = document.getElementById('caseGenModuleLocalNeedNumericValidation');
     var caseGenModuleLocalNeedBoundaryEl = document.getElementById('caseGenModuleLocalNeedBoundary');
     var caseGenModuleLocalNeedMobileEl = document.getElementById('caseGenModuleLocalNeedMobile');
     var caseGenModuleLocalNeedSpecialEl = document.getElementById('caseGenModuleLocalNeedSpecial');
@@ -111,6 +113,8 @@
     var casegenSettingsPanel = document.getElementById('casegenSettingsPanel');
     var casegenModulesPanel = document.getElementById('casegenModulesPanel');
     var caseGenCustomRequirementEl = document.getElementById('caseGenCustomRequirement');
+    var caseGenNeedFunctionConditionEl = document.getElementById('caseGenNeedFunctionCondition');
+    var caseGenNeedNumericValidationEl = document.getElementById('caseGenNeedNumericValidation');
     var caseGenNeedBoundaryEl = document.getElementById('caseGenNeedBoundary');
     var caseGenNeedMobileEl = document.getElementById('caseGenNeedMobile');
     var caseGenNeedSpecialEl = document.getElementById('caseGenNeedSpecial');
@@ -493,6 +497,8 @@
       var customRequirement = stringifyCaseField(settings.customRequirement || '');
       var specialNames = [];
       if (customRequirement) labels.push('额外要求：' + customRequirement);
+      if (settings.needFunctionCondition) labels.push('考虑功能使用条件');
+      if (settings.needNumericValidation) labels.push('数值验证');
       if (settings.needBoundary) labels.push('考虑边界');
       if (settings.needMobile) labels.push('考虑移动设备操作');
       if (settings.needSpecial) {
@@ -644,6 +650,8 @@
     function syncCaseGenModuleLocalInputs(settingsSource) {
       var settings = normalizeCaseGenPromptSettings(settingsSource || {});
       if (caseGenModuleLocalRequirementEl) caseGenModuleLocalRequirementEl.value = settings.customRequirement || '';
+      if (caseGenModuleLocalNeedFunctionConditionEl) caseGenModuleLocalNeedFunctionConditionEl.checked = settings.needFunctionCondition === true;
+      if (caseGenModuleLocalNeedNumericValidationEl) caseGenModuleLocalNeedNumericValidationEl.checked = settings.needNumericValidation === true;
       if (caseGenModuleLocalNeedBoundaryEl) caseGenModuleLocalNeedBoundaryEl.checked = settings.needBoundary === true;
       if (caseGenModuleLocalNeedMobileEl) caseGenModuleLocalNeedMobileEl.checked = settings.needMobile === true;
       if (caseGenModuleLocalNeedSpecialEl) caseGenModuleLocalNeedSpecialEl.checked = settings.needSpecial === true;
@@ -761,7 +769,7 @@
       if (caseGenModuleGenerateDrawerGlobalSummary) {
         caseGenModuleGenerateDrawerGlobalSummary.textContent = describeCaseGenPromptSettings(
           createCaseGenPromptSettingsSnapshot(),
-          '当前全局配置未填写额外要求，也未勾选任何选项，将按基础提示词正常生成。'
+          '当前全局生成配置将按共享设置执行，可切换到全局页签查看或调整。'
         );
       }
       syncCaseGenModuleLocalInputs(pendingCaseGenModuleGenerateState.localSettings);
@@ -806,6 +814,16 @@
       if (caseGenModuleLocalRequirementEl) {
         caseGenModuleLocalRequirementEl.addEventListener('input', function() {
           setCaseGenModuleLocalSettingValue('customRequirement', caseGenModuleLocalRequirementEl.value || '');
+        });
+      }
+      if (caseGenModuleLocalNeedFunctionConditionEl) {
+        caseGenModuleLocalNeedFunctionConditionEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('needFunctionCondition', caseGenModuleLocalNeedFunctionConditionEl.checked === true);
+        });
+      }
+      if (caseGenModuleLocalNeedNumericValidationEl) {
+        caseGenModuleLocalNeedNumericValidationEl.addEventListener('change', function() {
+          setCaseGenModuleLocalSettingValue('needNumericValidation', caseGenModuleLocalNeedNumericValidationEl.checked === true);
         });
       }
       if (caseGenModuleLocalNeedBoundaryEl) {
@@ -1187,6 +1205,8 @@
         activeTab: 'settings',
         storeMode: 'new',
         customRequirement: '',
+        needFunctionCondition: true,
+        needNumericValidation: true,
         needBoundary: false,
         needMobile: false,
         needSpecial: false,
@@ -1199,17 +1219,42 @@
     }
 
     function normalizeCaseGenPromptSettings(raw) {
+      var defaults = createDefaultCaseGenSettings();
       var source = raw && typeof raw === 'object' ? raw : {};
       return {
-        customRequirement: String(source.customRequirement || ''),
-        needBoundary: source.needBoundary === true,
-        needMobile: source.needMobile === true,
-        needSpecial: source.needSpecial === true,
-        specialRepeatOperation: source.specialRepeatOperation === true,
-        specialMultiTouch: source.specialMultiTouch === true,
-        specialRepeatExecution: source.specialRepeatExecution === true,
-        specialWeakNetwork: source.specialWeakNetwork === true,
-        specialInterruptResume: source.specialInterruptResume === true,
+        customRequirement: source.customRequirement === undefined || source.customRequirement === null
+          ? String(defaults.customRequirement || '')
+          : String(source.customRequirement || ''),
+        needFunctionCondition: source.needFunctionCondition === undefined
+          ? defaults.needFunctionCondition === true
+          : source.needFunctionCondition === true,
+        needNumericValidation: source.needNumericValidation === undefined
+          ? defaults.needNumericValidation === true
+          : source.needNumericValidation === true,
+        needBoundary: source.needBoundary === undefined
+          ? defaults.needBoundary === true
+          : source.needBoundary === true,
+        needMobile: source.needMobile === undefined
+          ? defaults.needMobile === true
+          : source.needMobile === true,
+        needSpecial: source.needSpecial === undefined
+          ? defaults.needSpecial === true
+          : source.needSpecial === true,
+        specialRepeatOperation: source.specialRepeatOperation === undefined
+          ? defaults.specialRepeatOperation === true
+          : source.specialRepeatOperation === true,
+        specialMultiTouch: source.specialMultiTouch === undefined
+          ? defaults.specialMultiTouch === true
+          : source.specialMultiTouch === true,
+        specialRepeatExecution: source.specialRepeatExecution === undefined
+          ? defaults.specialRepeatExecution === true
+          : source.specialRepeatExecution === true,
+        specialWeakNetwork: source.specialWeakNetwork === undefined
+          ? defaults.specialWeakNetwork === true
+          : source.specialWeakNetwork === true,
+        specialInterruptResume: source.specialInterruptResume === undefined
+          ? defaults.specialInterruptResume === true
+          : source.specialInterruptResume === true,
       };
     }
 
@@ -1227,6 +1272,8 @@
       state.caseGenSettings.activeTab = state.caseGenSettings.activeTab === 'modules' ? 'modules' : 'settings';
       state.caseGenSettings.storeMode = state.caseGenSettings.storeMode === 'append' ? 'append' : 'new';
       state.caseGenSettings.customRequirement = String(state.caseGenSettings.customRequirement || '');
+      state.caseGenSettings.needFunctionCondition = state.caseGenSettings.needFunctionCondition === true;
+      state.caseGenSettings.needNumericValidation = state.caseGenSettings.needNumericValidation === true;
       state.caseGenSettings.needBoundary = state.caseGenSettings.needBoundary === true;
       state.caseGenSettings.needMobile = state.caseGenSettings.needMobile === true;
       state.caseGenSettings.needSpecial = state.caseGenSettings.needSpecial === true;
@@ -1249,6 +1296,8 @@
     function syncCaseGenPromptInputs(settingsSource) {
       var settings = normalizeCaseGenPromptSettings(settingsSource || ensureCaseGenSettings());
       if (caseGenCustomRequirementEl) caseGenCustomRequirementEl.value = settings.customRequirement || '';
+      if (caseGenNeedFunctionConditionEl) caseGenNeedFunctionConditionEl.checked = settings.needFunctionCondition === true;
+      if (caseGenNeedNumericValidationEl) caseGenNeedNumericValidationEl.checked = settings.needNumericValidation === true;
       if (caseGenNeedBoundaryEl) caseGenNeedBoundaryEl.checked = settings.needBoundary === true;
       if (caseGenNeedMobileEl) caseGenNeedMobileEl.checked = settings.needMobile === true;
       if (caseGenNeedSpecialEl) caseGenNeedSpecialEl.checked = settings.needSpecial === true;
@@ -1264,6 +1313,8 @@
       var settings = ensureCaseGenSettings();
       var normalized = normalizeCaseGenPromptSettings(settingsSource);
       settings.customRequirement = normalized.customRequirement;
+      settings.needFunctionCondition = normalized.needFunctionCondition;
+      settings.needNumericValidation = normalized.needNumericValidation;
       settings.needBoundary = normalized.needBoundary;
       settings.needMobile = normalized.needMobile;
       settings.needSpecial = normalized.needSpecial;
@@ -1291,6 +1342,8 @@
         return settings;
       }
       if (
+        key === 'needFunctionCondition' ||
+        key === 'needNumericValidation' ||
         key === 'needBoundary' ||
         key === 'needMobile' ||
         key === 'needSpecial' ||
@@ -1407,6 +1460,12 @@
       var customRequirement = stringifyCaseField(settings.customRequirement || '');
       if (customRequirement) {
         parts.push('用户附加要求：' + customRequirement);
+      }
+      if (settings.needFunctionCondition) {
+        parts.push('生成时需要考虑功能使用条件，覆盖功能或系统的解锁条件、可用条件、身份或等级门槛、资源消耗、前置任务和使用时间限制等。');
+      }
+      if (settings.needNumericValidation) {
+        parts.push('生成时需要考虑数值验证，覆盖数值显示、取值范围、阈值变化、计算结果、累计或扣减和结算正确性等。');
       }
       if (settings.needBoundary) {
         parts.push('生成时需要考虑边界场景，覆盖数值上下限、临界条件、空值、满值、阈值切换和异常边界。');

@@ -1334,8 +1334,99 @@
         + '</div>';
     }
 
+    function renderOptionToggleCard(config) {
+      var meta = config || {};
+      var checked = meta.checked === true;
+      var disabled = meta.disabled === true;
+      var classes = ['xmind-casegen-prep-toggle'];
+      classes.push(checked ? 'is-on' : 'is-off');
+      if (disabled) classes.push('is-disabled');
+      return ''
+        + '<label class="' + classes.join(' ') + '" data-casegen-setting-card="' + escapeHtml(String(meta.key || '')) + '">'
+        +   '<input type="checkbox" data-casegen-setting="' + escapeHtml(String(meta.key || '')) + '" ' + (checked ? 'checked ' : '') + (disabled ? 'disabled' : '') + ' />'
+        +   '<span class="xmind-casegen-prep-toggle-main">'
+        +     '<span class="xmind-casegen-prep-toggle-copy">'
+        +       '<span class="xmind-casegen-prep-toggle-title">' + escapeHtml(meta.title || '') + '</span>'
+        +       '<span class="xmind-casegen-prep-toggle-desc">' + escapeHtml(meta.desc || '') + '</span>'
+        +     '</span>'
+        +     '<span class="xmind-casegen-prep-toggle-switch" aria-hidden="true">'
+        +       '<span class="xmind-casegen-prep-toggle-state xmind-casegen-prep-toggle-state-on">开</span>'
+        +       '<span class="xmind-casegen-prep-toggle-state xmind-casegen-prep-toggle-state-off">关</span>'
+        +       '<span class="xmind-casegen-prep-toggle-knob"></span>'
+        +     '</span>'
+        +   '</span>'
+        + '</label>';
+    }
+
     function renderOptionsStepCard() {
       var settings = getCaseGenSettingsSnapshot();
+      var primaryHtml = ''
+        + renderOptionToggleCard({
+          key: 'needFunctionCondition',
+          title: '考虑功能使用条件',
+          desc: '补足解锁、可用、身份门槛、前置任务和时段限制。',
+          checked: settings.needFunctionCondition === true
+        })
+        + renderOptionToggleCard({
+          key: 'needNumericValidation',
+          title: '数值验证',
+          desc: '补足范围、阈值变化、累计扣减和结算正确性。',
+          checked: settings.needNumericValidation === true
+        })
+        + renderOptionToggleCard({
+          key: 'needBoundary',
+          title: '考虑边界',
+          desc: '补足上下限、临界值、空值和异常边界。',
+          checked: settings.needBoundary === true
+        })
+        + renderOptionToggleCard({
+          key: 'needMobile',
+          title: '考虑移动设备',
+          desc: '补足手势、横竖屏和系统打断等移动端场景。',
+          checked: settings.needMobile === true
+        })
+        + renderOptionToggleCard({
+          key: 'needSpecial',
+          title: '考虑特殊场景',
+          desc: '开启后可继续选择弱网、中断恢复等特殊场景。',
+          checked: settings.needSpecial === true
+        });
+      var specialHtml = ''
+        + renderOptionToggleCard({
+          key: 'specialRepeatOperation',
+          title: '重复操作',
+          desc: '连续点击、重复提交或重复领取。',
+          checked: settings.specialRepeatOperation === true,
+          disabled: settings.needSpecial !== true
+        })
+        + renderOptionToggleCard({
+          key: 'specialMultiTouch',
+          title: '多点触控',
+          desc: '双指、误触连击和多点同时操作。',
+          checked: settings.specialMultiTouch === true,
+          disabled: settings.needSpecial !== true
+        })
+        + renderOptionToggleCard({
+          key: 'specialRepeatExecution',
+          title: '重复执行',
+          desc: '反复进入退出和连续重复执行流程。',
+          checked: settings.specialRepeatExecution === true,
+          disabled: settings.needSpecial !== true
+        })
+        + renderOptionToggleCard({
+          key: 'specialWeakNetwork',
+          title: '弱网',
+          desc: '高延迟、超时、断续连接和重试恢复。',
+          checked: settings.specialWeakNetwork === true,
+          disabled: settings.needSpecial !== true
+        })
+        + renderOptionToggleCard({
+          key: 'specialInterruptResume',
+          title: '中断恢复',
+          desc: '来电、切后台、锁屏或重启后的恢复。',
+          checked: settings.specialInterruptResume === true,
+          disabled: settings.needSpecial !== true
+        });
       return ''
         + '<div class="xmind-casegen-prep-card xmind-casegen-prep-card-main">'
         +   '<div class="xmind-casegen-prep-card-head">'
@@ -1349,17 +1440,20 @@
         +     '<label for="xmindCaseGenOptionCustomRequirement">额外要求</label>'
         +     '<textarea id="xmindCaseGenOptionCustomRequirement" data-casegen-setting="customRequirement" placeholder="非必填，用于补充生成要求。">' + escapeHtml(settings.customRequirement || '') + '</textarea>'
         +   '</div>'
-        +   '<div class="xmind-casegen-prep-checkbox-grid">'
-        +     '<label><input type="checkbox" data-casegen-setting="needBoundary" ' + (settings.needBoundary ? 'checked' : '') + ' />考虑边界</label>'
-        +     '<label><input type="checkbox" data-casegen-setting="needMobile" ' + (settings.needMobile ? 'checked' : '') + ' />考虑移动设备</label>'
-        +     '<label><input type="checkbox" data-casegen-setting="needSpecial" ' + (settings.needSpecial ? 'checked' : '') + ' />考虑特殊场景</label>'
-        +   '</div>'
-        +   '<div class="xmind-casegen-prep-checkbox-grid ' + (settings.needSpecial ? '' : 'is-disabled') + '">'
-        +     '<label><input type="checkbox" data-casegen-setting="specialRepeatOperation" ' + (settings.specialRepeatOperation ? 'checked' : '') + ' ' + (settings.needSpecial ? '' : 'disabled') + ' />重复操作</label>'
-        +     '<label><input type="checkbox" data-casegen-setting="specialMultiTouch" ' + (settings.specialMultiTouch ? 'checked' : '') + ' ' + (settings.needSpecial ? '' : 'disabled') + ' />多点触控</label>'
-        +     '<label><input type="checkbox" data-casegen-setting="specialRepeatExecution" ' + (settings.specialRepeatExecution ? 'checked' : '') + ' ' + (settings.needSpecial ? '' : 'disabled') + ' />重复执行</label>'
-        +     '<label><input type="checkbox" data-casegen-setting="specialWeakNetwork" ' + (settings.specialWeakNetwork ? 'checked' : '') + ' ' + (settings.needSpecial ? '' : 'disabled') + ' />弱网</label>'
-        +     '<label><input type="checkbox" data-casegen-setting="specialInterruptResume" ' + (settings.specialInterruptResume ? 'checked' : '') + ' ' + (settings.needSpecial ? '' : 'disabled') + ' />中断恢复</label>'
+        +   '<div class="xmind-casegen-prep-option-stack">'
+        +     '<div class="xmind-casegen-prep-option-group">'
+        +       '<div class="xmind-casegen-prep-option-group-head">'
+        +         '<strong class="xmind-casegen-prep-option-group-title">基础生成开关</strong>'
+        +         '<span class="xmind-casegen-prep-option-group-desc">先把覆盖策略选好，再回到画布触发生成。</span>'
+        +       '</div>'
+        +       '<div class="xmind-casegen-prep-toggle-grid">' + primaryHtml + '</div>'
+        +     '</div>'
+        +     '<div class="xmind-casegen-prep-option-group ' + (settings.needSpecial ? '' : 'is-disabled') + '">'
+        +       '<div class="xmind-casegen-prep-option-group-head">'
+        +         '<strong class="xmind-casegen-prep-option-group-title">特殊场景细项</strong>'
+        +         '<span class="xmind-casegen-prep-option-group-desc">' + (settings.needSpecial ? '按需补足本轮要覆盖的特殊场景。' : '先开启“考虑特殊场景”，再选择具体细项。') + '</span>'
+        +       '</div>'
+        +       '<div class="xmind-casegen-prep-toggle-grid xmind-casegen-prep-toggle-grid-compact">' + specialHtml + '</div>'
         +   '</div>'
         + '</div>';
     }

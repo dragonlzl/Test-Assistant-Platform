@@ -28,6 +28,8 @@
     var caseGenSettingsTabBtn = document.getElementById('caseGenSettingsTabBtn');
     var caseGenModulesTabBtn = document.getElementById('caseGenModulesTabBtn');
     var caseGenCustomRequirementEl = document.getElementById('caseGenCustomRequirement');
+    var caseGenNeedFunctionConditionEl = document.getElementById('caseGenNeedFunctionCondition');
+    var caseGenNeedNumericValidationEl = document.getElementById('caseGenNeedNumericValidation');
     var caseGenNeedBoundaryEl = document.getElementById('caseGenNeedBoundary');
     var caseGenNeedMobileEl = document.getElementById('caseGenNeedMobile');
     var caseGenNeedSpecialEl = document.getElementById('caseGenNeedSpecial');
@@ -237,6 +239,8 @@
           activeTab: 'settings',
           storeMode: 'new',
           customRequirement: '',
+          needFunctionCondition: true,
+          needNumericValidation: true,
           needBoundary: false,
           needMobile: false,
           needSpecial: false,
@@ -263,6 +267,8 @@
     function syncCaseGenSettingsUI() {
       var settings = ensureCaseGenSettings();
       if (caseGenCustomRequirementEl) caseGenCustomRequirementEl.value = settings.customRequirement || '';
+      if (caseGenNeedFunctionConditionEl) caseGenNeedFunctionConditionEl.checked = settings.needFunctionCondition === true;
+      if (caseGenNeedNumericValidationEl) caseGenNeedNumericValidationEl.checked = settings.needNumericValidation === true;
       if (caseGenNeedBoundaryEl) caseGenNeedBoundaryEl.checked = settings.needBoundary === true;
       if (caseGenNeedMobileEl) caseGenNeedMobileEl.checked = settings.needMobile === true;
       if (caseGenNeedSpecialEl) caseGenNeedSpecialEl.checked = settings.needSpecial === true;
@@ -297,6 +303,16 @@
         caseGenCustomRequirementEl.addEventListener('input', debounce(function() {
           updateCaseGenSetting('customRequirement', caseGenCustomRequirementEl.value || '');
         }, 200));
+      }
+      if (caseGenNeedFunctionConditionEl) {
+        caseGenNeedFunctionConditionEl.addEventListener('change', function() {
+          updateCaseGenSetting('needFunctionCondition', caseGenNeedFunctionConditionEl.checked === true);
+        });
+      }
+      if (caseGenNeedNumericValidationEl) {
+        caseGenNeedNumericValidationEl.addEventListener('change', function() {
+          updateCaseGenSetting('needNumericValidation', caseGenNeedNumericValidationEl.checked === true);
+        });
       }
       if (caseGenNeedBoundaryEl) {
         caseGenNeedBoundaryEl.addEventListener('change', function() {

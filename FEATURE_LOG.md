@@ -19,6 +19,38 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind/普通用例生成共享生成选项扩展与开关样式统一
+- 功能描述：在 XMind 用例生成的“生成前置准备”第 3 步新增 `考虑功能使用条件`、`数值验证` 两个生成选项，并统一接入共享用例生成设置与提示词拼装链路。其中两个新选项默认开启；同时将 XMind 第 3 步以及普通“用例生成”的全局/模块抽屉都改为更直观的卡片式左右开关布局，兼容黑色主题。
+- 操作方式：
+  - 进入 `用例生成` 页后打开 `XMind 用例生成` 抽屉，点击工具栏中的 `生成前置准备`；
+  - 在 `step3：生成选项` 中，可看到 `考虑功能使用条件`、`数值验证`、`考虑边界`、`考虑移动设备`、`考虑特殊场景` 等开关卡片；
+  - 在普通 `用例生成` 页执行 `生成模块`、`生成用例` 或模块独立生成时，打开对应确认抽屉，也会看到同样的开关样式与默认值；
+  - 新增的两个开关默认开启，绿色表示开启，红色表示关闭；特殊场景细项会在开启 `考虑特殊场景` 后可操作；
+  - 确认前置准备后，XMind 专属提示词会自动带上对应生成约束。
+- 使用效果：
+  - 用户可以直接控制模型是否补足解锁条件、可用条件、时段限制、数值范围、阈值变化和结算校验等内容；
+  - XMind 前置准备第 3 步的布局更清晰，信息不再堆在一块，开关状态也更直观；
+  - 普通用例生成入口与模块独立生成入口同步复用了这两个新选项，并统一成和 XMind 一致的开关卡片交互，避免出现页面能配、提示词没生效或默认值不一致的问题。
+- 新增内容/接口/组件：
+  - `scripts/base/state.js`、`scripts/core/casesGenCore.js`、`scripts/modules/casesgen.js`：新增共享设置项 `needFunctionCondition`、`needNumericValidation`，并接入普通用例生成、模块独立生成、提示词摘要和提示词拼装；
+  - `index.html`、`ai-workflow.html`：在普通用例生成的全局/模块配置区补上两个新选项，并将原复选框重排为卡片式开关；
+  - `scripts/modules/xmindCasegen.js`、`style.css`：将 XMind 前置准备第 3 步改成卡片式开关布局，同时抽象普通用例生成共用的开关视觉样式，并补齐深色主题样式；
+  - `scripts/core/appRuntime.js`：调整工作流快照“是否有内容”的判断，避免默认开启项导致空工作流也被误判为有内容；
+  - `tests/ui/xmind_casegen_flow.spec.js`、`tests/ui/casegen_settings_prompt.spec.js`：补充新开关默认状态、提示词拼装和 XMind 开关交互回归；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有共享 `caseGenSettings`、`casesGenCore.getCaseGenPromptComponents()`、XMind 前置准备弹窗和普通用例生成配置入口；本次没有新增第二套设置仓库或后端配置接口，只是在现有共享链路上扩展两个新选项并重排 XMind UI。
+- 测试与验证：
+  - `node --check scripts/base/state.js scripts/core/appRuntime.js scripts/core/casesGenCore.js scripts/modules/casesgen.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（15/15 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_settings_prompt.spec.js --reporter=line`（11/11 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-31 新增 `考虑功能使用条件`、`数值验证` 两个共享生成选项，默认开启；
+  - 2026-03-31 将 XMind 前置准备第 3 步改为开关卡片布局，绿色表示开启、红色表示关闭，并补齐黑色主题样式；
+  - 2026-03-31 将普通 `用例生成` 的全局确认抽屉、模块独立生成抽屉同步改为卡片式开关，两个新选项默认勾选；
+  - 2026-03-31 回归验证普通 `用例生成` 与 XMind 共享设置：`node --check scripts/core/casesGenCore.js tests/ui/casegen_settings_prompt.spec.js tests/ui/xmind_casegen_flow.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/casegen_settings_prompt.spec.js --reporter=line`、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "前置准备改为 3 步流程，并支持手填需求图片与最近步骤恢复|模块可并发生成，且根节点补模块动作不会阻塞现有模块生成" --reporter=line` 均通过；
+  - 2026-03-31 修正工作流快照内容判定，避免默认开启项导致空工作流被误判为已配置。
+
 - 功能名称：XMind 生成记录支持展示未新增原因
 - 功能描述：增强 XMind 用例生成抽屉中的 `生成记录` 弹窗。当根节点或模块节点执行生成后出现“本轮未生成新的模块或用例”时，历史记录现在会明确展示未新增原因，并附带去重/过滤诊断信息，区分是“模块重复”“用例重复”“模型未返回有效内容”还是“返回内容不在当前动作范围内”。
 - 操作方式：

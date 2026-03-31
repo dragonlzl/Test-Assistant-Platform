@@ -1138,7 +1138,7 @@
           <div class="casegen-module-drawer-head">
             <span class="casegen-module-drawer-label">当前全局生成配置</span>
           </div>
-          <p class="hint casegen-module-drawer-summary" id="caseGenModuleGenerateDrawerGlobalSummary">当前全局配置未填写额外要求，也未勾选任何选项，将按基础提示词正常生成。</p>
+          <p class="hint casegen-module-drawer-summary" id="caseGenModuleGenerateDrawerGlobalSummary">当前全局生成配置将按共享设置执行，可切换到全局页签查看或调整。</p>
         </div>
         <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
           <button class="pill primary" id="caseGenModuleGenerateGlobalConfirmBtn" type="button">确认并生成</button>
@@ -1152,25 +1152,74 @@
           <p class="hint casegen-generate-drawer-field-hint">仅当前模块本次生成生效，不写入全局，也不会被其他模块复用。</p>
         </div>
         <div class="casegen-option-list">
+          <label class="casegen-option" for="caseGenModuleLocalNeedFunctionCondition">
+            <input id="caseGenModuleLocalNeedFunctionCondition" type="checkbox"/>
+            <span class="casegen-option-body">
+              <span class="casegen-option-copy">
+                <span class="casegen-option-title">是否需要考虑功能使用条件</span>
+                <span class="hint">补足解锁条件、可用条件、身份门槛、前置任务和时间限制。</span>
+              </span>
+              <span class="casegen-option-switch" aria-hidden="true">
+                <span class="casegen-option-state casegen-option-state-on">开</span>
+                <span class="casegen-option-state casegen-option-state-off">关</span>
+                <span class="casegen-option-knob"></span>
+              </span>
+            </span>
+          </label>
+          <label class="casegen-option" for="caseGenModuleLocalNeedNumericValidation">
+            <input id="caseGenModuleLocalNeedNumericValidation" type="checkbox"/>
+            <span class="casegen-option-body">
+              <span class="casegen-option-copy">
+                <span class="casegen-option-title">是否需要做数值验证</span>
+                <span class="hint">覆盖数值范围、阈值变化、累计扣减和结算正确性。</span>
+              </span>
+              <span class="casegen-option-switch" aria-hidden="true">
+                <span class="casegen-option-state casegen-option-state-on">开</span>
+                <span class="casegen-option-state casegen-option-state-off">关</span>
+                <span class="casegen-option-knob"></span>
+              </span>
+            </span>
+          </label>
           <label class="casegen-option" for="caseGenModuleLocalNeedBoundary">
             <input id="caseGenModuleLocalNeedBoundary" type="checkbox"/>
             <span class="casegen-option-body">
-              <span class="casegen-option-title">是否需要考虑边界</span>
-              <span class="hint">覆盖上下限、临界状态、空值与异常边界。</span>
+              <span class="casegen-option-copy">
+                <span class="casegen-option-title">是否需要考虑边界</span>
+                <span class="hint">覆盖上下限、临界状态、空值与异常边界。</span>
+              </span>
+              <span class="casegen-option-switch" aria-hidden="true">
+                <span class="casegen-option-state casegen-option-state-on">开</span>
+                <span class="casegen-option-state casegen-option-state-off">关</span>
+                <span class="casegen-option-knob"></span>
+              </span>
             </span>
           </label>
           <label class="casegen-option" for="caseGenModuleLocalNeedMobile">
             <input id="caseGenModuleLocalNeedMobile" type="checkbox"/>
             <span class="casegen-option-body">
-              <span class="casegen-option-title">是否需要考虑移动设备操作</span>
-              <span class="hint">补充点击、长按、滑动、横竖屏等手机交互场景。</span>
+              <span class="casegen-option-copy">
+                <span class="casegen-option-title">是否需要考虑移动设备操作</span>
+                <span class="hint">补充点击、长按、滑动、横竖屏等手机交互场景。</span>
+              </span>
+              <span class="casegen-option-switch" aria-hidden="true">
+                <span class="casegen-option-state casegen-option-state-on">开</span>
+                <span class="casegen-option-state casegen-option-state-off">关</span>
+                <span class="casegen-option-knob"></span>
+              </span>
             </span>
           </label>
           <label class="casegen-option" for="caseGenModuleLocalNeedSpecial">
             <input id="caseGenModuleLocalNeedSpecial" type="checkbox"/>
             <span class="casegen-option-body">
-              <span class="casegen-option-title">是否需要考虑特殊场景</span>
-              <span class="hint">可继续勾选下方特殊场景明细。</span>
+              <span class="casegen-option-copy">
+                <span class="casegen-option-title">是否需要考虑特殊场景</span>
+                <span class="hint">可继续勾选下方特殊场景明细。</span>
+              </span>
+              <span class="casegen-option-switch" aria-hidden="true">
+                <span class="casegen-option-state casegen-option-state-on">开</span>
+                <span class="casegen-option-state casegen-option-state-off">关</span>
+                <span class="casegen-option-knob"></span>
+              </span>
             </span>
           </label>
           <div class="casegen-suboptions" id="caseGenModuleLocalSpecialOptions">
@@ -1178,23 +1227,58 @@
             <div class="casegen-suboptions-grid">
               <label class="casegen-suboption" for="caseGenModuleLocalSpecialRepeatOperation">
                 <input id="caseGenModuleLocalSpecialRepeatOperation" type="checkbox"/>
-                <span>重复操作</span>
+                <span class="casegen-suboption-body">
+                  <span class="casegen-suboption-title">重复操作</span>
+                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                    <span class="casegen-option-state casegen-option-state-on">开</span>
+                    <span class="casegen-option-state casegen-option-state-off">关</span>
+                    <span class="casegen-option-knob"></span>
+                  </span>
+                </span>
               </label>
               <label class="casegen-suboption" for="caseGenModuleLocalSpecialMultiTouch">
                 <input id="caseGenModuleLocalSpecialMultiTouch" type="checkbox"/>
-                <span>多点触控</span>
+                <span class="casegen-suboption-body">
+                  <span class="casegen-suboption-title">多点触控</span>
+                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                    <span class="casegen-option-state casegen-option-state-on">开</span>
+                    <span class="casegen-option-state casegen-option-state-off">关</span>
+                    <span class="casegen-option-knob"></span>
+                  </span>
+                </span>
               </label>
               <label class="casegen-suboption" for="caseGenModuleLocalSpecialRepeatExecution">
                 <input id="caseGenModuleLocalSpecialRepeatExecution" type="checkbox"/>
-                <span>重复执行</span>
+                <span class="casegen-suboption-body">
+                  <span class="casegen-suboption-title">重复执行</span>
+                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                    <span class="casegen-option-state casegen-option-state-on">开</span>
+                    <span class="casegen-option-state casegen-option-state-off">关</span>
+                    <span class="casegen-option-knob"></span>
+                  </span>
+                </span>
               </label>
               <label class="casegen-suboption" for="caseGenModuleLocalSpecialWeakNetwork">
                 <input id="caseGenModuleLocalSpecialWeakNetwork" type="checkbox"/>
-                <span>弱网</span>
+                <span class="casegen-suboption-body">
+                  <span class="casegen-suboption-title">弱网</span>
+                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                    <span class="casegen-option-state casegen-option-state-on">开</span>
+                    <span class="casegen-option-state casegen-option-state-off">关</span>
+                    <span class="casegen-option-knob"></span>
+                  </span>
+                </span>
               </label>
               <label class="casegen-suboption" for="caseGenModuleLocalSpecialInterruptResume">
                 <input id="caseGenModuleLocalSpecialInterruptResume" type="checkbox"/>
-                <span>中断恢复</span>
+                <span class="casegen-suboption-body">
+                  <span class="casegen-suboption-title">中断恢复</span>
+                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                    <span class="casegen-option-state casegen-option-state-on">开</span>
+                    <span class="casegen-option-state casegen-option-state-off">关</span>
+                    <span class="casegen-option-knob"></span>
+                  </span>
+                </span>
               </label>
             </div>
           </div>
@@ -1234,25 +1318,74 @@
         <p class="hint casegen-generate-drawer-field-hint">默认留空；如需补充本轮生成约束，请在这里填写。</p>
       </div>
       <div class="casegen-option-list">
+        <label class="casegen-option" for="caseGenNeedFunctionCondition">
+          <input id="caseGenNeedFunctionCondition" type="checkbox"/>
+          <span class="casegen-option-body">
+            <span class="casegen-option-copy">
+              <span class="casegen-option-title">是否需要考虑功能使用条件</span>
+              <span class="hint">补足解锁条件、可用条件、身份门槛、前置任务和时间限制。</span>
+            </span>
+            <span class="casegen-option-switch" aria-hidden="true">
+              <span class="casegen-option-state casegen-option-state-on">开</span>
+              <span class="casegen-option-state casegen-option-state-off">关</span>
+              <span class="casegen-option-knob"></span>
+            </span>
+          </span>
+        </label>
+        <label class="casegen-option" for="caseGenNeedNumericValidation">
+          <input id="caseGenNeedNumericValidation" type="checkbox"/>
+          <span class="casegen-option-body">
+            <span class="casegen-option-copy">
+              <span class="casegen-option-title">是否需要做数值验证</span>
+              <span class="hint">覆盖数值范围、阈值变化、累计扣减和结算正确性。</span>
+            </span>
+            <span class="casegen-option-switch" aria-hidden="true">
+              <span class="casegen-option-state casegen-option-state-on">开</span>
+              <span class="casegen-option-state casegen-option-state-off">关</span>
+              <span class="casegen-option-knob"></span>
+            </span>
+          </span>
+        </label>
         <label class="casegen-option" for="caseGenNeedBoundary">
           <input id="caseGenNeedBoundary" type="checkbox"/>
           <span class="casegen-option-body">
-            <span class="casegen-option-title">是否需要考虑边界</span>
-            <span class="hint">覆盖上下限、临界状态、空值与异常边界。</span>
+            <span class="casegen-option-copy">
+              <span class="casegen-option-title">是否需要考虑边界</span>
+              <span class="hint">覆盖上下限、临界状态、空值与异常边界。</span>
+            </span>
+            <span class="casegen-option-switch" aria-hidden="true">
+              <span class="casegen-option-state casegen-option-state-on">开</span>
+              <span class="casegen-option-state casegen-option-state-off">关</span>
+              <span class="casegen-option-knob"></span>
+            </span>
           </span>
         </label>
         <label class="casegen-option" for="caseGenNeedMobile">
           <input id="caseGenNeedMobile" type="checkbox"/>
           <span class="casegen-option-body">
-            <span class="casegen-option-title">是否需要考虑移动设备操作</span>
-            <span class="hint">补充点击、长按、滑动、横竖屏等手机交互场景。</span>
+            <span class="casegen-option-copy">
+              <span class="casegen-option-title">是否需要考虑移动设备操作</span>
+              <span class="hint">补充点击、长按、滑动、横竖屏等手机交互场景。</span>
+            </span>
+            <span class="casegen-option-switch" aria-hidden="true">
+              <span class="casegen-option-state casegen-option-state-on">开</span>
+              <span class="casegen-option-state casegen-option-state-off">关</span>
+              <span class="casegen-option-knob"></span>
+            </span>
           </span>
         </label>
         <label class="casegen-option" for="caseGenNeedSpecial">
           <input id="caseGenNeedSpecial" type="checkbox"/>
           <span class="casegen-option-body">
-            <span class="casegen-option-title">是否需要考虑特殊场景</span>
-            <span class="hint">可继续勾选下方特殊场景明细。</span>
+            <span class="casegen-option-copy">
+              <span class="casegen-option-title">是否需要考虑特殊场景</span>
+              <span class="hint">可继续勾选下方特殊场景明细。</span>
+            </span>
+            <span class="casegen-option-switch" aria-hidden="true">
+              <span class="casegen-option-state casegen-option-state-on">开</span>
+              <span class="casegen-option-state casegen-option-state-off">关</span>
+              <span class="casegen-option-knob"></span>
+            </span>
           </span>
         </label>
         <div class="casegen-suboptions" id="caseGenSpecialOptions">
@@ -1260,23 +1393,58 @@
           <div class="casegen-suboptions-grid">
             <label class="casegen-suboption" for="caseGenSpecialRepeatOperation">
               <input id="caseGenSpecialRepeatOperation" type="checkbox"/>
-              <span>重复操作</span>
+              <span class="casegen-suboption-body">
+                <span class="casegen-suboption-title">重复操作</span>
+                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                  <span class="casegen-option-state casegen-option-state-on">开</span>
+                  <span class="casegen-option-state casegen-option-state-off">关</span>
+                  <span class="casegen-option-knob"></span>
+                </span>
+              </span>
             </label>
             <label class="casegen-suboption" for="caseGenSpecialMultiTouch">
               <input id="caseGenSpecialMultiTouch" type="checkbox"/>
-              <span>多点触控</span>
+              <span class="casegen-suboption-body">
+                <span class="casegen-suboption-title">多点触控</span>
+                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                  <span class="casegen-option-state casegen-option-state-on">开</span>
+                  <span class="casegen-option-state casegen-option-state-off">关</span>
+                  <span class="casegen-option-knob"></span>
+                </span>
+              </span>
             </label>
             <label class="casegen-suboption" for="caseGenSpecialRepeatExecution">
               <input id="caseGenSpecialRepeatExecution" type="checkbox"/>
-              <span>重复执行</span>
+              <span class="casegen-suboption-body">
+                <span class="casegen-suboption-title">重复执行</span>
+                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                  <span class="casegen-option-state casegen-option-state-on">开</span>
+                  <span class="casegen-option-state casegen-option-state-off">关</span>
+                  <span class="casegen-option-knob"></span>
+                </span>
+              </span>
             </label>
             <label class="casegen-suboption" for="caseGenSpecialWeakNetwork">
               <input id="caseGenSpecialWeakNetwork" type="checkbox"/>
-              <span>弱网</span>
+              <span class="casegen-suboption-body">
+                <span class="casegen-suboption-title">弱网</span>
+                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                  <span class="casegen-option-state casegen-option-state-on">开</span>
+                  <span class="casegen-option-state casegen-option-state-off">关</span>
+                  <span class="casegen-option-knob"></span>
+                </span>
+              </span>
             </label>
             <label class="casegen-suboption" for="caseGenSpecialInterruptResume">
               <input id="caseGenSpecialInterruptResume" type="checkbox"/>
-              <span>中断恢复</span>
+              <span class="casegen-suboption-body">
+                <span class="casegen-suboption-title">中断恢复</span>
+                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
+                  <span class="casegen-option-state casegen-option-state-on">开</span>
+                  <span class="casegen-option-state casegen-option-state-off">关</span>
+                  <span class="casegen-option-knob"></span>
+                </span>
+              </span>
             </label>
           </div>
         </div>
