@@ -3879,6 +3879,168 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   min-height: 0;
   font-size: 12px;
 }
+.xmind-casegen-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.xmind-casegen-history-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(148,163,184,0.22);
+  background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(248,250,252,0.9));
+}
+.xmind-casegen-history-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.xmind-casegen-history-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.xmind-casegen-history-location {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.xmind-casegen-history-time {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.xmind-casegen-history-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(37,99,235,0.18);
+  background: rgba(219,234,254,0.9);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+.xmind-casegen-history-summary {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.xmind-casegen-history-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.xmind-casegen-history-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(248,250,252,0.92);
+  border: 1px solid rgba(148,163,184,0.18);
+}
+.xmind-casegen-history-detail-module {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.xmind-casegen-history-detail-count {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.xmind-casegen-history-empty,
+.xmind-casegen-history-empty-inline {
+  border-radius: 14px;
+  border: 1px dashed rgba(148,163,184,0.32);
+  background: rgba(248,250,252,0.76);
+  color: var(--muted);
+  text-align: center;
+}
+.xmind-casegen-history-empty {
+  padding: 36px 18px;
+  font-size: 13px;
+}
+.xmind-casegen-history-empty-inline {
+  padding: 14px 12px;
+  font-size: 12px;
+}
+.xmind-casegen-history-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(249,115,22,0.24);
+  background: rgba(255,247,237,0.92);
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.xmind-casegen-history-reason.is-error {
+  border-color: rgba(239,68,68,0.24);
+  background: rgba(254,242,242,0.92);
+  color: #b91c1c;
+}
+.xmind-casegen-history-reason-label {
+  flex: 0 0 auto;
+  font-weight: 800;
+}
+.xmind-casegen-history-reason-text {
+  min-width: 0;
+}
+.xmind-casegen-history-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(37,99,235,0.16);
+  background: rgba(239,246,255,0.72);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.xmind-casegen-history-preview-label {
+  flex: 0 0 auto;
+  font-weight: 800;
+  color: #1d4ed8;
+}
+.xmind-casegen-history-preview-text {
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  word-break: break-word;
+}
+.xmind-casegen-history-diagnostics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.xmind-casegen-history-diagnostic-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,0.24);
+  background: rgba(248,250,252,0.96);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
 .xmind-casegen-prep-start {
   display: block;
 }
@@ -9537,8 +9699,8 @@ tr.import-invalid-locate-active td {
   text-align: center;
 }
 
-.xmind-structure-viewer svg.subLines path.xmind-casegen-pending-link,
-.xmind-structure-viewer svg.subLines path[data-xmind-casegen-link="topup-pending"] {
+.xmind-structure-viewer svg path.xmind-casegen-pending-link,
+.xmind-structure-viewer svg path[data-xmind-casegen-link="topup-pending"] {
   stroke-dasharray: 6 5;
   stroke-linecap: round;
 }
@@ -11175,6 +11337,46 @@ button.exec-overview-file-chip,
   border-color: rgba(71,85,105,0.42);
   background: linear-gradient(135deg, rgba(30,41,59,0.92), rgba(15,23,42,0.96));
 }
+:root[data-theme="dark"] .xmind-casegen-history-card,
+:root[data-theme="dark"] .xmind-casegen-history-detail,
+:root[data-theme="dark"] .xmind-casegen-history-empty,
+:root[data-theme="dark"] .xmind-casegen-history-empty-inline {
+  border-color: rgba(71,85,105,0.42);
+  background: linear-gradient(135deg, rgba(30,41,59,0.92), rgba(15,23,42,0.96));
+  color: var(--text);
+}
+:root[data-theme="dark"] .xmind-casegen-history-pill {
+  border-color: rgba(96,165,250,0.28);
+  background: rgba(30,64,175,0.34);
+  color: #dbeafe;
+}
+:root[data-theme="dark"] .xmind-casegen-history-reason {
+  border-color: rgba(251,146,60,0.34);
+  background: rgba(124,45,18,0.32);
+  color: #fed7aa;
+}
+:root[data-theme="dark"] .xmind-casegen-history-reason.is-error {
+  border-color: rgba(248,113,113,0.36);
+  background: rgba(127,29,29,0.38);
+  color: #fecaca;
+}
+:root[data-theme="dark"] .xmind-casegen-history-preview {
+  border-color: rgba(96,165,250,0.28);
+  background: rgba(30,64,175,0.24);
+  color: #e2e8f0;
+}
+:root[data-theme="dark"] .xmind-casegen-history-preview-label {
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .xmind-casegen-history-diagnostic-chip {
+  border-color: rgba(71,85,105,0.42);
+  background: rgba(15,23,42,0.72);
+  color: #cbd5e1;
+}
+:root[data-theme="dark"] .xmind-casegen-history-detail-count,
+:root[data-theme="dark"] .xmind-casegen-history-time {
+  color: #cbd5e1;
+}
 :root[data-theme="dark"] .xmind-casegen-prep-overview-item,
 :root[data-theme="dark"] .xmind-casegen-prep-card,
 :root[data-theme="dark"] .xmind-casegen-prep-choice,
@@ -12189,6 +12391,11 @@ button.exec-overview-file-chip,
   }
   .xmind-casegen-summary-dialog-actions button {
     flex: 1 1 calc(50% - 4px);
+  }
+  .xmind-casegen-history-head,
+  .xmind-casegen-history-detail {
+    flex-direction: column;
+    align-items: stretch;
   }
   .xmind-casegen-viewer {
     min-height: 0;

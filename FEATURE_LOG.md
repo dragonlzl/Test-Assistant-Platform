@@ -19,6 +19,135 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 生成记录支持展示未新增原因
+- 功能描述：增强 XMind 用例生成抽屉中的 `生成记录` 弹窗。当根节点或模块节点执行生成后出现“本轮未生成新的模块或用例”时，历史记录现在会明确展示未新增原因，并附带去重/过滤诊断信息，区分是“模块重复”“用例重复”“模型未返回有效内容”还是“返回内容不在当前动作范围内”。
+- 操作方式：
+  - 在 `XMind 用例生成` 抽屉中执行根节点或模块节点生成；
+  - 若本轮没有新增模块或用例，点击工具栏中的 `生成记录`；
+  - 在对应历史卡片中查看 `未新增原因` 和诊断标签，例如 `重复模块 2 个`、`重复用例 3 条` 等。
+- 使用效果：
+  - 用户可以直接判断“补全模块+用例”为何没有新增结果，不再只能看到笼统的失败提示；
+  - 对“被去重”“被动作契约过滤”“模型未返回有效输出”等场景有明确区分，便于继续调整需求或重试；
+  - 历史弹窗的信息密度仍保持可读，没有新增第二套日志面板。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：为 `filterModulesByContract()`、`mergeCasesWithoutDuplicates()` 增加诊断计数；为根节点/模块节点无新增分支补充 `reasonText/diagnostics`；扩展生成记录落库与历史弹窗渲染；
+  - `style.css`：新增生成记录中的“未新增原因”提示块和诊断标签样式，并补齐深色主题；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增“补全模块+用例无新增原因”回归用例，并将该用例的根节点右键触发改为更稳定的精确根节点命中方式；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 `state.xmindCaseGen.history`、XMind 专属生成链路、共享 `caseGenModules/caseGenResults` 真源和已有生成记录弹窗；本次仅在现有前端生成/去重链路上补诊断信息，没有新增第二套状态机或后端依赖。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "工具栏支持查看生成记录，并展示根节点与模块节点的生成摘要|生成记录会展示根节点补全模块加用例未新增的原因" --reporter=line`（2/2 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-31 为 XMind 生成记录补充“未新增原因 + 诊断标签”展示，支持区分重复、过滤和模型空输出等场景。
+  - 2026-03-31 继续细化“模型未返回可识别的有效模块或用例”这类泛化原因：现在会进一步区分“返回内容为空”“返回普通文本”“非法 JSON”“JSON 缺少 modules/data 数组”“模块数组为空”等结构异常，并在历史卡片中追加“模型返回片段”，便于直接判断模型当时到底回了什么。
+  - 2026-03-31 将上述原因文案进一步收口为更通俗的用户语义：例如把空模块数组翻译为“当前没有需要补充的新模块”，把重复覆盖翻译为“当前模块已经覆盖，不需要再补充新模块”；同时新增失败记录卡片，模型异常时会在生成记录中直接显示“模型服务暂时不可用”“模型响应超时”或“模型连接失败”等通俗失败原因，并保留简短错误信息便于排查。
+
+- 功能名称：XMind 放弃本次生成统一为全局最近操作快照
+- 功能名称：XMind 根节点已有模块骨架时显示重新生成全量用例
+- 功能名称：XMind 根节点补全模块支持生成中占位与新增模块框选
+- 功能描述：增强 XMind 用例生成抽屉中根节点 `补全模块`、`补全模块+用例` 的树内生成表现。现在这两个动作触发后，会先在根节点新增位置插入一个带虚线连接的生成中占位节点；生成完成后，新增模块会像模块追加生成一样被虚线框高亮。其中 `补全模块` 高亮模块节点本体，`补全模块+用例` 高亮整棵新增模块子树（模块节点 + 新生成用例）。
+- 操作方式：
+  - 在已有 AI 模块骨架的 XMind 画布上，右键根节点执行 `补全模块` 或 `补全模块+用例`；
+  - 生成中时，会在根节点子节点追加位置看到 `补全模块中` / `补全模块+用例中` 占位节点，并带虚线连接到根节点；
+  - 生成成功后，新增模块区域会被虚线框圈起；
+  - `补全模块` 只框选新模块节点本体，`补全模块+用例` 会框选整个新增模块及其新增用例区域；多个新增模块仍按模块分别独立成框。
+- 使用效果：
+  - 根节点补全行为与模块追加生成的交互语义统一，生成前后都有明确的树内反馈；
+  - 用户可以更直观看到“新增模块将出现在哪里”，而不是等结果直接跳变；
+  - 对 `补全模块+用例`，新增模块不再只高亮用例部分，整块新模块区域都会被明确框出。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：扩展 `topupHighlight` 支持 `module` / `subtree` 两种高亮范围；为根节点 `补全模块` / `补全模块+用例` 增加 root 级 pending placeholder；补充模块节点本体的 topup token 挂载；pending link 查找兼容 `svg.lines` 与 `svg.subLines`；
+  - `style.css`：将 pending link 的虚线样式从 `subLines` 扩展到所有 XMind 连线路径，保证根节点新增模块占位也能显示虚线连接；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增根节点 `补全模块` 的 pending + 框选回归，并加固 `补全模块+用例` 的占位与整棵新模块子树框选断言；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 `topupHighlight` overlay、模块追加生成的 placeholder 表现、共享 `caseGenModules/caseGenResults` 真源和现有根节点动作编排；本次仅把 root 增量生成接入同一套高亮/占位机制，没有新增第二套渲染层。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（11/11 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-31 为根节点 `补全模块` / `补全模块+用例` 增加树内生成中占位、根节点虚线连接，以及新增模块/新增模块+用例区域的独立虚线框高亮。
+
+- 功能名称：XMind 根节点已有模块骨架时显示重新生成全量用例
+- 功能描述：收口 XMind 用例生成抽屉中根节点 `生成全量用例` 的文案语义。现在只要当前已经存在 AI 模块骨架或 AI 用例，根节点菜单中的该动作都会显示为 `重新生成全量用例`；不再只有“已有用例”时才切换文案，避免在“先生成模块、再补全用例”的场景里仍显示成首次生成。
+- 操作方式：
+  - 初次进入且尚无 AI 模块/用例时，根节点仍显示 `生成全量用例`；
+  - 当根节点先执行过 `生成全量模块`，即便此时还没有任何用例，重新打开根节点菜单也会显示 `重新生成全量用例`；
+  - 若后续已有完整 AI 用例，文案继续保持 `重新生成全量用例`。
+- 使用效果：
+  - 根节点动作文案与当前树内状态保持一致，已有模块骨架时不会再误导为“首次全量生成”；
+  - 并发场景下根节点动作的禁用态也会基于新文案展示，减少用户理解成本；
+  - 生成历史与成功提示语在“已有模块骨架后再生成全量用例”场景下也会同步收口为“重新生成”语义。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：根节点 `重新生成全量用例` 的文案判定改为基于“已有 AI 模块或用例”，并同步更新历史动作标签与成功提示语；
+  - `tests/ui/xmind_casegen_flow.spec.js`：更新根节点模块骨架态与并发态下的菜单断言，验证文案切换为 `重新生成全量用例`；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有根节点动作矩阵、共享 `caseGenModules/caseGenResults` 真源、生成历史记录与状态提示链路；本次仅调整前端文案判定，不引入新的生成分支或状态机。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（10/10 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-31 将根节点 `生成全量用例` 的文案切换条件从“已有用例”扩展为“已有模块骨架或已有用例”。
+
+- 功能名称：XMind 放弃本次生成统一为全局最近操作快照
+- 功能描述：修正 XMind 用例生成抽屉中根节点与模块节点“放弃本次生成”的快照冲突。现在根节点与模块节点生成都会写入同一份全局操作快照栈，根节点 `放弃本次生成` 始终回退最近一次生成操作；模块节点 `放弃本次生成` 仅在“最新一次操作正好属于当前模块”时可用，避免根节点放弃时误吞更早的模块骨架或其他模块结果。
+- 操作方式：
+  - 先在根节点生成模块骨架，再在某个模块节点单独生成或追加用例；
+  - 此时根节点右键 `放弃本次生成` 会只回退最近一次操作，不会把更早一次的根节点模块骨架一并清掉；
+  - 若最新一次操作属于某个模块，则只有该模块的 `放弃本次生成` 可点击，其他模块保持置灰；
+  - 回退后，快照栈会继续回到上一个可放弃的操作点。
+- 使用效果：
+  - 根节点和模块节点不再各自维护互相打架的放弃语义，回退目标始终与“最近一次真实生成操作”一致；
+  - 先根节点生成、再模块生成的场景下，根节点回退只会撤销模块这次最新生成，不会误删更早生成的模块骨架；
+  - 模块菜单的 `放弃本次生成` 可点击状态更自然，只会暴露当前真正可回退的最新模块操作。
+- 新增内容/接口/组件：
+  - `scripts/core/casesGenCore.js`：将 XMind 回退能力收口到统一的 `operationSnapshots` 栈，并提供 `getLatestCaseGenOperationSnapshot`、`discardCaseGenOperationSnapshot`、`rollbackCaseGenOperationSnapshot` 共享接口；
+  - `scripts/core/appRuntime.js`、`scripts/modules/app.js`：补齐 XMind 抽屉运行时可见的统一快照接口注入，确保抽屉与核心共用同一份最新操作栈；
+  - `scripts/modules/xmindCasegen.js`：根节点回退提示语改为全局语义，并修正本地 fallback 的“最新快照”判定为始终取栈顶；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增并通过“根节点放弃本次生成按全局最近一次快照回退，不会误吞更早的模块骨架”回归用例；
+  - 未新增后端接口、路由或存储表。
+- 复用说明：继续复用现有 `casesGenCore`、共享 `caseGenModules/caseGenResults` 真源、XMind 抽屉控制器与现有右键动作体系；本次仅把 root/module 放弃动作统一到同一份共享快照栈，没有新增第二套状态机，也没有引入后端依赖。
+- 测试与验证：
+  - `node --check scripts/base/state.js scripts/modules/app.js scripts/core/appRuntime.js scripts/core/casesGenCore.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（10/10 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-30 将 XMind 根节点/模块节点的 `放弃本次生成` 收口为全局最近操作快照语义，修复根节点回退误吞更早模块骨架的问题。
+
+- 功能名称：XMind 用例生成增加生成记录弹窗
+- 功能描述：在 XMind 用例生成抽屉的工具栏中，于 `生成前置准备` 右侧新增 `生成记录` 入口。点击后复用现有居中弹窗壳展示当前 XMind 用例生成历史，记录每次根节点或模块节点右键动作发生的位置、动作名称、涉及模块数，以及每个模块本轮生成的用例条数；记录持久化在 `state.xmindCaseGen.history`，刷新后仍可查看。
+- 操作方式：
+  - 打开 `XMind 用例生成` 抽屉，在搜索栏同排工具按钮中点击 `生成记录`；
+  - 弹窗会按最新优先展示当前需求下的生成历史；
+  - 每条记录会显示 `根节点 / 模块节点`、对应右键动作、生成模块数量，以及模块级的用例数量明细；
+  - 继续在 XMind 画布上触发生成后，再次打开即可看到新增记录。
+- 使用效果：
+  - 用户可以直接回看这份 XMind 用例在何处触发过哪些生成操作，不再需要靠记忆判断“这次到底补了哪些模块、每个模块补了多少条”；
+  - 历史弹窗和原有前置准备共用同一套居中浮层，不会再增加第二套抽屉/弹窗心智负担；
+  - 记录刷新后仍保留，方便在重新进入 XMind 页后继续核对生成过程。
+- 新增内容/接口/组件：
+  - `ai-workflow.html`、`index.html`：在 XMind 抽屉工具栏新增 `生成记录` 按钮，并为现有弹窗描述补充独立 DOM 标识；
+  - `scripts/modules/xmindCasegen.js`：为现有 summary overlay 增加 `prep/history` 双模式，新增历史记录收集、格式化与渲染逻辑，并在根节点/模块节点生成成功或“本轮无新增结果”时写入 `state.xmindCaseGen.history`；
+  - `scripts/base/state.js`、`scripts/core/casesGenCore.js`、`scripts/modules/app.js`：补充 `xmindCaseGen.history` 默认态与重置态；
+  - `style.css`：新增生成记录卡片样式、深色主题样式与移动端布局；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增生成记录入口与弹窗断言，并顺带加固 XMind 右键 helper，减少根节点/模块节点场景的命中抖动；
+  - 未新增后端接口、路由或存储表。
+- 复用说明：继续复用现有 XMind 抽屉、居中 summary overlay、`caseGenModules/caseGenResults` 共享真源、根节点/模块节点生成编排与工作流持久化；本次仅在前端共享状态中扩展一份轻量历史数组，没有新增后端依赖，也没有复制新的弹窗体系。
+- 测试与验证：
+  - `node --check scripts/base/state.js scripts/core/casesGenCore.js scripts/modules/app.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js`（9/9 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_export_xmind.spec.js`（3/3 通过）
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-03-30 新增 XMind 用例生成 `生成记录` 入口与历史弹窗，记录根节点/模块节点操作摘要，并将按钮并入现有画布工具栏内联控制区。
+
 - 功能名称：XMind 已有模块补全用例为已有用例模块保留独立虚线框
 - 功能描述：收口 XMind 用例生成抽屉中根节点 `已有模块补全用例` 的增量高亮语义。现在当模块原本已经有用例，再通过根节点补全出新的缺漏用例时，新增的那一批仍会像追加生成一样保留独立虚线框高亮；同时高亮 token 改为带模块标识的前缀，避免不同模块的本轮新增区域在极端情况下串组为同一个虚线框。
 - 操作方式：

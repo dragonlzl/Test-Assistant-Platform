@@ -142,6 +142,9 @@
         treeSourceSignature: '',
         hasModuleSkeleton: false,
         hasImportedBaseline: false,
+        history: [],
+        operationSnapshots: [],
+        lastOperationSnapshotId: '',
         rootSnapshotId: '',
         rootSnapshots: [],
         root: {

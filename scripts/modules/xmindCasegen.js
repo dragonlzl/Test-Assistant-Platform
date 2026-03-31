@@ -61,8 +61,11 @@
     var drawerTitleEl = document.getElementById('xmindCaseGenDrawerTitle');
     var toolbarEl = document.getElementById('xmindCaseGenToolbar');
     var summaryBtn = document.getElementById('xmindCaseGenSummaryBtn');
+    var historyBtn = document.getElementById('xmindCaseGenHistoryBtn');
     var summaryOverlayEl = document.getElementById('xmindCaseGenSummaryOverlay');
     var summaryDialogEl = document.getElementById('xmindCaseGenSummaryDialog');
+    var summaryDialogTitleEl = document.getElementById('xmindCaseGenSummaryDialogTitle');
+    var summaryDialogDescEl = document.getElementById('xmindCaseGenSummaryDialogDesc');
     var summaryDialogBodyEl = document.getElementById('xmindCaseGenSummaryDialogBody');
     var prepResetBtn = document.getElementById('xmindCaseGenPrepResetBtn');
     var summaryCloseBtn = document.getElementById('xmindCaseGenSummaryCloseBtn');
@@ -80,6 +83,7 @@
     var listObserver = null;
     var drawerInstance = null;
     var summaryDialogOpen = false;
+    var summaryDialogMode = 'prep';
     var currentMindData = null;
     var mindInstance = null;
     var mindApiReadyPromise = null;
@@ -98,6 +102,7 @@
     var STEP_REQUIREMENT = 1;
     var STEP_CASES = 2;
     var STEP_OPTIONS = 3;
+    var HISTORY_LIMIT = 80;
     var multimodalMaxImages = 20;
     var multimodalMaxEdge = 1600;
     var multimodalMaxBytes = 4 * 1024 * 1024;
@@ -287,6 +292,7 @@
     function getInlineControlButtons() {
       return [
         summaryBtn,
+        historyBtn,
         importRequirementBtn,
         importCasesBtn,
         selectCasesBtn,
@@ -468,6 +474,9 @@
           treeSourceSignature: '',
           hasModuleSkeleton: false,
           hasImportedBaseline: false,
+          history: [],
+          operationSnapshots: [],
+          lastOperationSnapshotId: '',
           rootSnapshotId: '',
           rootSnapshots: [],
           root: createDefaultRootState(),
@@ -478,6 +487,8 @@
           modules: {},
         };
       }
+      if (!Array.isArray(state.xmindCaseGen.history)) state.xmindCaseGen.history = [];
+      if (!Array.isArray(state.xmindCaseGen.operationSnapshots)) state.xmindCaseGen.operationSnapshots = [];
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) state.xmindCaseGen.rootSnapshots = [];
       if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
       if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') {
@@ -496,6 +507,7 @@
       state.xmindCaseGen.treeSourceSignature = String(state.xmindCaseGen.treeSourceSignature || '');
       state.xmindCaseGen.hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
       state.xmindCaseGen.hasImportedBaseline = hasImportedBaselineCases();
+      state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
       state.xmindCaseGen.root.hideAiLayer = state.xmindCaseGen.root.hideAiLayer === true;
       state.xmindCaseGen.summaryCollapsed = state.xmindCaseGen.summaryCollapsed === true;
@@ -988,6 +1000,191 @@
         + '</div>';
     }
 
+    function padDatePart(value) {
+      var num = Number(value) || 0;
+      return num < 10 ? ('0' + String(num)) : String(num);
+    }
+
+    function formatHistoryTimestamp(timestamp) {
+      var time = Number(timestamp);
+      if (!Number.isFinite(time) || time <= 0) return '-';
+      var date = new Date(time);
+      if (isNaN(date.getTime())) return '-';
+      return date.getFullYear()
+        + '-' + padDatePart(date.getMonth() + 1)
+        + '-' + padDatePart(date.getDate())
+        + ' ' + padDatePart(date.getHours())
+        + ':' + padDatePart(date.getMinutes())
+        + ':' + padDatePart(date.getSeconds());
+    }
+
+    function getRootHistoryActionLabel(actionId, hadAiContentBeforeAction) {
+      if (actionId === ROOT_ACTIONS.FULL_CASES) return getRootFullCasesLabel(hadAiContentBeforeAction === true);
+      if (actionId === ROOT_ACTIONS.FULL_MODULES) return '生成全量模块';
+      if (actionId === ROOT_ACTIONS.REGENERATE_MODULES) return '重新生成模块';
+      if (actionId === ROOT_ACTIONS.EXISTING_CASES) return '已有模块补全用例';
+      if (actionId === ROOT_ACTIONS.TOPUP_MODULES) return '补全模块';
+      if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES) return '补全模块+用例';
+      if (actionId === ROOT_ACTIONS.APPEND_ALL) return '追加生成全部模块+用例';
+      return String(actionId || '');
+    }
+
+    function getModuleHistoryActionLabel(actionId, moduleEntry, hadAiCasesBeforeAction) {
+      if (actionId === MODULE_ACTIONS.FULL_CASES) {
+        if (typeof hadAiCasesBeforeAction === 'boolean') {
+          return hadAiCasesBeforeAction ? '重新生成全量用例' : '生成全量用例';
+        }
+        return getModuleFullCasesLabel(moduleEntry);
+      }
+      if (actionId === MODULE_ACTIONS.APPEND) return '追加生成';
+      return String(actionId || '');
+    }
+
+    function buildHistoryLocationLabel(scope, moduleTitle) {
+      if (scope === 'module') {
+        return '模块节点 · ' + (normalizeModuleTitle(moduleTitle) || '当前模块');
+      }
+      return '根节点 · ' + getRequirementLabelText();
+    }
+
+    function normalizeHistoryDetails(details) {
+      var map = {};
+      (Array.isArray(details) ? details : []).forEach(function(item) {
+        if (!item) return;
+        var moduleTitle = normalizeModuleTitle(item.module || item.moduleTitle || '');
+        var key = normalizeModuleKey(moduleTitle || '');
+        var stableKey = key || ('module-' + String(Object.keys(map).length + 1));
+        if (!map[stableKey]) {
+          map[stableKey] = {
+            module: moduleTitle || '未命名模块',
+            caseCount: 0,
+          };
+        }
+        var caseCount = Number(item.caseCount);
+        if (!Number.isFinite(caseCount) || caseCount < 0) caseCount = 0;
+        map[stableKey].caseCount += caseCount;
+      });
+      return Object.keys(map).map(function(key) {
+        return map[key];
+      });
+    }
+
+    function normalizeHistoryDiagnostics(items) {
+      var result = [];
+      var seen = {};
+      (Array.isArray(items) ? items : []).forEach(function(item) {
+        var text = String(item || '').trim();
+        if (!text || seen[text]) return;
+        seen[text] = true;
+        result.push(text);
+      });
+      return result;
+    }
+
+    function normalizeHistoryPreviewText(value) {
+      var text = String(value || '').replace(/\s+/g, ' ').trim();
+      if (!text) return '';
+      if (text.length <= 140) return text;
+      return text.slice(0, 140).trim() + '…';
+    }
+
+    function recordGenerationHistory(payload) {
+      var xmindState = ensureState();
+      var history = Array.isArray(xmindState.history) ? xmindState.history : [];
+      var details = normalizeHistoryDetails(payload && payload.details);
+      var diagnostics = normalizeHistoryDiagnostics(payload && payload.diagnostics);
+      var scope = payload && payload.scope === 'module' ? 'module' : 'root';
+      var moduleCount = Number(payload && payload.moduleCount);
+      if (!Number.isFinite(moduleCount) || moduleCount < 0) moduleCount = details.length;
+      history.unshift({
+        id: 'history-' + String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000)),
+        scope: scope,
+        locationLabel: buildHistoryLocationLabel(scope, payload && payload.moduleTitle),
+        actionId: String(payload && payload.actionId ? payload.actionId : ''),
+        actionLabel: String(payload && payload.actionLabel ? payload.actionLabel : ''),
+        moduleCount: moduleCount,
+        details: details,
+        resultKind: payload && (
+          payload.resultKind === 'no-change'
+          || payload.resultKind === 'error'
+        ) ? String(payload.resultKind) : 'changed',
+        reasonText: payload && payload.reasonText ? String(payload.reasonText) : '',
+        diagnostics: diagnostics,
+        previewText: normalizeHistoryPreviewText(payload && payload.previewText),
+        createdAt: Date.now(),
+      });
+      if (history.length > HISTORY_LIMIT) history.length = HISTORY_LIMIT;
+      xmindState.history = history;
+    }
+
+    function renderHistoryDialog() {
+      if (!summaryDialogBodyEl) return;
+      var history = ensureState().history || [];
+      if (!Array.isArray(history) || !history.length) {
+        summaryDialogBodyEl.innerHTML = '<div class="xmind-casegen-history-empty">暂无生成记录</div>';
+        return;
+      }
+      summaryDialogBodyEl.innerHTML = '<div class="xmind-casegen-history-list">'
+        + history.map(function(entry) {
+          var details = Array.isArray(entry.details) ? entry.details : [];
+          var diagnostics = normalizeHistoryDiagnostics(entry && entry.diagnostics);
+          var resultKind = entry && entry.resultKind ? String(entry.resultKind) : 'changed';
+          var summaryText = '生成模块 ' + String(Number(entry.moduleCount) || 0) + ' 个';
+          if (resultKind === 'error') summaryText = '本次生成未成功';
+          else if (resultKind === 'no-change' && !details.length) summaryText = '本次没有新增结果';
+          var detailHtml = details.length
+            ? '<div class="xmind-casegen-history-detail-list">'
+                + details.map(function(detail) {
+                  return '<div class="xmind-casegen-history-detail">'
+                    + '<strong class="xmind-casegen-history-detail-module">' + escapeHtml(detail.module || '未命名模块') + '</strong>'
+                    + '<span class="xmind-casegen-history-detail-count">' + String(Number(detail.caseCount) || 0) + ' 条用例</span>'
+                    + '</div>';
+                }).join('')
+              + '</div>'
+            : '<div class="xmind-casegen-history-empty-inline">本次未生成新的模块或用例</div>';
+          var reasonHtml = entry && entry.reasonText
+            ? '<div class="xmind-casegen-history-reason' + (resultKind === 'error' ? ' is-error' : '') + '">'
+                + '<strong class="xmind-casegen-history-reason-label">' + (resultKind === 'error' ? '失败原因：' : '未新增原因：') + '</strong>'
+                + '<span class="xmind-casegen-history-reason-text">' + escapeHtml(entry.reasonText) + '</span>'
+              + '</div>'
+            : '';
+          var previewHtml = entry && entry.previewText
+            ? '<div class="xmind-casegen-history-preview">'
+                + '<strong class="xmind-casegen-history-preview-label">模型返回片段：</strong>'
+                + '<span class="xmind-casegen-history-preview-text">' + escapeHtml(entry.previewText) + '</span>'
+              + '</div>'
+            : '';
+          var diagnosticsHtml = diagnostics.length
+            ? '<div class="xmind-casegen-history-diagnostics">'
+                + diagnostics.map(function(text) {
+                  return '<span class="xmind-casegen-history-diagnostic-chip">' + escapeHtml(text) + '</span>';
+                }).join('')
+              + '</div>'
+            : '';
+          return '<article class="xmind-casegen-history-card">'
+            + '<div class="xmind-casegen-history-head">'
+            +   '<div class="xmind-casegen-history-copy">'
+            +     '<strong class="xmind-casegen-history-location">' + escapeHtml(entry.locationLabel || '-') + '</strong>'
+            +     '<span class="xmind-casegen-history-time">' + escapeHtml(formatHistoryTimestamp(entry.createdAt)) + '</span>'
+            +   '</div>'
+            +   '<span class="xmind-casegen-history-pill">' + escapeHtml(entry.actionLabel || '-') + '</span>'
+            + '</div>'
+            + '<div class="xmind-casegen-history-summary">' + escapeHtml(summaryText) + '</div>'
+            + detailHtml
+            + reasonHtml
+            + previewHtml
+            + diagnosticsHtml
+            + '</article>';
+        }).join('')
+        + '</div>';
+    }
+
+    function renderOpenedSummaryDialog() {
+      if (summaryDialogOpen !== true) return;
+      if (summaryDialogMode === 'history') renderHistoryDialog();
+      else renderPrepDialog();
+    }
+
     function getCaseGenSettingsSnapshot() {
       if (casesGenApi && typeof casesGenApi.ensureCaseGenSettings === 'function') {
         return casesGenApi.ensureCaseGenSettings();
@@ -1213,7 +1410,7 @@
         appendManualRequirementImages(files).then(function(ok) {
           if (ok) {
             notifyStatus('已添加需求图片', 'ok');
-            if (summaryDialogOpen === true) renderPrepDialog();
+            renderOpenedSummaryDialog();
           }
         });
         manualImageInputEl.value = '';
@@ -1264,6 +1461,13 @@
       if (Number(step) >= STEP_REQUIREMENT && Number(step) <= STEP_OPTIONS) {
         prep.step = Number(step);
       }
+      summaryDialogMode = 'prep';
+      summaryDialogOpen = true;
+      applySummaryDialogState();
+    }
+
+    function openHistoryDialog() {
+      summaryDialogMode = 'history';
       summaryDialogOpen = true;
       applySummaryDialogState();
     }
@@ -1276,6 +1480,7 @@
 
     function applySummaryDialogState() {
       var open = summaryDialogOpen === true;
+      var mode = summaryDialogMode === 'history' ? 'history' : 'prep';
       if (summaryOverlayEl) {
         summaryOverlayEl.hidden = !open;
         summaryOverlayEl.setAttribute('aria-hidden', open ? 'false' : 'true');
@@ -1285,10 +1490,25 @@
         }
       }
       if (summaryBtn) {
-        summaryBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        summaryBtn.setAttribute('aria-expanded', open && mode === 'prep' ? 'true' : 'false');
         summaryBtn.textContent = '生成前置准备';
       }
-      if (open) renderPrepDialog();
+      if (historyBtn) {
+        historyBtn.setAttribute('aria-expanded', open && mode === 'history' ? 'true' : 'false');
+        historyBtn.textContent = '生成记录';
+      }
+      if (prepResetBtn) prepResetBtn.hidden = !(open && mode === 'prep');
+      if (summaryDialogTitleEl) {
+        summaryDialogTitleEl.textContent = mode === 'history' ? '生成记录' : '生成前置准备';
+      }
+      if (summaryDialogDescEl) {
+        summaryDialogDescEl.textContent = mode === 'history'
+          ? '记录当前 XMind 用例生成里每次节点操作的结果摘要。'
+          : '按 3 步完成需求导入、参考用例选择与生成选项配置，然后回到画布触发生成。';
+      }
+      if (!open) return;
+      if (mode === 'history') renderHistoryDialog();
+      else renderPrepDialog();
     }
 
     function confirmResetPrepState() {
@@ -1333,6 +1553,9 @@
           treeSourceSignature: '',
           hasModuleSkeleton: false,
           hasImportedBaseline: false,
+          history: [],
+          operationSnapshots: [],
+          lastOperationSnapshotId: '',
           rootSnapshotId: '',
           rootSnapshots: [],
           root: createDefaultRootState(),
@@ -1353,7 +1576,7 @@
         state.importedCases = [];
       }
       ensureState();
-      renderPrepDialog();
+      renderOpenedSummaryDialog();
       scheduleRender('prep-reset');
       persistXmindState(true);
     }
@@ -1361,7 +1584,7 @@
     function setPrepStep(step) {
       var next = Math.max(STEP_REQUIREMENT, Math.min(STEP_OPTIONS, Number(step) || STEP_REQUIREMENT));
       setPrepField('step', next);
-      if (summaryDialogOpen === true) renderPrepDialog();
+      renderOpenedSummaryDialog();
     }
 
     function handlePrepNav(actionId) {
@@ -1389,7 +1612,7 @@
     function updateSummary() {
       ensureState().hasImportedBaseline = hasImportedBaselineCases();
       ensureState().hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
-      if (summaryDialogOpen === true) renderPrepDialog();
+      renderOpenedSummaryDialog();
     }
 
     function parseCaseList(rawText) {
@@ -1648,17 +1871,121 @@
       return null;
     }
 
-    function normalizeModelModulesOutput(content) {
-      var payload = extractJsonPayload(content);
+    function summarizeModelOutputText(text, maxLength) {
+      var limit = Number(maxLength);
+      var clean = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!clean) return '';
+      if (!Number.isFinite(limit) || limit <= 0) limit = 120;
+      if (clean.length <= limit) return clean;
+      return clean.slice(0, limit).trim() + '…';
+    }
+
+    function createModelOutputDiagnostics() {
+      return {
+        rawHasText: false,
+        rawPreview: '',
+        parseStatus: '',
+        parseMode: '',
+        payloadKind: '',
+        sourceKind: '',
+        missingModulesArray: false,
+        emptyModulesArray: false,
+        moduleCandidateCount: 0,
+        normalizedModuleCount: 0,
+        skippedNonObjectModules: 0,
+        caseCandidateCount: 0,
+        normalizedCaseCount: 0,
+        skippedInvalidCases: 0,
+      };
+    }
+
+    function extractJsonPayloadDetailed(text) {
+      var raw = stripCodeFence(text || '');
+      var diagnostics = createModelOutputDiagnostics();
+      diagnostics.rawHasText = Boolean(raw);
+      diagnostics.rawPreview = summarizeModelOutputText(raw, 120);
+      if (!raw) {
+        diagnostics.parseStatus = 'empty';
+        return {
+          payload: null,
+          diagnostics: diagnostics,
+        };
+      }
+      try {
+        diagnostics.parseStatus = 'json';
+        diagnostics.parseMode = 'direct';
+        return {
+          payload: JSON.parse(raw),
+          diagnostics: diagnostics,
+        };
+      } catch (err) {}
+      var start = raw.indexOf('{');
+      var end = raw.lastIndexOf('}');
+      if (start >= 0 && end > start) {
+        try {
+          diagnostics.parseStatus = 'json';
+          diagnostics.parseMode = 'object-slice';
+          return {
+            payload: JSON.parse(raw.slice(start, end + 1)),
+            diagnostics: diagnostics,
+          };
+        } catch (err2) {}
+      }
+      var arrStart = raw.indexOf('[');
+      var arrEnd = raw.lastIndexOf(']');
+      if (arrStart >= 0 && arrEnd > arrStart) {
+        try {
+          diagnostics.parseStatus = 'json';
+          diagnostics.parseMode = 'array-slice';
+          return {
+            payload: JSON.parse(raw.slice(arrStart, arrEnd + 1)),
+            diagnostics: diagnostics,
+          };
+        } catch (err3) {}
+      }
+      diagnostics.parseStatus = /[\{\[]/.test(raw) ? 'invalid-json' : 'plain-text';
+      return {
+        payload: null,
+        diagnostics: diagnostics,
+      };
+    }
+
+    function normalizeModelModulesOutputDetailed(content) {
+      var extracted = extractJsonPayloadDetailed(content);
+      var payload = extracted.payload;
+      var diagnostics = extracted.diagnostics || createModelOutputDiagnostics();
       var arr = [];
-      if (Array.isArray(payload)) arr = payload;
-      else if (payload && Array.isArray(payload.modules)) arr = payload.modules;
-      else if (payload && Array.isArray(payload.data)) arr = payload.data;
-      else arr = [];
-      return arr.map(function(item) {
-        if (!item || typeof item !== 'object') return null;
+      if (Array.isArray(payload)) {
+        arr = payload;
+        diagnostics.payloadKind = 'array';
+        diagnostics.sourceKind = 'root-array';
+      } else if (payload && typeof payload === 'object') {
+        diagnostics.payloadKind = 'object';
+        if (Array.isArray(payload.modules)) {
+          arr = payload.modules;
+          diagnostics.sourceKind = 'modules';
+        } else if (Array.isArray(payload.data)) {
+          arr = payload.data;
+          diagnostics.sourceKind = 'data';
+        } else {
+          diagnostics.missingModulesArray = true;
+        }
+      } else if (payload !== null && payload !== undefined) {
+        diagnostics.payloadKind = typeof payload;
+        diagnostics.missingModulesArray = true;
+      }
+
+      diagnostics.moduleCandidateCount = Array.isArray(arr) ? arr.length : 0;
+      diagnostics.emptyModulesArray = diagnostics.moduleCandidateCount === 0 && Boolean(diagnostics.sourceKind);
+
+      var list = (Array.isArray(arr) ? arr : []).map(function(item) {
+        if (!item || typeof item !== 'object') {
+          diagnostics.skippedNonObjectModules += 1;
+          return null;
+        }
         var moduleTitle = normalizeModuleTitle(item.module || item.title || item.name || '未命名模块');
         if (!moduleTitle) return null;
+        diagnostics.normalizedModuleCount += 1;
         var moduleInfo = {
           module: moduleTitle,
           key_scenarios: normalizeArrayField(item.key_scenarios || item.scenarios),
@@ -1667,12 +1994,27 @@
           cases: [],
         };
         var cases = Array.isArray(item.cases) ? item.cases : [];
+        diagnostics.caseCandidateCount += cases.length;
         cases.forEach(function(caseItem) {
           var normalized = normalizeCaseItem(caseItem, moduleTitle);
-          if (normalized) moduleInfo.cases.push(normalized);
+          if (!normalized) {
+            diagnostics.skippedInvalidCases += 1;
+            return;
+          }
+          diagnostics.normalizedCaseCount += 1;
+          moduleInfo.cases.push(normalized);
         });
         return moduleInfo;
       }).filter(Boolean);
+
+      return {
+        list: list,
+        diagnostics: diagnostics,
+      };
+    }
+
+    function normalizeModelModulesOutput(content) {
+      return normalizeModelModulesOutputDetailed(content).list;
     }
 
     function buildVisibleModuleSnapshot(context) {
@@ -1971,21 +2313,57 @@
       };
     }
 
+    function createFilterDiagnostics() {
+      return {
+        inputModuleCount: 0,
+        inputCaseCount: 0,
+        outputModuleCount: 0,
+        outputCaseCount: 0,
+        skippedDuplicateOutputModules: 0,
+        skippedTargetMismatchModules: 0,
+        skippedNewModulesNotAllowed: 0,
+        skippedDuplicateVisibleModules: 0,
+        skippedCaseDuplicateWithinModule: 0,
+        skippedCaseDuplicateVisible: 0,
+        clearedCasesForNewModules: 0,
+        clearedCasesForExistingModules: 0,
+      };
+    }
+
     function filterModulesByContract(modules, contract, visibleContext) {
       var visibleMap = visibleContext && visibleContext.map ? visibleContext.map : {};
       var targetKey = normalizeModuleKey(contract.targetModule || '');
       var finalModules = [];
       var seenModules = {};
+      var diagnostics = createFilterDiagnostics();
+
+      diagnostics.inputModuleCount = Array.isArray(modules) ? modules.length : 0;
+      (Array.isArray(modules) ? modules : []).forEach(function(item) {
+        diagnostics.inputCaseCount += Array.isArray(item && item.cases) ? item.cases.length : 0;
+      });
 
       (Array.isArray(modules) ? modules : []).forEach(function(item) {
         var moduleTitle = normalizeModuleTitle(item.module || '');
         var moduleKey = normalizeModuleKey(moduleTitle);
-        if (!moduleKey || seenModules[moduleKey]) return;
+        if (!moduleKey) return;
+        if (seenModules[moduleKey]) {
+          diagnostics.skippedDuplicateOutputModules += 1;
+          return;
+        }
         seenModules[moduleKey] = true;
         var existsVisible = Boolean(visibleMap[moduleKey]);
-        if (contract.scope === 'module' && targetKey && moduleKey !== targetKey) return;
-        if (contract.allowNewModules !== true && !existsVisible) return;
-        if (contract.dedupeAgainstVisibleModules === true && existsVisible) return;
+        if (contract.scope === 'module' && targetKey && moduleKey !== targetKey) {
+          diagnostics.skippedTargetMismatchModules += 1;
+          return;
+        }
+        if (contract.allowNewModules !== true && !existsVisible) {
+          diagnostics.skippedNewModulesNotAllowed += 1;
+          return;
+        }
+        if (contract.dedupeAgainstVisibleModules === true && existsVisible) {
+          diagnostics.skippedDuplicateVisibleModules += 1;
+          return;
+        }
 
         var nextItem = {
           module: moduleTitle,
@@ -2008,47 +2386,293 @@
           var normalizedCase = normalizeCaseItem(caseItem, moduleTitle);
           if (!normalizedCase) return;
           var titleKey = normalizeCaseTitle(normalizedCase.title);
-          if (!titleKey || caseSeen[titleKey]) return;
-          if (contract.dedupeAgainstVisibleCases === true && visibleCaseSeen[titleKey]) return;
+          if (!titleKey) return;
+          if (caseSeen[titleKey]) {
+            diagnostics.skippedCaseDuplicateWithinModule += 1;
+            return;
+          }
+          if (contract.dedupeAgainstVisibleCases === true && visibleCaseSeen[titleKey]) {
+            diagnostics.skippedCaseDuplicateVisible += 1;
+            return;
+          }
           caseSeen[titleKey] = true;
           nextItem.cases.push(normalizedCase);
         });
 
         if (existsVisible !== true && contract.generateCasesForNewModules !== true) {
+          diagnostics.clearedCasesForNewModules += nextItem.cases.length;
           nextItem.cases = [];
         }
         if (existsVisible === true && contract.generateCasesForExistingModules !== true) {
+          diagnostics.clearedCasesForExistingModules += nextItem.cases.length;
           nextItem.cases = [];
         }
         finalModules.push(nextItem);
+        diagnostics.outputModuleCount += 1;
+        diagnostics.outputCaseCount += nextItem.cases.length;
       });
 
-      return finalModules;
+      return {
+        list: finalModules,
+        diagnostics: diagnostics,
+      };
     }
 
     function mergeCasesWithoutDuplicates(existingList, addedList, visibleList) {
       var result = Array.isArray(existingList) ? existingList.slice() : [];
       var visible = Array.isArray(visibleList) ? visibleList : [];
-      var titleSeen = {};
+      var existingSeen = {};
       result.forEach(function(item) {
         var key = normalizeCaseTitle(item && item.title);
-        if (key) titleSeen[key] = true;
+        if (key) existingSeen[key] = true;
       });
       visible.forEach(function(item) {
         var key = normalizeCaseTitle(item && item.title);
-        if (key) titleSeen[key] = true;
+        if (key) existingSeen[key] = true;
       });
       var appended = [];
+      var appendedSeen = {};
+      var duplicateAgainstExisting = 0;
+      var duplicateWithinAdded = 0;
       (Array.isArray(addedList) ? addedList : []).forEach(function(item) {
         var key = normalizeCaseTitle(item && item.title);
-        if (!key || titleSeen[key]) return;
-        titleSeen[key] = true;
+        if (!key) return;
+        if (existingSeen[key]) {
+          duplicateAgainstExisting += 1;
+          return;
+        }
+        if (appendedSeen[key]) {
+          duplicateWithinAdded += 1;
+          return;
+        }
+        appendedSeen[key] = true;
         appended.push(item);
         result.push(item);
       });
       return {
         merged: result,
         appended: appended,
+        diagnostics: {
+          candidateCount: Array.isArray(addedList) ? addedList.length : 0,
+          appendedCount: appended.length,
+          duplicateAgainstExisting: duplicateAgainstExisting,
+          duplicateWithinAdded: duplicateWithinAdded,
+        },
+      };
+    }
+
+    function getDiagnosticsMetric(diag, key) {
+      var value = diag && Number(diag[key]);
+      if (!Number.isFinite(value) || value < 0) return 0;
+      return value;
+    }
+
+    function appendDiagnosticMetric(list, label, count, unit) {
+      var value = Number(count);
+      if (!Number.isFinite(value) || value <= 0) return;
+      list.push(label + ' ' + String(value) + ' ' + String(unit || ''));
+    }
+
+    function isRootAppendLikeAction(actionId) {
+      return actionId === ROOT_ACTIONS.TOPUP_MODULES
+        || actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES
+        || actionId === ROOT_ACTIONS.APPEND_ALL;
+    }
+
+    function getFriendlyRootEmptyModulesText(actionId) {
+      if (actionId === ROOT_ACTIONS.TOPUP_MODULES) return '当前没有需要补充的新模块。';
+      if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES) return '当前没有需要补充的新模块。';
+      if (actionId === ROOT_ACTIONS.EXISTING_CASES) return '当前已有模块下没有需要补充的新用例。';
+      if (actionId === ROOT_ACTIONS.APPEND_ALL) return '当前没有需要补充的新模块或新用例。';
+      if (actionId === ROOT_ACTIONS.FULL_MODULES || actionId === ROOT_ACTIONS.REGENERATE_MODULES) {
+        return '这次没有生成出任何模块。';
+      }
+      if (actionId === ROOT_ACTIONS.FULL_CASES) return '这次没有生成出任何模块或用例。';
+      return '这次没有生成出新的模块或用例。';
+    }
+
+    function getFriendlyModuleEmptyCasesText(actionId) {
+      if (actionId === MODULE_ACTIONS.APPEND) return '当前模块没有需要补充的新用例。';
+      if (actionId === MODULE_ACTIONS.FULL_CASES) return '这次没有为当前模块生成出用例。';
+      return '这次没有为当前模块生成出新的用例。';
+    }
+
+    function buildGenerationErrorInfo(err) {
+      var rawMessage = err && err.message ? String(err.message) : '未知错误';
+      var summary = summarizeModelOutputText(rawMessage, 120);
+      var reasonText = '模型调用出错，请稍后重试。';
+      if (/超时/.test(rawMessage)) {
+        reasonText = '模型响应超时，请稍后重试。';
+      } else if (/503|service unavailable/i.test(rawMessage)) {
+        reasonText = '模型服务暂时不可用，请稍后重试。';
+      } else if (/network|fetch|failed to fetch|网络/i.test(rawMessage)) {
+        reasonText = '模型连接失败，请检查网络后重试。';
+      }
+      return {
+        resultKind: 'error',
+        reasonText: reasonText,
+        diagnostics: summary ? ['错误信息：' + summary] : [],
+        previewText: '',
+      };
+    }
+
+    function buildModelOutputNoChangeInfo(scope, actionId, modelDiagnostics) {
+      var diagnostics = [];
+      var previewText = modelDiagnostics && modelDiagnostics.rawPreview ? String(modelDiagnostics.rawPreview) : '';
+      var reasonText = '';
+      if (!modelDiagnostics) return null;
+
+      if (modelDiagnostics.parseStatus === 'empty') {
+        reasonText = '模型这次没有返回内容。';
+        diagnostics.push('模型返回为空');
+      } else if (modelDiagnostics.parseStatus === 'plain-text') {
+        reasonText = '模型返回的是说明文字，不是系统可识别的结果。';
+        diagnostics.push('返回格式：说明文字');
+      } else if (modelDiagnostics.parseStatus === 'invalid-json') {
+        reasonText = '模型返回结果格式不完整，系统暂时没法识别。';
+        diagnostics.push('返回格式有问题');
+      } else if (modelDiagnostics.missingModulesArray === true) {
+        reasonText = '模型有返回内容，但没有给出可识别的模块列表。';
+        diagnostics.push('没有返回模块列表');
+      } else if (modelDiagnostics.emptyModulesArray === true) {
+        reasonText = scope === 'module'
+          ? getFriendlyModuleEmptyCasesText(actionId)
+          : getFriendlyRootEmptyModulesText(actionId);
+        diagnostics.push(scope === 'module' ? '模型返回空结果' : '模块列表为空');
+      } else if (getDiagnosticsMetric(modelDiagnostics, 'moduleCandidateCount') > 0 && getDiagnosticsMetric(modelDiagnostics, 'normalizedModuleCount') <= 0) {
+        reasonText = '模型有返回模块内容，但格式不完整，系统没法识别。';
+        appendDiagnosticMetric(diagnostics, '未识别模块', getDiagnosticsMetric(modelDiagnostics, 'skippedNonObjectModules'), '个');
+      } else if (getDiagnosticsMetric(modelDiagnostics, 'caseCandidateCount') > 0 && getDiagnosticsMetric(modelDiagnostics, 'normalizedCaseCount') <= 0) {
+        reasonText = '模型有返回用例内容，但格式不完整，系统没法识别。';
+        appendDiagnosticMetric(diagnostics, '未识别用例', getDiagnosticsMetric(modelDiagnostics, 'skippedInvalidCases'), '条');
+      } else {
+        return null;
+      }
+
+      return {
+        resultKind: 'no-change',
+        reasonText: reasonText,
+        diagnostics: diagnostics,
+        previewText: previewText,
+      };
+    }
+
+    function buildRootNoChangeInfo(actionId, filterDiagnostics, applyDiagnostics, modelDiagnostics) {
+      var rawModuleCount = getDiagnosticsMetric(filterDiagnostics, 'inputModuleCount');
+      var rawCaseCount = getDiagnosticsMetric(filterDiagnostics, 'inputCaseCount');
+      var outputModuleCount = getDiagnosticsMetric(filterDiagnostics, 'outputModuleCount');
+      var outputCaseCount = getDiagnosticsMetric(filterDiagnostics, 'outputCaseCount');
+      var duplicateVisibleModules = getDiagnosticsMetric(filterDiagnostics, 'skippedDuplicateVisibleModules');
+      var duplicateVisibleCases = getDiagnosticsMetric(filterDiagnostics, 'skippedCaseDuplicateVisible')
+        + getDiagnosticsMetric(applyDiagnostics, 'duplicateAgainstExistingCases');
+      var duplicateOutputModules = getDiagnosticsMetric(filterDiagnostics, 'skippedDuplicateOutputModules');
+      var duplicateOutputCases = getDiagnosticsMetric(filterDiagnostics, 'skippedCaseDuplicateWithinModule')
+        + getDiagnosticsMetric(applyDiagnostics, 'duplicateWithinAddedCases');
+      var targetMismatchModules = getDiagnosticsMetric(filterDiagnostics, 'skippedTargetMismatchModules');
+      var blockedNewModules = getDiagnosticsMetric(filterDiagnostics, 'skippedNewModulesNotAllowed');
+      var reasonText = '';
+      var diagnostics = [];
+      var previewText = '';
+
+      appendDiagnosticMetric(diagnostics, '已有模块已覆盖', duplicateVisibleModules, '个');
+      appendDiagnosticMetric(diagnostics, '已有用例已覆盖', duplicateVisibleCases, '条');
+      appendDiagnosticMetric(diagnostics, '模型结果里有重复模块', duplicateOutputModules, '个');
+      appendDiagnosticMetric(diagnostics, '模型结果里有重复用例', duplicateOutputCases, '条');
+      appendDiagnosticMetric(diagnostics, '返回了当前目标外的模块', targetMismatchModules, '个');
+      appendDiagnosticMetric(diagnostics, '本次动作不允许新增模块', blockedNewModules, '个');
+
+      if (rawModuleCount <= 0 && rawCaseCount <= 0) {
+        var modelOutputIssue = buildModelOutputNoChangeInfo('root', actionId, modelDiagnostics);
+        if (modelOutputIssue) {
+          return modelOutputIssue;
+        }
+        reasonText = '这次没有拿到可用的生成结果。';
+        if (modelDiagnostics && modelDiagnostics.rawPreview) previewText = modelDiagnostics.rawPreview;
+      } else if (duplicateVisibleModules > 0 && outputModuleCount <= 0) {
+        reasonText = '当前模块已经覆盖，不需要再补充新模块。';
+      } else if (duplicateVisibleCases > 0 && outputModuleCount > 0) {
+        reasonText = '当前已有用例已经覆盖，本轮没有补出新的用例。';
+      } else if (duplicateVisibleCases > 0 && outputCaseCount <= 0) {
+        reasonText = '当前已有内容已经覆盖，本轮没有补出新的结果。';
+      } else if (targetMismatchModules > 0 || blockedNewModules > 0) {
+        reasonText = '模型返回的内容和当前操作不匹配，所以这次没有采用。';
+      } else if (outputModuleCount > 0 && outputCaseCount <= 0) {
+        if (actionId === ROOT_ACTIONS.EXISTING_CASES || actionId === ROOT_ACTIONS.APPEND_ALL) {
+          reasonText = '模型识别到了模块，但判断当前没有需要补充的新用例。';
+        } else if (isRootAppendLikeAction(actionId)) {
+          reasonText = '当前没有需要补充的新模块。';
+        } else {
+          reasonText = '模型识别到了模块，但这次没有生成出新的用例。';
+        }
+      } else if (duplicateOutputModules > 0 || duplicateOutputCases > 0) {
+        reasonText = '模型返回内容里有重复项，整理后没有留下新的结果。';
+      } else {
+        reasonText = '这次没有生成出新的模块或用例。';
+      }
+
+      return {
+        resultKind: 'no-change',
+        reasonText: reasonText,
+        diagnostics: diagnostics,
+        previewText: previewText,
+      };
+    }
+
+    function buildModuleNoChangeInfo(actionId, filterDiagnostics, mergeDiagnostics, targetOutput, modelDiagnostics) {
+      var rawModuleCount = getDiagnosticsMetric(filterDiagnostics, 'inputModuleCount');
+      var rawCaseCount = getDiagnosticsMetric(filterDiagnostics, 'inputCaseCount');
+      var outputModuleCount = getDiagnosticsMetric(filterDiagnostics, 'outputModuleCount');
+      var outputCaseCount = getDiagnosticsMetric(filterDiagnostics, 'outputCaseCount');
+      var duplicateVisibleCases = getDiagnosticsMetric(filterDiagnostics, 'skippedCaseDuplicateVisible')
+        + getDiagnosticsMetric(mergeDiagnostics, 'duplicateAgainstExisting');
+      var duplicateOutputCases = getDiagnosticsMetric(filterDiagnostics, 'skippedCaseDuplicateWithinModule')
+        + getDiagnosticsMetric(mergeDiagnostics, 'duplicateWithinAdded');
+      var targetMismatchModules = getDiagnosticsMetric(filterDiagnostics, 'skippedTargetMismatchModules');
+      var blockedNewModules = getDiagnosticsMetric(filterDiagnostics, 'skippedNewModulesNotAllowed');
+      var reasonText = '';
+      var diagnostics = [];
+      var targetCaseCount = Array.isArray(targetOutput && targetOutput.cases) ? targetOutput.cases.length : 0;
+      var previewText = '';
+
+      appendDiagnosticMetric(diagnostics, '已有用例已覆盖', duplicateVisibleCases, '条');
+      appendDiagnosticMetric(diagnostics, '模型结果里有重复用例', duplicateOutputCases, '条');
+      appendDiagnosticMetric(diagnostics, '返回了当前目标外的模块', targetMismatchModules, '个');
+      appendDiagnosticMetric(diagnostics, '本次动作不允许新增模块', blockedNewModules, '个');
+
+      if (rawModuleCount <= 0 && rawCaseCount <= 0) {
+        var modelOutputIssue = buildModelOutputNoChangeInfo('module', actionId, modelDiagnostics);
+        if (modelOutputIssue) {
+          return modelOutputIssue;
+        }
+        reasonText = '这次没有拿到可用的生成结果。';
+        if (modelDiagnostics && modelDiagnostics.rawPreview) previewText = modelDiagnostics.rawPreview;
+      } else if (actionId === MODULE_ACTIONS.APPEND) {
+        if (duplicateVisibleCases > 0) {
+          reasonText = '当前模块已有用例已经覆盖，本轮没有补出新的用例。';
+        } else if (targetMismatchModules > 0 || blockedNewModules > 0 || outputModuleCount <= 0) {
+          reasonText = '模型返回的内容没有命中当前模块，所以这次没有采用。';
+        } else if (duplicateOutputCases > 0 && targetCaseCount <= 0) {
+          reasonText = '模型返回内容里有重复项，整理后没有留下新的用例。';
+        } else if (targetCaseCount <= 0 || outputCaseCount <= 0) {
+          reasonText = '当前模块没有需要补充的新用例。';
+        } else {
+          reasonText = '这次没有补出新的用例。';
+        }
+      } else if (targetMismatchModules > 0 || blockedNewModules > 0 || outputModuleCount <= 0) {
+        reasonText = '模型返回的内容没有命中当前模块，所以这次没有采用。';
+      } else if (duplicateOutputCases > 0 && targetCaseCount <= 0) {
+        reasonText = '模型返回内容里有重复项，整理后没有留下新的用例。';
+      } else if (targetCaseCount <= 0 || outputCaseCount <= 0) {
+        reasonText = '这次没有为当前模块生成出用例。';
+      } else {
+        reasonText = '这次没有生成出新的用例。';
+      }
+
+      return {
+        resultKind: 'no-change',
+        reasonText: reasonText,
+        diagnostics: diagnostics,
+        previewText: previewText,
       };
     }
 
@@ -2063,16 +2687,25 @@
 
     function cloneTopupHighlight(marker) {
       if (!marker || typeof marker !== 'object') return null;
+      var highlightScope = marker.highlightScope === 'module' || marker.highlightScope === 'subtree'
+        ? String(marker.highlightScope || '')
+        : 'cases';
       var startIndex = Number(marker.startIndex);
       var count = Number(marker.count);
-      if (!Number.isFinite(startIndex) || startIndex < 0) return null;
-      if (!Number.isFinite(count) || count <= 0) return null;
+      if (highlightScope === 'cases') {
+        if (!Number.isFinite(startIndex) || startIndex < 0) return null;
+        if (!Number.isFinite(count) || count <= 0) return null;
+      } else {
+        if (!Number.isFinite(startIndex) || startIndex < 0) startIndex = 0;
+        if (!Number.isFinite(count) || count < 0) count = 0;
+      }
       return {
         token: marker.token ? String(marker.token) : '',
         label: marker.label ? String(marker.label) : '本轮追加用例',
         startIndex: startIndex,
         count: count,
         updatedAt: Number(marker.updatedAt || 0),
+        highlightScope: highlightScope,
       };
     }
 
@@ -2081,30 +2714,49 @@
       moduleState.topupHighlight = null;
     }
 
-    function buildTopupHighlightLabel(count) {
+    function buildTopupHighlightLabel(count, highlightScope) {
+      if (highlightScope === 'module') return '本轮补全模块';
+      if (highlightScope === 'subtree') {
+        var subtreeTotal = Number(count);
+        if (!Number.isFinite(subtreeTotal) || subtreeTotal <= 0) return '本轮补全模块+用例';
+        return subtreeTotal > 1 ? ('本轮补全模块+用例 · ' + subtreeTotal + ' 条') : '本轮补全模块+用例';
+      }
       var total = Number(count);
       if (!Number.isFinite(total) || total <= 0) return '本轮追加用例';
       return total > 1 ? ('本轮追加用例 · ' + total + ' 条') : '本轮追加用例';
     }
 
-    function setModuleTopupHighlight(moduleState, moduleKey, startIndex, count) {
-      if (!moduleState || !Number.isFinite(startIndex) || !Number.isFinite(count) || count <= 0) {
+    function setModuleTopupHighlight(moduleState, moduleKey, startIndex, count, options) {
+      options = options || {};
+      var highlightScope = options.highlightScope === 'module' || options.highlightScope === 'subtree'
+        ? String(options.highlightScope || '')
+        : 'cases';
+      var safeStartIndex = Number(startIndex);
+      var safeCount = Number(count);
+      if (highlightScope === 'cases') {
+        if (!moduleState || !Number.isFinite(safeStartIndex) || !Number.isFinite(safeCount) || safeCount <= 0) {
+          clearModuleTopupHighlight(moduleState);
+          return null;
+        }
+      } else if (!moduleState) {
         clearModuleTopupHighlight(moduleState);
         return null;
       }
       var tokenPrefix = buildNodeId(['topup-highlight', moduleKey || 'module']) || 'topup-highlight';
       moduleState.topupHighlight = {
         token: generateLocalId(tokenPrefix),
-        label: buildTopupHighlightLabel(count),
-        startIndex: startIndex,
-        count: count,
+        label: options.label ? String(options.label || '') : buildTopupHighlightLabel(safeCount, highlightScope),
+        startIndex: Number.isFinite(safeStartIndex) && safeStartIndex >= 0 ? safeStartIndex : 0,
+        count: Number.isFinite(safeCount) && safeCount >= 0 ? safeCount : 0,
         updatedAt: Date.now(),
+        highlightScope: highlightScope,
       };
       setDebugState({
         topupPhase: 'set',
         topupModule: String(moduleKey || ''),
-        topupStartIndex: startIndex,
-        topupCount: count,
+        topupStartIndex: moduleState.topupHighlight.startIndex,
+        topupCount: moduleState.topupHighlight.count,
+        topupScope: highlightScope,
         topupToken: String(moduleState.topupHighlight.token || '')
       });
       return moduleState.topupHighlight;
@@ -2117,10 +2769,20 @@
     function getCaseTopupHighlight(moduleState, caseIndex) {
       var marker = getModuleTopupHighlight(moduleState);
       var index = Number(caseIndex);
-      if (!marker || !Number.isFinite(index) || index < 0) return null;
+      if (!marker) return null;
+      if (marker.highlightScope === 'subtree') return marker;
+      if (marker.highlightScope !== 'cases') return null;
+      if (!Number.isFinite(index) || index < 0) return null;
       if (index < marker.startIndex) return null;
       if (index >= marker.startIndex + marker.count) return null;
       return marker;
+    }
+
+    function getModuleNodeTopupHighlight(moduleState) {
+      var marker = getModuleTopupHighlight(moduleState);
+      if (!marker) return null;
+      if (marker.highlightScope === 'module' || marker.highlightScope === 'subtree') return marker;
+      return null;
     }
 
     function getTopupHighlightMapElement(viewerEl) {
@@ -2285,12 +2947,38 @@
       });
     }
 
-    function snapshotAllCaseGenStateLocal() {
+    function getLatestCaseGenOperationSnapshotLocal() {
       var xmindState = ensureState();
-      var snapshotId = 'root-snap-' + String(xmindState.nextSnapshotId || 1);
+      var list = Array.isArray(xmindState.operationSnapshots) ? xmindState.operationSnapshots : [];
+      return list.length ? list[list.length - 1] : null;
+    }
+
+    function syncCaseGenOperationPointersLocal() {
+      var xmindState = ensureState();
+      var latest = getLatestCaseGenOperationSnapshotLocal();
+      xmindState.lastOperationSnapshotId = latest && latest.id ? String(latest.id || '') : '';
+      xmindState.rootSnapshotId = latest && latest.scope === 'root'
+        ? String(latest.id || '')
+        : '';
+      xmindState.root.snapshotId = String(xmindState.rootSnapshotId || '');
+      Object.keys(xmindState.modules || {}).forEach(function(key) {
+        var moduleState = ensureModuleUiState(key);
+        if (latest && latest.scope === 'module' && String(latest.moduleId || '') === String(key || '')) {
+          moduleState.snapshotId = String(latest.id || '');
+        } else {
+          moduleState.snapshotId = '';
+        }
+      });
+    }
+
+    function createCaseGenOperationSnapshotLocal(scope, moduleId) {
+      var xmindState = ensureState();
+      var snapshotId = 'op-snap-' + String(xmindState.nextSnapshotId || 1);
       xmindState.nextSnapshotId = Number(xmindState.nextSnapshotId || 1) + 1;
-      xmindState.rootSnapshots.push({
+      xmindState.operationSnapshots.push({
         id: snapshotId,
+        scope: scope === 'module' ? 'module' : 'root',
+        moduleId: moduleId ? String(moduleId || '') : '',
         caseGenModules: cloneJson(state.caseGenModules, []),
         caseGenResults: cloneJson(state.caseGenResults, {}),
         caseSelections: cloneSelectionMap(state.caseSelections),
@@ -2301,24 +2989,28 @@
         caseGenSource: String(state.caseGenSource || ''),
         createdAt: Date.now(),
       });
-      xmindState.rootSnapshotId = snapshotId;
-      xmindState.root.snapshotId = snapshotId;
+      syncCaseGenOperationPointersLocal();
       xmindState.root.updatedAt = Date.now();
       return snapshotId;
     }
 
-    function rollbackAllCaseGenStateLocal() {
+    function discardCaseGenOperationSnapshotLocal(snapshotId) {
+      var targetId = String(snapshotId || '');
+      if (!targetId) return false;
       var xmindState = ensureState();
-      var snapshotId = String(xmindState.rootSnapshotId || (xmindState.root && xmindState.root.snapshotId) || '');
-      if (!snapshotId) return false;
-      var snapshot = null;
-      for (var i = xmindState.rootSnapshots.length - 1; i >= 0; i -= 1) {
-        var item = xmindState.rootSnapshots[i];
-        if (!item || String(item.id || '') !== snapshotId) continue;
-        snapshot = item;
-        break;
-      }
-      if (!snapshot) return false;
+      var list = Array.isArray(xmindState.operationSnapshots) ? xmindState.operationSnapshots : [];
+      var nextList = list.filter(function(item) {
+        return item && String(item.id || '') !== targetId;
+      });
+      if (nextList.length === list.length) return false;
+      xmindState.operationSnapshots = nextList;
+      syncCaseGenOperationPointersLocal();
+      return true;
+    }
+
+    function applyCaseGenOperationSnapshotLocal(snapshot) {
+      if (!snapshot || typeof snapshot !== 'object') return false;
+      var xmindState = ensureState();
       state.caseGenModules = cloneJson(snapshot.caseGenModules, []);
       state.caseGenResults = cloneJson(snapshot.caseGenResults, {});
       state.caseSelections = restoreSelectionMap(snapshot.caseSelections);
@@ -2332,16 +3024,56 @@
       xmindState.root.running = false;
       xmindState.root.status = '';
       xmindState.root.error = '';
-      xmindState.root.snapshotId = '';
-      xmindState.rootSnapshotId = '';
       xmindState.root.updatedAt = Date.now();
-      xmindState.modules = {};
+      Object.keys(xmindState.modules || {}).forEach(function(key) {
+        var moduleState = ensureModuleUiState(key);
+        moduleState.running = false;
+        moduleState.status = '';
+        moduleState.error = '';
+        moduleState.hideResults = false;
+        moduleState.lastAction = 'rollback';
+        moduleState.updatedAt = Date.now();
+      });
+      syncCaseGenOperationPointersLocal();
       clearAllTopupHighlights();
       if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
         casesGenApi.renderCaseGeneration();
       }
       persistXmindState(true);
       return true;
+    }
+
+    function rollbackCaseGenOperationSnapshotLocal(snapshotId) {
+      var xmindState = ensureState();
+      var targetId = String(snapshotId || '');
+      var snapshot = null;
+      var index = -1;
+      var list = Array.isArray(xmindState.operationSnapshots) ? xmindState.operationSnapshots : [];
+      if (targetId) {
+        for (var i = list.length - 1; i >= 0; i -= 1) {
+          var item = list[i];
+          if (!item || String(item.id || '') !== targetId) continue;
+          snapshot = item;
+          index = i;
+          break;
+        }
+      } else if (list.length) {
+        index = list.length - 1;
+        snapshot = list[index];
+      }
+      if (!snapshot || index < 0) return false;
+      xmindState.operationSnapshots.splice(index, 1);
+      return applyCaseGenOperationSnapshotLocal(snapshot);
+    }
+
+    function snapshotAllCaseGenStateLocal() {
+      return createCaseGenOperationSnapshotLocal('root', '');
+    }
+
+    function rollbackAllCaseGenStateLocal() {
+      var latest = getLatestCaseGenOperationSnapshotLocal();
+      if (!latest) return false;
+      return rollbackCaseGenOperationSnapshotLocal(String(latest.id || '')) === true;
     }
 
     function bindTopupHighlightPresentation() {
@@ -2520,8 +3252,8 @@
       return Boolean(resolveBlockingOperation(actionId, moduleEntry));
     }
 
-    function getRootFullCasesLabel(hasAiCases) {
-      return hasAiCases ? '重新生成全量用例' : '生成全量用例';
+    function getRootFullCasesLabel(hasAiContent) {
+      return hasAiContent ? '重新生成全量用例' : '生成全量用例';
     }
 
     function getModuleFullCasesLabel(moduleEntry) {
@@ -2562,13 +3294,33 @@
       return '当前动作不可执行';
     }
 
+    function getLatestCaseGenOperationSnapshotEntry() {
+      if (casesGenApi && typeof casesGenApi.getLatestCaseGenOperationSnapshot === 'function') {
+        return casesGenApi.getLatestCaseGenOperationSnapshot();
+      }
+      return getLatestCaseGenOperationSnapshotLocal();
+    }
+
+    function rollbackCaseGenOperationSnapshotEntry(snapshotId) {
+      if (casesGenApi && typeof casesGenApi.rollbackCaseGenOperationSnapshot === 'function') {
+        return casesGenApi.rollbackCaseGenOperationSnapshot(snapshotId) === true;
+      }
+      return rollbackCaseGenOperationSnapshotLocal(snapshotId) === true;
+    }
+
+    function discardCaseGenOperationSnapshotEntry(snapshotId) {
+      if (casesGenApi && typeof casesGenApi.discardCaseGenOperationSnapshot === 'function') {
+        return casesGenApi.discardCaseGenOperationSnapshot(snapshotId) === true;
+      }
+      return discardCaseGenOperationSnapshotLocal(snapshotId) === true;
+    }
+
     function getRootActions() {
       var hasBaseline = hasImportedBaselineCases();
       var hasSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
       var hasAiCases = hasAnyAiCases();
-      var fullCasesLabel = getRootFullCasesLabel(hasAiCases);
-      var rootUiState = ensureRootUiState();
-      var canRollback = Boolean(ensureState().rootSnapshotId || (rootUiState && rootUiState.snapshotId));
+      var fullCasesLabel = getRootFullCasesLabel(hasSkeleton || hasAiCases);
+      var canRollback = Boolean(getLatestCaseGenOperationSnapshotEntry());
       if (!hasBaseline && !hasSkeleton && !hasAiCases) {
         return [
           { id: ROOT_ACTIONS.FULL_CASES, label: fullCasesLabel, disabled: isActionBlocked(ROOT_ACTIONS.FULL_CASES, null) },
@@ -2605,8 +3357,12 @@
 
     function getModuleActions(moduleEntry) {
       var moduleId = moduleEntry && moduleEntry.aiModuleId ? moduleEntry.aiModuleId : '';
-      var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
-      var canRollback = Boolean(moduleState && moduleState.snapshotId);
+      var latestOperation = getLatestCaseGenOperationSnapshotEntry();
+      var canRollback = Boolean(
+        latestOperation
+        && latestOperation.scope === 'module'
+        && String(latestOperation.moduleId || '') === String(moduleId || '')
+      );
       var hasVisibleCases = getVisibleCasesForModuleEntry(moduleEntry).length > 0;
       return [
         { id: MODULE_ACTIONS.FULL_CASES, label: getModuleFullCasesLabel(moduleEntry), disabled: isActionBlocked(MODULE_ACTIONS.FULL_CASES, moduleEntry) },
@@ -2677,6 +3433,17 @@
       });
     }
 
+    function buildRootPendingNode(actionId) {
+      var label = actionId === ROOT_ACTIONS.TOPUP_MODULES ? '补全模块中' : '补全模块+用例中';
+      return createNode(label, {
+        type: 'topup-placeholder',
+        moduleKey: 'root',
+        moduleId: '',
+        nodeId: buildNodeId(['root-topup-placeholder', actionId || 'root']),
+        branchColor: '#2563eb',
+      });
+    }
+
     function buildCaseTree(moduleEntry, item, caseIndex, topupHighlight) {
       var xmindCoreApi = getXmindCoreApi();
       var moduleTitle = moduleEntry ? moduleEntry.title : '模块';
@@ -2742,7 +3509,7 @@
         if (moduleState && moduleState.running && moduleState.lastAction === MODULE_ACTIONS.APPEND) {
           moduleChildren.push(buildTopupPendingNode(entry));
         }
-        children.push(createNode(entry.title, {
+        children.push(createNode(entry.title, withTopupHighlightMeta({
           type: 'module',
           moduleKey: entry.moduleKey,
           moduleId: entry.aiModuleId || '',
@@ -2751,8 +3518,14 @@
           nodeId: getModuleNodeId(entry),
           status: moduleState && moduleState.running ? 'running' : (moduleState && moduleState.status === 'error' ? 'error' : ''),
           statusText: moduleState && moduleState.error ? moduleState.error : '',
-        }, moduleChildren));
+        }, getModuleNodeTopupHighlight(moduleState)), moduleChildren));
       });
+      if (
+        rootState.running
+        && (rootState.lastAction === ROOT_ACTIONS.TOPUP_MODULES || rootState.lastAction === ROOT_ACTIONS.TOPUP_MODULES_CASES)
+      ) {
+        children.push(buildRootPendingNode(rootState.lastAction));
+      }
 
       xmindState.treeSourceSignature = buildTreeSignature();
       return {
@@ -2806,6 +3579,49 @@
       };
     }
 
+    function markPendingPlaceholderLink(nodeEl) {
+      function decoratePendingPath(pathEl) {
+        if (!pathEl || !pathEl.setAttribute) return false;
+        pathEl.classList.add('xmind-casegen-pending-link');
+        pathEl.setAttribute('data-xmind-casegen-link', 'topup-pending');
+        pathEl.setAttribute('stroke-dasharray', '6 5');
+        pathEl.setAttribute('stroke-linecap', 'round');
+        return true;
+      }
+      var currentEl = nodeEl && nodeEl.closest ? nodeEl.closest('me-wrapper') : null;
+      while (currentEl && currentEl !== mindContainer) {
+        var parentEl = currentEl.parentElement;
+        if (!parentEl || !parentEl.children) break;
+        var candidatePath = null;
+        for (var i = 0; i < parentEl.children.length; i += 1) {
+          var childEl = parentEl.children[i];
+          if (!childEl || childEl === currentEl || !childEl.tagName) continue;
+          if (String(childEl.tagName).toLowerCase() !== 'svg') continue;
+          if (!(childEl.classList && childEl.classList.contains('subLines'))) continue;
+          var pathList = childEl.querySelectorAll ? childEl.querySelectorAll('path') : [];
+          if (pathList && pathList.length) {
+            candidatePath = pathList[pathList.length - 1];
+          }
+        }
+        if (!candidatePath && parentEl.querySelectorAll) {
+          var nestedPathList = parentEl.querySelectorAll('svg.subLines path, svg.lines path');
+          if (nestedPathList && nestedPathList.length) {
+            candidatePath = nestedPathList[nestedPathList.length - 1];
+          }
+        }
+        if (decoratePendingPath(candidatePath)) return true;
+        currentEl = parentEl;
+      }
+      var fallbackHost = getTopupHighlightMapElement(getTopupHighlightViewerElement()) || mindContainer;
+      if (fallbackHost && fallbackHost.querySelectorAll) {
+        var fallbackPathList = fallbackHost.querySelectorAll('svg.subLines path, svg.lines path');
+        if (fallbackPathList && fallbackPathList.length) {
+          return decoratePendingPath(fallbackPathList[fallbackPathList.length - 1]);
+        }
+      }
+      return false;
+    }
+
     function decorateNodeElement(nodeEl, nodeMeta) {
       if (!nodeEl || !nodeEl.classList) return;
       var statusBadge = nodeEl.querySelector ? nodeEl.querySelector('.xmind-node-status-badge') : null;
@@ -2853,6 +3669,11 @@
           badge.appendChild(textSpan);
           nodeEl.appendChild(badge);
         }
+        if (meta.topupHighlightToken) {
+          nodeEl.classList.add('xmind-casegen-node-topup-highlight-case');
+          nodeEl.setAttribute('data-xmind-topup-highlight-token', String(meta.topupHighlightToken));
+          nodeEl.setAttribute('data-xmind-topup-highlight-label', String(meta.topupHighlightLabel || '本轮追加用例'));
+        }
         return;
       }
       if (meta.type === 'topup-placeholder') {
@@ -2861,32 +3682,7 @@
         spinnerEl.className = 'xmind-node-topup-spinner';
         spinnerEl.setAttribute('aria-hidden', 'true');
         nodeEl.appendChild(spinnerEl);
-        var wrapperEl = nodeEl.closest ? nodeEl.closest('me-wrapper') : null;
-        var childrenEl = wrapperEl && wrapperEl.parentElement ? wrapperEl.parentElement : null;
-        var parentWrapper = childrenEl && childrenEl.tagName && String(childrenEl.tagName).toLowerCase() === 'me-children'
-          ? childrenEl.parentElement
-          : null;
-        if (parentWrapper && parentWrapper.children) {
-          var directSubLines = null;
-          for (var i = 0; i < parentWrapper.children.length; i += 1) {
-            var childEl = parentWrapper.children[i];
-            if (!childEl || !childEl.tagName) continue;
-            if (String(childEl.tagName).toLowerCase() !== 'svg') continue;
-            if (!(childEl.classList && childEl.classList.contains('subLines'))) continue;
-            directSubLines = childEl;
-            break;
-          }
-          if (directSubLines) {
-            var pathList = directSubLines.querySelectorAll ? directSubLines.querySelectorAll('path') : [];
-            var pendingPath = pathList && pathList.length ? pathList[pathList.length - 1] : null;
-            if (pendingPath && pendingPath.setAttribute) {
-              pendingPath.classList.add('xmind-casegen-pending-link');
-              pendingPath.setAttribute('data-xmind-casegen-link', 'topup-pending');
-              pendingPath.setAttribute('stroke-dasharray', '6 5');
-              pendingPath.setAttribute('stroke-linecap', 'round');
-            }
-          }
-        }
+        markPendingPlaceholderLink(nodeEl);
         return;
       }
       if (meta.topupHighlightToken) {
@@ -3051,7 +3847,26 @@
       var createdModules = 0;
       var affectedModules = 0;
       var addedCases = 0;
+      var detailMap = {};
+      var applyDiagnostics = {
+        duplicateAgainstExistingCases: 0,
+        duplicateWithinAddedCases: 0,
+      };
       clearAllTopupHighlights();
+
+      function collectDetail(moduleTitle, caseCount) {
+        var title = normalizeModuleTitle(moduleTitle || '');
+        var key = normalizeModuleKey(title || '') || ('module-' + String(Object.keys(detailMap).length + 1));
+        if (!detailMap[key]) {
+          detailMap[key] = {
+            module: title || '未命名模块',
+            caseCount: 0,
+          };
+        }
+        var nextCount = Number(caseCount);
+        if (!Number.isFinite(nextCount) || nextCount < 0) nextCount = 0;
+        detailMap[key].caseCount += nextCount;
+      }
 
       if (
         actionId === ROOT_ACTIONS.FULL_CASES
@@ -3062,11 +3877,13 @@
         (modules || []).forEach(function(item) {
           var record = ensureAiModuleRecord(item.module, item);
           createdModules += 1;
+          collectDetail(item.module, 0);
           if (actionId === ROOT_ACTIONS.FULL_CASES) {
             commitCaseList(record.id, item.cases || [], durationMs, '', '');
             if ((item.cases || []).length) {
               affectedModules += 1;
               addedCases += (item.cases || []).length;
+              collectDetail(item.module, (item.cases || []).length);
             }
           }
         });
@@ -3075,6 +3892,8 @@
           createdModules: createdModules,
           affectedModules: affectedModules,
           addedCases: addedCases,
+          details: normalizeHistoryDetails(Object.keys(detailMap).map(function(key) { return detailMap[key]; })),
+          diagnostics: applyDiagnostics,
         };
       }
 
@@ -3087,16 +3906,31 @@
         var visibleCases = entryBefore
           ? getVisibleCasesForModuleEntry(entryBefore).map(function(row) { return normalizeCaseItem(row.item, item.module); }).filter(Boolean)
           : existingAiCases.slice();
-        if (!existedBefore) createdModules += 1;
+        if (!existedBefore) {
+          createdModules += 1;
+          collectDetail(item.module, 0);
+          if (actionId === ROOT_ACTIONS.TOPUP_MODULES) {
+            setModuleTopupHighlight(moduleState, item.module, 0, 0, { highlightScope: 'module' });
+          }
+        }
         if (item.cases && item.cases.length) {
           var merged = mergeCasesWithoutDuplicates(existingAiCases, item.cases, visibleCases);
+          applyDiagnostics.duplicateAgainstExistingCases += getDiagnosticsMetric(merged.diagnostics, 'duplicateAgainstExisting');
+          applyDiagnostics.duplicateWithinAddedCases += getDiagnosticsMetric(merged.diagnostics, 'duplicateWithinAdded');
           if (merged.appended.length > 0) {
             commitCaseList(record.id, merged.merged, durationMs, '', 'keep-valid');
             affectedModules += 1;
             addedCases += merged.appended.length;
+            collectDetail(item.module, merged.appended.length);
             var baselineCount = entryBefore && Array.isArray(entryBefore.baselineCases) ? entryBefore.baselineCases.length : 0;
-            setModuleTopupHighlight(moduleState, item.module, baselineCount + existingAiCases.length, merged.appended.length);
+            if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES && !existedBefore) {
+              setModuleTopupHighlight(moduleState, item.module, 0, merged.appended.length, { highlightScope: 'subtree' });
+            } else {
+              setModuleTopupHighlight(moduleState, item.module, baselineCount + existingAiCases.length, merged.appended.length);
+            }
           }
+        } else if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES && !existedBefore) {
+          setModuleTopupHighlight(moduleState, item.module, 0, 0, { highlightScope: 'module' });
         }
       });
       return {
@@ -3104,6 +3938,8 @@
         createdModules: createdModules,
         affectedModules: affectedModules,
         addedCases: addedCases,
+        details: normalizeHistoryDetails(Object.keys(detailMap).map(function(key) { return detailMap[key]; })),
+        diagnostics: applyDiagnostics,
       };
     }
 
@@ -3127,7 +3963,7 @@
           rootState.error = '';
           rootState.lastAction = ROOT_ACTIONS.ROLLBACK;
           rootState.snapshotId = '';
-          notifyStatus('已放弃最近一次根节点生成', 'ok');
+          notifyStatus('已放弃最近一次生成', 'ok');
           render({ reason: 'root-rollback', anchorNodeId: anchorNodeId });
         }
         return rolledBack;
@@ -3139,13 +3975,14 @@
         ? buildVisibleModuleContext({ includeAiLayer: false })
         : buildVisibleModuleContext();
       var contract = createOperationContract(actionId, null);
-      var previousSnapshotId = ensureState().rootSnapshotId;
       var currentSnapshotId = '';
+      var hadAiContentBeforeAction = hasAnyAiModules();
       var hadAiLayerBeforeAction = shouldResetAiLayerBeforeAction && hasAnyAiModules();
       var hadAiCasesBeforeAction = (
         actionId === ROOT_ACTIONS.FULL_CASES
         || actionId === ROOT_ACTIONS.REGENERATE_MODULES
       ) && hasAnyAiCases();
+      var historyActionLabel = getRootHistoryActionLabel(actionId, hadAiContentBeforeAction);
       if (casesGenApi && typeof casesGenApi.snapshotAllCaseGenState === 'function') {
         currentSnapshotId = String(casesGenApi.snapshotAllCaseGenState() || '');
       }
@@ -3162,7 +3999,9 @@
 
       try {
         var modelResult = await executeXmindGeneration(contract, visibleContext, null);
-        var modules = filterModulesByContract(normalizeModelModulesOutput(modelResult.content), contract, visibleContext);
+        var normalizedOutput = normalizeModelModulesOutputDetailed(modelResult.content);
+        var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
+        var modules = filtered.list;
         var applied = applyRootOutput(actionId, modules, visibleContext, modelResult.durationMs);
         rootState.running = false;
         rootState.hideAiLayer = false;
@@ -3170,9 +4009,20 @@
         rootState.error = '';
         rootState.updatedAt = Date.now();
         if (!applied.changed) {
+          var rootNoChangeInfo = buildRootNoChangeInfo(actionId, filtered.diagnostics, applied.diagnostics, normalizedOutput.diagnostics);
+          recordGenerationHistory({
+            scope: 'root',
+            actionId: actionId,
+            actionLabel: historyActionLabel,
+            moduleCount: 0,
+            details: [],
+            resultKind: rootNoChangeInfo.resultKind,
+            reasonText: rootNoChangeInfo.reasonText,
+            diagnostics: rootNoChangeInfo.diagnostics,
+            previewText: rootNoChangeInfo.previewText,
+          });
+          discardCaseGenOperationSnapshotEntry(currentSnapshotId);
           if (hadAiCasesBeforeAction) setAllModuleResultsVisibility(true);
-          ensureState().rootSnapshotId = String(previousSnapshotId || '');
-          rootState.snapshotId = String(previousSnapshotId || '');
           notifyStatus('本轮未生成新的模块或用例', 'warn', { forceInline: true });
           render({ reason: 'root-no-change', anchorNodeId: anchorNodeId });
           persistXmindState(true);
@@ -3183,13 +4033,20 @@
           || actionId === ROOT_ACTIONS.REGENERATE_MODULES
         ) ? 'modules' : 'full';
         rootState.snapshotId = String(ensureState().rootSnapshotId || currentSnapshotId || '');
+        recordGenerationHistory({
+          scope: 'root',
+          actionId: actionId,
+          actionLabel: historyActionLabel,
+          moduleCount: Array.isArray(applied.details) ? applied.details.length : 0,
+          details: applied.details,
+        });
         var message = '';
         if (actionId === ROOT_ACTIONS.FULL_MODULES) {
           message = '已生成 ' + String(applied.createdModules) + ' 个模块';
         } else if (actionId === ROOT_ACTIONS.REGENERATE_MODULES) {
           message = '已重新生成 ' + String(applied.createdModules) + ' 个模块';
         } else if (actionId === ROOT_ACTIONS.FULL_CASES) {
-          message = (hadAiCasesBeforeAction ? '已重新生成 ' : '已生成 ')
+          message = (hadAiContentBeforeAction ? '已重新生成 ' : '已生成 ')
             + String(applied.createdModules) + ' 个模块，' + String(applied.addedCases) + ' 条用例';
         } else {
           message = '已补充 ' + String(applied.createdModules) + ' 个模块，' + String(applied.addedCases) + ' 条用例';
@@ -3202,11 +4059,24 @@
         persistXmindState(true);
         return true;
       } catch (err) {
+        discardCaseGenOperationSnapshotEntry(currentSnapshotId);
         rootState.running = false;
         rootState.hideAiLayer = false;
         rootState.status = 'error';
         rootState.error = err && err.message ? String(err.message) : '未知错误';
         rootState.updatedAt = Date.now();
+        var rootErrorInfo = buildGenerationErrorInfo(err);
+        recordGenerationHistory({
+          scope: 'root',
+          actionId: actionId,
+          actionLabel: historyActionLabel,
+          moduleCount: 0,
+          details: [],
+          resultKind: rootErrorInfo.resultKind,
+          reasonText: rootErrorInfo.reasonText,
+          diagnostics: rootErrorInfo.diagnostics,
+          previewText: rootErrorInfo.previewText,
+        });
         if (hadAiCasesBeforeAction) setAllModuleResultsVisibility(true);
         notifyStatus('生成失败：' + rootState.error, 'err', { forceInline: true });
         render({ reason: 'root-error', anchorNodeId: anchorNodeId });
@@ -3226,8 +4096,20 @@
       var snapshotId = '';
 
       if (actionId === MODULE_ACTIONS.ROLLBACK) {
-        if (moduleEntry.aiModuleId && casesGenApi && typeof casesGenApi.rollbackModuleCases === 'function') {
-          var rolledBack = casesGenApi.rollbackModuleCases(moduleEntry.aiModuleId);
+        if (moduleEntry.aiModuleId) {
+          var rolledBack = false;
+          if (casesGenApi && typeof casesGenApi.rollbackModuleCases === 'function') {
+            rolledBack = casesGenApi.rollbackModuleCases(moduleEntry.aiModuleId) === true;
+          } else {
+            var latestLocalOperation = getLatestCaseGenOperationSnapshotLocal();
+            if (
+              latestLocalOperation
+              && latestLocalOperation.scope === 'module'
+              && String(latestLocalOperation.moduleId || '') === String(moduleEntry.aiModuleId || '')
+            ) {
+              rolledBack = rollbackCaseGenOperationSnapshotLocal(String(latestLocalOperation.id || '')) === true;
+            }
+          }
           if (rolledBack) {
             var rolledState = ensureModuleUiState(moduleEntry.aiModuleId);
             clearModuleTopupHighlight(rolledState);
@@ -3241,6 +4123,8 @@
 
       if (casesGenApi && typeof casesGenApi.snapshotModuleCases === 'function') {
         snapshotId = casesGenApi.snapshotModuleCases(moduleId) || '';
+      } else {
+        snapshotId = createCaseGenOperationSnapshotLocal('module', moduleId) || '';
       }
       if (createdModuleBeforeAction) {
         moduleEntry.aiModule = ensureAiModuleRecord(moduleEntry.title, {
@@ -3251,6 +4135,7 @@
 
       var moduleState = ensureModuleUiState(moduleEntry.aiModuleId);
       var hadAiCasesBeforeAction = actionId === MODULE_ACTIONS.FULL_CASES && hasAiCasesForModule(moduleEntry.aiModuleId);
+      var historyActionLabel = getModuleHistoryActionLabel(actionId, moduleEntry, hadAiCasesBeforeAction);
       moduleState.snapshotId = snapshotId;
       moduleState.lastAction = actionId;
       moduleState.running = true;
@@ -3268,9 +4153,12 @@
       try {
         var visibleContext = buildVisibleModuleContext();
         var resolvedEntry = visibleContext.map[moduleEntry.moduleKey] || moduleEntry;
+        var historyModuleTitle = normalizeModuleTitle(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : moduleEntry.title);
         var contract = createOperationContract(actionId, resolvedEntry);
         var modelResult = await executeXmindGeneration(contract, visibleContext, resolvedEntry);
-        var modules = filterModulesByContract(normalizeModelModulesOutput(modelResult.content), contract, visibleContext);
+        var normalizedOutput = normalizeModelModulesOutputDetailed(modelResult.content);
+        var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
+        var modules = filtered.list;
         var targetKey = normalizeModuleKey(resolvedEntry.title);
         var targetOutput = null;
         modules.some(function(item) {
@@ -3295,16 +4183,38 @@
         }).filter(Boolean);
         var nextList = [];
         var appended = [];
+        var mergeDiagnostics = {
+          duplicateAgainstExisting: 0,
+          duplicateWithinAdded: 0,
+        };
         if (actionId === MODULE_ACTIONS.APPEND) {
           var merged = mergeCasesWithoutDuplicates(currentAiCases, targetOutput.cases || [], visibleCases);
           nextList = merged.merged;
           appended = merged.appended;
+          mergeDiagnostics = merged.diagnostics || mergeDiagnostics;
           if (!appended.length) {
-            if (createdModuleBeforeAction && moduleEntry.aiModuleId && casesGenApi && typeof casesGenApi.rollbackModuleCases === 'function') {
-              casesGenApi.rollbackModuleCases(moduleEntry.aiModuleId);
+            var appendNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
+            if (createdModuleBeforeAction && snapshotId) {
+              rollbackCaseGenOperationSnapshotEntry(snapshotId);
+            } else if (snapshotId) {
+              discardCaseGenOperationSnapshotEntry(snapshotId);
+            }
+            if (createdModuleBeforeAction) {
               moduleEntry.aiModule = null;
               moduleEntry.aiModuleId = '';
             }
+            recordGenerationHistory({
+              scope: 'module',
+              moduleTitle: historyModuleTitle,
+              actionId: actionId,
+              actionLabel: historyActionLabel,
+              moduleCount: 1,
+              details: [{ module: historyModuleTitle, caseCount: 0 }],
+              resultKind: appendNoChangeInfo.resultKind,
+              reasonText: appendNoChangeInfo.reasonText,
+              diagnostics: appendNoChangeInfo.diagnostics,
+              previewText: appendNoChangeInfo.previewText,
+            });
             moduleState.running = false;
             moduleState.hideResults = false;
             moduleState.snapshotId = '';
@@ -3318,11 +4228,28 @@
         } else {
           nextList = Array.isArray(targetOutput.cases) ? targetOutput.cases.slice() : [];
           if (!nextList.length) {
-            if (createdModuleBeforeAction && moduleEntry.aiModuleId && casesGenApi && typeof casesGenApi.rollbackModuleCases === 'function') {
-              casesGenApi.rollbackModuleCases(moduleEntry.aiModuleId);
+            var fullNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
+            if (createdModuleBeforeAction && snapshotId) {
+              rollbackCaseGenOperationSnapshotEntry(snapshotId);
+            } else if (snapshotId) {
+              discardCaseGenOperationSnapshotEntry(snapshotId);
+            }
+            if (createdModuleBeforeAction) {
               moduleEntry.aiModule = null;
               moduleEntry.aiModuleId = '';
             }
+            recordGenerationHistory({
+              scope: 'module',
+              moduleTitle: historyModuleTitle,
+              actionId: actionId,
+              actionLabel: historyActionLabel,
+              moduleCount: 1,
+              details: [{ module: historyModuleTitle, caseCount: 0 }],
+              resultKind: fullNoChangeInfo.resultKind,
+              reasonText: fullNoChangeInfo.reasonText,
+              diagnostics: fullNoChangeInfo.diagnostics,
+              previewText: fullNoChangeInfo.previewText,
+            });
             moduleState.running = false;
             moduleState.hideResults = false;
             moduleState.snapshotId = '';
@@ -3339,6 +4266,17 @@
         moduleState.error = '';
         moduleState.hideResults = false;
         moduleState.updatedAt = Date.now();
+        recordGenerationHistory({
+          scope: 'module',
+          moduleTitle: historyModuleTitle,
+          actionId: actionId,
+          actionLabel: historyActionLabel,
+          moduleCount: 1,
+          details: [{
+            module: historyModuleTitle,
+            caseCount: actionId === MODULE_ACTIONS.APPEND ? appended.length : nextList.length,
+          }],
+        });
         notifyStatus(
           actionId === MODULE_ACTIONS.APPEND
             ? ('已为该模块补充 ' + String(appended.length) + ' 条用例')
@@ -3352,11 +4290,31 @@
         persistXmindState(true);
         return true;
       } catch (err) {
+        if (createdModuleBeforeAction && snapshotId) {
+          rollbackCaseGenOperationSnapshotEntry(snapshotId);
+          moduleEntry.aiModule = null;
+          moduleEntry.aiModuleId = '';
+        } else if (snapshotId) {
+          discardCaseGenOperationSnapshotEntry(snapshotId);
+        }
         moduleState.running = false;
         moduleState.status = 'error';
         moduleState.error = err && err.message ? String(err.message) : '未知错误';
         moduleState.hideResults = false;
         moduleState.updatedAt = Date.now();
+        var moduleErrorInfo = buildGenerationErrorInfo(err);
+        recordGenerationHistory({
+          scope: 'module',
+          moduleTitle: normalizeModuleTitle(moduleEntry && moduleEntry.title ? moduleEntry.title : ''),
+          actionId: actionId,
+          actionLabel: historyActionLabel,
+          moduleCount: 0,
+          details: [],
+          resultKind: moduleErrorInfo.resultKind,
+          reasonText: moduleErrorInfo.reasonText,
+          diagnostics: moduleErrorInfo.diagnostics,
+          previewText: moduleErrorInfo.previewText,
+        });
         notifyStatus('生成失败：' + moduleState.error, 'err', { forceInline: true });
         render({ reason: 'module-error', anchorNodeId: anchorNodeId });
         persistXmindState(true);
@@ -3432,8 +4390,14 @@
       }
       if (summaryBtn) {
         summaryBtn.addEventListener('click', function() {
-          if (summaryDialogOpen === true) closeSummaryDialog();
+          if (summaryDialogOpen === true && summaryDialogMode === 'prep') closeSummaryDialog();
           else openSummaryDialog(getPrepState().step || STEP_REQUIREMENT);
+        });
+      }
+      if (historyBtn) {
+        historyBtn.addEventListener('click', function() {
+          if (summaryDialogOpen === true && summaryDialogMode === 'history') closeSummaryDialog();
+          else openHistoryDialog();
         });
       }
       if (summaryCloseBtn) {
@@ -3526,7 +4490,7 @@
             var imageIndex = Number(actionTarget.getAttribute('data-image-index'));
             if (Number.isFinite(imageIndex)) {
               removeManualRequirementImage(imageIndex);
-              renderPrepDialog();
+              renderOpenedSummaryDialog();
             }
           }
         });
@@ -3535,19 +4499,19 @@
           if (!target) return;
           if (target.name === 'xmindRequirementMode') {
             setPrepField('requirementMode', target.value === 'manual' ? 'manual' : 'document');
-            renderPrepDialog();
+            renderOpenedSummaryDialog();
             return;
           }
           if (target.name === 'xmindCaseImportMode') {
             setPrepField('caseImportMode', target.value === 'import' ? 'import' : 'skip');
-            renderPrepDialog();
+            renderOpenedSummaryDialog();
             scheduleRender('case-import-mode-change');
             return;
           }
           var settingKey = target.getAttribute ? target.getAttribute('data-casegen-setting') : '';
           if (settingKey) {
             setCaseGenOption(settingKey, target.type === 'checkbox' ? target.checked === true : (target.value || ''));
-            renderPrepDialog();
+            renderOpenedSummaryDialog();
           }
         });
         summaryDialogBodyEl.addEventListener('input', debounce(function(event) {
@@ -3586,7 +4550,7 @@
           appendManualRequirementImages(files).then(function(ok) {
             if (ok) {
               notifyStatus('已粘贴需求图片', 'ok');
-              if (summaryDialogOpen === true) renderPrepDialog();
+              renderOpenedSummaryDialog();
             }
           });
         });
@@ -3622,7 +4586,7 @@
         input.addEventListener('change', function() {
           setTimeout(function() {
             updateSummary();
-            if (summaryDialogOpen === true) renderPrepDialog();
+            renderOpenedSummaryDialog();
             scheduleRender('file-change');
           }, 220);
         });
@@ -3631,7 +4595,7 @@
       if (caseFileList && typeof MutationObserver !== 'undefined') {
         listObserver = new MutationObserver(function() {
           updateSummary();
-          if (summaryDialogOpen === true) renderPrepDialog();
+          renderOpenedSummaryDialog();
           scheduleRender('case-list-mutation');
         });
         listObserver.observe(caseFileList, { childList: true, subtree: true });

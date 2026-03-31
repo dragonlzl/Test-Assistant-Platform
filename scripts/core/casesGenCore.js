@@ -264,6 +264,9 @@
           treeSourceSignature: '',
           hasModuleSkeleton: false,
           hasImportedBaseline: false,
+          history: [],
+          operationSnapshots: [],
+          lastOperationSnapshotId: '',
           rootSnapshotId: '',
           rootSnapshots: [],
           root: {
@@ -290,6 +293,12 @@
       }
       if (!Array.isArray(state.xmindCaseGen.snapshots)) {
         state.xmindCaseGen.snapshots = [];
+      }
+      if (!Array.isArray(state.xmindCaseGen.history)) {
+        state.xmindCaseGen.history = [];
+      }
+      if (!Array.isArray(state.xmindCaseGen.operationSnapshots)) {
+        state.xmindCaseGen.operationSnapshots = [];
       }
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) {
         state.xmindCaseGen.rootSnapshots = [];
@@ -324,6 +333,7 @@
       state.xmindCaseGen.treeSourceSignature = String(state.xmindCaseGen.treeSourceSignature || '');
       state.xmindCaseGen.hasModuleSkeleton = state.xmindCaseGen.hasModuleSkeleton === true;
       state.xmindCaseGen.hasImportedBaseline = state.xmindCaseGen.hasImportedBaseline === true;
+      state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
       state.xmindCaseGen.summaryCollapsed = state.xmindCaseGen.summaryCollapsed === true;
       state.xmindCaseGen.prep.step = Math.max(1, Math.min(3, Number(state.xmindCaseGen.prep.step) || 1));
@@ -3207,37 +3217,152 @@
       return list.filter(function(item) { return item && typeof item === 'object'; });
     }
 
+    function cloneCaseSelectionMap() {
+      var result = {};
+      var source = state.caseSelections && typeof state.caseSelections === 'object'
+        ? state.caseSelections
+        : {};
+      Object.keys(source).forEach(function(key) {
+        result[key] = cloneSelectionSet(source[key]);
+      });
+      return result;
+    }
+
+    function buildOperationSnapshotPayload(scope, moduleId) {
+      return {
+        id: 'op-snap-' + String(ensureXmindCaseGenState().nextSnapshotId),
+        scope: scope === 'module' ? 'module' : 'root',
+        moduleId: moduleId ? String(moduleId || '') : '',
+        caseGenModules: cloneJsonValue(state.caseGenModules, []),
+        caseGenResults: cloneJsonValue(state.caseGenResults, {}),
+        caseSelections: cloneCaseSelectionMap(),
+        caseGenSuggestions: cloneJsonValue(state.caseGenSuggestions, {}),
+        caseGenModuleStatus: cloneJsonValue(ensureCaseModuleStatusState(), {}),
+        caseGenProgress: cloneJsonValue(state.caseGenProgress, {}),
+        caseGenTiming: cloneJsonValue(ensureCaseModuleTimingState(), {}),
+        caseGenSource: String(state.caseGenSource || ''),
+        createdAt: Date.now(),
+      };
+    }
+
+    function getLatestCaseGenOperationSnapshot() {
+      var xmindState = ensureXmindCaseGenState();
+      var list = Array.isArray(xmindState.operationSnapshots) ? xmindState.operationSnapshots : [];
+      return list.length ? list[list.length - 1] : null;
+    }
+
+    function syncCaseGenOperationPointers() {
+      var xmindState = ensureXmindCaseGenState();
+      var latest = getLatestCaseGenOperationSnapshot();
+      xmindState.lastOperationSnapshotId = latest && latest.id ? String(latest.id || '') : '';
+      xmindState.rootSnapshotId = latest && latest.scope === 'root'
+        ? String(latest.id || '')
+        : '';
+      xmindState.root.snapshotId = String(xmindState.rootSnapshotId || '');
+      Object.keys(xmindState.modules || {}).forEach(function(key) {
+        var moduleState = ensureXmindCaseGenModuleState(key);
+        if (latest && latest.scope === 'module' && String(latest.moduleId || '') === String(key || '')) {
+          moduleState.snapshotId = String(latest.id || '');
+        } else {
+          moduleState.snapshotId = '';
+        }
+      });
+    }
+
+    function createCaseGenOperationSnapshot(scope, moduleId) {
+      var xmindState = ensureXmindCaseGenState();
+      var snapshot = buildOperationSnapshotPayload(scope, moduleId);
+      xmindState.nextSnapshotId += 1;
+      xmindState.operationSnapshots.push(snapshot);
+      syncCaseGenOperationPointers();
+      xmindState.root.updatedAt = Date.now();
+      if (moduleId) {
+        var moduleState = ensureXmindCaseGenModuleState(moduleId);
+        if (moduleState) moduleState.updatedAt = Date.now();
+      }
+      return String(snapshot.id || '');
+    }
+
+    function discardCaseGenOperationSnapshot(snapshotId) {
+      var targetId = String(snapshotId || '');
+      if (!targetId) return false;
+      var xmindState = ensureXmindCaseGenState();
+      var list = Array.isArray(xmindState.operationSnapshots) ? xmindState.operationSnapshots : [];
+      var nextList = list.filter(function(item) {
+        return item && String(item.id || '') !== targetId;
+      });
+      if (nextList.length === list.length) return false;
+      xmindState.operationSnapshots = nextList;
+      syncCaseGenOperationPointers();
+      return true;
+    }
+
+    function applyOperationSnapshot(snapshot, rollbackAction) {
+      if (!snapshot || typeof snapshot !== 'object') return false;
+      state.caseGenModules = cloneJsonValue(snapshot.caseGenModules, []);
+      state.caseGenResults = cloneJsonValue(snapshot.caseGenResults, {});
+      state.caseSelections = {};
+      Object.keys(snapshot.caseSelections || {}).forEach(function(key) {
+        state.caseSelections[key] = restoreSelectionSet(snapshot.caseSelections[key]);
+      });
+      state.caseGenSuggestions = cloneJsonValue(snapshot.caseGenSuggestions, {});
+      state.caseGenModuleStatus = cloneJsonValue(snapshot.caseGenModuleStatus, {});
+      state.caseGenProgress = cloneJsonValue(snapshot.caseGenProgress, {});
+      state.caseGenTiming = cloneJsonValue(snapshot.caseGenTiming, {});
+      state.caseGenSource = String(snapshot.caseGenSource || '');
+      var xmindState = ensureXmindCaseGenState();
+      xmindState.hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
+      xmindState.root.lastAction = rollbackAction || 'rollback';
+      xmindState.root.running = false;
+      xmindState.root.status = '';
+      xmindState.root.error = '';
+      xmindState.root.updatedAt = Date.now();
+      Object.keys(xmindState.modules || {}).forEach(function(key) {
+        var moduleState = ensureXmindCaseGenModuleState(key);
+        moduleState.running = false;
+        moduleState.status = '';
+        moduleState.error = '';
+        moduleState.hideResults = false;
+        moduleState.lastAction = rollbackAction || 'rollback';
+        moduleState.updatedAt = Date.now();
+      });
+      syncCaseGenOperationPointers();
+      closeCaseViewIfActive(ALL_CASE_VIEW_ID);
+      (Array.isArray(state.caseGenModules) ? state.caseGenModules : []).forEach(function(mod) {
+        if (!mod || !mod.id) return;
+        refreshCaseSelectionUI(mod.id);
+        updateSupplementButtons(mod.id, getCaseListForModule(mod.id).length > 0);
+      });
+      renderCaseGeneration();
+      persistWorkflowState();
+      return true;
+    }
+
+    function rollbackCaseGenOperationSnapshot(snapshotId) {
+      var targetId = String(snapshotId || '');
+      var xmindState = ensureXmindCaseGenState();
+      var list = Array.isArray(xmindState.operationSnapshots) ? xmindState.operationSnapshots : [];
+      var snapshot = null;
+      var index = -1;
+      if (targetId) {
+        for (var i = list.length - 1; i >= 0; i -= 1) {
+          if (!list[i] || String(list[i].id || '') !== targetId) continue;
+          snapshot = list[i];
+          index = i;
+          break;
+        }
+      } else if (list.length) {
+        index = list.length - 1;
+        snapshot = list[index];
+      }
+      if (!snapshot || index < 0) return false;
+      xmindState.operationSnapshots.splice(index, 1);
+      return applyOperationSnapshot(snapshot, 'rollback');
+    }
+
     function snapshotModuleCases(moduleId) {
       if (!moduleId) return '';
-      var xmindState = ensureXmindCaseGenState();
-      var moduleState = ensureXmindCaseGenModuleState(moduleId);
-      var moduleRecord = findCaseGenModule(moduleId);
-      var moduleIndex = -1;
-      if (moduleRecord && Array.isArray(state.caseGenModules)) {
-        moduleIndex = state.caseGenModules.findIndex(function(item) {
-          return item && String(item.id || '') === String(moduleId || '');
-        });
-      }
-      var snapshotId = 'snap-' + String(xmindState.nextSnapshotId);
-      xmindState.nextSnapshotId += 1;
-      xmindState.snapshots.push({
-        id: snapshotId,
-        moduleId: String(moduleId),
-        moduleExistsBefore: Boolean(moduleRecord),
-        moduleRecord: cloneJsonValue(moduleRecord, null),
-        moduleIndex: moduleIndex,
-        rawResult: state.caseGenResults && Object.prototype.hasOwnProperty.call(state.caseGenResults, moduleId)
-          ? String(state.caseGenResults[moduleId] || '')
-          : null,
-        selection: cloneSelectionSet(state.caseSelections && state.caseSelections[moduleId]),
-        status: cloneJsonValue(ensureCaseModuleStatusState()[moduleId], null),
-        progress: cloneJsonValue(state.caseGenProgress && state.caseGenProgress[moduleId], null),
-        timing: cloneJsonValue(ensureCaseModuleTimingState()[moduleId], null),
-        createdAt: Date.now(),
-      });
-      moduleState.snapshotId = snapshotId;
-      moduleState.updatedAt = Date.now();
-      return snapshotId;
+      return createCaseGenOperationSnapshot('module', moduleId);
     }
 
     function findModuleSnapshot(moduleId, snapshotId) {
@@ -3264,130 +3389,21 @@
 
     function rollbackModuleCases(moduleId) {
       if (!moduleId) return false;
-      var moduleState = ensureXmindCaseGenModuleState(moduleId);
-      var snapshot = findModuleSnapshot(moduleId, moduleState.snapshotId || '');
-      if (!snapshot) return false;
-      if (snapshot.moduleRecord && !findCaseGenModule(moduleId) && Array.isArray(state.caseGenModules)) {
-        var moduleIndex = Number(snapshot.moduleIndex);
-        var insertIndex = Number.isFinite(moduleIndex)
-          ? Math.max(0, Math.min(state.caseGenModules.length, moduleIndex))
-          : state.caseGenModules.length;
-        state.caseGenModules.splice(insertIndex, 0, cloneJsonValue(snapshot.moduleRecord, null));
-      } else if (!snapshot.moduleExistsBefore && Array.isArray(state.caseGenModules)) {
-        state.caseGenModules = state.caseGenModules.filter(function(item) {
-          return !(item && String(item.id || '') === String(moduleId || ''));
-        });
+      var latest = getLatestCaseGenOperationSnapshot();
+      if (!latest || latest.scope !== 'module' || String(latest.moduleId || '') !== String(moduleId || '')) {
+        return false;
       }
-      if (snapshot.rawResult === null || snapshot.rawResult === undefined) {
-        delete state.caseGenResults[moduleId];
-      } else {
-        state.caseGenResults[moduleId] = String(snapshot.rawResult || '');
-      }
-      state.caseSelections[moduleId] = restoreSelectionSet(snapshot.selection);
-      if (snapshot.status && typeof snapshot.status === 'object') {
-        ensureCaseModuleStatusState()[moduleId] = snapshot.status;
-      } else {
-        delete ensureCaseModuleStatusState()[moduleId];
-      }
-      if (snapshot.progress && typeof snapshot.progress === 'object') {
-        state.caseGenProgress[moduleId] = snapshot.progress;
-      } else if (state.caseGenProgress) {
-        delete state.caseGenProgress[moduleId];
-      }
-      if (snapshot.timing === null || snapshot.timing === undefined) {
-        setCaseModuleTiming(moduleId);
-      } else {
-        setCaseModuleTiming(moduleId, Number(snapshot.timing));
-      }
-      moduleState.running = false;
-      moduleState.status = '';
-      moduleState.error = '';
-      moduleState.hideResults = false;
-      moduleState.lastAction = 'rollback';
-      moduleState.snapshotId = '';
-      moduleState.updatedAt = Date.now();
-      closeCaseViewIfActive(moduleId);
-      refreshCaseSelectionUI(moduleId);
-      updateSupplementButtons(moduleId, getCaseListForModule(moduleId).length > 0);
-      renderCaseGeneration();
-      persistWorkflowState();
-      return true;
+      return rollbackCaseGenOperationSnapshot(String(latest.id || '')) === true;
     }
 
     function snapshotAllCaseGenState() {
-      var xmindState = ensureXmindCaseGenState();
-      var snapshotId = 'root-snap-' + String(xmindState.nextSnapshotId);
-      xmindState.nextSnapshotId += 1;
-      xmindState.rootSnapshots.push({
-        id: snapshotId,
-        caseGenModules: cloneJsonValue(state.caseGenModules, []),
-        caseGenResults: cloneJsonValue(state.caseGenResults, {}),
-        caseSelections: (function() {
-          var result = {};
-          var source = state.caseSelections && typeof state.caseSelections === 'object'
-            ? state.caseSelections
-            : {};
-          Object.keys(source).forEach(function(key) {
-            result[key] = cloneSelectionSet(source[key]);
-          });
-          return result;
-        })(),
-        caseGenSuggestions: cloneJsonValue(state.caseGenSuggestions, {}),
-        caseGenModuleStatus: cloneJsonValue(ensureCaseModuleStatusState(), {}),
-        caseGenProgress: cloneJsonValue(state.caseGenProgress, {}),
-        caseGenTiming: cloneJsonValue(ensureCaseModuleTimingState(), {}),
-        caseGenSource: String(state.caseGenSource || ''),
-        createdAt: Date.now(),
-      });
-      xmindState.rootSnapshotId = snapshotId;
-      xmindState.root.snapshotId = snapshotId;
-      xmindState.root.updatedAt = Date.now();
-      return snapshotId;
+      return createCaseGenOperationSnapshot('root', '');
     }
 
     function rollbackAllCaseGenState() {
-      var xmindState = ensureXmindCaseGenState();
-      var snapshotId = xmindState.rootSnapshotId || (xmindState.root && xmindState.root.snapshotId) || '';
-      if (!snapshotId) return false;
-      var snapshot = null;
-      for (var i = xmindState.rootSnapshots.length - 1; i >= 0; i -= 1) {
-        var item = xmindState.rootSnapshots[i];
-        if (!item || String(item.id || '') !== String(snapshotId)) continue;
-        snapshot = item;
-        break;
-      }
-      if (!snapshot) return false;
-      state.caseGenModules = cloneJsonValue(snapshot.caseGenModules, []);
-      state.caseGenResults = cloneJsonValue(snapshot.caseGenResults, {});
-      state.caseSelections = {};
-      Object.keys(snapshot.caseSelections || {}).forEach(function(key) {
-        state.caseSelections[key] = restoreSelectionSet(snapshot.caseSelections[key]);
-      });
-      state.caseGenSuggestions = cloneJsonValue(snapshot.caseGenSuggestions, {});
-      state.caseGenModuleStatus = cloneJsonValue(snapshot.caseGenModuleStatus, {});
-      state.caseGenProgress = cloneJsonValue(snapshot.caseGenProgress, {});
-      state.caseGenTiming = cloneJsonValue(snapshot.caseGenTiming, {});
-      state.caseGenSource = String(snapshot.caseGenSource || '');
-      xmindState.hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
-      xmindState.root.lastAction = 'rollback';
-      xmindState.root.running = false;
-      xmindState.root.status = '';
-      xmindState.root.error = '';
-      xmindState.root.snapshotId = '';
-      xmindState.rootSnapshotId = '';
-      xmindState.root.updatedAt = Date.now();
-      Object.keys(xmindState.modules || {}).forEach(function(key) {
-        var moduleState = ensureXmindCaseGenModuleState(key);
-        moduleState.running = false;
-        moduleState.status = '';
-        moduleState.error = '';
-        moduleState.hideResults = false;
-        moduleState.updatedAt = Date.now();
-      });
-      closeCaseViewIfActive(ALL_CASE_VIEW_ID);
-      renderCaseGeneration();
-      persistWorkflowState();
-      return true;
+      var latest = getLatestCaseGenOperationSnapshot();
+      if (!latest) return false;
+      return rollbackCaseGenOperationSnapshot(String(latest.id || '')) === true;
     }
 
     function commitModuleCases(moduleId, payload) {
@@ -4781,6 +4797,9 @@
       rollbackModuleCases: rollbackModuleCases,
       snapshotAllCaseGenState: snapshotAllCaseGenState,
       rollbackAllCaseGenState: rollbackAllCaseGenState,
+      getLatestCaseGenOperationSnapshot: getLatestCaseGenOperationSnapshot,
+      discardCaseGenOperationSnapshot: discardCaseGenOperationSnapshot,
+      rollbackCaseGenOperationSnapshot: rollbackCaseGenOperationSnapshot,
       setCaseGenDbStoreNewAction: setCaseGenDbStoreNewAction,
       clearCaseGenDbStoreNewActionError: clearCaseGenDbStoreNewActionError,
       openCaseGenDbStoreNewDrawer: function() { bindCaseGenDbStoreEvents(); return openCaseGenDbStoreNewDrawer(); },
