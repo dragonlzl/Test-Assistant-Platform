@@ -69,13 +69,7 @@
     var summaryDialogBodyEl = document.getElementById('xmindCaseGenSummaryDialogBody');
     var prepResetBtn = document.getElementById('xmindCaseGenPrepResetBtn');
     var summaryCloseBtn = document.getElementById('xmindCaseGenSummaryCloseBtn');
-    var importRequirementBtn = document.getElementById('xmindCaseGenImportRequirementBtn');
-    var importCasesBtn = document.getElementById('xmindCaseGenImportCasesBtn');
-    var selectCasesBtn = document.getElementById('xmindCaseGenSelectCasesBtn');
-    var generateModulesBtn = document.getElementById('xmindCaseGenGenerateModulesBtn');
-    var generateFullBtn = document.getElementById('xmindCaseGenGenerateFullBtn');
     var exportBtn = document.getElementById('xmindCaseGenExportBtn');
-    var promptBtn = document.getElementById('xmindCaseGenPromptBtn');
     var statusEl = document.getElementById('xmindCaseGenStatus');
     var mindContainer = document.getElementById('xmindCaseGenMindContainer');
 
@@ -295,13 +289,7 @@
       return [
         summaryBtn,
         historyBtn,
-        importRequirementBtn,
-        importCasesBtn,
-        selectCasesBtn,
-        generateModulesBtn,
-        generateFullBtn,
         exportBtn,
-        promptBtn,
       ].filter(Boolean);
     }
 
@@ -4601,39 +4589,9 @@
           confirmResetPrepState();
         });
       }
-      if (importRequirementBtn) {
-        importRequirementBtn.addEventListener('click', function() {
-          triggerRequirementImport();
-        });
-      }
-      if (importCasesBtn) {
-        importCasesBtn.addEventListener('click', function() {
-          triggerCasesImport();
-        });
-      }
-      if (selectCasesBtn) {
-        selectCasesBtn.addEventListener('click', function() {
-          triggerCasesLibrarySelect();
-        });
-      }
-      if (generateModulesBtn) {
-        generateModulesBtn.addEventListener('click', function() {
-          runRootAction(ROOT_ACTIONS.FULL_MODULES, { anchorNodeId: getRootNodeId() });
-        });
-      }
-      if (generateFullBtn) {
-        generateFullBtn.addEventListener('click', function() {
-          runRootAction(ROOT_ACTIONS.FULL_CASES, { anchorNodeId: getRootNodeId() });
-        });
-      }
       if (exportBtn) {
         exportBtn.addEventListener('click', function() {
           exportCurrentXmind();
-        });
-      }
-      if (promptBtn) {
-        promptBtn.addEventListener('click', function() {
-          openSummaryDialog(STEP_OPTIONS);
         });
       }
       if (summaryDialogBodyEl) {

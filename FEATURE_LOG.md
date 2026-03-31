@@ -19,6 +19,28 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 用例生成工具栏入口收敛
+- 功能描述：移除 XMind 用例生成抽屉工具栏中与“生成前置准备”重复的快捷操作，只保留 `生成前置准备`、`生成记录` 和 `导出当前XMind`。需求导入、参考用例导入、从用例库选择、生成全量模块、生成全量用例、生成选项统一收口到前置准备弹窗和树节点右键/`+AI` 入口，避免页面顶部重复操作造成理解负担。
+- 操作方式：
+  - 进入 `用例生成` 页后打开 `XMind 用例生成` 抽屉；
+  - 在搜索栏工具区使用 `生成前置准备` 完成需求导入、参考用例导入和生成选项配置；
+  - 完成前置准备后，回到画布通过根节点/模块节点的右键菜单或 `+AI` 触发生成；
+  - 如需查看过程记录或导出结果，继续使用工具栏中的 `生成记录`、`导出当前XMind`。
+- 使用效果：
+  - XMind 页面顶部只保留低频全局动作，入口更聚焦；
+  - 用户不再面对两套重复的“导入/生成/生成选项”操作，减少误触和理解成本；
+  - 生成流程统一围绕“前置准备 + 画布节点操作”展开，和当前 XMind 交互设计保持一致。
+- 新增内容/接口/组件：
+  - 调整 [index.html](/Users/linzhenlong/work/casetool/Test-Assistant-Platform/index.html) 中 XMind 抽屉工具栏按钮集合；
+  - 清理 [scripts/modules/xmindCasegen.js](/Users/linzhenlong/work/casetool/Test-Assistant-Platform/scripts/modules/xmindCasegen.js) 对已移除按钮的引用与事件绑定；
+  - 更新 [tests/ui/xmind_casegen_flow.spec.js](/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/xmind_casegen_flow.spec.js)、[tests/ui/casegen_settings_prompt.spec.js](/Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/casegen_settings_prompt.spec.js) 的 UI 回归路径。
+- 复用说明：继续复用现有 `生成前置准备` 弹窗、XMind 右键菜单、`+AI` 快捷入口和导出能力；未新增接口、状态机或后端依赖。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "工具栏支持查看生成记录，并展示根节点与模块节点的生成摘要|生成记录会展示模型返回非 JSON 时的具体原因和返回片段|生成记录会把模型错误显示为通俗失败原因" --reporter=line`（通过，3/3）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_settings_prompt.spec.js -g "XMind 用例生成抽屉使用专属指派与提示词拼装" --reporter=line`（通过，1/1）
+- 更新记录：2026-03-31 新增该收敛项，统一删除工具栏重复入口并保留前置准备主入口；同步回归 XMind 历史记录、根节点生成入口与专属提示词拼装路径。
+
 - 功能名称：XMind/普通用例生成共享生成选项扩展与开关样式统一
 - 功能描述：在 XMind 用例生成的“生成前置准备”第 3 步新增 `考虑功能使用条件`、`数值验证` 两个生成选项，并统一接入共享用例生成设置与提示词拼装链路。其中两个新选项默认开启；同时将 XMind 第 3 步以及普通“用例生成”的全局/模块抽屉都改为更直观的卡片式左右开关布局，兼容黑色主题。
 - 操作方式：

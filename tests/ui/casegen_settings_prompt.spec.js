@@ -834,7 +834,6 @@ test.describe('用例生成-设置项与跳转', () => {
       if (rawTextEl) {
         rawTextEl.removeAttribute('readonly');
         rawTextEl.value = '这是 XMind 专属提示词拼装测试需求。';
-        rawTextEl.dispatchEvent(new Event('input', { bubbles: true }));
       }
       if (window.app && window.app.state) {
         window.app.state.requirementLabel = 'XMind提示词需求';
@@ -849,12 +848,13 @@ test.describe('用例生成-设置项与跳转', () => {
           completed: true,
         };
       }
+      if (rawTextEl) {
+        rawTextEl.dispatchEvent(new Event('input', { bubbles: true }));
+        rawTextEl.dispatchEvent(new Event('change', { bubbles: true }));
+      }
     });
 
-    await page.evaluate(() => {
-      const btn = document.getElementById('xmindCaseGenPromptBtn');
-      if (btn && typeof btn.click === 'function') btn.click();
-    });
+    await page.click('#xmindCaseGenSummaryBtn');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
     await page.fill('#xmindCaseGenOptionCustomRequirement', 'XMind 页面专用要求');
     await expect(page.locator('[data-casegen-setting-card="needFunctionCondition"]')).toHaveClass(/is-on/);
@@ -866,10 +866,7 @@ test.describe('用例生成-设置项与跳转', () => {
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
 
     await installCaseGenPromptCapture(page);
-    await page.evaluate(() => {
-      const btn = document.getElementById('xmindCaseGenGenerateFullBtn');
-      if (btn && typeof btn.click === 'function') btn.click();
-    });
+    await clickXmindNodeQuickAction(page, 'XMind提示词需求');
 
     await page.waitForFunction(() => {
       return Array.isArray(window.__casegenPromptSnapshots) && window.__casegenPromptSnapshots.length > 0;

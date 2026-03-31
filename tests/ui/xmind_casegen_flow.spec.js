@@ -977,13 +977,7 @@ test.describe('XMind 用例生成抽屉', () => {
     })).toEqual([
       'xmindCaseGenSummaryBtn',
       'xmindCaseGenHistoryBtn',
-      'xmindCaseGenImportRequirementBtn',
-      'xmindCaseGenImportCasesBtn',
-      'xmindCaseGenSelectCasesBtn',
-      'xmindCaseGenGenerateModulesBtn',
-      'xmindCaseGenGenerateFullBtn',
       'xmindCaseGenExportBtn',
-      'xmindCaseGenPromptBtn',
     ]);
 
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
@@ -1101,7 +1095,8 @@ test.describe('XMind 用例生成抽屉', () => {
     await openXmindCaseGenDrawer(page);
     await waitForNodeText(page, 'XMind模型返回结构异常需求');
 
-    await clickElementById(page, 'xmindCaseGenGenerateModulesBtn');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
     await page.waitForFunction(() => {
       var state = window.app && window.app.state ? window.app.state : null;
       var history = state && state.xmindCaseGen ? state.xmindCaseGen.history : null;
@@ -1183,7 +1178,8 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await openXmindCaseGenDrawer(page);
     await waitForNodeText(page, 'XMind模型调用错误需求');
-    await clickElementById(page, 'xmindCaseGenGenerateModulesBtn');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
     await page.waitForFunction(() => {
       var state = window.app && window.app.state ? window.app.state : null;
       var history = state && state.xmindCaseGen ? state.xmindCaseGen.history : null;
