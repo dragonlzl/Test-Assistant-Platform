@@ -118,6 +118,9 @@
       APPEND: 'module-append',
       ROLLBACK: 'module-rollback',
     };
+    var COMMON_ACTIONS = {
+      DELETE: 'xmind-delete-selection',
+    };
 
     function createDefaultPrepState() {
       return {
@@ -465,13 +468,15 @@
           hasModuleSkeleton: false,
           hasImportedBaseline: false,
           history: [],
-          operationSnapshots: [],
-          lastOperationSnapshotId: '',
-          rootSnapshotId: '',
-          rootSnapshots: [],
-          root: createDefaultRootState(),
-          summaryCollapsed: false,
-          prep: createDefaultPrepState(),
+        operationSnapshots: [],
+        lastOperationSnapshotId: '',
+        rootSnapshotId: '',
+        rootSnapshots: [],
+        deletedBaselineModuleKeys: [],
+        deletedBaselineCaseKeys: [],
+        root: createDefaultRootState(),
+        summaryCollapsed: false,
+        prep: createDefaultPrepState(),
           nextSnapshotId: 1,
           snapshots: [],
           modules: {},
@@ -480,6 +485,8 @@
       if (!Array.isArray(state.xmindCaseGen.history)) state.xmindCaseGen.history = [];
       if (!Array.isArray(state.xmindCaseGen.operationSnapshots)) state.xmindCaseGen.operationSnapshots = [];
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) state.xmindCaseGen.rootSnapshots = [];
+      if (!Array.isArray(state.xmindCaseGen.deletedBaselineModuleKeys)) state.xmindCaseGen.deletedBaselineModuleKeys = [];
+      if (!Array.isArray(state.xmindCaseGen.deletedBaselineCaseKeys)) state.xmindCaseGen.deletedBaselineCaseKeys = [];
       if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
       if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') {
         state.xmindCaseGen.modules = {};
@@ -499,6 +506,12 @@
       state.xmindCaseGen.hasImportedBaseline = hasImportedBaselineCases();
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
+      state.xmindCaseGen.deletedBaselineModuleKeys = state.xmindCaseGen.deletedBaselineModuleKeys
+        .map(function(item) { return normalizeModuleKey(item); })
+        .filter(Boolean);
+      state.xmindCaseGen.deletedBaselineCaseKeys = state.xmindCaseGen.deletedBaselineCaseKeys
+        .map(function(item) { return String(item || '').trim(); })
+        .filter(Boolean);
       state.xmindCaseGen.root.hideAiLayer = state.xmindCaseGen.root.hideAiLayer === true;
       state.xmindCaseGen.summaryCollapsed = state.xmindCaseGen.summaryCollapsed === true;
       state.xmindCaseGen.prep.step = Math.max(STEP_REQUIREMENT, Math.min(STEP_OPTIONS, Number(state.xmindCaseGen.prep.step) || STEP_REQUIREMENT));
@@ -539,6 +552,75 @@
         };
       }
       return rootState.modules[key];
+    }
+
+    function getDeletedBaselineModuleMap() {
+      var map = Object.create(null);
+      ensureState().deletedBaselineModuleKeys.forEach(function(item) {
+        var key = buildBaselineModuleDeleteKey(item);
+        if (key) map[key] = true;
+      });
+      return map;
+    }
+
+    function getDeletedBaselineCaseMap() {
+      var map = Object.create(null);
+      ensureState().deletedBaselineCaseKeys.forEach(function(item) {
+        var key = String(item || '').trim();
+        if (key) map[key] = true;
+      });
+      return map;
+    }
+
+    function rememberDeletedBaselineModule(moduleTitle) {
+      var key = buildBaselineModuleDeleteKey(moduleTitle);
+      var xmindState = ensureState();
+      if (!key) return false;
+      if (xmindState.deletedBaselineModuleKeys.indexOf(key) !== -1) return false;
+      xmindState.deletedBaselineModuleKeys.push(key);
+      xmindState.deletedBaselineModuleKeys = normalizeUniqueStringList(xmindState.deletedBaselineModuleKeys);
+      xmindState.deletedBaselineCaseKeys = normalizeUniqueStringList((xmindState.deletedBaselineCaseKeys || []).filter(function(item) {
+        return String(item || '').indexOf(key + '::') !== 0;
+      }));
+      return true;
+    }
+
+    function rememberDeletedBaselineCase(moduleTitle, caseSignature) {
+      var key = buildBaselineCaseDeleteKey(moduleTitle, caseSignature);
+      var xmindState = ensureState();
+      if (!key) return false;
+      if (xmindState.deletedBaselineCaseKeys.indexOf(key) !== -1) return false;
+      xmindState.deletedBaselineCaseKeys.push(key);
+      xmindState.deletedBaselineCaseKeys = normalizeUniqueStringList(xmindState.deletedBaselineCaseKeys);
+      return true;
+    }
+
+    function invalidateDeleteConflictingSnapshots() {
+      var xmindState = ensureState();
+      xmindState.snapshots = [];
+      xmindState.rootSnapshots = [];
+      xmindState.operationSnapshots = [];
+      xmindState.lastOperationSnapshotId = '';
+      xmindState.rootSnapshotId = '';
+      if (xmindState.root) {
+        xmindState.root.snapshotId = '';
+        xmindState.root.running = false;
+        xmindState.root.hideAiLayer = false;
+        xmindState.root.status = '';
+        xmindState.root.error = '';
+      }
+      Object.keys(xmindState.modules || {}).forEach(function(key) {
+        var moduleState = ensureModuleUiState(key);
+        if (!moduleState) return;
+        moduleState.snapshotId = '';
+        moduleState.running = false;
+        moduleState.rootPendingActionId = '';
+        moduleState.status = '';
+        moduleState.error = '';
+        moduleState.hideResults = false;
+        clearModuleTopupHighlight(moduleState);
+      });
+      clearAllTopupHighlights();
     }
 
     function persistXmindState(useImmediate) {
@@ -587,6 +669,27 @@
 
     function normalizeCaseTitle(value) {
       return normalizeText(value).toLowerCase();
+    }
+
+    function normalizeUniqueStringList(list) {
+      var seen = Object.create(null);
+      return (Array.isArray(list) ? list : []).map(function(item) {
+        return String(item || '').trim();
+      }).filter(function(item) {
+        if (!item || seen[item]) return false;
+        seen[item] = true;
+        return true;
+      });
+    }
+
+    function buildBaselineModuleDeleteKey(moduleTitle) {
+      return normalizeModuleKey(moduleTitle || '');
+    }
+
+    function buildBaselineCaseDeleteKey(moduleTitle, caseSignature) {
+      var moduleKey = buildBaselineModuleDeleteKey(moduleTitle);
+      var signature = String(caseSignature || '').trim();
+      return moduleKey && signature ? (moduleKey + '::' + signature) : '';
     }
 
     function getRequirementLabelText() {
@@ -882,6 +985,28 @@
         return Array.isArray(list) && list.length > 0;
       }
       return false;
+    }
+
+    function getVisibleBaselineCaseList() {
+      var deletedBaselineModules = getDeletedBaselineModuleMap();
+      var deletedBaselineCases = getDeletedBaselineCaseMap();
+      var rawBaselineList = hasImportedBaselineCases() && xmindGenApi && typeof xmindGenApi.getCombinedCaseList === 'function'
+        ? xmindGenApi.getCombinedCaseList()
+        : [];
+      return rawBaselineList.filter(function(item) {
+        if (!item || typeof item !== 'object') return false;
+        var moduleTitle = normalizeModuleTitle(item.module || item.module_name || item['模块'] || '未命名模块');
+        var moduleKey = normalizeModuleKey(moduleTitle);
+        if (!moduleKey) return false;
+        if (deletedBaselineModules[moduleKey]) return false;
+        var caseDeleteKey = buildBaselineCaseDeleteKey(moduleTitle, buildCaseSignature(item, moduleTitle));
+        if (caseDeleteKey && deletedBaselineCases[caseDeleteKey]) return false;
+        return true;
+      });
+    }
+
+    function hasVisibleImportedBaselineCases() {
+      return getVisibleBaselineCaseList().length > 0;
     }
 
     function getRequirementContextText() {
@@ -1643,6 +1768,8 @@
           lastOperationSnapshotId: '',
           rootSnapshotId: '',
           rootSnapshots: [],
+          deletedBaselineModuleKeys: [],
+          deletedBaselineCaseKeys: [],
           root: createDefaultRootState(),
           summaryCollapsed: false,
           prep: createDefaultPrepState(),
@@ -1747,9 +1874,7 @@
       var opts = options || {};
       var rootState = ensureRootUiState();
       var includeAiLayer = opts.includeAiLayer !== false && !(rootState && rootState.hideAiLayer === true);
-      var baselineList = hasImportedBaselineCases() && xmindGenApi && typeof xmindGenApi.getCombinedCaseList === 'function'
-        ? xmindGenApi.getCombinedCaseList()
-        : [];
+      var baselineList = getVisibleBaselineCaseList();
       var baselineGrouped = groupCasesByModule(baselineList);
       var order = baselineGrouped.order.slice();
       var map = {};
@@ -1801,11 +1926,21 @@
     function getVisibleCasesForModuleEntry(entry) {
       var result = [];
       if (!entry) return result;
-      (entry.baselineCases || []).forEach(function(item) {
-        result.push({ source: 'baseline', item: item });
+      (entry.baselineCases || []).forEach(function(item, index) {
+        result.push({
+          source: 'baseline',
+          sourceIndex: index,
+          caseSignature: buildCaseSignature(item, entry.title),
+          item: item,
+        });
       });
-      (entry.aiCases || []).forEach(function(item) {
-        result.push({ source: 'ai', item: item });
+      (entry.aiCases || []).forEach(function(item, index) {
+        result.push({
+          source: 'ai',
+          sourceIndex: index,
+          caseSignature: buildCaseSignature(item, entry.title),
+          item: item,
+        });
       });
       return result;
     }
@@ -1931,6 +2066,19 @@
         steps: normalizeCaseSteps(item.steps || item.actions || item['操作步骤']),
         expected: expected || '-',
       };
+    }
+
+    function buildCaseSignature(item, fallbackModule) {
+      var normalized = normalizeCaseItem(item, fallbackModule);
+      if (!normalized) return '';
+      var steps = Array.isArray(normalized.steps) ? normalized.steps.slice() : [];
+      return [
+        normalizeCaseTitle(normalized.title),
+        normalizeCasePriority(normalized.priority),
+        normalizeText(normalized.preconditions),
+        steps.map(function(step) { return normalizeText(step); }).join('||'),
+        normalizeText(normalized.expected),
+      ].join('##');
     }
 
     function extractJsonPayload(text) {
@@ -3464,8 +3612,262 @@
       return discardCaseGenOperationSnapshotLocal(snapshotId) === true;
     }
 
+    function isDeleteActionId(actionId) {
+      return actionId === COMMON_ACTIONS.DELETE;
+    }
+
+    function isDeleteNodeType(type) {
+      return type === 'module'
+        || type === 'case'
+        || type === 'priority'
+        || type === 'preconditions'
+        || type === 'steps'
+        || type === 'expected';
+    }
+
+    function buildDeleteTargetKey(meta) {
+      if (!meta || !meta.type) return '';
+      if (meta.type === 'module') {
+        return 'module::' + String(meta.moduleKey || normalizeModuleKey(meta.moduleTitle || ''));
+      }
+      if (!isDeleteNodeType(meta.type)) return '';
+      return [
+        'case',
+        String(meta.moduleKey || normalizeModuleKey(meta.moduleTitle || '')),
+        String(meta.caseSource || ''),
+        String(Number(meta.caseSourceIndex)),
+        String(meta.caseSignature || normalizeCaseTitle(meta.caseTitle || ''))
+      ].join('::');
+    }
+
+    function buildDeleteSelectionPlan(nodeMeta) {
+      var selection = nodeMeta && Array.isArray(nodeMeta.selection) && nodeMeta.selection.length
+        ? nodeMeta.selection
+        : (nodeMeta ? [nodeMeta] : []);
+      var visibleContext = buildVisibleModuleContext();
+      var moduleTargets = {};
+      var caseTargets = {};
+
+      selection.forEach(function(item) {
+        var meta = item && item.meta ? item.meta : null;
+        if (!meta || !isDeleteNodeType(meta.type)) return;
+        var moduleKey = String(meta.moduleKey || normalizeModuleKey(meta.moduleTitle || ''));
+        var moduleEntry = moduleKey ? visibleContext.map[moduleKey] : null;
+        var moduleTitle = normalizeModuleTitle(
+          meta.moduleTitle
+          || (moduleEntry && moduleEntry.title)
+          || ''
+        );
+        if (!moduleKey && !moduleTitle) return;
+        if (meta.type === 'module') {
+          if (!moduleTargets[moduleKey]) {
+            moduleTargets[moduleKey] = {
+              type: 'module',
+              key: buildDeleteTargetKey(meta),
+              moduleKey: moduleKey,
+              moduleTitle: moduleTitle || '模块',
+              moduleId: moduleEntry && moduleEntry.aiModuleId ? String(moduleEntry.aiModuleId || '') : '',
+              deleteAiLayer: Boolean(moduleEntry && moduleEntry.aiModuleId),
+              deleteBaselineLayer: Boolean(moduleEntry && Array.isArray(moduleEntry.baselineCases) && moduleEntry.baselineCases.length > 0),
+            };
+          } else {
+            moduleTargets[moduleKey].deleteAiLayer = moduleTargets[moduleKey].deleteAiLayer || Boolean(moduleEntry && moduleEntry.aiModuleId);
+            moduleTargets[moduleKey].deleteBaselineLayer = moduleTargets[moduleKey].deleteBaselineLayer || Boolean(moduleEntry && Array.isArray(moduleEntry.baselineCases) && moduleEntry.baselineCases.length > 0);
+          }
+          return;
+        }
+        if (!moduleEntry && !moduleTitle) return;
+        caseTargets[buildDeleteTargetKey(meta)] = {
+          type: 'case',
+          moduleKey: moduleKey,
+          moduleTitle: moduleTitle || '模块',
+          moduleId: moduleEntry && moduleEntry.aiModuleId ? String(moduleEntry.aiModuleId || '') : '',
+          caseTitle: String(meta.caseTitle || ''),
+          caseSource: String(meta.caseSource || ''),
+          caseSourceIndex: Number.isFinite(Number(meta.caseSourceIndex)) ? Number(meta.caseSourceIndex) : -1,
+          caseSignature: String(meta.caseSignature || ''),
+        };
+      });
+
+      Object.keys(caseTargets).forEach(function(key) {
+        var target = caseTargets[key];
+        if (target && target.moduleKey && moduleTargets[target.moduleKey]) {
+          delete caseTargets[key];
+        }
+      });
+
+      return {
+        modules: Object.keys(moduleTargets).map(function(key) { return moduleTargets[key]; }),
+        cases: Object.keys(caseTargets).map(function(key) { return caseTargets[key]; }),
+      };
+    }
+
+    function hasDeleteTargets(nodeMeta) {
+      var plan = buildDeleteSelectionPlan(nodeMeta);
+      return Boolean((plan.modules && plan.modules.length) || (plan.cases && plan.cases.length));
+    }
+
+    function buildDeleteSummaryText(plan) {
+      var modulesCount = plan && Array.isArray(plan.modules) ? plan.modules.length : 0;
+      var casesCount = plan && Array.isArray(plan.cases) ? plan.cases.length : 0;
+      var parts = [];
+      if (modulesCount > 0) parts.push(String(modulesCount) + ' 个模块');
+      if (casesCount > 0) parts.push(String(casesCount) + ' 条用例');
+      return parts.join('、') || '当前选中内容';
+    }
+
+    function confirmDeleteSelection(plan) {
+      var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+      var summary = buildDeleteSummaryText(plan);
+      var message = '确认删除选中的 ' + summary + '？删除后会以当前树为新的基线，之前的“放弃本次生成”回退记录将失效。';
+      if (!confirmDrawer || typeof confirmDrawer.open !== 'function') {
+        var ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm(message)
+          : true;
+        return Promise.resolve(ok === true);
+      }
+      return confirmDrawer.open({
+        title: '确认删除',
+        message: message,
+        confirmText: '确认删除',
+        cancelText: '取消',
+        danger: true,
+      }).then(function(result) {
+        return Boolean(result && result.ok === true);
+      });
+    }
+
+    function removeAiModuleRecord(moduleId) {
+      var targetId = String(moduleId || '');
+      if (!targetId) return false;
+      var beforeCount = Array.isArray(state.caseGenModules) ? state.caseGenModules.length : 0;
+      state.caseGenModules = (Array.isArray(state.caseGenModules) ? state.caseGenModules : []).filter(function(mod) {
+        return !mod || String(mod.id || '') !== targetId;
+      });
+      delete state.caseGenResults[targetId];
+      delete state.caseSelections[targetId];
+      delete state.caseGenSuggestions[targetId];
+      delete state.caseGenModuleStatus[targetId];
+      delete state.caseGenProgress[targetId];
+      delete state.caseGenTiming[targetId];
+      if (ensureState().modules && ensureState().modules[targetId]) {
+        delete ensureState().modules[targetId];
+      }
+      ensureState().hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
+      return beforeCount !== state.caseGenModules.length;
+    }
+
+    function removeAiCasesFromModule(moduleId, targets) {
+      var targetId = String(moduleId || '');
+      var list = getAiCasesForModule(targetId);
+      var targetList = Array.isArray(targets) ? targets.slice() : [];
+      var moduleRecord = findAiModuleById(targetId);
+      var moduleTitle = moduleRecord ? normalizeModuleTitle(moduleRecord.title || moduleRecord.module || '') : '';
+      var removedCount = 0;
+      if (!targetId || !list.length || !targetList.length) return 0;
+      var nextList = list.filter(function(item, index) {
+        var shouldDelete = targetList.some(function(target) {
+          if (!target || String(target.caseSource || '') !== 'ai') return false;
+          var targetIndex = Number(target.caseSourceIndex);
+          if (Number.isFinite(targetIndex) && targetIndex !== index) return false;
+          if (target.caseSignature) {
+            return String(target.caseSignature || '') === buildCaseSignature(item, moduleTitle);
+          }
+          if (target.caseTitle) {
+            return normalizeCaseTitle(target.caseTitle) === normalizeCaseTitle(item && item.title);
+          }
+          return true;
+        });
+        if (shouldDelete) {
+          removedCount += 1;
+          return false;
+        }
+        return true;
+      });
+      if (!removedCount) return 0;
+      commitCaseList(targetId, nextList, null, '', '');
+      return removedCount;
+    }
+
+    async function handleDeleteSelection(nodeMeta) {
+      if (hasAnyRunningGenerationOperation()) {
+        notifyStatus('当前有生成任务进行中，请等待完成后再删除', 'warn', { forceInline: true });
+        return false;
+      }
+      var plan = buildDeleteSelectionPlan(nodeMeta);
+      if (!plan.modules.length && !plan.cases.length) {
+        notifyStatus('当前选中节点不支持删除', 'warn', { forceInline: true });
+        return false;
+      }
+      var confirmed = await confirmDeleteSelection(plan);
+      if (!confirmed) return false;
+
+      var changed = false;
+      var affectedModuleIds = {};
+
+      plan.modules.forEach(function(target) {
+        if (!target) return;
+        if (target.deleteBaselineLayer === true) {
+          changed = rememberDeletedBaselineModule(target.moduleTitle) || changed;
+        }
+        if (target.deleteAiLayer === true && target.moduleId) {
+          affectedModuleIds[String(target.moduleId || '')] = true;
+          changed = removeAiModuleRecord(target.moduleId) || changed;
+        }
+      });
+
+      var aiCaseTargetsByModule = {};
+      plan.cases.forEach(function(target) {
+        if (!target) return;
+        if (target.caseSource === 'baseline') {
+          changed = rememberDeletedBaselineCase(target.moduleTitle, target.caseSignature) || changed;
+          return;
+        }
+        if (target.caseSource === 'ai' && target.moduleId) {
+          var key = String(target.moduleId || '');
+          if (!aiCaseTargetsByModule[key]) aiCaseTargetsByModule[key] = [];
+          aiCaseTargetsByModule[key].push(target);
+        }
+      });
+
+      Object.keys(aiCaseTargetsByModule).forEach(function(moduleId) {
+        var removedCount = removeAiCasesFromModule(moduleId, aiCaseTargetsByModule[moduleId]);
+        if (removedCount > 0) {
+          affectedModuleIds[moduleId] = true;
+          changed = true;
+        }
+      });
+
+      if (!changed) {
+        notifyStatus('当前选中内容未发生变化', 'warn', { forceInline: true });
+        return false;
+      }
+
+      Object.keys(affectedModuleIds).forEach(function(moduleId) {
+        var moduleState = ensureState().modules ? ensureState().modules[moduleId] : null;
+        if (moduleState) clearModuleTopupHighlight(moduleState);
+      });
+      invalidateDeleteConflictingSnapshots();
+      if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
+        casesGenApi.renderCaseGeneration();
+      }
+      notifyStatus('已删除 ' + buildDeleteSummaryText(plan), 'ok');
+      render({ reason: 'delete-selection' });
+      persistXmindState(true);
+      return true;
+    }
+
+    function buildDeleteAction(nodeMeta) {
+      var enabled = hasDeleteTargets(nodeMeta) && !hasAnyRunningGenerationOperation();
+      return {
+        id: COMMON_ACTIONS.DELETE,
+        label: '删除',
+        disabled: !enabled,
+      };
+    }
+
     function getRootActions() {
-      var hasBaseline = hasImportedBaselineCases();
+      var hasBaseline = hasVisibleImportedBaselineCases();
       var hasSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
       var hasAiCases = hasAnyAiCases();
       var fullCasesLabel = getRootFullCasesLabel(hasSkeleton || hasAiCases);
@@ -3598,9 +4000,14 @@
       });
     }
 
-    function buildCaseTree(moduleEntry, item, caseIndex, topupHighlight) {
+    function buildCaseTree(moduleEntry, row, caseIndex, topupHighlight) {
       var xmindCoreApi = getXmindCoreApi();
       var moduleTitle = moduleEntry ? moduleEntry.title : '模块';
+      var item = row && row.item ? row.item : row;
+      var caseTitle = item && item.title ? String(item.title) : ('用例' + String(caseIndex + 1));
+      var caseSource = row && row.source ? String(row.source || '') : 'ai';
+      var caseSourceIndex = row && Number.isFinite(Number(row.sourceIndex)) ? Number(row.sourceIndex) : caseIndex;
+      var caseSignature = row && row.caseSignature ? String(row.caseSignature || '') : buildCaseSignature(item, moduleTitle);
       var fields = xmindCoreApi && typeof xmindCoreApi.buildCaseFieldsForXmind === 'function'
         ? xmindCoreApi.buildCaseFieldsForXmind(item || {}, moduleTitle)
         : [
@@ -3615,27 +4022,56 @@
         type: 'expected',
         moduleKey: moduleEntry.moduleKey,
         caseIndex: caseIndex,
+        moduleTitle: moduleTitle,
+        caseTitle: caseTitle,
+        caseSource: caseSource,
+        caseSourceIndex: caseSourceIndex,
+        caseSignature: caseSignature,
         segment: 'expected'
       }, topupHighlight));
       var stepsNode = createNode(fields[4] || '-', withTopupHighlightMeta({
         type: 'steps',
         moduleKey: moduleEntry.moduleKey,
         caseIndex: caseIndex,
+        moduleTitle: moduleTitle,
+        caseTitle: caseTitle,
+        caseSource: caseSource,
+        caseSourceIndex: caseSourceIndex,
+        caseSignature: caseSignature,
         segment: 'steps'
       }, topupHighlight), [expectedNode]);
       var preNode = createNode(fields[3] || '-', withTopupHighlightMeta({
         type: 'preconditions',
         moduleKey: moduleEntry.moduleKey,
         caseIndex: caseIndex,
+        moduleTitle: moduleTitle,
+        caseTitle: caseTitle,
+        caseSource: caseSource,
+        caseSourceIndex: caseSourceIndex,
+        caseSignature: caseSignature,
         segment: 'preconditions'
       }, topupHighlight), [stepsNode]);
       var priorityNode = createNode(fields[2] || 'P1', withTopupHighlightMeta({
         type: 'priority',
         moduleKey: moduleEntry.moduleKey,
         caseIndex: caseIndex,
+        moduleTitle: moduleTitle,
+        caseTitle: caseTitle,
+        caseSource: caseSource,
+        caseSourceIndex: caseSourceIndex,
+        caseSignature: caseSignature,
         segment: 'priority'
       }, topupHighlight), [preNode]);
-      var caseMeta = withTopupHighlightMeta({ type: 'case', moduleKey: moduleEntry.moduleKey, caseIndex: caseIndex }, topupHighlight);
+      var caseMeta = withTopupHighlightMeta({
+        type: 'case',
+        moduleKey: moduleEntry.moduleKey,
+        caseIndex: caseIndex,
+        moduleTitle: moduleTitle,
+        caseTitle: caseTitle,
+        caseSource: caseSource,
+        caseSourceIndex: caseSourceIndex,
+        caseSignature: caseSignature,
+      }, topupHighlight);
       return createNode(fields[1] || ('用例' + String(caseIndex + 1)), caseMeta, [priorityNode]);
     }
 
@@ -3650,14 +4086,14 @@
         var moduleChildren = [];
         var moduleState = entry.aiModuleId ? ensureModuleUiState(entry.aiModuleId) : null;
         var visibleCases = getVisibleCasesForModuleEntry(entry);
-        if (visibleCases.length) {
-          visibleCases.forEach(function(row, caseIndex) {
-            moduleChildren.push(buildCaseTree(
-              entry,
-              row.item,
-              caseIndex,
-              getCaseTopupHighlight(moduleState, caseIndex)
-            ));
+          if (visibleCases.length) {
+            visibleCases.forEach(function(row, caseIndex) {
+              moduleChildren.push(buildCaseTree(
+                entry,
+                row,
+                caseIndex,
+                getCaseTopupHighlight(moduleState, caseIndex)
+              ));
           });
         }
         if (moduleState && moduleState.running && moduleState.lastAction === MODULE_ACTIONS.APPEND) {
@@ -3711,36 +4147,36 @@
     function getNodeActions(nodeMeta) {
       var meta = nodeMeta && nodeMeta.meta ? nodeMeta.meta : null;
       if (!meta) return [];
+      var deleteAction = buildDeleteAction(nodeMeta);
+      if (nodeMeta && Number(nodeMeta.selectionCount) > 1) {
+        return hasDeleteTargets(nodeMeta) ? [deleteAction] : [];
+      }
       if (meta.type === 'root') return getRootActions();
       if (meta.type === 'module') {
         var context = buildVisibleModuleContext();
-        return getModuleActions(context.map[meta.moduleKey]);
+        return getModuleActions(context.map[meta.moduleKey]).concat([deleteAction]);
+      }
+      if (isDeleteNodeType(meta.type)) {
+        return [deleteAction];
       }
       return [];
     }
 
     function getNodeQuickAction(nodeMeta) {
       var meta = nodeMeta && nodeMeta.meta ? nodeMeta.meta : null;
+      if (!meta || meta.type !== 'module') return null;
       var actions = getNodeActions(nodeMeta);
-      if (!meta || !actions.length) return null;
-      if (meta.type === 'module') {
-        var context = buildVisibleModuleContext();
-        var entry = context.map[meta.moduleKey] || null;
-        var preferredActionId = entry && Array.isArray(entry.aiCases) && entry.aiCases.length > 0
-          ? MODULE_ACTIONS.APPEND
-          : MODULE_ACTIONS.FULL_CASES;
-        var preferredAction = actions.filter(function(item) {
-          return item && item.id === preferredActionId;
-        })[0] || null;
-        if (preferredAction) {
-          return {
-            id: preferredAction.id,
-            label: '+AI',
-            disabled: preferredAction.disabled === true,
-          };
-        }
-      }
-      var first = actions.filter(function(item) { return item && item.disabled !== true; })[0] || actions[0] || null;
+      if (!actions.length) return null;
+      var context = buildVisibleModuleContext();
+      var entry = context.map[meta.moduleKey] || null;
+      var preferredActionId = entry && Array.isArray(entry.aiCases) && entry.aiCases.length > 0
+        ? MODULE_ACTIONS.APPEND
+        : MODULE_ACTIONS.FULL_CASES;
+      var first = actions.filter(function(item) {
+        return item && item.id === preferredActionId;
+      })[0] || actions.filter(function(item) {
+        return item && item.disabled !== true;
+      })[0] || actions[0] || null;
       if (!first) return null;
       return {
         id: first.id,
@@ -3812,9 +4248,21 @@
       if (nodeEl.removeAttribute) {
         nodeEl.removeAttribute('data-xmind-topup-highlight-token');
         nodeEl.removeAttribute('data-xmind-topup-highlight-label');
+        nodeEl.removeAttribute('data-xmind-select-group');
+        nodeEl.removeAttribute('data-xmind-select-preferred');
       }
       var meta = nodeMeta && nodeMeta.meta ? nodeMeta.meta : null;
       if (!meta) return;
+      var selectGroupKey = '';
+      if (meta.type === 'module') {
+        selectGroupKey = 'module::' + String(meta.moduleKey || normalizeModuleKey(meta.moduleTitle || ''));
+      } else if (isDeleteNodeType(meta.type)) {
+        selectGroupKey = buildDeleteTargetKey(meta);
+      }
+      if (selectGroupKey && nodeEl.setAttribute) {
+        nodeEl.setAttribute('data-xmind-select-group', String(selectGroupKey));
+        nodeEl.setAttribute('data-xmind-select-preferred', meta.type === 'module' || meta.type === 'case' ? '1' : '0');
+      }
       if (meta.type === 'root' || meta.type === 'module') {
         nodeEl.classList.add(meta.type === 'root' ? 'xmind-casegen-node-root' : 'xmind-casegen-node-module');
         if (meta.type === 'module') {
@@ -3931,12 +4379,14 @@
         mindInstance = mindElixirCoreApi.renderMindMap(mindContainer, currentMindData, {
           instance: mindInstance,
           allowEdit: false,
+          enableCustomBoxSelection: true,
           preserveViewState: Boolean(mindInstance),
           preserveAnchorNodeId: options.anchorNodeId || '',
           initialCenterNodeId: freshRender ? getRootNodeId() : '',
           onExportXmind: exportCurrentXmind,
           getNodeActions: getNodeActions,
           onNodeAction: handleNodeAction,
+          onDeleteSelection: handleDeleteSelection,
           getNodeQuickAction: getNodeQuickAction,
           decorateNodeElement: decorateNodeElement,
         });
@@ -4503,6 +4953,10 @@
 
     function handleNodeAction(actionId, nodeMeta) {
       if (!actionId) return false;
+      if (isDeleteActionId(actionId)) {
+        handleDeleteSelection(nodeMeta);
+        return true;
+      }
       var meta = nodeMeta && nodeMeta.meta ? nodeMeta.meta : {};
       if (meta.type === 'root') {
         runRootAction(actionId, {

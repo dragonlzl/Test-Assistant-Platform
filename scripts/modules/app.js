@@ -3404,6 +3404,8 @@
         lastOperationSnapshotId: '',
         rootSnapshotId: '',
         rootSnapshots: [],
+        deletedBaselineModuleKeys: [],
+        deletedBaselineCaseKeys: [],
         root: {
           lastAction: '',
           running: false,

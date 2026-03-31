@@ -874,7 +874,7 @@
         pending: false,
       };
 
-      var enableCustomBoxSelection = false;
+      var enableCustomBoxSelection = Boolean(opts && opts.enableCustomBoxSelection === true);
       var boxPending = false;
       var boxSelecting = false;
       var boxMoved = false;
@@ -882,6 +882,9 @@
       var boxStartY = 0;
       var boxRectEl = null;
       var boxMinDragDistance = 4;
+      var boxSuppressClickUntil = 0;
+      var customSelectionNodes = [];
+      var modifierSelectionSuppressClickUntil = 0;
 
       var rightDragGestureBlock = {
         active: false,
@@ -980,10 +983,34 @@
         }).filter(Boolean);
       }
 
+      function collectSelectedNodeMetas(preferredNodeEl) {
+        var selectedNodes = collectSelectedNodes().slice();
+        if (preferredNodeEl) {
+          var exists = selectedNodes.some(function(node) {
+            return node === preferredNodeEl;
+          });
+          if (!exists) selectedNodes.unshift(preferredNodeEl);
+        }
+        return selectedNodes.map(function(node) {
+          return buildNodeMeta(node);
+        }).filter(Boolean);
+      }
+
+      function ensureActionContext(nodeMeta) {
+        if (!nodeMeta) return null;
+        if (Array.isArray(nodeMeta.selection)) return nodeMeta;
+        var preferredNodeEl = nodeMeta.nodeEl || null;
+        var actionMeta = preferredNodeEl ? buildNodeMeta(preferredNodeEl) : nodeMeta;
+        if (!actionMeta) return null;
+        actionMeta.selection = collectSelectedNodeMetas(preferredNodeEl);
+        actionMeta.selectionCount = actionMeta.selection.length;
+        return actionMeta;
+      }
+
       function getNodeActionsForMeta(nodeMeta) {
         if (!nodeMeta || !opts || typeof opts.getNodeActions !== 'function') return [];
         try {
-          return normalizeActionList(opts.getNodeActions(nodeMeta));
+          return normalizeActionList(opts.getNodeActions(ensureActionContext(nodeMeta)));
         } catch (err) {
           return [];
         }
@@ -1013,7 +1040,17 @@
       function requestNodeAction(actionId, nodeMeta) {
         if (!actionId || !opts || typeof opts.onNodeAction !== 'function') return false;
         try {
-          opts.onNodeAction(String(actionId), nodeMeta || null);
+          opts.onNodeAction(String(actionId), ensureActionContext(nodeMeta) || null);
+          return true;
+        } catch (err) {
+          return false;
+        }
+      }
+
+      function requestDeleteSelection(nodeMeta) {
+        if (!opts || typeof opts.onDeleteSelection !== 'function') return false;
+        try {
+          opts.onDeleteSelection(ensureActionContext(nodeMeta) || null);
           return true;
         } catch (err) {
           return false;
@@ -1508,6 +1545,131 @@
         });
       }
 
+      function getBoxSelectedNodes() {
+        if (!viewerEl || !viewerEl.querySelectorAll) return [];
+        var selected = viewerEl.querySelectorAll('me-tpc.xmind-box-selected');
+        var out = [];
+        Array.prototype.forEach.call(selected, function(node) {
+          if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return;
+          out.push(node);
+        });
+        return out;
+      }
+
+      function collectNodeIds(nodes) {
+        return (Array.isArray(nodes) ? nodes : []).map(function(node) {
+          if (!node || !node.nodeObj || node.nodeObj.id === undefined || node.nodeObj.id === null) return '';
+          return String(node.nodeObj.id);
+        }).filter(Boolean);
+      }
+
+      function setCustomSelectionNodes(nodes) {
+        customSelectionNodes = Array.isArray(nodes) ? nodes.filter(function(node) {
+          return Boolean(node && node.tagName && String(node.tagName).toLowerCase() === 'me-tpc');
+        }) : [];
+      }
+
+      function findViewerNodesByIds(nodeIds) {
+        var ids = Array.isArray(nodeIds) ? nodeIds : [];
+        var map = Object.create(null);
+        var out = [];
+        ids.forEach(function(id) {
+          var key = String(id || '');
+          if (!key || map[key]) return;
+          map[key] = true;
+          var node = findViewerNodeById(key);
+          if (node) out.push(node);
+        });
+        return out;
+      }
+
+      function findViewerNodeBySelectionGroup(groupKey) {
+        var key = groupKey === null || groupKey === undefined ? '' : String(groupKey);
+        if (!key || !viewerEl || !viewerEl.querySelectorAll) return null;
+        var nodes = viewerEl.querySelectorAll('me-tpc[data-xmind-select-group]');
+        for (var i = 0; i < nodes.length; i += 1) {
+          var node = nodes[i];
+          if (!node || !node.getAttribute) continue;
+          if (String(node.getAttribute('data-xmind-select-group') || '') === key) return node;
+        }
+        return null;
+      }
+
+      function syncMindSelectionWithNodes(nodes) {
+        var inst = getInstance();
+        if (!inst) return;
+        var selected = Array.isArray(nodes) ? nodes.filter(function(node) {
+          return Boolean(node && node.tagName && String(node.tagName).toLowerCase() === 'me-tpc');
+        }) : [];
+        try {
+          if (typeof inst.clearSelection === 'function') inst.clearSelection();
+        } catch (err) {
+          // ignore
+        }
+        if (!selected.length) return;
+        if (typeof inst.selectNodes === 'function') {
+          try {
+            inst.selectNodes(selected);
+            return;
+          } catch (err2) {
+            // ignore
+          }
+        }
+        if (selected.length === 1 && typeof inst.selectNode === 'function') {
+          try {
+            inst.selectNode(selected[0]);
+          } catch (err3) {
+            // ignore
+          }
+        }
+      }
+
+      function applyCustomSelectionNodes(nodes) {
+        var selected = Array.isArray(nodes) ? nodes.filter(function(node) {
+          return Boolean(node && node.tagName && String(node.tagName).toLowerCase() === 'me-tpc');
+        }) : [];
+        setCustomSelectionNodes(selected);
+        clearBoxSelectionClasses();
+        syncMindSelectionWithNodes(selected);
+        var displayNodes = [];
+        selected.forEach(function(node) {
+          if (!node) return;
+          var liveNode = node;
+          var selectionGroupKey = node.getAttribute ? String(node.getAttribute('data-xmind-select-group') || '') : '';
+          if (selectionGroupKey) {
+            liveNode = findViewerNodeBySelectionGroup(selectionGroupKey) || liveNode;
+          } else if (node.nodeObj && node.nodeObj.id) {
+            liveNode = findViewerNodeById(String(node.nodeObj.id)) || liveNode;
+          }
+          if (!liveNode || displayNodes.indexOf(liveNode) !== -1) return;
+          displayNodes.push(liveNode);
+        });
+        if (!displayNodes.length) displayNodes = selected;
+        displayNodes.forEach(function(node) {
+          if (!node || !node.classList) return;
+          node.classList.add('xmind-box-selected');
+        });
+      }
+
+      function resolveBoxSelectableNode(node) {
+        var current = node || null;
+        while (current) {
+          if (current.tagName && String(current.tagName).toLowerCase() === 'me-tpc') {
+            var key = current.getAttribute ? String(current.getAttribute('data-xmind-select-group') || '') : '';
+            if (key) {
+              return {
+                node: current,
+                key: key,
+                preferred: current.getAttribute && current.getAttribute('data-xmind-select-preferred') === '1',
+              };
+            }
+          }
+          if (!current.parentElement || current.parentElement === viewerEl) break;
+          current = current.parentElement.closest ? current.parentElement.closest('me-tpc') : null;
+        }
+        return null;
+      }
+
       function updateBoxSelection(currentX, currentY) {
         if (!viewerEl) return;
         var left = boxStartX < currentX ? boxStartX : currentX;
@@ -1545,19 +1707,30 @@
         if (!viewerEl.querySelectorAll) return;
         var nodes = viewerEl.querySelectorAll('me-tpc');
         if (!nodes || !nodes.length) return;
+        var hitMap = Object.create(null);
+        var hitNodes = [];
         Array.prototype.forEach.call(nodes, function(node) {
           if (!node || !node.classList || !node.getBoundingClientRect) return;
-          var rectTarget = node;
-          if (node.querySelector) {
-            var topicText = node.querySelector('.text');
-            if (topicText && topicText.getBoundingClientRect) {
-              rectTarget = topicText;
-            }
-          }
-          var rect = rectTarget.getBoundingClientRect();
+          var rect = node.getBoundingClientRect();
           var hit = !(rect.right < left || rect.left > right || rect.bottom < top || rect.top > bottom);
-          if (hit) node.classList.add('xmind-box-selected');
-          else node.classList.remove('xmind-box-selected');
+          if (!hit) return;
+          var resolved = resolveBoxSelectableNode(node);
+          if (!resolved || !resolved.node || !resolved.key) return;
+          if (!hitMap[resolved.key]) {
+            hitMap[resolved.key] = resolved;
+            hitNodes.push(resolved.node);
+            return;
+          }
+          if (resolved.preferred && !hitMap[resolved.key].preferred) {
+            var index = hitNodes.indexOf(hitMap[resolved.key].node);
+            hitMap[resolved.key] = resolved;
+            if (index >= 0) hitNodes[index] = resolved.node;
+          }
+        });
+        clearBoxSelectionClasses();
+        hitNodes.forEach(function(node) {
+          if (!node || !node.classList) return;
+          node.classList.add('xmind-box-selected');
         });
       }
 
@@ -1568,19 +1741,47 @@
 
         function pushNode(node) {
           if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return;
-          var key = node.getAttribute && node.getAttribute('data-nodeid')
-            ? String(node.getAttribute('data-nodeid'))
+          var key = node.getAttribute && node.getAttribute('data-xmind-select-group')
+            ? String(node.getAttribute('data-xmind-select-group'))
             : '';
           if (!key) {
-            key = node.nodeObj && node.nodeObj.id ? String(node.nodeObj.id) : String(Math.random());
+            key = node.getAttribute && node.getAttribute('data-nodeid')
+              ? String(node.getAttribute('data-nodeid'))
+              : '';
+          }
+          if (!key) {
+            var nodeId = node.nodeObj && node.nodeObj.id ? String(node.nodeObj.id) : '';
+            var locatePath = collectNodeLocatePath(node).join('>');
+            if (nodeId || locatePath) key = nodeId + '::' + locatePath;
+            else key = String(Math.random());
           }
           if (seen[key]) return;
           seen[key] = true;
           out.push(node);
         }
 
+        var useCustomSelectionOnly = enableCustomBoxSelection && !editing && customSelectionNodes.length > 0;
         var current = inst && Array.isArray(inst.currentNodes) ? inst.currentNodes : [];
-        current.forEach(pushNode);
+        if (!useCustomSelectionOnly) {
+          current.forEach(pushNode);
+        }
+
+        customSelectionNodes.forEach(function(node) {
+          if (!node) return;
+          var liveNode = node;
+          var hasViewerContains = viewerEl && typeof viewerEl.contains === 'function';
+          if (
+            (!liveNode.isConnected || (hasViewerContains && !viewerEl.contains(liveNode)))
+          ) {
+            var selectionGroupKey = liveNode.getAttribute ? String(liveNode.getAttribute('data-xmind-select-group') || '') : '';
+            if (selectionGroupKey) {
+              liveNode = findViewerNodeBySelectionGroup(selectionGroupKey) || liveNode;
+            } else if (liveNode.nodeObj && liveNode.nodeObj.id) {
+              liveNode = findViewerNodeById(String(liveNode.nodeObj.id)) || liveNode;
+            }
+          }
+          pushNode(liveNode);
+        });
 
         if (viewerEl && viewerEl.querySelectorAll) {
           var boxed = viewerEl.querySelectorAll('me-tpc.xmind-box-selected');
@@ -1633,24 +1834,32 @@
       }
 
       function syncMindSelectionFromBox() {
-        var inst = getInstance();
-        if (!inst || typeof inst.selectNodes !== 'function' || !viewerEl || !viewerEl.querySelectorAll) return;
-        var boxed = viewerEl.querySelectorAll('me-tpc.xmind-box-selected');
-        var selected = [];
-        Array.prototype.forEach.call(boxed, function(node) {
-          if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return;
-          selected.push(node);
+        applyCustomSelectionNodes(getBoxSelectedNodes());
+      }
+
+      function toggleNodeInCustomSelection(nodeEl) {
+        if (!enableCustomBoxSelection || !nodeEl) return [];
+        var current = collectSelectedNodes();
+        var next = [];
+        var exists = false;
+        current.forEach(function(node) {
+          if (!node) return;
+          if (node === nodeEl) {
+            exists = true;
+            return;
+          }
+          next.push(node);
         });
-        if (!selected.length) return;
-        try {
-          if (typeof inst.clearSelection === 'function') inst.clearSelection();
-        } catch (err) {
-          // ignore
-        }
-        try {
-          inst.selectNodes(selected);
-        } catch (err2) {
-          // ignore
+        if (!exists) next.push(nodeEl);
+        applyCustomSelectionNodes(next);
+        return next;
+      }
+
+      function clearCustomSelection(syncMindSelection) {
+        setCustomSelectionNodes([]);
+        clearBoxSelectionClasses();
+        if (syncMindSelection === true) {
+          syncMindSelectionWithNodes([]);
         }
       }
 
@@ -1739,13 +1948,14 @@
         return false;
       }
 
-      function selectSingleNodeForContextMenu(nodeEl) {
+      function selectSingleNodeForContextMenu(nodeEl, preserveExistingSelection) {
         if (!nodeEl) return;
+        if (preserveExistingSelection === true && isNodeCurrentlySelected(nodeEl)) return;
         var selected = collectSelectedNodes();
         if (selected.length === 1 && selected[0] === nodeEl) return;
         var inst = getInstance();
         if (enableCustomBoxSelection) {
-          clearBoxSelectionClasses();
+          clearCustomSelection(false);
         }
         if (inst && typeof inst.clearSelection === 'function') {
           try {
@@ -1774,7 +1984,7 @@
       function resolveContextMenuTargetNode(target) {
         var nodeEl = target && target.closest ? target.closest('me-tpc') : null;
         if (nodeEl) {
-          selectSingleNodeForContextMenu(nodeEl);
+          selectSingleNodeForContextMenu(nodeEl, true);
           return nodeEl;
         }
         var selectedNodes = collectSelectedNodes();
@@ -1783,7 +1993,7 @@
       }
 
       function resolveContextMenuPayload(nodeEl) {
-        var nodeMeta = buildNodeMeta(nodeEl);
+        var nodeMeta = ensureActionContext(buildNodeMeta(nodeEl));
         if (!nodeMeta) return null;
         var customActions = getNodeActionsForMeta(nodeMeta);
         if (customActions.length) {
@@ -2092,6 +2302,7 @@
         if (e.pointerType && e.pointerType !== 'mouse') return false;
         if (!isCtrlModifierActive(e)) return false;
         if (isEventInsideMindControls(e.target)) return false;
+        if (enableCustomBoxSelection && e.target && e.target.closest && e.target.closest('me-tpc')) return false;
         if (!isEventInsideMindCanvas(e.target)) return false;
         return true;
       }
@@ -2122,6 +2333,24 @@
         clearCustomPointerDragState();
         resetDragGhostPreview();
         updateViewerDragState(viewerEl, inst, true);
+      }
+
+      function beginModifierNodeSelection(e) {
+        if (!enableCustomBoxSelection || editing || pendingSave) return false;
+        if (!e || e.button !== 0) return false;
+        if (!(e.ctrlKey || e.metaKey)) return false;
+        if (isEventInsideMindControls(e.target)) return false;
+        var nodeEl = resolveViewerEventNode(e);
+        if (!nodeEl) return false;
+        hideNodeContextMenu();
+        clearClickNodeEditTimer();
+        toggleNodeInCustomSelection(nodeEl);
+        modifierSelectionSuppressClickUntil = Date.now() + 220;
+        updateEditButtons();
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        else if (e.stopPropagation) e.stopPropagation();
+        return true;
       }
 
       function moveCtrlLeftCanvasDrag(e) {
@@ -2210,13 +2439,19 @@
         if (!enableCustomBoxSelection) return;
         if (!e || e.button !== 0) return;
         if (e.pointerType && e.pointerType !== 'mouse') return;
-        if (isCtrlModifierActive(e)) return;
+        if (boxPending || boxSelecting) return;
+        if (isCtrlModifierActive(e) || e.metaKey) return;
         if (isEventInsideMindControls(e.target)) return;
+        hideNodeContextMenu();
+        clearClickNodeEditTimer();
         boxPending = true;
         boxSelecting = false;
         boxMoved = false;
         boxStartX = e.clientX;
         boxStartY = e.clientY;
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        else if (e.stopPropagation) e.stopPropagation();
       }
 
       function moveBoxSelection(e) {
@@ -2235,11 +2470,27 @@
 
         updateBoxSelection(e.clientX, e.clientY);
         if (e.preventDefault) e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        else if (e.stopPropagation) e.stopPropagation();
       }
 
-      function stopBoxSelection() {
+      function stopBoxSelection(e) {
         if (!enableCustomBoxSelection) return;
         if (!boxPending && !boxSelecting) return;
+        var endX = e && typeof e.clientX === 'number' ? e.clientX : boxStartX;
+        var endY = e && typeof e.clientY === 'number' ? e.clientY : boxStartY;
+        if (!boxSelecting) {
+          var pendingDeltaX = Math.abs(endX - boxStartX);
+          var pendingDeltaY = Math.abs(endY - boxStartY);
+          if (pendingDeltaX >= boxMinDragDistance || pendingDeltaY >= boxMinDragDistance) {
+            boxSelecting = true;
+            boxMoved = true;
+            ensureBoxRectEl();
+            clearBoxSelectionClasses();
+            if (viewerEl && viewerEl.classList) viewerEl.classList.add('is-box-selecting');
+            updateBoxSelection(endX, endY);
+          }
+        }
         boxPending = false;
         if (!boxSelecting) return;
         boxSelecting = false;
@@ -2252,7 +2503,11 @@
           return;
         }
         syncMindSelectionFromBox();
+        boxSuppressClickUntil = Date.now() + 220;
         updateEditButtons();
+        if (e && e.preventDefault) e.preventDefault();
+        if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
+        else if (e && e.stopPropagation) e.stopPropagation();
       }
 
       function setButtonVisible(button, visible) {
@@ -2664,6 +2919,16 @@
         var lower = e.key ? String(e.key).toLowerCase() : '';
 
         if (!editing) {
+          if (!typing && (e.key === 'Delete' || e.key === 'Backspace')) {
+            var deleteSelectedReadonly = collectSelectedNodes().filter(function(node) {
+              return Boolean(node && node.nodeObj && node.nodeObj.parent);
+            });
+            if (deleteSelectedReadonly.length && requestDeleteSelection(buildNodeMeta(deleteSelectedReadonly[0]))) {
+              if (e.preventDefault) e.preventDefault();
+              if (e.stopPropagation) e.stopPropagation();
+              return;
+            }
+          }
           if (isMutationKeyEvent(e)) {
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropagation) e.stopPropagation();
@@ -2792,6 +3057,26 @@
         if (isEventInsideMindControls(target)) return null;
         if (target.closest && target.closest('.xmind-node-context-menu')) return null;
         if (target.closest && target.closest('.xmind-node-quick-action')) return null;
+        if (
+          e
+          && typeof e.clientX === 'number'
+          && typeof e.clientY === 'number'
+          && typeof document !== 'undefined'
+          && document
+          && typeof document.elementsFromPoint === 'function'
+        ) {
+          var pointed = document.elementsFromPoint(e.clientX, e.clientY) || [];
+          for (var i = 0; i < pointed.length; i += 1) {
+            var pointedEl = pointed[i];
+            if (!pointedEl || !pointedEl.closest) continue;
+            if (isEventInsideMindControls(pointedEl)) continue;
+            var pointedNode = pointedEl.closest('me-tpc');
+            if (!pointedNode || !pointedNode.nodeObj) continue;
+            if (pointedNode.getAttribute && pointedNode.getAttribute('data-xmind-select-group')) {
+              return pointedNode;
+            }
+          }
+        }
         var nodeEl = target.closest ? target.closest('me-tpc') : null;
         if (!nodeEl || !nodeEl.nodeObj) return null;
         return nodeEl;
@@ -2852,6 +3137,20 @@
       }
 
       function onViewerClick(e) {
+        if (enableCustomBoxSelection && modifierSelectionSuppressClickUntil && Date.now() <= modifierSelectionSuppressClickUntil) {
+          if (e && e.preventDefault) e.preventDefault();
+          if (e && e.stopPropagation) e.stopPropagation();
+          modifierSelectionSuppressClickUntil = 0;
+          updateEditButtons();
+          return;
+        }
+        if (enableCustomBoxSelection && boxSuppressClickUntil && Date.now() <= boxSuppressClickUntil) {
+          if (e && e.preventDefault) e.preventDefault();
+          if (e && e.stopPropagation) e.stopPropagation();
+          boxSuppressClickUntil = 0;
+          updateEditButtons();
+          return;
+        }
         var quickBtn = e && e.target && e.target.closest
           ? e.target.closest('.xmind-node-quick-action')
           : null;
@@ -2863,6 +3162,23 @@
           var actionId = quickBtn.getAttribute ? quickBtn.getAttribute('data-mind-node-quick') : '';
           requestNodeAction(actionId, quickMeta);
           return;
+        }
+        var nodeEl = resolveViewerEventNode(e);
+        if (enableCustomBoxSelection && !editing && e && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && nodeEl) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          hideNodeContextMenu();
+          clearClickNodeEditTimer();
+          toggleNodeInCustomSelection(nodeEl);
+          updateEditButtons();
+          return;
+        }
+        if (enableCustomBoxSelection && !editing && e && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+          if (nodeEl) {
+            applyCustomSelectionNodes([nodeEl]);
+          } else if (isEventInsideMindCanvas(e.target)) {
+            clearCustomSelection(true);
+          }
         }
         hideNodeContextMenu();
         clearClickNodeEditTimer();
@@ -3750,9 +4066,20 @@
         viewerEl.addEventListener('gestureend', blockCanvasNativeGesture, true);
         viewerEl.addEventListener('pointerdown', beginRightDragGestureBlock, true);
         viewerEl.addEventListener('mousedown', onViewerMouseDownGestureGuard, true);
+        if (enableCustomBoxSelection) {
+          viewerEl.addEventListener('pointerdown', beginModifierNodeSelection, true);
+          viewerEl.addEventListener('mousedown', beginModifierNodeSelection, true);
+        }
         viewerEl.addEventListener('pointerdown', beginCtrlLeftCanvasDrag, true);
         viewerEl.addEventListener('pointerdown', onViewerPointerDownForDragPreview, true);
-        if (enableCustomBoxSelection) viewerEl.addEventListener('pointerdown', startBoxSelection, true);
+        if (enableCustomBoxSelection) {
+          viewerEl.addEventListener('pointerdown', startBoxSelection, true);
+          viewerEl.addEventListener('mousedown', startBoxSelection, true);
+          viewerEl.addEventListener('pointermove', moveBoxSelection, true);
+          viewerEl.addEventListener('mousemove', moveBoxSelection, true);
+          viewerEl.addEventListener('pointerup', stopBoxSelection, true);
+          viewerEl.addEventListener('mouseup', stopBoxSelection, true);
+        }
         viewerEl.addEventListener('keydown', onViewerInputBoxEnterKeydown, true);
         viewerEl.addEventListener('keydown', onViewerKeydown, true);
         viewerEl.addEventListener('click', onViewerClick, true);
@@ -3765,6 +4092,8 @@
         window.addEventListener('pointermove', moveBoxSelection);
         window.addEventListener('pointerup', stopBoxSelection);
         window.addEventListener('pointercancel', stopBoxSelection);
+        window.addEventListener('mousemove', moveBoxSelection);
+        window.addEventListener('mouseup', stopBoxSelection);
       }
       if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
         window.addEventListener('pagehide', onWindowPageHide);
@@ -3888,9 +4217,20 @@
           viewerEl.removeEventListener('gestureend', blockCanvasNativeGesture, true);
           viewerEl.removeEventListener('pointerdown', beginRightDragGestureBlock, true);
           viewerEl.removeEventListener('mousedown', onViewerMouseDownGestureGuard, true);
+          if (enableCustomBoxSelection) {
+            viewerEl.removeEventListener('pointerdown', beginModifierNodeSelection, true);
+            viewerEl.removeEventListener('mousedown', beginModifierNodeSelection, true);
+          }
           viewerEl.removeEventListener('pointerdown', beginCtrlLeftCanvasDrag, true);
           viewerEl.removeEventListener('pointerdown', onViewerPointerDownForDragPreview, true);
-          if (enableCustomBoxSelection) viewerEl.removeEventListener('pointerdown', startBoxSelection, true);
+          if (enableCustomBoxSelection) {
+            viewerEl.removeEventListener('pointerdown', startBoxSelection, true);
+            viewerEl.removeEventListener('mousedown', startBoxSelection, true);
+            viewerEl.removeEventListener('pointermove', moveBoxSelection, true);
+            viewerEl.removeEventListener('mousemove', moveBoxSelection, true);
+            viewerEl.removeEventListener('pointerup', stopBoxSelection, true);
+            viewerEl.removeEventListener('mouseup', stopBoxSelection, true);
+          }
           viewerEl.removeEventListener('keydown', onViewerInputBoxEnterKeydown, true);
           viewerEl.removeEventListener('keydown', onViewerKeydown, true);
           viewerEl.removeEventListener('click', onViewerClick, true);
@@ -3903,6 +4243,8 @@
           window.removeEventListener('pointermove', moveBoxSelection);
           window.removeEventListener('pointerup', stopBoxSelection);
           window.removeEventListener('pointercancel', stopBoxSelection);
+          window.removeEventListener('mousemove', moveBoxSelection);
+          window.removeEventListener('mouseup', stopBoxSelection);
         }
         if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
           window.removeEventListener('pagehide', onWindowPageHide);
@@ -4314,6 +4656,9 @@
           // ignore
         }
       }
+      instance.getSelectedNodeMetas = function() {
+        return collectSelectedNodeMetas();
+      };
 
       var restoredViewState = false;
       if (preservedViewState && !initialEditing) {

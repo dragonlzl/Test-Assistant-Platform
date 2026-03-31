@@ -273,6 +273,8 @@
           lastOperationSnapshotId: '',
           rootSnapshotId: '',
           rootSnapshots: [],
+          deletedBaselineModuleKeys: [],
+          deletedBaselineCaseKeys: [],
           root: {
             lastAction: '',
             running: false,
@@ -307,6 +309,12 @@
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) {
         state.xmindCaseGen.rootSnapshots = [];
       }
+      if (!Array.isArray(state.xmindCaseGen.deletedBaselineModuleKeys)) {
+        state.xmindCaseGen.deletedBaselineModuleKeys = [];
+      }
+      if (!Array.isArray(state.xmindCaseGen.deletedBaselineCaseKeys)) {
+        state.xmindCaseGen.deletedBaselineCaseKeys = [];
+      }
       if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') {
         state.xmindCaseGen.modules = {};
       }
@@ -339,6 +347,12 @@
       state.xmindCaseGen.hasImportedBaseline = state.xmindCaseGen.hasImportedBaseline === true;
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
+      state.xmindCaseGen.deletedBaselineModuleKeys = state.xmindCaseGen.deletedBaselineModuleKeys.map(function(item) {
+        return String(item || '').trim().toLowerCase();
+      }).filter(Boolean);
+      state.xmindCaseGen.deletedBaselineCaseKeys = state.xmindCaseGen.deletedBaselineCaseKeys.map(function(item) {
+        return String(item || '').trim();
+      }).filter(Boolean);
       state.xmindCaseGen.summaryCollapsed = state.xmindCaseGen.summaryCollapsed === true;
       state.xmindCaseGen.prep.step = Math.max(1, Math.min(3, Number(state.xmindCaseGen.prep.step) || 1));
       state.xmindCaseGen.prep.requirementMode = state.xmindCaseGen.prep.requirementMode === 'manual'

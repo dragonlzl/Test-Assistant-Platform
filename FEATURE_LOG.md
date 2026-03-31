@@ -19,6 +19,44 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 用例生成支持删除与多选删除
+- 功能描述：为 `XMind 用例生成` 抽屉增加删除能力。现在模块节点、用例节点及其任意子节点都支持通过右键菜单执行 `删除`；同时支持多选后按键盘 `Delete` 批量删除模块和用例。删除会以当前可见树作为新的权威基线，并主动失效旧的“放弃本次生成”快照，避免后续生成或回退重新带回已删除内容。
+- 操作方式：
+  - 打开 `用例生成` 页中的 `XMind 用例生成` 抽屉；
+  - 右键模块节点，或右键某条用例下的 `优先级 / 前置条件 / 步骤 / 预期结果` 等任意节点，可看到 `删除`；
+  - 若需要批量删除，可先多选模块/用例节点，再按键盘 `Delete`；
+  - 删除前会二次确认；确认后立即更新 XMind 画布与共享用例结果。
+- 使用效果：
+  - 用户可以直接在 XMind 中清理不需要的模块或用例，不必依赖“放弃本次生成”去回滚整批结果；
+  - 删除导入基线用例时，不会改写原始 `importedCases/caseText`，而是只在 XMind 页隐藏对应基线内容；
+  - 删除 AI 生成模块/用例后，后续再次生成时提供给模型的上下文会和当前 XMind 可见内容一致，不会继续带上已删数据。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增删除动作常量、删除计划归一化、基线隐藏层、AI 模块/用例删除提交、删除确认、快照失效处理，并把删除动作接入根/模块/用例节点菜单与 `Delete` 键链路；
+  - `scripts/core/mindElixirCore.js`：在只读态 XMind 视图上补充自定义框选、多选、`Delete` 键转发和稳定选中分组能力，支持鼠标框选、`Ctrl`/`Cmd` 点击追加选择，同时保持非 XMind 只读视图的 `Ctrl + 左键拖动画布` 行为不回退；
+  - `scripts/core/casesGenCore.js`、`scripts/modules/app.js`：补齐 `state.xmindCaseGen.deletedBaselineModuleKeys/deletedBaselineCaseKeys` 默认值与归一化；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增右键删除、Delete 键批量删除、删除后生成上下文一致性的 UI 自动化回归；
+  - 未新增后端接口、路由或存储表。
+- 复用说明：继续复用现有 `mindElixirCore` 右键菜单/多选能力、共享 `caseGenModules/caseGenResults` 真源、XMind 前置准备与生成链路、现有快照回滚机制；本次没有新增后端依赖，也没有引入第二套生成状态机，只是在现有真源和 XMind 本地隐藏层上补充删除语义。
+- 测试与验证：
+  - 自查 code review：确认删除能力仍复用共享 `caseGenModules/caseGenResults` 真源，没有新增第二套生成状态机；删除后统一失效旧快照，避免 `放弃本次生成` 与当前可见树冲突；`mindElixirCore` 的多选增强被限定在 XMind 抽屉，不影响其他只读结构视图。
+  - `node --check scripts/core/mindElixirCore.js`
+  - `node --check scripts/modules/xmindCasegen.js`
+  - `node --check scripts/core/casesGenCore.js`
+  - `node --check scripts/modules/app.js`
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（18/18 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line`（3/3 通过）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（1/1 通过）
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js --reporter=line`（1/1 通过）
+  - 本次未改动后端接口，继续复用既有 API。
+- 更新记录：
+  - 2026-03-31 新增 XMind 删除能力，支持模块/用例右键删除和多选 `Delete` 批量删除；
+  - 2026-03-31 删除后统一清空旧的“放弃本次生成”快照，避免回滚或后续生成重新引入已删除内容；
+  - 2026-03-31 对导入基线内容采用 XMind 页本地隐藏层处理，不直接改写原始导入数据。
+  - 2026-03-31 收窄 XMind 画布上的 `+AI` 快捷入口范围，只在模块节点显示，避免用例字段节点重复出现快捷按钮干扰阅读与操作。
+  - 2026-03-31 补充只读态 XMind 的自定义框选与 `Ctrl`/`Cmd` 点击多选，支持按 `Delete` 批量删除模块和用例，同时确认不影响其他只读结构视图的拖动画布交互。
+  - 2026-03-31 修正只读态 XMind 的普通单击选中行为：不按 `Ctrl`/`Cmd` 单击节点时会保持单选高亮；若此前已有多选，普通单击会收敛为当前节点的单选状态。
+
 - 功能名称：XMind 用例生成工具栏入口收敛
 - 功能描述：移除 XMind 用例生成抽屉工具栏中与“生成前置准备”重复的快捷操作，只保留 `生成前置准备`、`生成记录` 和 `导出当前XMind`。需求导入、参考用例导入、从用例库选择、生成全量模块、生成全量用例、生成选项统一收口到前置准备弹窗和树节点右键/`+AI` 入口，避免页面顶部重复操作造成理解负担。
 - 操作方式：
