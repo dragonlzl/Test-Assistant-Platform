@@ -9802,6 +9802,18 @@ tr.import-invalid-locate-active td {
   right: calc(100% + 124px);
 }
 
+.xmind-structure-viewer me-tpc.xmind-casegen-node-flow-left.xmind-casegen-node-has-pending-branch .xmind-node-quick-action,
+.xmind-structure-viewer me-tpc.xmind-casegen-node-flow-left.xmind-casegen-node-has-pending-branch.xmind-casegen-node-has-status .xmind-node-quick-action {
+  left: calc(100% + 12px);
+  right: auto;
+}
+
+.xmind-structure-viewer me-tpc.xmind-casegen-node-flow-right.xmind-casegen-node-has-pending-branch .xmind-node-quick-action,
+.xmind-structure-viewer me-tpc.xmind-casegen-node-flow-right.xmind-casegen-node-has-pending-branch.xmind-casegen-node-has-status .xmind-node-quick-action {
+  left: auto;
+  right: calc(100% + 12px);
+}
+
 .xmind-structure-viewer .xmind-node-quick-action:hover:not(:disabled) {
   background: linear-gradient(135deg, rgba(191,219,254,0.98), rgba(219,234,254,0.98));
 }

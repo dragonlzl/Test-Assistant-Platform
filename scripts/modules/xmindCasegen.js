@@ -91,6 +91,8 @@
     var inlineStatusHost = null;
     var manualImageInputEl = null;
     var topupHighlightSyncTimer = 0;
+    var topupHighlightRetryTimer = 0;
+    var topupHighlightRetryCount = 0;
     var topupHighlightMutationObserver = null;
     var topupHighlightResizeObserver = null;
     var topupHighlightViewerEl = null;
@@ -538,6 +540,7 @@
         rootState.modules[key] = {
           lastAction: '',
           running: false,
+          rootPendingActionId: '',
           snapshotId: '',
           status: '',
           error: '',
@@ -2808,6 +2811,34 @@
       moduleState.topupHighlight = null;
     }
 
+    function setModuleRootPendingAction(moduleState, actionId) {
+      if (!moduleState || typeof moduleState !== 'object') return;
+      moduleState.rootPendingActionId = actionId ? String(actionId || '') : '';
+      moduleState.updatedAt = Date.now();
+    }
+
+    function clearModuleRootPendingAction(moduleState, actionId) {
+      if (!moduleState || typeof moduleState !== 'object') return;
+      if (actionId && String(moduleState.rootPendingActionId || '') !== String(actionId || '')) return;
+      moduleState.rootPendingActionId = '';
+      moduleState.updatedAt = Date.now();
+    }
+
+    function markRootPendingModules(moduleEntries, actionId) {
+      var list = Array.isArray(moduleEntries) ? moduleEntries : [];
+      list.forEach(function(entry) {
+        if (!entry || !entry.aiModuleId) return;
+        setModuleRootPendingAction(ensureModuleUiState(entry.aiModuleId), actionId);
+      });
+    }
+
+    function clearRootPendingModules(actionId) {
+      var modulesState = ensureState().modules || {};
+      Object.keys(modulesState).forEach(function(key) {
+        clearModuleRootPendingAction(modulesState[key], actionId);
+      });
+    }
+
     function buildTopupHighlightLabel(count, highlightScope) {
       if (highlightScope === 'module') return '本轮补全模块';
       if (highlightScope === 'subtree') {
@@ -2937,6 +2968,11 @@
         clearTimeout(topupHighlightSyncTimer);
         topupHighlightSyncTimer = 0;
       }
+      if (topupHighlightRetryTimer) {
+        clearTimeout(topupHighlightRetryTimer);
+        topupHighlightRetryTimer = 0;
+      }
+      topupHighlightRetryCount = 0;
       if (topupHighlightMutationObserver) {
         topupHighlightMutationObserver.disconnect();
         topupHighlightMutationObserver = null;
@@ -2969,6 +3005,14 @@
       }, 40);
     }
 
+    function scheduleTopupHighlightRetry(delayMs) {
+      if (topupHighlightRetryTimer) clearTimeout(topupHighlightRetryTimer);
+      topupHighlightRetryTimer = setTimeout(function() {
+        topupHighlightRetryTimer = 0;
+        syncTopupHighlightPresentation();
+      }, Number(delayMs) || 120);
+    }
+
     function syncTopupHighlightPresentation() {
       var viewerEl = getTopupHighlightViewerElement();
       var mapEl = getTopupHighlightMapElement(viewerEl);
@@ -2976,6 +3020,7 @@
       clearTopupHighlightLayer(mapEl);
       var highlightedNodes = mapEl.querySelectorAll('[data-xmind-topup-highlight-token]');
       if (!highlightedNodes || !highlightedNodes.length) {
+        topupHighlightRetryCount = 0;
         setDebugState({ topupPhase: 'empty', topupNodeCount: 0 });
         return;
       }
@@ -2991,16 +3036,31 @@
         var token = nodeEl && nodeEl.getAttribute ? String(nodeEl.getAttribute('data-xmind-topup-highlight-token') || '') : '';
         if (!token) return;
         if (!grouped[token]) {
-          grouped[token] = { label: '', nodes: [] };
+          grouped[token] = { label: '', nodes: [], hasVisibleNode: false };
         }
         if (!grouped[token].label && nodeEl.getAttribute) {
           grouped[token].label = String(nodeEl.getAttribute('data-xmind-topup-highlight-label') || '本轮追加用例');
         }
+        if (nodeEl && nodeEl.getBoundingClientRect) {
+          var nodeRect = nodeEl.getBoundingClientRect();
+          if (
+            nodeRect
+            && nodeRect.right > viewerRect.left
+            && nodeRect.left < viewerRect.right
+            && nodeRect.bottom > viewerRect.top
+            && nodeRect.top < viewerRect.bottom
+          ) {
+            grouped[token].hasVisibleNode = true;
+          }
+        }
         grouped[token].nodes.push(nodeEl);
       });
+      var expectedFrameCount = 0;
+      var renderedFrameCount = 0;
       Object.keys(grouped).forEach(function(token) {
         var group = grouped[token];
         if (!group || !group.nodes || !group.nodes.length) return;
+        expectedFrameCount += 1;
         var minLeft = Infinity;
         var minTop = Infinity;
         var maxRight = -Infinity;
@@ -3014,9 +3074,6 @@
           maxBottom = Math.max(maxBottom, rect.bottom);
         });
         if (!Number.isFinite(minLeft) || !Number.isFinite(minTop) || !Number.isFinite(maxRight) || !Number.isFinite(maxBottom)) return;
-        if (maxRight <= viewerRect.left || minLeft >= viewerRect.right || maxBottom <= viewerRect.top || minTop >= viewerRect.bottom) {
-          return;
-        }
         var frameEl = document.createElement('div');
         frameEl.className = 'xmind-casegen-topup-highlight-frame';
         frameEl.setAttribute('data-xmind-casegen-topup-frame', token);
@@ -3033,11 +3090,20 @@
         labelEl.textContent = group.label || '本轮追加用例';
         frameEl.appendChild(labelEl);
         layerEl.appendChild(frameEl);
+        renderedFrameCount += 1;
       });
+      if (expectedFrameCount > renderedFrameCount && topupHighlightRetryCount < 4) {
+        topupHighlightRetryCount += 1;
+        scheduleTopupHighlightRetry(120 + (topupHighlightRetryCount * 60));
+      } else {
+        topupHighlightRetryCount = 0;
+      }
       setDebugState({
         topupPhase: 'rendered',
         topupNodeCount: highlightedNodes.length,
-        topupFrameCount: layerEl.querySelectorAll ? layerEl.querySelectorAll('[data-xmind-casegen-topup-frame]').length : 0
+        topupFrameCount: layerEl.querySelectorAll ? layerEl.querySelectorAll('[data-xmind-casegen-topup-frame]').length : 0,
+        topupExpectedFrameCount: expectedFrameCount,
+        topupRetryCount: topupHighlightRetryCount
       });
     }
 
@@ -3122,6 +3188,7 @@
       Object.keys(xmindState.modules || {}).forEach(function(key) {
         var moduleState = ensureModuleUiState(key);
         moduleState.running = false;
+        moduleState.rootPendingActionId = '';
         moduleState.status = '';
         moduleState.error = '';
         moduleState.hideResults = false;
@@ -3517,12 +3584,17 @@
       return nextMeta;
     }
 
-    function buildTopupPendingNode(moduleEntry) {
-      return createNode('追加生成中', {
+    function buildModulePendingNode(moduleEntry, options) {
+      options = options || {};
+      return createNode(String(options.label || '追加生成中'), {
         type: 'topup-placeholder',
         moduleKey: moduleEntry.moduleKey,
         moduleId: moduleEntry.aiModuleId || '',
-        nodeId: buildNodeId(['topup-placeholder', moduleEntry.moduleKey]),
+        nodeId: buildNodeId([
+          'topup-placeholder',
+          moduleEntry.moduleKey,
+          String(options.pendingKey || options.actionId || 'module')
+        ]),
         branchColor: '#2563eb',
       });
     }
@@ -3601,7 +3673,15 @@
           });
         }
         if (moduleState && moduleState.running && moduleState.lastAction === MODULE_ACTIONS.APPEND) {
-          moduleChildren.push(buildTopupPendingNode(entry));
+          moduleChildren.push(buildModulePendingNode(entry, {
+            label: '追加生成中',
+            actionId: MODULE_ACTIONS.APPEND,
+          }));
+        } else if (moduleState && moduleState.rootPendingActionId === ROOT_ACTIONS.EXISTING_CASES) {
+          moduleChildren.push(buildModulePendingNode(entry, {
+            label: '补全用例中',
+            actionId: ROOT_ACTIONS.EXISTING_CASES,
+          }));
         }
         children.push(createNode(entry.title, withTopupHighlightMeta({
           type: 'module',
@@ -3610,7 +3690,15 @@
           moduleTitle: entry.title,
           moduleIndex: moduleIndex,
           nodeId: getModuleNodeId(entry),
-          status: moduleState && moduleState.running ? 'running' : (moduleState && moduleState.status === 'error' ? 'error' : ''),
+          hasPendingBranch: Boolean(
+            moduleState && (
+              (moduleState.running && moduleState.lastAction === MODULE_ACTIONS.APPEND)
+              || moduleState.rootPendingActionId === ROOT_ACTIONS.EXISTING_CASES
+            )
+          ),
+          status: moduleState && moduleState.running
+            ? 'running'
+            : (moduleState && moduleState.status === 'error' ? 'error' : ''),
           statusText: moduleState && moduleState.error ? moduleState.error : '',
         }, getModuleNodeTopupHighlight(moduleState)), moduleChildren));
       });
@@ -3729,6 +3817,7 @@
         'xmind-casegen-node-topup-highlight-case',
         'xmind-casegen-node-status',
         'xmind-casegen-node-has-status',
+        'xmind-casegen-node-has-pending-branch',
         'xmind-casegen-node-flow-left',
         'xmind-casegen-node-flow-right'
       );
@@ -3746,6 +3835,9 @@
             nodeEl.classList.add('xmind-casegen-node-flow-left');
           } else {
             nodeEl.classList.add('xmind-casegen-node-flow-right');
+          }
+          if (meta.hasPendingBranch) {
+            nodeEl.classList.add('xmind-casegen-node-has-pending-branch');
           }
         }
         if (meta.status) {
@@ -4088,6 +4180,9 @@
       rootState.status = '';
       rootState.error = '';
       rootState.updatedAt = Date.now();
+      if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
+        markRootPendingModules(visibleContext.list, actionId);
+      }
       if (hadAiCasesBeforeAction) setAllModuleResultsVisibility(false);
       render({ reason: 'root-running', anchorNodeId: anchorNodeId, persist: false });
 
@@ -4102,6 +4197,7 @@
         rootState.status = '';
         rootState.error = '';
         rootState.updatedAt = Date.now();
+        clearRootPendingModules(actionId);
         if (!applied.changed) {
           var rootNoChangeInfo = buildRootNoChangeInfo(actionId, filtered.diagnostics, applied.diagnostics, normalizedOutput.diagnostics);
           recordGenerationHistory({
@@ -4159,6 +4255,7 @@
         rootState.status = 'error';
         rootState.error = err && err.message ? String(err.message) : '未知错误';
         rootState.updatedAt = Date.now();
+        clearRootPendingModules(actionId);
         var rootErrorInfo = buildGenerationErrorInfo(err);
         recordGenerationHistory({
           scope: 'root',

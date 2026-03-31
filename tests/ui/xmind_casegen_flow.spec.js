@@ -1586,7 +1586,7 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await gotoCasesgenWorkflow(page);
     await waitXmindModelAssigned(page, mockInfo.modelId);
-    await installXmindModelStub(page, 220);
+    await installXmindModelStub(page, 900);
     await seedDocumentRequirement(page, {
       text: '需求：针对已有模块继续补全缺漏用例，并给新增用例标记本轮补全范围。',
       requirementLabel: 'XMind已有模块补全需求',
@@ -1638,8 +1638,44 @@ test.describe('XMind 用例生成抽屉', () => {
     await openNodeContextMenu(page, 'XMind已有模块补全需求');
     await clickContextMenuAction(page, '已有模块补全用例');
 
+    await waitForNodeStatus(page, 'XMind已有模块补全需求', '生成中');
+    await page.waitForFunction(() => {
+      var moduleBadges = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-module .xmind-node-status-badge');
+      var placeholders = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-topup-placeholder');
+      var casePendingCount = 0;
+      Array.prototype.forEach.call(placeholders, function(node) {
+        if (String(node.textContent || '').indexOf('补全用例中') !== -1) casePendingCount += 1;
+      });
+      var pendingLinks = document.querySelectorAll('#xmindCaseGenMindContainer path[data-xmind-casegen-link="topup-pending"]');
+      return moduleBadges.length === 0 && casePendingCount === 2 && pendingLinks.length >= 2;
+    }, {}, { timeout: 15000 });
+    const pendingQuickActionOverlap = await page.evaluate(() => {
+      function intersects(a, b) {
+        if (!a || !b) return false;
+        return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+      }
+      var quickButtons = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-module .xmind-node-quick-action');
+      var placeholders = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-topup-placeholder');
+      var placeholderRects = [];
+      Array.prototype.forEach.call(placeholders, function(node) {
+        if (!node || !node.getBoundingClientRect) return;
+        var text = String(node.textContent || '');
+        if (text.indexOf('补全用例中') === -1) return;
+        placeholderRects.push(node.getBoundingClientRect());
+      });
+      return Array.prototype.some.call(quickButtons, function(node) {
+        if (!node || !node.getBoundingClientRect) return false;
+        var rect = node.getBoundingClientRect();
+        return placeholderRects.some(function(target) { return intersects(rect, target); });
+      });
+    });
+    expect(pendingQuickActionOverlap).toBe(false);
+
     await waitForNodeText(page, '登录模块-补全用例');
     await waitForNodeText(page, '支付模块-补全用例');
+    await waitForNodeStatusAbsent(page, '登录模块');
+    await waitForNodeStatusAbsent(page, '支付模块');
+    await waitForNodeStatusAbsent(page, 'XMind已有模块补全需求');
     await page.click('#xmindCaseGenMindContainer [data-mind-action="zoom-fit"]');
     await page.waitForTimeout(180);
     await page.waitForFunction(() => {
@@ -1657,6 +1693,28 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(frames).toHaveLength(2);
     expect(frames.every((item) => item.label === '本轮追加用例')).toBeTruthy();
     expect(frames.every((item) => item.highlightedNodeCount >= 5)).toBeTruthy();
+
+    await page.evaluate(() => {
+      var nodes = document.querySelectorAll('#xmindCaseGenMindContainer [data-xmind-topup-highlight-token]');
+      var targetToken = '';
+      Array.prototype.some.call(nodes, function(node) {
+        var token = node && node.getAttribute ? String(node.getAttribute('data-xmind-topup-highlight-token') || '') : '';
+        if (!token || targetToken) return false;
+        targetToken = token;
+        return true;
+      });
+      if (!targetToken) return;
+      Array.prototype.forEach.call(nodes, function(node) {
+        var token = node && node.getAttribute ? String(node.getAttribute('data-xmind-topup-highlight-token') || '') : '';
+        if (token !== targetToken || !node || !node.style) return;
+        node.style.transform = 'translateY(2200px)';
+      });
+      window.dispatchEvent(new Event('resize'));
+    });
+    await page.waitForTimeout(260);
+
+    const framesAfterOffscreen = await readAllTopupHighlightFrames(page);
+    expect(framesAfterOffscreen).toHaveLength(2);
   });
 
   test('根节点补全模块会在追加位置展示生成中占位，并在完成后框选新增模块', async ({ page }) => {

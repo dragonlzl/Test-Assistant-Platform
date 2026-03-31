@@ -190,10 +190,11 @@
 - 使用效果：
   - 已有旧用例的模块在根节点补全后，用户可以直观看到“哪些是这次新补出来的用例”，不再和原有内容混在一起；
   - 多个模块同时补出新用例时，虚线框会按模块分组，不会误合并成一个高亮区域；
-  - 在点击 `全览` 后，可稳定看到各模块新增区域的独立虚线框效果。
+  - 在点击 `全览` 后，可稳定看到各模块新增区域的独立虚线框效果；
+  - 补全执行中时，每个已有模块会在自己的分支区域显示 `生成中` 状态；若该模块原本已有用例，还会在旧用例后的即将追加位置显示 `补全用例中` 占位，并带虚线连接。
 - 新增内容/接口/组件：
-  - `scripts/modules/xmindCasegen.js`：将模块追加高亮 token 收口为带模块标识的稳定前缀，降低多模块高亮串组风险；
-  - `tests/ui/xmind_casegen_flow.spec.js`：新增根节点 `已有模块补全用例` 场景回归，验证已有用例模块补全后仍会渲染独立虚线框；
+  - `scripts/modules/xmindCasegen.js`：将模块追加高亮 token 收口为带模块标识的稳定前缀，降低多模块高亮串组风险；同时为根节点 `已有模块补全用例` 增加模块级 root-pending 元信息，把生成中占位投影到各模块自己的分支区域；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增根节点 `已有模块补全用例` 场景回归，验证已有用例模块补全后仍会渲染独立虚线框，并补充模块节点 `生成中` + `补全用例中` 占位与虚线连接断言；
   - 未新增后端接口、路由或存储结构。
 - 复用说明：继续复用现有根节点 `已有模块补全用例` 提示词契约、共享 `caseGenResults` 真源、XMind 节点高亮渲染层与 `全览` 视图能力；本次仅增强高亮分组稳定性并补足 UI 回归覆盖。
 - 测试与验证：
@@ -204,6 +205,11 @@
   - 本次未改动后端接口，未新增 API 用例。
 - 更新记录：
   - 2026-03-30 为根节点 `已有模块补全用例` 增加已有用例模块的独立虚线框回归保障，并将高亮 token 收口为模块级稳定前缀。
+  - 2026-03-31 为根节点 `已有模块补全用例` 增加模块原位生成中表现：执行期间各模块节点显示 `生成中`，且已有用例模块会在追加位置显示 `补全用例中` 占位和虚线连接；验证命令：`node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点已有模块补全用例会为已有用例模块新增内容渲染独立虚线框|模块可并发生成，且根节点补模块动作不会阻塞现有模块生成" --reporter=line` 均通过。
+  - 2026-03-31 进一步收口根节点 `已有模块补全用例` 的生成中展示：移除模块节点上重复的通用 `生成中` badge，仅保留分支上的 `补全用例中` 占位与虚线连接，避免信息叠加；验证命令：`node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点已有模块补全用例会为已有用例模块新增内容渲染独立虚线框" --reporter=line` 均通过。
+  - 2026-03-31 为 topup highlight overlay 增加可见分组补重算：当可见高亮分组数大于当前已绘制虚线框数时，会自动追加数轮重算，减少同一批模块里偶发漏掉某个虚线框的情况；验证命令：`node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点已有模块补全用例会为已有用例模块新增内容渲染独立虚线框" --reporter=line`、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点补全模块\\+用例为多个新增模块分别渲染独立追加虚线框" --reporter=line` 均通过。
+  - 2026-03-31 调整模块节点 `+AI` 的避让布局：当模块分支上存在 `补全用例中` / `追加生成中` 占位时，`+AI` 会自动移到节点另一侧，避免和待生成占位重叠；验证命令：`node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点已有模块补全用例会为已有用例模块新增内容渲染独立虚线框" --reporter=line` 均通过。
+  - 2026-03-31 去掉 topup highlight frame 的 viewer 可视区裁剪：即使某一批新增用例所在模块在生成成功时落在当前画布可视区外，也会先按地图坐标创建对应虚线框；后续平移到该区域时可直接看到，不会因为“生成成功那一刻不在视口里”而丢框。验证命令：`node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`、`npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点已有模块补全用例会为已有用例模块新增内容渲染独立虚线框" --reporter=line` 均通过。
 
 - 功能名称：XMind 操作步骤节点保留多行展示
 - 功能描述：修正 XMind 用例生成抽屉和结构视图中“操作步骤”节点的文本格式化方式。现在步骤数组会按原顺序保留为多行展示，不再被统一拼接成带 ` / ` 的单行文本；同时去掉了 MindElixir 构树时对已格式化节点的二次重写，避免步骤节点再次被打回斜杠展示。
