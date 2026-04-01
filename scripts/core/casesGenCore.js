@@ -275,6 +275,8 @@
           rootSnapshots: [],
           deletedBaselineModuleKeys: [],
           deletedBaselineCaseKeys: [],
+          deleteUndoStack: [],
+          deleteRedoStack: [],
           root: {
             lastAction: '',
             running: false,
@@ -314,6 +316,12 @@
       }
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineCaseKeys)) {
         state.xmindCaseGen.deletedBaselineCaseKeys = [];
+      }
+      if (!Array.isArray(state.xmindCaseGen.deleteUndoStack)) {
+        state.xmindCaseGen.deleteUndoStack = [];
+      }
+      if (!Array.isArray(state.xmindCaseGen.deleteRedoStack)) {
+        state.xmindCaseGen.deleteRedoStack = [];
       }
       if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') {
         state.xmindCaseGen.modules = {};

@@ -62,6 +62,8 @@
     var toolbarEl = document.getElementById('xmindCaseGenToolbar');
     var summaryBtn = document.getElementById('xmindCaseGenSummaryBtn');
     var historyBtn = document.getElementById('xmindCaseGenHistoryBtn');
+    var deleteUndoBtn = document.getElementById('xmindCaseGenDeleteUndoBtn');
+    var deleteRedoBtn = document.getElementById('xmindCaseGenDeleteRedoBtn');
     var summaryOverlayEl = document.getElementById('xmindCaseGenSummaryOverlay');
     var summaryDialogEl = document.getElementById('xmindCaseGenSummaryDialog');
     var summaryDialogTitleEl = document.getElementById('xmindCaseGenSummaryDialogTitle');
@@ -292,6 +294,8 @@
       return [
         summaryBtn,
         historyBtn,
+        deleteUndoBtn,
+        deleteRedoBtn,
         exportBtn,
       ].filter(Boolean);
     }
@@ -364,6 +368,7 @@
       var statusHost = getInlineStatusHost();
       if (!controlsRoot || !actionsHost) return false;
       controlsRoot.classList.add('xmind-casegen-inline-controls-ready');
+      syncDeleteHistoryButtons();
       getInlineControlButtons().forEach(function(btn) {
         if (!btn || !actionsHost.appendChild) return;
         btn.classList.add('xmind-casegen-inline-btn');
@@ -468,15 +473,17 @@
           hasModuleSkeleton: false,
           hasImportedBaseline: false,
           history: [],
-        operationSnapshots: [],
-        lastOperationSnapshotId: '',
-        rootSnapshotId: '',
-        rootSnapshots: [],
-        deletedBaselineModuleKeys: [],
-        deletedBaselineCaseKeys: [],
-        root: createDefaultRootState(),
-        summaryCollapsed: false,
-        prep: createDefaultPrepState(),
+          operationSnapshots: [],
+          lastOperationSnapshotId: '',
+          rootSnapshotId: '',
+          rootSnapshots: [],
+          deletedBaselineModuleKeys: [],
+          deletedBaselineCaseKeys: [],
+          deleteUndoStack: [],
+          deleteRedoStack: [],
+          root: createDefaultRootState(),
+          summaryCollapsed: false,
+          prep: createDefaultPrepState(),
           nextSnapshotId: 1,
           snapshots: [],
           modules: {},
@@ -487,6 +494,8 @@
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) state.xmindCaseGen.rootSnapshots = [];
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineModuleKeys)) state.xmindCaseGen.deletedBaselineModuleKeys = [];
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineCaseKeys)) state.xmindCaseGen.deletedBaselineCaseKeys = [];
+      if (!Array.isArray(state.xmindCaseGen.deleteUndoStack)) state.xmindCaseGen.deleteUndoStack = [];
+      if (!Array.isArray(state.xmindCaseGen.deleteRedoStack)) state.xmindCaseGen.deleteRedoStack = [];
       if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
       if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') {
         state.xmindCaseGen.modules = {};
@@ -627,6 +636,142 @@
       ensureState().hasImportedBaseline = hasImportedBaselineCases();
       if (useImmediate === true) persistWorkflowStateNow();
       else persistWorkflowState();
+    }
+
+    function buildDeleteHistorySnapshotPayload() {
+      return {
+        caseGenModules: cloneJson(state.caseGenModules, []),
+        caseGenResults: cloneJson(state.caseGenResults, {}),
+        caseSelections: cloneSelectionMap(state.caseSelections),
+        caseGenSuggestions: cloneJson(state.caseGenSuggestions, {}),
+        caseGenModuleStatus: cloneJson(state.caseGenModuleStatus, {}),
+        caseGenProgress: cloneJson(state.caseGenProgress, {}),
+        caseGenTiming: cloneJson(state.caseGenTiming, {}),
+        caseGenSource: String(state.caseGenSource || ''),
+        deletedBaselineModuleKeys: cloneJson(ensureState().deletedBaselineModuleKeys, []),
+        deletedBaselineCaseKeys: cloneJson(ensureState().deletedBaselineCaseKeys, []),
+      };
+    }
+
+    function hasDeleteUndoHistory() {
+      return Array.isArray(ensureState().deleteUndoStack) && ensureState().deleteUndoStack.length > 0;
+    }
+
+    function hasDeleteRedoHistory() {
+      return Array.isArray(ensureState().deleteRedoStack) && ensureState().deleteRedoStack.length > 0;
+    }
+
+    function syncDeleteHistoryButtons() {
+      if (deleteUndoBtn) {
+        deleteUndoBtn.disabled = !hasDeleteUndoHistory();
+        deleteUndoBtn.title = hasDeleteUndoHistory()
+          ? '撤回最近一次删除（Ctrl/Cmd+Z）'
+          : '暂无可撤回的删除';
+      }
+      if (deleteRedoBtn) {
+        deleteRedoBtn.disabled = !hasDeleteRedoHistory();
+        deleteRedoBtn.title = hasDeleteRedoHistory()
+          ? '恢复最近一次撤回的删除（Ctrl/Cmd+Shift+Z）'
+          : '暂无可恢复的删除';
+      }
+    }
+
+    function clearDeleteHistoryStacks() {
+      var xmindState = ensureState();
+      var hadHistory = (xmindState.deleteUndoStack && xmindState.deleteUndoStack.length)
+        || (xmindState.deleteRedoStack && xmindState.deleteRedoStack.length);
+      xmindState.deleteUndoStack = [];
+      xmindState.deleteRedoStack = [];
+      syncDeleteHistoryButtons();
+      return Boolean(hadHistory);
+    }
+
+    function pushDeleteHistoryEntry(plan, beforeSnapshot, afterSnapshot) {
+      var xmindState = ensureState();
+      var entry = {
+        id: generateLocalId('xmind-delete'),
+        summaryText: buildDeleteSummaryText(plan),
+        moduleCount: Array.isArray(plan && plan.modules) ? plan.modules.length : 0,
+        caseCount: Array.isArray(plan && plan.cases) ? plan.cases.length : 0,
+        before: cloneJson(beforeSnapshot, null),
+        after: cloneJson(afterSnapshot, null),
+        createdAt: Date.now(),
+      };
+      xmindState.deleteUndoStack = Array.isArray(xmindState.deleteUndoStack) ? xmindState.deleteUndoStack : [];
+      xmindState.deleteRedoStack = [];
+      xmindState.deleteUndoStack.push(entry);
+      if (xmindState.deleteUndoStack.length > HISTORY_LIMIT) {
+        xmindState.deleteUndoStack = xmindState.deleteUndoStack.slice(xmindState.deleteUndoStack.length - HISTORY_LIMIT);
+      }
+      syncDeleteHistoryButtons();
+      return entry;
+    }
+
+    function applyDeleteHistorySnapshot(snapshot, actionId) {
+      if (!snapshot || typeof snapshot !== 'object') return false;
+      state.caseGenModules = cloneJson(snapshot.caseGenModules, []);
+      state.caseGenResults = cloneJson(snapshot.caseGenResults, {});
+      state.caseSelections = restoreSelectionMap(snapshot.caseSelections);
+      state.caseGenSuggestions = cloneJson(snapshot.caseGenSuggestions, {});
+      state.caseGenModuleStatus = cloneJson(snapshot.caseGenModuleStatus, {});
+      state.caseGenProgress = cloneJson(snapshot.caseGenProgress, {});
+      state.caseGenTiming = cloneJson(snapshot.caseGenTiming, {});
+      state.caseGenSource = String(snapshot.caseGenSource || '');
+      ensureState().deletedBaselineModuleKeys = cloneJson(snapshot.deletedBaselineModuleKeys, []);
+      ensureState().deletedBaselineCaseKeys = cloneJson(snapshot.deletedBaselineCaseKeys, []);
+      ensureState().modules = {};
+      invalidateDeleteConflictingSnapshots();
+      ensureState().hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
+      ensureState().hasImportedBaseline = hasImportedBaselineCases();
+      ensureRootUiState().lastAction = String(actionId || '');
+      ensureRootUiState().updatedAt = Date.now();
+      if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
+        casesGenApi.renderCaseGeneration();
+      }
+      syncDeleteHistoryButtons();
+      return true;
+    }
+
+    function undoLatestDeleteSelection() {
+      var xmindState = ensureState();
+      var list = Array.isArray(xmindState.deleteUndoStack) ? xmindState.deleteUndoStack : [];
+      if (!list.length) return false;
+      var entry = list.pop();
+      if (!entry || !entry.before) {
+        syncDeleteHistoryButtons();
+        return false;
+      }
+      xmindState.deleteRedoStack = Array.isArray(xmindState.deleteRedoStack) ? xmindState.deleteRedoStack : [];
+      xmindState.deleteRedoStack.push(entry);
+      if (xmindState.deleteRedoStack.length > HISTORY_LIMIT) {
+        xmindState.deleteRedoStack = xmindState.deleteRedoStack.slice(xmindState.deleteRedoStack.length - HISTORY_LIMIT);
+      }
+      if (!applyDeleteHistorySnapshot(entry.before, 'delete-undo')) return false;
+      notifyStatus('已撤回删除：' + String(entry.summaryText || '当前选中内容'), 'ok');
+      render({ reason: 'delete-undo' });
+      persistXmindState(true);
+      return true;
+    }
+
+    function redoLatestDeleteSelection() {
+      var xmindState = ensureState();
+      var list = Array.isArray(xmindState.deleteRedoStack) ? xmindState.deleteRedoStack : [];
+      if (!list.length) return false;
+      var entry = list.pop();
+      if (!entry || !entry.after) {
+        syncDeleteHistoryButtons();
+        return false;
+      }
+      xmindState.deleteUndoStack = Array.isArray(xmindState.deleteUndoStack) ? xmindState.deleteUndoStack : [];
+      xmindState.deleteUndoStack.push(entry);
+      if (xmindState.deleteUndoStack.length > HISTORY_LIMIT) {
+        xmindState.deleteUndoStack = xmindState.deleteUndoStack.slice(xmindState.deleteUndoStack.length - HISTORY_LIMIT);
+      }
+      if (!applyDeleteHistorySnapshot(entry.after, 'delete-redo')) return false;
+      notifyStatus('已恢复删除：' + String(entry.summaryText || '当前选中内容'), 'ok');
+      render({ reason: 'delete-redo' });
+      persistXmindState(true);
+      return true;
     }
 
     function getPrepState() {
@@ -1770,6 +1915,8 @@
           rootSnapshots: [],
           deletedBaselineModuleKeys: [],
           deletedBaselineCaseKeys: [],
+          deleteUndoStack: [],
+          deleteRedoStack: [],
           root: createDefaultRootState(),
           summaryCollapsed: false,
           prep: createDefaultPrepState(),
@@ -1788,6 +1935,7 @@
         state.importedCases = [];
       }
       ensureState();
+      clearDeleteHistoryStacks();
       renderOpenedSummaryDialog();
       scheduleRender('prep-reset');
       persistXmindState(true);
@@ -3333,6 +3481,7 @@
       });
       syncCaseGenOperationPointersLocal();
       clearAllTopupHighlights();
+      clearDeleteHistoryStacks();
       if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
         casesGenApi.renderCaseGeneration();
       }
@@ -3801,6 +3950,7 @@
       }
       var confirmed = await confirmDeleteSelection(plan);
       if (!confirmed) return false;
+      var beforeSnapshot = buildDeleteHistorySnapshotPayload();
 
       var changed = false;
       var affectedModuleIds = {};
@@ -3848,6 +3998,7 @@
         if (moduleState) clearModuleTopupHighlight(moduleState);
       });
       invalidateDeleteConflictingSnapshots();
+      pushDeleteHistoryEntry(plan, beforeSnapshot, buildDeleteHistorySnapshotPayload());
       if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
         casesGenApi.renderCaseGeneration();
       }
@@ -4391,6 +4542,7 @@
           decorateNodeElement: decorateNodeElement,
         });
         mountInlineControls();
+        syncDeleteHistoryButtons();
         bindTopupHighlightPresentation();
         setDebugState({ phase: 'render-success' });
         setTimeout(function() {
@@ -4587,6 +4739,7 @@
           rootState.error = '';
           rootState.lastAction = ROOT_ACTIONS.ROLLBACK;
           rootState.snapshotId = '';
+          clearDeleteHistoryStacks();
           notifyStatus('已放弃最近一次生成', 'ok');
           render({ reason: 'root-rollback', anchorNodeId: anchorNodeId });
         }
@@ -4680,6 +4833,7 @@
           message = '已补充 ' + String(applied.createdModules) + ' 个模块，' + String(applied.addedCases) + ' 条用例';
         }
         notifyStatus(message, 'ok');
+        clearDeleteHistoryStacks();
         if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
           casesGenApi.renderCaseGeneration();
         }
@@ -4742,6 +4896,7 @@
           if (rolledBack) {
             var rolledState = ensureModuleUiState(moduleEntry.aiModuleId);
             clearModuleTopupHighlight(rolledState);
+            clearDeleteHistoryStacks();
             notifyStatus('已放弃该模块最近一次生成', 'ok');
             render({ reason: 'module-rollback', anchorNodeId: anchorNodeId });
           }
@@ -4912,6 +5067,7 @@
             : ((hadAiCasesBeforeAction ? '已重新生成 ' : '已生成 ') + String(nextList.length) + ' 条用例'),
           'ok'
         );
+        clearDeleteHistoryStacks();
         if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
           casesGenApi.renderCaseGeneration();
         }
@@ -5015,6 +5171,13 @@
       return false;
     }
 
+    function isTypingLikeTarget(target) {
+      if (!target) return false;
+      if (target.isContentEditable) return true;
+      var tag = target.tagName ? String(target.tagName).toLowerCase() : '';
+      return tag === 'input' || tag === 'textarea' || tag === 'select';
+    }
+
     function bindButtons() {
       if (openBtn) {
         openBtn.addEventListener('click', function() {
@@ -5031,6 +5194,16 @@
         historyBtn.addEventListener('click', function() {
           if (summaryDialogOpen === true && summaryDialogMode === 'history') closeSummaryDialog();
           else openHistoryDialog();
+        });
+      }
+      if (deleteUndoBtn) {
+        deleteUndoBtn.addEventListener('click', function() {
+          undoLatestDeleteSelection();
+        });
+      }
+      if (deleteRedoBtn) {
+        deleteRedoBtn.addEventListener('click', function() {
+          redoLatestDeleteSelection();
         });
       }
       if (summaryCloseBtn) {
@@ -5160,11 +5333,32 @@
       }
       if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
         document.addEventListener('keydown', function(event) {
-          if (!event || event.key !== 'Escape') return;
-          if (!isDrawerOpen() || summaryDialogOpen !== true) return;
-          closeSummaryDialog();
-        });
+          if (!event) return;
+          if (event.key === 'Escape') {
+            if (!isDrawerOpen() || summaryDialogOpen !== true) return;
+            closeSummaryDialog();
+            return;
+          }
+          if (!isDrawerOpen() || summaryDialogOpen === true || isTypingLikeTarget(event.target)) return;
+          var lower = String(event.key || '').toLowerCase();
+          var modifier = event.ctrlKey || event.metaKey;
+          if (!modifier) return;
+          if (!event.shiftKey && lower === 'z') {
+            if (undoLatestDeleteSelection()) {
+              if (event.preventDefault) event.preventDefault();
+              if (event.stopPropagation) event.stopPropagation();
+            }
+            return;
+          }
+          if ((event.shiftKey && lower === 'z') || (!event.shiftKey && lower === 'y')) {
+            if (redoLatestDeleteSelection()) {
+              if (event.preventDefault) event.preventDefault();
+              if (event.stopPropagation) event.stopPropagation();
+            }
+          }
+        }, true);
       }
+      syncDeleteHistoryButtons();
     }
 
     function bindRenderListeners() {

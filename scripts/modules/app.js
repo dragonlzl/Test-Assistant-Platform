@@ -3406,6 +3406,8 @@
         rootSnapshots: [],
         deletedBaselineModuleKeys: [],
         deletedBaselineCaseKeys: [],
+        deleteUndoStack: [],
+        deleteRedoStack: [],
         root: {
           lastAction: '',
           running: false,

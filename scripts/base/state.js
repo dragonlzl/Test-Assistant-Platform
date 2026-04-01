@@ -149,6 +149,8 @@
         lastOperationSnapshotId: '',
         rootSnapshotId: '',
         rootSnapshots: [],
+        deleteUndoStack: [],
+        deleteRedoStack: [],
         root: {
           lastAction: '',
           running: false,

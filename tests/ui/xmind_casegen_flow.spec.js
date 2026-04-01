@@ -901,42 +901,11 @@ async function autoAcceptXmindConfirm(page) {
 
 async function ctrlClickXmindNodes(page, topics) {
   for (const topic of topics || []) {
-    const clicked = await page.evaluate((expectedTopic) => {
-      var textNodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc .text');
-      var match = false;
-      Array.prototype.some.call(textNodes, function(textEl) {
-        if (!textEl || !textEl.getBoundingClientRect) return false;
-        var label = String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim();
-        var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
-        if (stableLabel !== expectedTopic && label !== expectedTopic) return false;
-        var nodeEl = textEl.closest ? textEl.closest('me-tpc') : null;
-        var isModuleNode = Boolean(nodeEl && nodeEl.classList && nodeEl.classList.contains('xmind-casegen-node-module'));
-        var targetEl = isModuleNode && nodeEl ? nodeEl : textEl;
-        if (!targetEl || !targetEl.getBoundingClientRect) return false;
-        var rect = targetEl.getBoundingClientRect();
-        var centerX = isModuleNode
-          ? rect.left + Math.max(16, Math.min(rect.width * 0.22, rect.width - 18))
-          : rect.left + (rect.width / 2);
-        var centerY = rect.top + (rect.height / 2);
-        ['mousedown', 'mouseup', 'click'].forEach(function(type) {
-          targetEl.dispatchEvent(new MouseEvent(type, {
-            bubbles: true,
-            cancelable: true,
-            clientX: centerX,
-            clientY: centerY,
-            button: 0,
-            buttons: type === 'mouseup' ? 0 : 1,
-            which: 1,
-            ctrlKey: true,
-          }));
-        });
-        match = true;
-        return true;
-      });
-      return match;
-    }, topic);
-    expect(clicked).toBeTruthy();
-    await page.waitForTimeout(80);
+    await page.locator('#xmindCaseGenMindContainer me-tpc .text').filter({ hasText: topic }).first().click({
+      force: true,
+      modifiers: ['Control'],
+    });
+    await page.waitForTimeout(240);
   }
 }
 
@@ -952,37 +921,9 @@ async function clickXmindNode(page, topicText) {
       return stableLabel === topic || label === topic;
     });
   }, topicText, { timeout: 15000 });
-  const clicked = await page.evaluate((topic) => {
-    var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
-    var target = null;
-    Array.prototype.some.call(nodes, function(node) {
-      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
-      var label = textEl
-        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
-        : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
-      if (!(stableLabel === topic || label === topic)) return false;
-      target = textEl || node;
-      return true;
-    });
-    if (!target || !target.getBoundingClientRect) return false;
-    var rect = target.getBoundingClientRect();
-    var centerX = rect.left + (rect.width / 2);
-    var centerY = rect.top + (rect.height / 2);
-    ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(function(type) {
-      target.dispatchEvent(new MouseEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        clientX: centerX,
-        clientY: centerY,
-        button: 0,
-        buttons: type === 'mouseup' || type === 'click' ? 0 : 1,
-        which: 1,
-      }));
-    });
-    return true;
-  }, topicText);
-  expect(clicked).toBeTruthy();
+  await page.locator('#xmindCaseGenMindContainer me-tpc .text').filter({ hasText: topicText }).first().click({
+    force: true,
+  });
   await page.waitForTimeout(80);
 }
 
@@ -1094,23 +1035,67 @@ async function pressDeleteInXmind(page) {
   await page.waitForTimeout(60);
 }
 
+async function pressDeleteUndoInXmind(page) {
+  const hasViewer = await page.evaluate(() => {
+    var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+      || document.getElementById('xmindCaseGenMindContainer');
+    if (!viewer || typeof viewer.focus !== 'function') return false;
+    viewer.focus();
+    return true;
+  });
+  expect(hasViewer).toBeTruthy();
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(120);
+}
+
+async function pressDeleteRedoInXmind(page) {
+  const hasViewer = await page.evaluate(() => {
+    var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+      || document.getElementById('xmindCaseGenMindContainer');
+    if (!viewer || typeof viewer.focus !== 'function') return false;
+    viewer.focus();
+    return true;
+  });
+  expect(hasViewer).toBeTruthy();
+  await page.keyboard.press('Control+Shift+z');
+  await page.waitForTimeout(120);
+}
+
 async function readSelectedXmindNodeCount(page) {
   return page.evaluate(() => {
-    var selected = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-box-selected');
-    return selected ? selected.length : 0;
+    var selected = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-box-selected, #xmindCaseGenMindContainer .selected');
+    var seen = {};
+    Array.prototype.forEach.call(selected || [], function(node) {
+      var host = node && node.closest ? node.closest('me-tpc') : node;
+      var textEl = host && host.querySelector ? host.querySelector('.text') : null;
+      var label = textEl
+        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+        : '';
+      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      if (!stableLabel) return;
+      seen[stableLabel] = true;
+    });
+    return Object.keys(seen).length;
   });
 }
 
 async function readSelectedXmindNodeLabels(page) {
   return page.evaluate(() => {
-    var selected = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-box-selected');
-    return Array.prototype.map.call(selected || [], function(node) {
-      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+    var selected = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-box-selected, #xmindCaseGenMindContainer .selected');
+    var labels = [];
+    var seen = {};
+    Array.prototype.forEach.call(selected || [], function(node) {
+      var host = node && node.closest ? node.closest('me-tpc') : node;
+      var textEl = host && host.querySelector ? host.querySelector('.text') : null;
       var label = textEl
         ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      return label.replace(/\s*\+AI\s*$/, '').trim();
-    }).filter(Boolean);
+      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      if (!stableLabel || seen[stableLabel]) return;
+      seen[stableLabel] = true;
+      labels.push(stableLabel);
+    });
+    return labels;
   });
 }
 
@@ -2350,8 +2335,11 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '登录成功校验');
     await waitForNodeText(page, '支付模块');
     await autoAcceptXmindConfirm(page);
-    await ctrlClickXmindNodes(page, ['支付模块', '登录成功校验']);
-    expect(await readSelectedXmindNodeCount(page)).toBeGreaterThanOrEqual(2);
+    await clickXmindNode(page, '支付模块');
+    await ctrlClickXmindNodes(page, ['登录成功校验']);
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeCount(page);
+    }).toBeGreaterThanOrEqual(2);
     await pressDeleteInXmind(page);
     await page.waitForFunction(() => Boolean(window.__xmindConfirmPayload), {}, { timeout: 5000 });
 
@@ -2376,6 +2364,170 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(String(lastCall.user || '')).not.toContain('支付模块');
     expect(String(lastCall.user || '')).not.toContain('登录成功校验');
     expect(String(lastCall.user || '')).toContain('登录失败提示');
+  });
+
+  test('工具栏支持撤回删除和恢复删除，且仅针对删除历史生效', async ({ page }) => {
+    const token = 'token-xmind-delete-undo-toolbar';
+    const user = { id: 45, username: 'demo_user_45', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 180);
+    await seedDocumentRequirement(page, {
+      text: '需求：支持在 XMind 用例生成页撤回删除和恢复删除，且不影响生成历史。',
+      requirementLabel: 'XMind删除撤回需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }, {
+        module: '登录模块',
+        title: '登录失败提示',
+        priority: 'P2',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入错误密码并提交'],
+        expected: '提示账号或密码错误',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '登录失败提示');
+    await expect(page.locator('#xmindCaseGenDeleteUndoBtn')).toBeDisabled();
+    await expect(page.locator('#xmindCaseGenDeleteRedoBtn')).toBeDisabled();
+
+    await autoAcceptXmindConfirm(page);
+    await openNodeContextMenu(page, '登录成功校验');
+    await clickContextMenuAction(page, '删除');
+    await waitForNodeTextAbsent(page, '登录成功校验');
+
+    await expect(page.locator('#xmindCaseGenDeleteUndoBtn')).toBeEnabled();
+    await expect(page.locator('#xmindCaseGenDeleteRedoBtn')).toBeDisabled();
+
+    let stateAfterDelete = await readState(page);
+    let loginCases = JSON.parse(String(stateAfterDelete.caseGenResults['xmind-mod-login'] || '[]'));
+    expect(loginCases.map((item) => item.title)).toEqual(['登录失败提示']);
+    expect((stateAfterDelete.xmindCaseGen.deleteUndoStack || []).length).toBe(1);
+    expect((stateAfterDelete.xmindCaseGen.deleteRedoStack || []).length).toBe(0);
+
+    await page.click('#xmindCaseGenDeleteUndoBtn');
+    await waitForNodeText(page, '登录成功校验');
+    await expect(page.locator('#xmindCaseGenDeleteUndoBtn')).toBeDisabled();
+    await expect(page.locator('#xmindCaseGenDeleteRedoBtn')).toBeEnabled();
+
+    stateAfterDelete = await readState(page);
+    loginCases = JSON.parse(String(stateAfterDelete.caseGenResults['xmind-mod-login'] || '[]'));
+    expect(loginCases.map((item) => item.title)).toEqual(['登录成功校验', '登录失败提示']);
+    expect((stateAfterDelete.xmindCaseGen.deleteUndoStack || []).length).toBe(0);
+    expect((stateAfterDelete.xmindCaseGen.deleteRedoStack || []).length).toBe(1);
+    expect((stateAfterDelete.xmindCaseGen.operationSnapshots || []).length).toBe(0);
+
+    await page.click('#xmindCaseGenDeleteRedoBtn');
+    await waitForNodeTextAbsent(page, '登录成功校验');
+    await expect(page.locator('#xmindCaseGenDeleteUndoBtn')).toBeEnabled();
+    await expect(page.locator('#xmindCaseGenDeleteRedoBtn')).toBeDisabled();
+
+    stateAfterDelete = await readState(page);
+    loginCases = JSON.parse(String(stateAfterDelete.caseGenResults['xmind-mod-login'] || '[]'));
+    expect(loginCases.map((item) => item.title)).toEqual(['登录失败提示']);
+    expect((stateAfterDelete.xmindCaseGen.deleteUndoStack || []).length).toBe(1);
+    expect((stateAfterDelete.xmindCaseGen.deleteRedoStack || []).length).toBe(0);
+  });
+
+  test('键盘快捷键支持撤回删除和恢复删除', async ({ page }) => {
+    const token = 'token-xmind-delete-undo-shortcut';
+    const user = { id: 46, username: 'demo_user_46', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 180);
+    await seedDocumentRequirement(page, {
+      text: '需求：支持通过快捷键撤回删除和恢复删除。',
+      requirementLabel: 'XMind删除快捷键需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }, {
+      id: 'xmind-mod-pay',
+      title: '支付模块',
+      scenarios: ['支付主场景'],
+      points: ['支付结果校验'],
+      coupled: ['订单中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }],
+      'xmind-mod-pay': [{
+        module: '支付模块',
+        title: '支付成功校验',
+        priority: 'P1',
+        preconditions: '订单待支付',
+        steps: ['1、进入支付页', '2、完成支付'],
+        expected: '支付成功',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '支付模块');
+    await autoAcceptXmindConfirm(page);
+    await openNodeContextMenu(page, '支付模块');
+    await clickContextMenuAction(page, '删除');
+    await waitForNodeTextAbsent(page, '支付模块');
+    let stateAfterUndo = await readState(page);
+    expect((stateAfterUndo.xmindCaseGen.deleteUndoStack || []).length).toBe(1);
+    expect((stateAfterUndo.xmindCaseGen.deleteRedoStack || []).length).toBe(0);
+
+    await pressDeleteUndoInXmind(page);
+    await waitForNodeText(page, '支付模块');
+
+    stateAfterUndo = await readState(page);
+    expect((stateAfterUndo.caseGenModules || []).map((item) => item.title)).toEqual(['登录模块', '支付模块']);
+    expect((stateAfterUndo.xmindCaseGen.deleteUndoStack || []).length).toBe(0);
+    expect((stateAfterUndo.xmindCaseGen.deleteRedoStack || []).length).toBe(1);
+
+    await pressDeleteRedoInXmind(page);
+    await waitForNodeTextAbsent(page, '支付模块');
+
+    stateAfterUndo = await readState(page);
+    expect((stateAfterUndo.caseGenModules || []).map((item) => item.title)).toEqual(['登录模块']);
+    expect((stateAfterUndo.xmindCaseGen.deleteUndoStack || []).length).toBe(1);
+    expect((stateAfterUndo.xmindCaseGen.deleteRedoStack || []).length).toBe(0);
   });
 
   test('普通单击节点会保持单选高亮，并能从多选收敛为当前节点', async ({ page }) => {
@@ -2431,7 +2583,9 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(await readSelectedXmindNodeLabels(page)).toEqual(['登录成功校验']);
 
     await ctrlClickXmindNodes(page, ['登录失败提示']);
-    expect(await readSelectedXmindNodeCount(page)).toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeCount(page);
+    }).toBeGreaterThanOrEqual(2);
 
     await clickXmindNode(page, '登录模块');
     expect(await readSelectedXmindNodeCount(page)).toBe(1);

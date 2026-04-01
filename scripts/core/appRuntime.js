@@ -399,8 +399,15 @@
         treeSourceSignature: '',
         hasModuleSkeleton: false,
         hasImportedBaseline: false,
+        history: [],
+        operationSnapshots: [],
+        lastOperationSnapshotId: '',
         rootSnapshotId: '',
         rootSnapshots: [],
+        deletedBaselineModuleKeys: [],
+        deletedBaselineCaseKeys: [],
+        deleteUndoStack: [],
+        deleteRedoStack: [],
         root: {
           lastAction: '',
           running: false,
@@ -426,8 +433,14 @@
         state.caseGenProgressNotice.lastStates = {};
       }
       state.caseGenProgressNotice.dotVisible = state.caseGenProgressNotice.dotVisible === true;
+      if (!Array.isArray(state.xmindCaseGen.history)) state.xmindCaseGen.history = [];
+      if (!Array.isArray(state.xmindCaseGen.operationSnapshots)) state.xmindCaseGen.operationSnapshots = [];
       if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) state.xmindCaseGen.rootSnapshots = [];
+      if (!Array.isArray(state.xmindCaseGen.deletedBaselineModuleKeys)) state.xmindCaseGen.deletedBaselineModuleKeys = [];
+      if (!Array.isArray(state.xmindCaseGen.deletedBaselineCaseKeys)) state.xmindCaseGen.deletedBaselineCaseKeys = [];
+      if (!Array.isArray(state.xmindCaseGen.deleteUndoStack)) state.xmindCaseGen.deleteUndoStack = [];
+      if (!Array.isArray(state.xmindCaseGen.deleteRedoStack)) state.xmindCaseGen.deleteRedoStack = [];
       if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') state.xmindCaseGen.modules = {};
       if (!state.xmindCaseGen.root || typeof state.xmindCaseGen.root !== 'object') {
         state.xmindCaseGen.root = {
@@ -444,7 +457,14 @@
       state.xmindCaseGen.treeSourceSignature = String(state.xmindCaseGen.treeSourceSignature || '');
       state.xmindCaseGen.hasModuleSkeleton = state.xmindCaseGen.hasModuleSkeleton === true;
       state.xmindCaseGen.hasImportedBaseline = state.xmindCaseGen.hasImportedBaseline === true;
+      state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
+      state.xmindCaseGen.deletedBaselineModuleKeys = state.xmindCaseGen.deletedBaselineModuleKeys.map(function(item) {
+        return String(item || '').trim().toLowerCase();
+      }).filter(Boolean);
+      state.xmindCaseGen.deletedBaselineCaseKeys = state.xmindCaseGen.deletedBaselineCaseKeys.map(function(item) {
+        return String(item || '').trim();
+      }).filter(Boolean);
       state.xmindCaseGen.summaryCollapsed = state.xmindCaseGen.summaryCollapsed === true;
       if (!state.xmindCaseGen.prep || typeof state.xmindCaseGen.prep !== 'object') {
         state.xmindCaseGen.prep = {

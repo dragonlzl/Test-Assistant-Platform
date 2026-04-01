@@ -19,6 +19,34 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 用例生成支持删除撤回与恢复删除
+- 功能描述：为 `XMind 用例生成` 抽屉补充删除专用的撤回/恢复能力。现在删除模块或用例后，可通过工具栏的 `撤回删除`、`恢复删除`，或键盘 `Ctrl/Cmd + Z`、`Ctrl/Cmd + Shift + Z` / `Ctrl/Cmd + Y` 来回退或重做最近的删除；这套能力只记录删除历史，不会误把普通生成、补全、放弃本次生成纳入撤回范围。
+- 操作方式：
+  - 在 `用例生成` 页打开 `XMind 用例生成` 抽屉；
+  - 通过右键菜单或 `Delete` 删除模块/用例后，工具栏中的 `撤回删除` 会变为可用；
+  - 点击 `撤回删除`，或按 `Ctrl/Cmd + Z`，即可恢复最近一次删除；
+  - 点击 `恢复删除`，或按 `Ctrl/Cmd + Shift + Z` / `Ctrl/Cmd + Y`，即可重新应用刚刚撤回的删除；
+  - 一旦执行新的删除，会自动清空旧的“恢复删除”栈；若执行新的生成/回滚，也会清空删除撤回栈，避免和当前可见树冲突。
+- 使用效果：
+  - 用户不需要依赖整批 `放弃本次生成` 才能找回误删的模块或用例，删除操作本身可细粒度回退；
+  - 撤回/恢复删除只针对删除生效，不会把根节点或模块节点的生成历史误当成撤回目标；
+  - 删除撤回后，XMind 画布、共享 `caseGenModules/caseGenResults` 真源和基线隐藏层会同步恢复，刷新后仍保持当前删除历史状态。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增删除历史栈、删除前后快照、工具栏按钮状态同步、删除撤回/恢复删除执行逻辑，以及 `Ctrl/Cmd + Z` / `Ctrl/Cmd + Shift + Z` / `Ctrl/Cmd + Y` 快捷键；
+  - `ai-workflow.html`、`index.html`：为 XMind 用例生成工具栏新增 `撤回删除`、`恢复删除` 按钮；
+  - `scripts/base/state.js`、`scripts/core/appRuntime.js`、`scripts/core/casesGenCore.js`、`scripts/modules/app.js`：补齐 `state.xmindCaseGen.deleteUndoStack/deleteRedoStack` 的默认值、恢复与重置逻辑；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增工具栏按钮撤回/恢复删除与键盘快捷键回归；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 `xmindCasegen` 删除计划、共享 `caseGenModules/caseGenResults` 真源、`deletedBaselineModuleKeys/deletedBaselineCaseKeys` 基线隐藏层和现有 XMind 工具栏；没有复用 `用例库/用例执行` 的编辑态 `undo/redo`，因为本需求要求撤回能力只对删除生效。
+- 测试与验证：
+  - 自查 code review：确认删除撤回/恢复删除只记录删除历史，不会把普通生成链路纳入撤回；新生成、放弃本次生成和重置前置准备会主动清空删除历史，避免状态冲突。
+  - `node --check index.html`（跳过，静态 HTML）
+  - `node --check scripts/modules/xmindCasegen.js scripts/core/appRuntime.js scripts/core/casesGenCore.js scripts/modules/app.js tests/ui/xmind_casegen_flow.spec.js`，通过
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "工具栏支持撤回删除和恢复删除，且仅针对删除历史生效|键盘快捷键支持撤回删除和恢复删除|支持按住 Ctrl 点击多个模块或用例后批量删除，后续生成上下文与当前可见树保持一致|支持鼠标框选多条用例后批量删除" --reporter=line`，4 项全部通过
+  - 本次未改动后端接口，未新增 API 用例。
+- 更新记录：
+  - 2026-04-01 为 XMind 用例生成补充删除专用撤回/恢复删除按钮和快捷键，且撤回范围严格限定为删除历史。
+
 - 功能名称：执行页/用例库 XMind 结构展示同步多选交互
 - 功能描述：将 `XMind 用例生成` 抽屉里已经落地的只读态多选能力同步到 `用例执行` 和 `用例库` 的 XMind 结构展示抽屉。现在这两个页面的 XMind 只读结构图也支持普通单击单选、`Ctrl/Cmd` 点击多选，以及保持原有的空白区域拖动画布、右键拖动画布、缩放/搜索/全屏等交互不回退。
 - 操作方式：
