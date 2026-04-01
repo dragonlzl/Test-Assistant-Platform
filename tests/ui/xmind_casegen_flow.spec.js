@@ -909,11 +909,17 @@ async function ctrlClickXmindNodes(page, topics) {
         var label = String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim();
         var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
         if (stableLabel !== expectedTopic && label !== expectedTopic) return false;
-        var rect = textEl.getBoundingClientRect();
-        var centerX = rect.left + (rect.width / 2);
+        var nodeEl = textEl.closest ? textEl.closest('me-tpc') : null;
+        var isModuleNode = Boolean(nodeEl && nodeEl.classList && nodeEl.classList.contains('xmind-casegen-node-module'));
+        var targetEl = isModuleNode && nodeEl ? nodeEl : textEl;
+        if (!targetEl || !targetEl.getBoundingClientRect) return false;
+        var rect = targetEl.getBoundingClientRect();
+        var centerX = isModuleNode
+          ? rect.left + Math.max(16, Math.min(rect.width * 0.22, rect.width - 18))
+          : rect.left + (rect.width / 2);
         var centerY = rect.top + (rect.height / 2);
-        ['mousedown', 'mouseup', 'click'].forEach(function(type, index) {
-          textEl.dispatchEvent(new MouseEvent(type, {
+        ['mousedown', 'mouseup', 'click'].forEach(function(type) {
+          targetEl.dispatchEvent(new MouseEvent(type, {
             bubbles: true,
             cancelable: true,
             clientX: centerX,
@@ -1079,21 +1085,12 @@ async function pressDeleteInXmind(page) {
   const hasViewer = await page.evaluate(() => {
     var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
       || document.getElementById('xmindCaseGenMindContainer');
-    if (!viewer || !viewer.dispatchEvent) return false;
-    viewer.setAttribute('tabindex', '0');
+    if (!viewer || typeof viewer.focus !== 'function') return false;
     if (typeof viewer.focus === 'function') viewer.focus();
-    var evt = new KeyboardEvent('keydown', {
-      key: 'Delete',
-      code: 'Delete',
-      keyCode: 46,
-      which: 46,
-      bubbles: true,
-      cancelable: true,
-    });
-    viewer.dispatchEvent(evt);
     return true;
   });
   expect(hasViewer).toBeTruthy();
+  await page.keyboard.press('Delete');
   await page.waitForTimeout(60);
 }
 

@@ -136,6 +136,154 @@ async function getCanvasScale(page, selector) {
   });
 }
 
+async function clickStructureNode(page, viewerSelector, topicText, options) {
+  var opts = options || {};
+  await page.waitForFunction(({ viewer, topic }) => {
+    var nodes = document.querySelectorAll(viewer + ' me-tpc');
+    return Array.prototype.some.call(nodes, function(node) {
+      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+      var label = textEl
+        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+        : '';
+      return label === topic;
+    });
+  }, {
+    viewer: viewerSelector,
+    topic: topicText,
+  }, { timeout: 15000 });
+  if (opts.ctrlKey === true) {
+    await page.evaluate(({ viewer, topic }) => {
+      var nodes = document.querySelectorAll(viewer + ' me-tpc');
+      var target = null;
+      Array.prototype.some.call(nodes, function(node) {
+        var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+        var label = textEl
+          ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+          : '';
+        if (label !== topic) return false;
+        target = textEl || node;
+        return true;
+      });
+      if (!target || typeof target.dispatchEvent !== 'function') return false;
+      ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(function(type) {
+        var EventCtor = type.indexOf('pointer') === 0 ? PointerEvent : MouseEvent;
+        var evt = new EventCtor(type, {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          button: 0,
+          buttons: type === 'pointerup' || type === 'mouseup' || type === 'click' ? 0 : 1,
+        });
+        target.dispatchEvent(evt);
+      });
+      return true;
+    }, {
+      viewer: viewerSelector,
+      topic: topicText,
+    });
+  } else {
+    await page.locator(viewerSelector + ' me-tpc .text').filter({ hasText: topicText }).first().click({
+      force: true,
+    });
+  }
+  await page.waitForTimeout(opts.ctrlKey === true ? 240 : 80);
+}
+
+async function ctrlClickStructureNodes(page, viewerSelector, topics) {
+  for (var i = 0; i < (topics || []).length; i += 1) {
+    await clickStructureNode(page, viewerSelector, topics[i], { ctrlKey: true });
+  }
+}
+
+async function readSelectedStructureLabels(page, viewerSelector) {
+  return page.evaluate((viewer) => {
+    var selected = document.querySelectorAll(viewer + ' me-tpc.xmind-box-selected, ' + viewer + ' .selected');
+    var labels = [];
+    var seen = {};
+    Array.prototype.forEach.call(selected || [], function(node) {
+      var host = node && node.closest ? node.closest('me-tpc') : node;
+      var textEl = host && host.querySelector ? host.querySelector('.text') : null;
+      var label = textEl
+        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+        : '';
+      if (!label || seen[label]) return;
+      seen[label] = true;
+      labels.push(label);
+    });
+    return labels;
+  }, viewerSelector);
+}
+
+async function readSelectedStructureCount(page, viewerSelector) {
+  return page.evaluate((viewer) => {
+    var selected = document.querySelectorAll(viewer + ' me-tpc.xmind-box-selected, ' + viewer + ' .selected');
+    var seen = {};
+    Array.prototype.forEach.call(selected || [], function(node) {
+      var host = node && node.closest ? node.closest('me-tpc') : node;
+      var textEl = host && host.querySelector ? host.querySelector('.text') : null;
+      var label = textEl
+        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+        : '';
+      if (!label) return;
+      seen[label] = true;
+    });
+    return Object.keys(seen).length;
+  }, viewerSelector);
+}
+
+async function clearStructureSelection(page, viewerSelector) {
+  var cleared = await page.evaluate((viewer) => {
+    var canvas = document.querySelector(viewer + ' .xmind-structure-canvas');
+    if (!canvas || !canvas.getBoundingClientRect) return false;
+    var rect = canvas.getBoundingClientRect();
+    var pointX = rect.left + 12;
+    var pointY = rect.top + 12;
+    ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(function(type) {
+      canvas.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: pointX,
+        clientY: pointY,
+        button: 0,
+        buttons: type === 'mouseup' || type === 'click' ? 0 : 1,
+        which: 1,
+      }));
+    });
+    return true;
+  }, viewerSelector);
+  expect(cleared).toBeTruthy();
+  await page.waitForTimeout(80);
+}
+
+async function findStructureCanvasBlankPoint(page, viewerSelector) {
+  var point = await page.evaluate((viewer) => {
+    var canvas = document.querySelector(viewer + ' .xmind-structure-canvas');
+    if (!canvas || !canvas.getBoundingClientRect || typeof document.elementsFromPoint !== 'function') return null;
+    var rect = canvas.getBoundingClientRect();
+    var cols = [0.12, 0.2, 0.28, 0.72, 0.8, 0.88, 0.5];
+    var rows = [0.16, 0.28, 0.4, 0.6, 0.74, 0.86, 0.5];
+    for (var ri = 0; ri < rows.length; ri += 1) {
+      for (var ci = 0; ci < cols.length; ci += 1) {
+        var x = rect.left + (rect.width * cols[ci]);
+        var y = rect.top + (rect.height * rows[ri]);
+        var stack = document.elementsFromPoint(x, y) || [];
+        var blocked = stack.some(function(el) {
+          return Boolean(el && el.closest && el.closest('me-tpc'));
+        });
+        if (!blocked) {
+          return { x: x, y: y };
+        }
+      }
+    }
+    return {
+      x: rect.left + (rect.width * 0.1),
+      y: rect.top + (rect.height * 0.1),
+    };
+  }, viewerSelector);
+  expect(point).toBeTruthy();
+  return point;
+}
+
 function buildCaseLibraryRoutes(page, options) {
   const {
     token,
@@ -359,14 +507,20 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-search-count]')).toHaveText(/1\s*\/\s*1/);
     await page.click('#tempExecXmindStructureViewer [data-mind-action="search-clear"]');
     await expect(page.locator('#tempExecXmindStructureViewer [data-mind-search-count]')).toHaveText(/0\s*\/\s*0/);
+    await clickStructureNode(page, '#tempExecXmindStructureViewer', '支付模块');
+    expect(await readSelectedStructureCount(page, '#tempExecXmindStructureViewer')).toBe(1);
+    expect(await readSelectedStructureLabels(page, '#tempExecXmindStructureViewer')).toEqual(['支付模块']);
+    await clearStructureSelection(page, '#tempExecXmindStructureViewer');
+    expect(await readSelectedStructureCount(page, '#tempExecXmindStructureViewer')).toBe(0);
 
     var ctrlDragInitX = 0;
     var ctrlDragInitY = 0;
     var canvasForInitCtrlDrag = page.locator('#tempExecXmindStructureViewer .xmind-structure-canvas');
     var initCtrlDragBox = await canvasForInitCtrlDrag.boundingBox();
     if (!initCtrlDragBox) throw new Error('执行页 XMind 画布未渲染（初始Ctrl拖动）');
-    ctrlDragInitX = initCtrlDragBox.x + (initCtrlDragBox.width / 2) - 40;
-    ctrlDragInitY = initCtrlDragBox.y + (initCtrlDragBox.height / 2) - 30;
+    var initCtrlDragPoint = await findStructureCanvasBlankPoint(page, '#tempExecXmindStructureViewer');
+    ctrlDragInitX = initCtrlDragPoint.x;
+    ctrlDragInitY = initCtrlDragPoint.y;
     var transformBeforeInitCtrlDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
     var scaleBeforeInitCtrlDrag = await getCanvasScale(page, '#tempExecXmindStructureViewer .map-canvas');
     await page.keyboard.down('Control');
@@ -435,8 +589,9 @@ test.describe('XMind 结构展示按钮', () => {
     var transformAfterDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
     expect(transformAfterDrag).not.toBe(transformBeforeDrag);
 
-    var ctrlDragStartX = dragBox.x + (dragBox.width / 2) - 30;
-    var ctrlDragStartY = dragBox.y + (dragBox.height / 2) - 20;
+    var ctrlDragPoint = await findStructureCanvasBlankPoint(page, '#tempExecXmindStructureViewer');
+    var ctrlDragStartX = ctrlDragPoint.x;
+    var ctrlDragStartY = ctrlDragPoint.y;
     var transformBeforeCtrlDrag = await getCanvasTransform(page, '#tempExecXmindStructureViewer .map-canvas');
     await page.keyboard.down('Control');
     await page.mouse.move(ctrlDragStartX, ctrlDragStartY);
@@ -835,6 +990,12 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     await page.fill('#caseLibraryXmindStructureViewer [data-mind-search-input]', '创建订单成功');
     await expect(page.locator('#caseLibraryXmindStructureViewer [data-mind-search-count]')).toHaveText(/1\s*\/\s*1/);
+    await page.click('#caseLibraryXmindStructureViewer [data-mind-action="search-clear"]');
+    await clickStructureNode(page, '#caseLibraryXmindStructureViewer', '订单模块');
+    expect(await readSelectedStructureCount(page, '#caseLibraryXmindStructureViewer')).toBe(1);
+    expect(await readSelectedStructureLabels(page, '#caseLibraryXmindStructureViewer')).toEqual(['订单模块']);
+    await clearStructureSelection(page, '#caseLibraryXmindStructureViewer');
+    expect(await readSelectedStructureCount(page, '#caseLibraryXmindStructureViewer')).toBe(0);
 
     var beforeZoom = await getCanvasTransform(page, '#caseLibraryXmindStructureViewer .map-canvas');
     await page.click('#caseLibraryXmindStructureViewer [data-mind-action="zoom-in"]');

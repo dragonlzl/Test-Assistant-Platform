@@ -3764,6 +3764,7 @@
       caseLibraryXmindMindInstance = mindApi.renderMindMap(container, mindData, {
         instance: caseLibraryXmindMindInstance,
         direction: 'right',
+        enableCustomBoxSelection: true,
         onExportXmind: exportCurrentCaseLibraryXmind,
         editableSessionKey: 'tap-case-library-xmind-edit-' + String(currentFile.id || ''),
         onSaveCases: saveCaseLibraryXmindCases,

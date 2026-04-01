@@ -19,6 +19,53 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：执行页/用例库 XMind 结构展示同步多选交互
+- 功能描述：将 `XMind 用例生成` 抽屉里已经落地的只读态多选能力同步到 `用例执行` 和 `用例库` 的 XMind 结构展示抽屉。现在这两个页面的 XMind 只读结构图也支持普通单击单选、`Ctrl/Cmd` 点击多选，以及保持原有的空白区域拖动画布、右键拖动画布、缩放/搜索/全屏等交互不回退。
+- 操作方式：
+  - 在 `用例执行` 或 `用例库` 页面打开 `XMind 结构展示` 抽屉；
+  - 普通单击模块或用例节点，可进入单选高亮；
+  - 按住 `Ctrl`（macOS 可用 `Cmd`）再点击多个模块/用例节点，可累加多选；
+  - 单击空白区域可清空选中；`Ctrl + 左键` 在空白画布区域仍可拖动画布。
+- 使用效果：
+  - 执行页和用例库的 XMind 结构图交互与 XMind 用例生成页保持一致，用户不需要记两套操作方式；
+  - 多选时会按“模块节点”或“整条用例”作为选择单元，不会只选中某个字段节点；
+  - 进入编辑态后，原生单选、`Ctrl` 多选和框选能力仍然可用，不会再被只读态自定义框选逻辑拦截；
+  - 原有查看类能力不受影响，仍可继续搜索、全览、缩放、全屏、导出和双击定位。
+- 新增内容/接口/组件：
+  - `scripts/core/mindElixirCore.js`：为开启 `enableCustomBoxSelection` 的标准用例树补充默认选择分组规则，模块节点按模块分组，用例标题/优先级/前置条件/步骤/预期等字段按整条用例分组；
+  - `scripts/core/mindElixirCore.js`：编辑态切入时主动清理只读态自定义框选/多选状态，并禁止编辑态再进入共享只读框选流程，避免拦截 MindElixir 原生选中；
+  - `scripts/core/mindElixirCore.js`：读取当前选区时统一把字段节点折叠到模块或整条用例的首选锚点，删除前再做父子节点去重，避免框选或 `Ctrl` 多选后只删掉一条字段节点；
+  - `scripts/modules/tempexec.js`：执行页 XMind 结构抽屉开启只读态多选能力；
+  - `scripts/modules/caseLibrary.js`：用例库 XMind 结构抽屉开启只读态多选能力；
+  - `tests/ui/xmind_structure_view_buttons.spec.js`：补充执行页、用例库的 `Ctrl` 多选/单选收敛回归，并调整 `Ctrl + 左键拖动画布` 用例为命中空白画布区域；
+  - `tests/ui/xmind_structure_edit_selection.spec.js`：新增执行页、用例库 XMind 编辑态的单选、`Ctrl` 多选和框选回归；
+  - `tests/ui/xmind_structure_view_selection.spec.js`：新增执行页、用例库 XMind 只读态 `Ctrl` 多选回归，覆盖搜索清空、全览、全屏切换后的真实点击链路；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补强模块节点 `Ctrl` 点击回归 helper，避免与模块 `+AI` 区域重叠导致测试不稳定；
+  - 未新增后端接口、路由或存储表。
+- 复用说明：继续复用共享 `mindElixirCore.renderMindMap()` 只读渲染链路和现有 XMind 结构抽屉；没有在执行页或用例库复制新的选择状态机，也没有新增后端依赖。
+- 测试与验证：
+  - 自查 code review：确认执行页和用例库只是在现有只读视图上开启共享多选能力，`XMind 用例生成` 的自定义节点分组仍优先，不会被默认分组覆盖；
+  - `node --check scripts/core/mindElixirCore.js`
+  - `node --check scripts/modules/tempexec.js`
+  - `node --check scripts/modules/caseLibrary.js`
+  - `node --check tests/ui/xmind_structure_view_buttons.spec.js`
+  - `node --check tests/ui/xmind_structure_edit_selection.spec.js`
+  - `node --check tests/ui/xmind_structure_view_selection.spec.js`
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_selection.spec.js --reporter=line`（2/2 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_selection.spec.js --reporter=line`（2/2 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_mode.spec.js --reporter=line`（4/4 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_edit_interactions.spec.js --reporter=line`（1/1 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_buttons.spec.js --reporter=line`（3/3 通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "支持按住 Ctrl 点击多个模块或用例后批量删除，后续生成上下文与当前可见树保持一致" --reporter=line`（1/1 通过）
+- 更新记录：
+  - 2026-03-31 将执行页与用例库的 XMind 结构展示同步到共享只读态多选交互；
+  - 2026-03-31 为标准用例树新增默认选择分组，避免只选中单个字段节点；
+  - 2026-03-31 保持 `Ctrl + 左键` 空白画布拖动、右键拖动和原有 XMind 查看交互不回退。
+  - 2026-04-01 修正执行页和用例库 XMind 结构抽屉在编辑态下的选择回归：进入编辑态后会清理只读态框选残留状态，恢复 MindElixir 原生单选、`Ctrl` 多选和鼠标框选。
+  - 2026-04-01 统一将编辑态/只读态选区映射到模块或整条用例的首选锚点，并在批量删除前剔除已被父节点覆盖的子节点，修正“框选多条后只删除其中一条”的问题。
+  - 2026-04-01 补充执行页和用例库 XMind 只读态 `Ctrl` 多选最小回归，覆盖搜索清空、全览、全屏切换后的真实点击链路。
+
 - 功能名称：XMind 用例生成支持删除与多选删除
 - 功能描述：为 `XMind 用例生成` 抽屉增加删除能力。现在模块节点、用例节点及其任意子节点都支持通过右键菜单执行 `删除`；同时支持多选后按键盘 `Delete` 批量删除模块和用例。删除会以当前可见树作为新的权威基线，并主动失效旧的“放弃本次生成”快照，避免后续生成或回退重新带回已删除内容。
 - 操作方式：
@@ -56,6 +103,7 @@
   - 2026-03-31 收窄 XMind 画布上的 `+AI` 快捷入口范围，只在模块节点显示，避免用例字段节点重复出现快捷按钮干扰阅读与操作。
   - 2026-03-31 补充只读态 XMind 的自定义框选与 `Ctrl`/`Cmd` 点击多选，支持按 `Delete` 批量删除模块和用例，同时确认不影响其他只读结构视图的拖动画布交互。
   - 2026-03-31 修正只读态 XMind 的普通单击选中行为：不按 `Ctrl`/`Cmd` 单击节点时会保持单选高亮；若此前已有多选，普通单击会收敛为当前节点的单选状态。
+  - 2026-03-31 修正 XMind 用例生成页真实键盘 `Delete` 删除失效问题：节点/画布交互后会把焦点收回到 XMind viewer，确保用户直接按键盘 `Delete` 就能触发删除，而不是只有测试里手工分发 `keydown` 才生效。
 
 - 功能名称：XMind 用例生成工具栏入口收敛
 - 功能描述：移除 XMind 用例生成抽屉工具栏中与“生成前置准备”重复的快捷操作，只保留 `生成前置准备`、`生成记录` 和 `导出当前XMind`。需求导入、参考用例导入、从用例库选择、生成全量模块、生成全量用例、生成选项统一收口到前置准备弹窗和树节点右键/`+AI` 入口，避免页面顶部重复操作造成理解负担。

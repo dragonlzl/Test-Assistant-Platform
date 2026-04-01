@@ -813,6 +813,9 @@
       if (!viewerEl || !canvasEl || !instance) return null;
 
       var opts = options || {};
+      if (viewerEl.setAttribute && !viewerEl.getAttribute('tabindex')) {
+        viewerEl.setAttribute('tabindex', '0');
+      }
       var controlsEl = viewerEl.querySelector ? viewerEl.querySelector('[data-mind-controls]') : null;
       var searchInputEl = controlsEl && controlsEl.querySelector
         ? controlsEl.querySelector('[data-mind-search-input]')
@@ -873,6 +876,19 @@
       var exportState = {
         pending: false,
       };
+
+      function focusViewerForKeyboard() {
+        if (!viewerEl || typeof viewerEl.focus !== 'function') return;
+        try {
+          viewerEl.focus({ preventScroll: true });
+        } catch (err) {
+          try {
+            viewerEl.focus();
+          } catch (err2) {
+            // ignore
+          }
+        }
+      }
 
       var enableCustomBoxSelection = Boolean(opts && opts.enableCustomBoxSelection === true);
       var boxPending = false;
@@ -967,6 +983,45 @@
           nodeObj: nodeObj,
           nodeEl: nodeEl || null,
         };
+      }
+
+      function buildDefaultSelectionGroupDescriptor(nodeMeta) {
+        if (!enableCustomBoxSelection || !nodeMeta) return null;
+        var path = Array.isArray(nodeMeta.path) ? nodeMeta.path.map(function(seg) {
+          return seg === null || seg === undefined ? '' : String(seg).trim();
+        }).filter(function(seg) {
+          return Boolean(seg);
+        }) : [];
+        if (!path.length) {
+          var rootTopic = nodeMeta.topic === null || nodeMeta.topic === undefined
+            ? ''
+            : String(nodeMeta.topic).trim();
+          if (!rootTopic) return null;
+          return {
+            key: 'root::' + encodeURIComponent(rootTopic),
+            preferred: true,
+          };
+        }
+        if (path.length === 1) {
+          return {
+            key: 'module::' + encodeURIComponent(path[0]),
+            preferred: true,
+          };
+        }
+        return {
+          key: 'case::' + encodeURIComponent(path[0]) + '::' + encodeURIComponent(path[1]),
+          preferred: path.length === 2,
+        };
+      }
+
+      function applyDefaultSelectionGroup(nodeEl, nodeMeta) {
+        if (!enableCustomBoxSelection || !nodeEl || !nodeEl.getAttribute || !nodeEl.setAttribute) return;
+        var existingGroup = String(nodeEl.getAttribute('data-xmind-select-group') || '').trim();
+        if (existingGroup) return;
+        var descriptor = buildDefaultSelectionGroupDescriptor(nodeMeta);
+        if (!descriptor || !descriptor.key) return;
+        nodeEl.setAttribute('data-xmind-select-group', String(descriptor.key));
+        nodeEl.setAttribute('data-xmind-select-preferred', descriptor.preferred ? '1' : '0');
       }
 
       function normalizeActionList(list) {
@@ -1587,12 +1642,58 @@
         var key = groupKey === null || groupKey === undefined ? '' : String(groupKey);
         if (!key || !viewerEl || !viewerEl.querySelectorAll) return null;
         var nodes = viewerEl.querySelectorAll('me-tpc[data-xmind-select-group]');
+        var fallback = null;
         for (var i = 0; i < nodes.length; i += 1) {
           var node = nodes[i];
           if (!node || !node.getAttribute) continue;
-          if (String(node.getAttribute('data-xmind-select-group') || '') === key) return node;
+          if (String(node.getAttribute('data-xmind-select-group') || '') !== key) continue;
+          if (!fallback) fallback = node;
+          if (node.getAttribute('data-xmind-select-preferred') === '1') return node;
         }
-        return null;
+        return fallback;
+      }
+
+      function resolveSelectionAnchorNode(node) {
+        if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return null;
+        var selectionGroupKey = node.getAttribute ? String(node.getAttribute('data-xmind-select-group') || '') : '';
+        if (!selectionGroupKey) return node;
+        return findViewerNodeBySelectionGroup(selectionGroupKey) || node;
+      }
+
+      function getSelectionIdentityKey(node) {
+        if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return '';
+        var key = node.getAttribute && node.getAttribute('data-xmind-select-group')
+          ? String(node.getAttribute('data-xmind-select-group'))
+          : '';
+        if (!key) {
+          key = node.getAttribute && node.getAttribute('data-nodeid')
+            ? String(node.getAttribute('data-nodeid'))
+            : '';
+        }
+        if (!key) {
+          var nodeId = node.nodeObj && node.nodeObj.id ? String(node.nodeObj.id) : '';
+          var locatePath = collectNodeLocatePath(node).join('>');
+          if (nodeId || locatePath) key = nodeId + '::' + locatePath;
+        }
+        return key;
+      }
+
+      function normalizeSelectionNodeList(nodes) {
+        var list = Array.isArray(nodes) ? nodes : [];
+        var out = [];
+        var seen = Object.create(null);
+        list.forEach(function(node) {
+          var anchorNode = resolveSelectionAnchorNode(node) || node;
+          if (!anchorNode || !anchorNode.tagName || String(anchorNode.tagName).toLowerCase() !== 'me-tpc') return;
+          var key = getSelectionIdentityKey(anchorNode);
+          if (!key) {
+            key = String(out.length + 1);
+          }
+          if (seen[key]) return;
+          seen[key] = true;
+          out.push(anchorNode);
+        });
+        return out;
       }
 
       function syncMindSelectionWithNodes(nodes) {
@@ -1625,9 +1726,9 @@
       }
 
       function applyCustomSelectionNodes(nodes) {
-        var selected = Array.isArray(nodes) ? nodes.filter(function(node) {
+        var selected = normalizeSelectionNodeList((Array.isArray(nodes) ? nodes : []).filter(function(node) {
           return Boolean(node && node.tagName && String(node.tagName).toLowerCase() === 'me-tpc');
-        }) : [];
+        }));
         setCustomSelectionNodes(selected);
         clearBoxSelectionClasses();
         syncMindSelectionWithNodes(selected);
@@ -1740,24 +1841,13 @@
         var seen = Object.create(null);
 
         function pushNode(node) {
-          if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return;
-          var key = node.getAttribute && node.getAttribute('data-xmind-select-group')
-            ? String(node.getAttribute('data-xmind-select-group'))
-            : '';
-          if (!key) {
-            key = node.getAttribute && node.getAttribute('data-nodeid')
-              ? String(node.getAttribute('data-nodeid'))
-              : '';
-          }
-          if (!key) {
-            var nodeId = node.nodeObj && node.nodeObj.id ? String(node.nodeObj.id) : '';
-            var locatePath = collectNodeLocatePath(node).join('>');
-            if (nodeId || locatePath) key = nodeId + '::' + locatePath;
-            else key = String(Math.random());
-          }
+          var anchorNode = resolveSelectionAnchorNode(node) || node;
+          if (!anchorNode || !anchorNode.tagName || String(anchorNode.tagName).toLowerCase() !== 'me-tpc') return;
+          var key = getSelectionIdentityKey(anchorNode);
+          if (!key) return;
           if (seen[key]) return;
           seen[key] = true;
-          out.push(node);
+          out.push(anchorNode);
         }
 
         var useCustomSelectionOnly = enableCustomBoxSelection && !editing && customSelectionNodes.length > 0;
@@ -1784,6 +1874,11 @@
         });
 
         if (viewerEl && viewerEl.querySelectorAll) {
+          var nativeSelected = viewerEl.querySelectorAll('.selected');
+          Array.prototype.forEach.call(nativeSelected, function(node) {
+            var hostNode = node && node.closest ? node.closest('me-tpc') : null;
+            pushNode(hostNode);
+          });
           var boxed = viewerEl.querySelectorAll('me-tpc.xmind-box-selected');
           Array.prototype.forEach.call(boxed, pushNode);
         }
@@ -1822,6 +1917,7 @@
               // ignore
             }
           }
+          applyDefaultSelectionGroup(nodeEl, nodeMeta);
         });
       }
 
@@ -1839,19 +1935,28 @@
 
       function toggleNodeInCustomSelection(nodeEl) {
         if (!enableCustomBoxSelection || !nodeEl) return [];
+        var targetNode = resolveSelectionAnchorNode(nodeEl) || nodeEl;
+        var targetKey = getSelectionIdentityKey(targetNode);
+        if (!targetKey) return [];
         var current = collectSelectedNodes();
         var next = [];
         var exists = false;
         current.forEach(function(node) {
           if (!node) return;
-          if (node === nodeEl) {
+          if (getSelectionIdentityKey(node) === targetKey) {
             exists = true;
             return;
           }
           next.push(node);
         });
-        if (!exists) next.push(nodeEl);
-        applyCustomSelectionNodes(next);
+        if (!exists) next.push(targetNode);
+        if (editing) {
+          setCustomSelectionNodes([]);
+          clearBoxSelectionClasses();
+          syncMindSelectionWithNodes(next);
+        } else {
+          applyCustomSelectionNodes(next);
+        }
         return next;
       }
 
@@ -1860,6 +1965,22 @@
         clearBoxSelectionClasses();
         if (syncMindSelection === true) {
           syncMindSelectionWithNodes([]);
+        }
+      }
+
+      function resetCustomSelectionInteractionState(syncMindSelection) {
+        boxPending = false;
+        boxSelecting = false;
+        boxMoved = false;
+        boxSuppressClickUntil = 0;
+        modifierSelectionSuppressClickUntil = 0;
+        clearClickNodeEditTimer();
+        clearCustomSelection(syncMindSelection === true);
+        if (viewerEl && viewerEl.classList) viewerEl.classList.remove('is-box-selecting');
+        if (boxRectEl && boxRectEl.style) {
+          boxRectEl.style.display = 'none';
+          boxRectEl.style.width = '0px';
+          boxRectEl.style.height = '0px';
         }
       }
 
@@ -1950,9 +2071,16 @@
 
       function selectSingleNodeForContextMenu(nodeEl, preserveExistingSelection) {
         if (!nodeEl) return;
-        if (preserveExistingSelection === true && isNodeCurrentlySelected(nodeEl)) return;
+        nodeEl = resolveSelectionAnchorNode(nodeEl) || nodeEl;
+        if (preserveExistingSelection === true && isNodeCurrentlySelected(nodeEl)) {
+          focusViewerForKeyboard();
+          return;
+        }
         var selected = collectSelectedNodes();
-        if (selected.length === 1 && selected[0] === nodeEl) return;
+        if (selected.length === 1 && selected[0] === nodeEl) {
+          focusViewerForKeyboard();
+          return;
+        }
         var inst = getInstance();
         if (enableCustomBoxSelection) {
           clearCustomSelection(false);
@@ -1967,6 +2095,7 @@
         if (inst && typeof inst.selectNode === 'function') {
           try {
             inst.selectNode(nodeEl);
+            focusViewerForKeyboard();
             return;
           } catch (err1) {
             // ignore
@@ -1975,6 +2104,7 @@
         if (inst && typeof inst.selectNodes === 'function') {
           try {
             inst.selectNodes([nodeEl]);
+            focusViewerForKeyboard();
           } catch (err2) {
             // ignore
           }
@@ -1984,6 +2114,7 @@
       function resolveContextMenuTargetNode(target) {
         var nodeEl = target && target.closest ? target.closest('me-tpc') : null;
         if (nodeEl) {
+          nodeEl = resolveSelectionAnchorNode(nodeEl) || nodeEl;
           selectSingleNodeForContextMenu(nodeEl, true);
           return nodeEl;
         }
@@ -2162,6 +2293,19 @@
         if (!e || e.button !== 2) return;
         if (e.pointerType && e.pointerType !== 'mouse') return;
         if (isEventInsideMindControls(e.target)) return;
+        if (enableCustomBoxSelection && (isCtrlModifierActive(e) || e.metaKey)) {
+          var modifierNode = resolveViewerEventNode(e);
+          if (modifierNode) {
+            hideNodeContextMenu();
+            clearClickNodeEditTimer();
+            toggleNodeInCustomSelection(modifierNode);
+            focusViewerForKeyboard();
+            modifierSelectionSuppressClickUntil = Date.now() + 220;
+            updateEditButtons();
+            if (e.preventDefault) e.preventDefault();
+            return;
+          }
+        }
 
         if (rightDragGestureBlock.active) {
           rightDragGestureBlock.suppressContextUntil = Date.now() + 1800;
@@ -2196,6 +2340,19 @@
       function onViewerMouseDownGestureGuard(e) {
         if (!e || e.button !== 2) return;
         if (isEventInsideMindControls(e.target)) return;
+        if (enableCustomBoxSelection && (isCtrlModifierActive(e) || e.metaKey)) {
+          var modifierNode = resolveViewerEventNode(e);
+          if (modifierNode) {
+            hideNodeContextMenu();
+            clearClickNodeEditTimer();
+            toggleNodeInCustomSelection(modifierNode);
+            focusViewerForKeyboard();
+            modifierSelectionSuppressClickUntil = Date.now() + 220;
+            updateEditButtons();
+            if (e.preventDefault) e.preventDefault();
+            return;
+          }
+        }
         var nodeEl = resolveContextMenuTargetNode(e.target);
         var menuPayload = nodeEl ? resolveContextMenuPayload(nodeEl) : null;
         if (menuPayload && nodeEl && isNodeCurrentlySelected(nodeEl)) {
@@ -2251,10 +2408,32 @@
 
       function onViewerContextMenu(e) {
         if (!e) return;
+        if (enableCustomBoxSelection && modifierSelectionSuppressClickUntil && Date.now() <= modifierSelectionSuppressClickUntil) {
+          modifierSelectionSuppressClickUntil = 0;
+          hideNodeContextMenu();
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          return;
+        }
         if (isEventInsideMindControls(e.target)) return;
+        if (enableCustomBoxSelection && (e.ctrlKey || e.metaKey)) {
+          var modifierNodeEl = resolveViewerEventNode(e);
+          if (modifierNodeEl) {
+            hideNodeContextMenu();
+            clearClickNodeEditTimer();
+            toggleNodeInCustomSelection(modifierNodeEl);
+            focusViewerForKeyboard();
+            modifierSelectionSuppressClickUntil = Date.now() + 220;
+            updateEditButtons();
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            return;
+          }
+        }
         var nodeEl = resolveContextMenuTargetNode(e.target);
         var menuPayload = nodeEl ? resolveContextMenuPayload(nodeEl) : null;
         if (menuPayload && nodeEl && isNodeCurrentlySelected(nodeEl)) {
+          focusViewerForKeyboard();
           if (e.preventDefault) e.preventDefault();
           if (e.stopPropagation) e.stopPropagation();
           showNodeContextMenu(e.clientX, e.clientY, menuPayload);
@@ -2270,6 +2449,13 @@
 
       function onWindowContextMenu(e) {
         if (!e) return;
+        if (enableCustomBoxSelection && modifierSelectionSuppressClickUntil && Date.now() <= modifierSelectionSuppressClickUntil) {
+          modifierSelectionSuppressClickUntil = 0;
+          hideNodeContextMenu();
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopPropagation) e.stopPropagation();
+          return;
+        }
         if (isEventInsideMindControls(e.target)) return;
         if (isEventInsideMindCanvas(e.target)) {
           if (isNodeContextMenuOpen()) {
@@ -2336,15 +2522,16 @@
       }
 
       function beginModifierNodeSelection(e) {
-        if (!enableCustomBoxSelection || editing || pendingSave) return false;
+        if (!enableCustomBoxSelection || pendingSave) return false;
         if (!e || e.button !== 0) return false;
-        if (!(e.ctrlKey || e.metaKey)) return false;
+        if (!(isCtrlModifierActive(e) || e.metaKey)) return false;
         if (isEventInsideMindControls(e.target)) return false;
         var nodeEl = resolveViewerEventNode(e);
         if (!nodeEl) return false;
         hideNodeContextMenu();
         clearClickNodeEditTimer();
         toggleNodeInCustomSelection(nodeEl);
+        focusViewerForKeyboard();
         modifierSelectionSuppressClickUntil = Date.now() + 220;
         updateEditButtons();
         if (e.preventDefault) e.preventDefault();
@@ -2437,6 +2624,7 @@
 
       function startBoxSelection(e) {
         if (!enableCustomBoxSelection) return;
+        if (editing || pendingSave) return;
         if (!e || e.button !== 0) return;
         if (e.pointerType && e.pointerType !== 'mouse') return;
         if (boxPending || boxSelecting) return;
@@ -2444,6 +2632,7 @@
         if (isEventInsideMindControls(e.target)) return;
         hideNodeContextMenu();
         clearClickNodeEditTimer();
+        focusViewerForKeyboard();
         boxPending = true;
         boxSelecting = false;
         boxMoved = false;
@@ -2456,6 +2645,10 @@
 
       function moveBoxSelection(e) {
         if (!enableCustomBoxSelection) return;
+        if (editing || pendingSave) {
+          stopBoxSelection(e);
+          return;
+        }
         if (!boxPending && !boxSelecting) return;
         var deltaX = Math.abs(e.clientX - boxStartX);
         var deltaY = Math.abs(e.clientY - boxStartY);
@@ -2477,6 +2670,18 @@
       function stopBoxSelection(e) {
         if (!enableCustomBoxSelection) return;
         if (!boxPending && !boxSelecting) return;
+        if (editing || pendingSave) {
+          boxPending = false;
+          boxSelecting = false;
+          boxMoved = false;
+          if (viewerEl && viewerEl.classList) viewerEl.classList.remove('is-box-selecting');
+          if (boxRectEl && boxRectEl.style) {
+            boxRectEl.style.display = 'none';
+            boxRectEl.style.width = '0px';
+            boxRectEl.style.height = '0px';
+          }
+          return;
+        }
         var endX = e && typeof e.clientX === 'number' ? e.clientX : boxStartX;
         var endY = e && typeof e.clientY === 'number' ? e.clientY : boxStartY;
         if (!boxSelecting) {
@@ -2561,6 +2766,7 @@
         editing = true;
         pendingSave = false;
         clearValidationMarks();
+        resetCustomSelectionInteractionState(true);
         var inst = getInstance();
         if (inst && typeof inst.enableEdit === 'function') {
           try {
@@ -2638,13 +2844,42 @@
         }
       }
 
+      function collectRemovableSelectedNodes() {
+        var selected = normalizeSelectionNodeList(collectSelectedNodes()).filter(function(node) {
+          return Boolean(node && node.nodeObj && node.nodeObj.parent);
+        });
+        if (!selected.length) return [];
+        selected.sort(function(a, b) {
+          var depthA = Array.isArray(collectNodeLocatePath(a)) ? collectNodeLocatePath(a).length : 0;
+          var depthB = Array.isArray(collectNodeLocatePath(b)) ? collectNodeLocatePath(b).length : 0;
+          if (depthA !== depthB) return depthA - depthB;
+          var keyA = getSelectionIdentityKey(a);
+          var keyB = getSelectionIdentityKey(b);
+          if (keyA < keyB) return -1;
+          if (keyA > keyB) return 1;
+          return 0;
+        });
+        var kept = [];
+        var keptIds = Object.create(null);
+        selected.forEach(function(node) {
+          var cursor = node && node.nodeObj ? node.nodeObj.parent : null;
+          while (cursor) {
+            if (cursor.id !== undefined && cursor.id !== null && keptIds[String(cursor.id)]) return;
+            cursor = cursor.parent || null;
+          }
+          kept.push(node);
+          if (node && node.nodeObj && node.nodeObj.id !== undefined && node.nodeObj.id !== null) {
+            keptIds[String(node.nodeObj.id)] = true;
+          }
+        });
+        return kept;
+      }
+
       function runDeleteNodes() {
         if (!editing || pendingSave) return;
         var inst = getInstance();
         if (!inst || typeof inst.removeNodes !== 'function') return;
-        var selected = collectSelectedNodes().filter(function(node) {
-          return Boolean(node && node.nodeObj && node.nodeObj.parent);
-        });
+        var selected = collectRemovableSelectedNodes();
         if (!selected.length) return;
         clearValidationMarks();
         try {
@@ -2839,13 +3074,7 @@
           moveSearch(1);
         } else if (action === 'search-clear') {
           clearSearch();
-          if (searchInputEl && typeof searchInputEl.focus === 'function') {
-            try {
-              searchInputEl.focus();
-            } catch (err) {
-              // ignore
-            }
-          }
+          focusViewerForKeyboard();
         } else if (action === 'export-xmind') {
           if (exportState.pending) return;
           if (!opts || typeof opts.onExportXmind !== 'function') return;
@@ -2920,9 +3149,7 @@
 
         if (!editing) {
           if (!typing && (e.key === 'Delete' || e.key === 'Backspace')) {
-            var deleteSelectedReadonly = collectSelectedNodes().filter(function(node) {
-              return Boolean(node && node.nodeObj && node.nodeObj.parent);
-            });
+            var deleteSelectedReadonly = collectRemovableSelectedNodes();
             if (deleteSelectedReadonly.length && requestDeleteSelection(buildNodeMeta(deleteSelectedReadonly[0]))) {
               if (e.preventDefault) e.preventDefault();
               if (e.stopPropagation) e.stopPropagation();
@@ -2951,9 +3178,7 @@
         }
 
         if (!typing && e.key === 'Delete') {
-          var deleteSelected = collectSelectedNodes().filter(function(node) {
-            return Boolean(node && node.nodeObj && node.nodeObj.parent);
-          });
+          var deleteSelected = collectRemovableSelectedNodes();
           if (deleteSelected.length) {
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropagation) e.stopPropagation();
@@ -2967,9 +3192,7 @@
         }
 
         if (!typing && (e.key === 'Delete' || e.key === 'Backspace')) {
-          var selected = collectSelectedNodes().filter(function(node) {
-            return Boolean(node && node.nodeObj && node.nodeObj.parent);
-          });
+          var selected = collectRemovableSelectedNodes();
           if (selected.length) {
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropagation) e.stopPropagation();
@@ -3140,7 +3363,6 @@
         if (enableCustomBoxSelection && modifierSelectionSuppressClickUntil && Date.now() <= modifierSelectionSuppressClickUntil) {
           if (e && e.preventDefault) e.preventDefault();
           if (e && e.stopPropagation) e.stopPropagation();
-          modifierSelectionSuppressClickUntil = 0;
           updateEditButtons();
           return;
         }
@@ -3164,20 +3386,23 @@
           return;
         }
         var nodeEl = resolveViewerEventNode(e);
-        if (enableCustomBoxSelection && !editing && e && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && nodeEl) {
+        if (enableCustomBoxSelection && !editing && e && (isCtrlModifierActive(e) || e.metaKey) && !e.shiftKey && !e.altKey && nodeEl) {
           if (e.preventDefault) e.preventDefault();
           if (e.stopPropagation) e.stopPropagation();
           hideNodeContextMenu();
           clearClickNodeEditTimer();
           toggleNodeInCustomSelection(nodeEl);
+          focusViewerForKeyboard();
           updateEditButtons();
           return;
         }
-        if (enableCustomBoxSelection && !editing && e && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+        if (enableCustomBoxSelection && !editing && e && !isCtrlModifierActive(e) && !e.metaKey && !e.shiftKey && !e.altKey) {
           if (nodeEl) {
             applyCustomSelectionNodes([nodeEl]);
+            focusViewerForKeyboard();
           } else if (isEventInsideMindCanvas(e.target)) {
             clearCustomSelection(true);
+            focusViewerForKeyboard();
           }
         }
         hideNodeContextMenu();

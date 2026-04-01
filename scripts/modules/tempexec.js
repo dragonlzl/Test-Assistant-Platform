@@ -717,6 +717,7 @@
         tempExecXmindMindInstance = mindApi.renderMindMap(container, mindData, {
           instance: tempExecXmindMindInstance,
           direction: 'right',
+          enableCustomBoxSelection: true,
           onExportXmind: triggerTempExecXmindExport,
           editableSessionKey: 'tap-temp-exec-xmind-edit-' + String(active.id || state.tempExecActiveId || ''),
           onSaveCases: saveTempExecXmindCases,
