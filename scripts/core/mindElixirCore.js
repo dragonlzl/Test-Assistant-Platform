@@ -4360,6 +4360,15 @@
         instance.__tapSyncCtrlWheelMinScale = function(forceReset) {
           syncCtrlWheelMinScaleWithCurrent(getInstance(), forceReset === true);
         };
+        instance.__tapCaptureViewState = function() {
+          return captureMindViewState(getInstance());
+        };
+        instance.__tapCaptureDrawerState = function() {
+          return captureMindDrawerState(getInstance());
+        };
+        instance.__tapSetDrawerFullscreen = function(enabled) {
+          return setDrawerFullscreen(enabled === true);
+        };
       }
       if (typeof MutationObserver !== 'undefined' && canvasEl) {
         nodeDecorateObserver = new MutationObserver(function() {
@@ -4514,6 +4523,26 @@
             delete instance.__tapSyncZoomMinScale;
           } catch (err4) {
             instance.__tapSyncZoomMinScale = null;
+          }
+          try {
+            delete instance.__tapSyncCtrlWheelMinScale;
+          } catch (err4b) {
+            instance.__tapSyncCtrlWheelMinScale = null;
+          }
+          try {
+            delete instance.__tapCaptureViewState;
+          } catch (err4c) {
+            instance.__tapCaptureViewState = null;
+          }
+          try {
+            delete instance.__tapCaptureDrawerState;
+          } catch (err4d) {
+            instance.__tapCaptureDrawerState = null;
+          }
+          try {
+            delete instance.__tapSetDrawerFullscreen;
+          } catch (err4e) {
+            instance.__tapSetDrawerFullscreen = null;
           }
         }
         if (nodeDecorateObserver && typeof nodeDecorateObserver.disconnect === 'function') {
@@ -4746,6 +4775,12 @@
       var preservedDrawerState = opts && opts.preserveViewState === true
         ? captureMindDrawerState(opts.instance || null)
         : null;
+      var explicitInitialViewState = opts && opts.initialViewState && typeof opts.initialViewState === 'object'
+        ? opts.initialViewState
+        : null;
+      var explicitInitialDrawerState = opts && opts.initialDrawerState && typeof opts.initialDrawerState === 'object'
+        ? opts.initialDrawerState
+        : null;
       if (
         opts &&
         opts.instance &&
@@ -4892,6 +4927,16 @@
           restoreMindAnchorState(instance, preservedAnchorState);
           scheduleMindAnchorRestore(instance, preservedAnchorState);
         }
+      } else if (explicitInitialViewState && !initialEditing) {
+        restoredViewState = restoreMindViewState(instance, explicitInitialViewState);
+      }
+      if (
+        explicitInitialDrawerState
+        && explicitInitialDrawerState.fullscreen === true
+        && instance
+        && typeof instance.__tapSetDrawerFullscreen === 'function'
+      ) {
+        instance.__tapSetDrawerFullscreen(true);
       }
       if (showRestoreNotice) {
         setTimeout(function() {

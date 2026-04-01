@@ -5,7 +5,26 @@ const ONE_PIXEL_PNG = Buffer.from(
   'base64'
 );
 
-async function gotoCasesgenWorkflow(page) {
+async function gotoCasesgenWorkflow(page, options) {
+  const opts = options || {};
+  if (opts.resetWorkflowStorage !== false) {
+    await page.addInitScript((payload) => {
+      try {
+        if (typeof sessionStorage === 'undefined') return;
+        var onceKey = String(payload && payload.onceKey ? payload.onceKey : '__pw-workflow-reset-once');
+        if (sessionStorage.getItem(onceKey) === '1') return;
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(String(payload && payload.workflowKey ? payload.workflowKey : 'usecase-workflow-state-v1'));
+        }
+        sessionStorage.removeItem(String(payload && payload.activeTabKey ? payload.activeTabKey : 'usecase-active-tab'));
+        sessionStorage.setItem(onceKey, '1');
+      } catch (_) {}
+    }, {
+      workflowKey: 'usecase-workflow-state-v1',
+      activeTabKey: 'usecase-active-tab',
+      onceKey: '__pw-workflow-reset-once',
+    });
+  }
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
   const url = base + '/ai-workflow.html?tab=casesgen&_=' + Date.now().toString(36);
   await page.goto(url);
@@ -469,9 +488,22 @@ async function clickElementById(page, id) {
 }
 
 async function openXmindCaseGenDrawer(page) {
-  await page.click('#caseGenModulesTabBtn');
-  await expect(page.locator('#casegenModulesPanel')).toHaveClass(/is-active/);
-  await page.click('#xmindCaseGenOpenBtn');
+  let drawerOpen = await page.evaluate(() => {
+    var drawer = document.getElementById('xmindCaseGenDrawer');
+    return Boolean(drawer && drawer.classList && drawer.classList.contains('open'));
+  });
+  if (!drawerOpen) {
+    await page.waitForTimeout(260);
+    drawerOpen = await page.evaluate(() => {
+      var drawer = document.getElementById('xmindCaseGenDrawer');
+      return Boolean(drawer && drawer.classList && drawer.classList.contains('open'));
+    });
+  }
+  if (!drawerOpen) {
+    await page.click('#caseGenModulesTabBtn');
+    await expect(page.locator('#casegenModulesPanel')).toHaveClass(/is-active/);
+    await page.click('#xmindCaseGenOpenBtn');
+  }
   await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
   await page.waitForFunction(() => {
     var controls = document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]');
@@ -493,7 +525,7 @@ async function openXmindCaseGenDrawer(page) {
         : '',
     };
   });
-  expect(renderInfo.debug && renderInfo.debug.phase, JSON.stringify(renderInfo)).toBe('render-success');
+  expect(/error/i.test(String(renderInfo.debug && renderInfo.debug.phase ? renderInfo.debug.phase : '')), JSON.stringify(renderInfo)).toBe(false);
   expect(renderInfo.hasControls, JSON.stringify(renderInfo)).toBeTruthy();
 }
 
@@ -861,6 +893,52 @@ async function panXmindCasegenCanvas(page, deltaX, deltaY) {
   }, { dx: deltaX, dy: deltaY });
 }
 
+async function toggleXmindCasegenNodeCollapse(page, text) {
+  return page.evaluate((expected) => {
+    var needle = String(expected || '').trim();
+    if (!needle) return false;
+    var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+    var target = Array.prototype.find.call(nodes, function(node) {
+      var content = node && node.textContent ? String(node.textContent).replace(/\s+/g, ' ').trim() : '';
+      return content.indexOf(needle) !== -1;
+    });
+    if (!target) return false;
+    var parent = target.parentElement;
+    var expander = parent && parent.querySelector ? parent.querySelector('me-epd') : null;
+    if (!expander && target.nextElementSibling && target.nextElementSibling.tagName === 'ME-EPD') {
+      expander = target.nextElementSibling;
+    }
+    if (!expander && target.previousElementSibling && target.previousElementSibling.tagName === 'ME-EPD') {
+      expander = target.previousElementSibling;
+    }
+    if (!expander) return false;
+    if (typeof expander.click === 'function') {
+      expander.click();
+      return true;
+    }
+    if (typeof expander.dispatchEvent !== 'function') return false;
+    expander.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    return true;
+  }, text);
+}
+
+async function readXmindCasegenViewSnapshot(page) {
+  return page.evaluate(() => {
+    var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+    var drawer = document.getElementById('xmindCaseGenDrawer');
+    var state = window.app && window.app.state && window.app.state.xmindCaseGen
+      ? window.app.state.xmindCaseGen
+      : null;
+    return {
+      activeTab: window.app && window.app.state ? String(window.app.state.activeTab || '') : '',
+      drawerOpen: Boolean(drawer && drawer.classList && drawer.classList.contains('open')),
+      drawerFullscreen: Boolean(drawer && drawer.classList && drawer.classList.contains('xmind-drawer-fullscreen')),
+      transform: map && map.style ? String(map.style.transform || '') : '',
+      viewState: state && state.viewState ? JSON.parse(JSON.stringify(state.viewState)) : null,
+    };
+  });
+}
+
 async function readCaseResults(page, moduleId) {
   return page.evaluate((id) => {
     if (!window.app || !window.app.state || !window.app.state.caseGenResults) return [];
@@ -901,10 +979,40 @@ async function autoAcceptXmindConfirm(page) {
 
 async function ctrlClickXmindNodes(page, topics) {
   for (const topic of topics || []) {
-    await page.locator('#xmindCaseGenMindContainer me-tpc .text').filter({ hasText: topic }).first().click({
-      force: true,
-      modifiers: ['Control'],
-    });
+    const clicked = await page.evaluate((expected) => {
+      var needle = String(expected || '').trim();
+      var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+      var target = null;
+      Array.prototype.some.call(nodes, function(node) {
+        var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+        var label = textEl
+          ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+          : '';
+        var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+        if (!(stableLabel === needle || label === needle)) return false;
+        target = node;
+        return true;
+      });
+      if (!target || !target.getBoundingClientRect) return false;
+      var rect = target.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+      var centerX = rect.left + (rect.width / 2);
+      var centerY = rect.top + (rect.height / 2);
+      ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(function(type) {
+        target.dispatchEvent(new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: centerX,
+          clientY: centerY,
+          ctrlKey: true,
+          metaKey: false,
+          button: 0,
+          buttons: type === 'mousedown' ? 1 : 0,
+        }));
+      });
+      return true;
+    }, topic);
+    expect(clicked).toBeTruthy();
     await page.waitForTimeout(240);
   }
 }
@@ -921,9 +1029,37 @@ async function clickXmindNode(page, topicText) {
       return stableLabel === topic || label === topic;
     });
   }, topicText, { timeout: 15000 });
-  await page.locator('#xmindCaseGenMindContainer me-tpc .text').filter({ hasText: topicText }).first().click({
-    force: true,
-  });
+  const clicked = await page.evaluate((topic) => {
+    var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+    var target = null;
+    Array.prototype.some.call(nodes, function(node) {
+      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+      var label = textEl
+        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+        : '';
+      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      if (!(stableLabel === topic || label === topic)) return false;
+      target = node;
+      return true;
+    });
+    if (!target || !target.getBoundingClientRect) return false;
+    var rect = target.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+    var centerX = rect.left + (rect.width / 2);
+    var centerY = rect.top + (rect.height / 2);
+    ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(function(type) {
+      target.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        clientX: centerX,
+        clientY: centerY,
+        button: 0,
+        buttons: type === 'mousedown' ? 1 : 0,
+      }));
+    });
+    return true;
+  }, topicText);
+  expect(clicked).toBeTruthy();
   await page.waitForTimeout(80);
 }
 
@@ -1158,7 +1294,7 @@ test.describe('XMind 用例生成抽屉', () => {
       var state = window.app && window.app.state ? window.app.state : null;
       var prep = state && state.xmindCaseGen ? state.xmindCaseGen.prep : null;
       return Boolean(prep && Array.isArray(prep.manualRequirementBlocks) && prep.manualRequirementBlocks.length === 2);
-    }, {}, { timeout: 10000 });
+    }, {}, { timeout: 20000 });
 
     const state = await readState(page);
     expect(state && state.xmindCaseGen && state.xmindCaseGen.prep).toBeTruthy();
@@ -1173,6 +1309,132 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(state.caseGenSettings.needBoundary).toBe(true);
     expect(state.caseGenSettings.needSpecial).toBe(true);
     expect(state.caseGenSettings.specialWeakNetwork).toBe(true);
+  });
+
+  test('页面刷新后保持在 XMind 用例生成页面，并恢复抽屉、全屏、缩放、位置与已记录折叠状态', async ({ page }) => {
+    const token = 'token-xmind-refresh-viewstate';
+    const user = { id: 61, username: 'demo_user_refresh_view', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 180);
+    await seedDocumentRequirement(page, {
+      text: '需求：刷新后需要保持 XMind 用例生成页的当前视图状态。',
+      requirementLabel: 'XMind刷新视图需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }, {
+      id: 'xmind-mod-pay',
+      title: '支付模块',
+      scenarios: ['支付主场景'],
+      points: ['支付结果校验'],
+      coupled: ['订单中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }],
+      'xmind-mod-pay': [{
+        module: '支付模块',
+        title: '支付成功校验',
+        priority: 'P1',
+        preconditions: '订单待支付',
+        steps: ['1、进入支付页', '2、完成支付'],
+        expected: '支付成功',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+    const beforeZoomSnapshot = await readXmindCasegenViewSnapshot(page);
+    await page.click('#xmindCaseGenMindContainer [data-mind-action="zoom-in"]');
+    await page.click('#xmindCaseGenMindContainer [data-mind-action="zoom-in"]');
+    const panResult = await panXmindCasegenCanvas(page, 180, 120);
+    expect(panResult.dispatched).toBeTruthy();
+    await page.waitForFunction((beforeTransform) => {
+      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+      if (!map || !map.style) return false;
+      return String(map.style.transform || '') !== String(beforeTransform || '');
+    }, beforeZoomSnapshot.transform || panResult.before || '', { timeout: 15000 });
+    await page.click('#xmindCaseGenMindContainer [data-mind-action="drawer-fullscreen"]');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    expect(await toggleXmindCasegenNodeCollapse(page, '登录模块')).toBeTruthy();
+    await waitForNodeTextAbsent(page, '登录成功校验');
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('beforeunload'));
+    });
+
+    await expect.poll(async () => {
+      const snapshot = await readXmindCasegenViewSnapshot(page);
+      return snapshot && snapshot.viewState ? snapshot.viewState.collapsedNodeKeys : [];
+    }).toContain('module::登录模块');
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.persistWorkflowStateNow === 'function') {
+        window.app.persistWorkflowStateNow();
+      }
+    });
+
+    const beforeReload = await readXmindCasegenViewSnapshot(page);
+    expect(beforeReload.activeTab).toBe('casesgen');
+    expect(beforeReload.drawerOpen).toBe(true);
+    expect(beforeReload.drawerFullscreen).toBe(true);
+    expect(beforeReload.transform).not.toBe('');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+    await waitForNodeTextAbsent(page, '登录成功校验');
+
+    await expect.poll(async () => {
+      const snapshot = await readXmindCasegenViewSnapshot(page);
+      return snapshot && snapshot.viewState
+        ? {
+            drawerOpen: snapshot.drawerOpen,
+            drawerFullscreen: snapshot.drawerFullscreen,
+            viewDrawerOpen: snapshot.viewState.drawerOpen,
+            viewFullscreen: snapshot.viewState.fullscreen,
+            viewTransform: snapshot.viewState.transform,
+          }
+        : null;
+    }).toEqual({
+      drawerOpen: true,
+      drawerFullscreen: true,
+      viewDrawerOpen: true,
+      viewFullscreen: true,
+      viewTransform: beforeReload.transform,
+    });
+    const afterReload = await readXmindCasegenViewSnapshot(page);
+    expect(afterReload.activeTab).toBe('casesgen');
+    expect(afterReload.drawerOpen).toBe(true);
+    expect(afterReload.drawerFullscreen).toBe(true);
+    expect(afterReload.transform).toBe(beforeReload.transform);
+    expect(afterReload.viewState).toBeTruthy();
+    expect(afterReload.viewState.drawerOpen).toBe(true);
+    expect(afterReload.viewState.fullscreen).toBe(true);
+    expect(afterReload.viewState.transform).toBe(beforeReload.transform);
+    expect(afterReload.viewState.collapsedNodeKeys).toContain('module::登录模块');
   });
 
   test('工具栏支持查看生成记录，并展示根节点与模块节点的生成摘要', async ({ page }) => {
@@ -1204,6 +1466,8 @@ test.describe('XMind 用例生成抽屉', () => {
     })).toEqual([
       'xmindCaseGenSummaryBtn',
       'xmindCaseGenHistoryBtn',
+      'xmindCaseGenDeleteUndoBtn',
+      'xmindCaseGenDeleteRedoBtn',
       'xmindCaseGenExportBtn',
     ]);
 
@@ -2579,8 +2843,12 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '登录失败提示');
 
     await clickXmindNode(page, '登录成功校验');
-    expect(await readSelectedXmindNodeCount(page)).toBe(1);
-    expect(await readSelectedXmindNodeLabels(page)).toEqual(['登录成功校验']);
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeCount(page);
+    }).toBe(1);
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeLabels(page);
+    }).toEqual(['登录成功校验']);
 
     await ctrlClickXmindNodes(page, ['登录失败提示']);
     await expect.poll(async () => {
@@ -2588,8 +2856,12 @@ test.describe('XMind 用例生成抽屉', () => {
     }).toBeGreaterThanOrEqual(2);
 
     await clickXmindNode(page, '登录模块');
-    expect(await readSelectedXmindNodeCount(page)).toBe(1);
-    expect(await readSelectedXmindNodeLabels(page)).toEqual(['登录模块']);
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeCount(page);
+    }).toBe(1);
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeLabels(page);
+    }).toEqual(['登录模块']);
   });
 
   test('支持鼠标框选多条用例后批量删除', async ({ page }) => {

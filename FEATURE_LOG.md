@@ -19,6 +19,33 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 用例生成页面刷新保持视图状态
+- 功能描述：为 `用例生成 -> XMind 用例生成` 抽屉补齐刷新恢复能力。现在页面刷新后会继续停留在 `用例生成` 页面，并自动恢复 XMind 抽屉打开态、全屏态、当前缩放/画布位置，以及已记录的模块折叠状态，不会回到默认视图。
+- 操作方式：
+  - 在 `用例生成` 页打开 `XMind 用例生成` 抽屉；
+  - 调整画布缩放、拖动画布位置、切换全屏，并折叠需要收起的模块；
+  - 直接刷新当前页面；
+  - 页面重新加载完成后，XMind 抽屉会自动恢复到刷新前的打开状态和当前视图位置。
+- 使用效果：
+  - 刷新不会把用户从当前 `用例生成` 页面带回其他页面或默认布局；
+  - 已打开的 XMind 抽屉会自动恢复，不需要重新点击入口；
+  - 全屏、缩放比例、画布平移位置与模块折叠状态会随刷新一起恢复，继续停留在用户刚才操作的视图上下文中。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增 `state.xmindCaseGen.viewState` 采集/恢复、抽屉恢复重试、折叠态 DOM 采集、抽屉关闭清理与刷新后恢复入口；
+  - `scripts/core/mindElixirCore.js`：补充思维导图实例的视图/抽屉状态捕获与恢复钩子，支持首次渲染时恢复 transform、scroll 和抽屉全屏状态；
+  - `scripts/core/appRuntime.js`：补齐 `xmindCaseGen.viewState` 的默认值、恢复归一化，并在工作流状态恢复完成后回调 XMind 抽屉执行二次恢复；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增刷新后恢复视图状态回归，并让整份 XMind 抽屉测试在有刷新持久化能力后保持隔离；
+  - 未新增后端接口、路由或存储表。
+- 复用说明：继续复用现有工作流持久化快照、共享 `state.xmindCaseGen` 真源、`mindElixirCore.renderMindMap()` 渲染链路和已有抽屉组件；本次没有新增第二套生成状态机，也没有绕开现有状态恢复体系。
+- 测试与验证：
+  - 自查 code review：确认恢复逻辑仍由 `xmindCasegen` 控制器负责，`mindElixirCore` 只提供渲染期 restore hook，未把业务状态散落到其他模块；
+  - `node --check scripts/modules/xmindCasegen.js scripts/core/mindElixirCore.js scripts/core/appRuntime.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "页面刷新后保持在 XMind 用例生成页面，并恢复抽屉、全屏、缩放、位置与已记录折叠状态" --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`，22/22 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-01 新增 XMind 用例生成页面刷新后保持当前页、抽屉态、全屏态、缩放/位置和折叠态的能力，并补齐对应 UI 回归。
+
 - 功能名称：XMind 用例生成支持删除撤回与恢复删除
 - 功能描述：为 `XMind 用例生成` 抽屉补充删除专用的撤回/恢复能力。现在删除模块或用例后，可通过工具栏的 `撤回删除`、`恢复删除`，或键盘 `Ctrl/Cmd + Z`、`Ctrl/Cmd + Shift + Z` / `Ctrl/Cmd + Y` 来回退或重做最近的删除；这套能力只记录删除历史，不会误把普通生成、补全、放弃本次生成纳入撤回范围。
 - 操作方式：

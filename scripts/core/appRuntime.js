@@ -399,6 +399,17 @@
         treeSourceSignature: '',
         hasModuleSkeleton: false,
         hasImportedBaseline: false,
+        viewState: {
+          drawerOpen: false,
+          fullscreen: false,
+          transform: '',
+          scaleVal: 1,
+          scrollLeft: 0,
+          scrollTop: 0,
+          collapsedNodeKeys: [],
+          treeSourceSignature: '',
+          updatedAt: 0,
+        },
         history: [],
         operationSnapshots: [],
         lastOperationSnapshotId: '',
@@ -437,6 +448,20 @@
       if (!Array.isArray(state.xmindCaseGen.operationSnapshots)) state.xmindCaseGen.operationSnapshots = [];
       if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) state.xmindCaseGen.rootSnapshots = [];
+      if (!state.xmindCaseGen.viewState || typeof state.xmindCaseGen.viewState !== 'object') {
+        state.xmindCaseGen.viewState = {
+          drawerOpen: false,
+          fullscreen: false,
+          transform: '',
+          scaleVal: 1,
+          scrollLeft: 0,
+          scrollTop: 0,
+          collapsedNodeKeys: [],
+          treeSourceSignature: '',
+          updatedAt: 0,
+        };
+      }
+      if (!Array.isArray(state.xmindCaseGen.viewState.collapsedNodeKeys)) state.xmindCaseGen.viewState.collapsedNodeKeys = [];
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineModuleKeys)) state.xmindCaseGen.deletedBaselineModuleKeys = [];
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineCaseKeys)) state.xmindCaseGen.deletedBaselineCaseKeys = [];
       if (!Array.isArray(state.xmindCaseGen.deleteUndoStack)) state.xmindCaseGen.deleteUndoStack = [];
@@ -459,6 +484,31 @@
       state.xmindCaseGen.hasImportedBaseline = state.xmindCaseGen.hasImportedBaseline === true;
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
+      state.xmindCaseGen.viewState.drawerOpen = state.xmindCaseGen.viewState.drawerOpen === true;
+      state.xmindCaseGen.viewState.fullscreen = state.xmindCaseGen.viewState.fullscreen === true;
+      state.xmindCaseGen.viewState.transform = String(state.xmindCaseGen.viewState.transform || '');
+      state.xmindCaseGen.viewState.scaleVal = Number(state.xmindCaseGen.viewState.scaleVal || 1);
+      if (!isFinite(state.xmindCaseGen.viewState.scaleVal) || state.xmindCaseGen.viewState.scaleVal <= 0) {
+        state.xmindCaseGen.viewState.scaleVal = 1;
+      }
+      state.xmindCaseGen.viewState.scrollLeft = Number(state.xmindCaseGen.viewState.scrollLeft || 0);
+      if (!isFinite(state.xmindCaseGen.viewState.scrollLeft) || state.xmindCaseGen.viewState.scrollLeft < 0) {
+        state.xmindCaseGen.viewState.scrollLeft = 0;
+      }
+      state.xmindCaseGen.viewState.scrollTop = Number(state.xmindCaseGen.viewState.scrollTop || 0);
+      if (!isFinite(state.xmindCaseGen.viewState.scrollTop) || state.xmindCaseGen.viewState.scrollTop < 0) {
+        state.xmindCaseGen.viewState.scrollTop = 0;
+      }
+      state.xmindCaseGen.viewState.collapsedNodeKeys = state.xmindCaseGen.viewState.collapsedNodeKeys
+        .map(function(item) {
+          return String(item || '').trim();
+        })
+        .filter(Boolean);
+      state.xmindCaseGen.viewState.treeSourceSignature = String(state.xmindCaseGen.viewState.treeSourceSignature || '');
+      state.xmindCaseGen.viewState.updatedAt = Number(state.xmindCaseGen.viewState.updatedAt || 0);
+      if (!isFinite(state.xmindCaseGen.viewState.updatedAt) || state.xmindCaseGen.viewState.updatedAt < 0) {
+        state.xmindCaseGen.viewState.updatedAt = 0;
+      }
       state.xmindCaseGen.deletedBaselineModuleKeys = state.xmindCaseGen.deletedBaselineModuleKeys.map(function(item) {
         return String(item || '').trim().toLowerCase();
       }).filter(Boolean);
@@ -1656,6 +1706,9 @@
       setCaseViewHint('请先上传或输入 XMind 测试用例');
       updateFlowStatus();
       bindWorkflowPersistenceListeners();
+      if (xmindCasegenModule && typeof xmindCasegenModule.restoreAfterWorkflowReady === 'function') {
+        xmindCasegenModule.restoreAfterWorkflowReady();
+      }
       workflowRestoring = false;
       return { casegenHandlersModule: casegenHandlersModule, casegenCoreModule: casegenCoreModule, layoutHandlersModule: layoutHandlersModule };
     }

@@ -96,11 +96,23 @@
     var topupHighlightCanvasEl = null;
     var topupHighlightScrollHandler = null;
     var topupHighlightResizeHandler = null;
+    var viewStatePersistTimer = 0;
+    var viewStateMutationObserver = null;
+    var viewStateScrollTarget = null;
+    var viewStateScrollHandler = null;
+    var viewStateInteractionTarget = null;
+    var viewStateClickHandler = null;
+    var viewStateWheelHandler = null;
+    var viewStateBeforeUnloadBound = false;
+    var drawerRestoreRetryTimer = 0;
+    var drawerRestoreRetryCount = 0;
+    var drawerRestoreStableCount = 0;
 
     var STEP_REQUIREMENT = 1;
     var STEP_CASES = 2;
     var STEP_OPTIONS = 3;
     var HISTORY_LIMIT = 80;
+    var DRAWER_RESTORE_RETRY_LIMIT = 18;
     var multimodalMaxImages = 20;
     var multimodalMaxEdge = 1600;
     var multimodalMaxBytes = 4 * 1024 * 1024;
@@ -143,6 +155,20 @@
         snapshotId: '',
         status: '',
         error: '',
+        updatedAt: 0,
+      };
+    }
+
+    function createDefaultViewState() {
+      return {
+        drawerOpen: false,
+        fullscreen: false,
+        transform: '',
+        scaleVal: 1,
+        scrollLeft: 0,
+        scrollTop: 0,
+        collapsedNodeKeys: [],
+        treeSourceSignature: '',
         updatedAt: 0,
       };
     }
@@ -381,7 +407,42 @@
       return true;
     }
 
+    function cleanupViewStateBindings() {
+      if (viewStatePersistTimer) {
+        clearTimeout(viewStatePersistTimer);
+        viewStatePersistTimer = 0;
+      }
+      if (viewStateMutationObserver) {
+        viewStateMutationObserver.disconnect();
+        viewStateMutationObserver = null;
+      }
+      if (viewStateScrollTarget && viewStateScrollHandler) {
+        viewStateScrollTarget.removeEventListener('scroll', viewStateScrollHandler);
+      }
+      if (viewStateInteractionTarget && viewStateClickHandler) {
+        viewStateInteractionTarget.removeEventListener('click', viewStateClickHandler, true);
+      }
+      if (viewStateInteractionTarget && viewStateWheelHandler) {
+        viewStateInteractionTarget.removeEventListener('wheel', viewStateWheelHandler, true);
+      }
+      viewStateScrollTarget = null;
+      viewStateScrollHandler = null;
+      viewStateInteractionTarget = null;
+      viewStateClickHandler = null;
+      viewStateWheelHandler = null;
+    }
+
+    function clearDrawerRestoreRetry() {
+      if (drawerRestoreRetryTimer) {
+        clearTimeout(drawerRestoreRetryTimer);
+        drawerRestoreRetryTimer = 0;
+      }
+      drawerRestoreRetryCount = 0;
+      drawerRestoreStableCount = 0;
+    }
+
     function destroyMind() {
+      cleanupViewStateBindings();
       cleanupTopupHighlightPresentation();
       restoreInlineControlsToBank();
       if (mindInstance && typeof mindInstance.destroy === 'function') {
@@ -413,6 +474,11 @@
         openButtons: [],
         closeButtons: ['closeXmindCaseGenDrawerBtn'],
         onOpen: function() {
+          getViewState().drawerOpen = true;
+          getViewState().updatedAt = Date.now();
+          if (drawerEl && drawerEl.classList) {
+            drawerEl.classList.toggle('xmind-drawer-fullscreen', getViewState().fullscreen === true);
+          }
           setDebugState({ phase: 'drawer-open' });
           try {
             setDebugState({ phase: 'drawer-open-set-view-start' });
@@ -457,6 +523,14 @@
           }
         },
         onClose: function() {
+          clearDrawerRestoreRetry();
+          captureCurrentViewState();
+          getViewState().drawerOpen = false;
+          getViewState().fullscreen = false;
+          getViewState().updatedAt = Date.now();
+          if (drawerEl && drawerEl.classList) {
+            drawerEl.classList.remove('xmind-drawer-fullscreen');
+          }
           closeSummaryDialog({ skipPersist: true });
           destroyMind();
           persistWorkflowStateNow();
@@ -472,6 +546,7 @@
           treeSourceSignature: '',
           hasModuleSkeleton: false,
           hasImportedBaseline: false,
+          viewState: createDefaultViewState(),
           history: [],
           operationSnapshots: [],
           lastOperationSnapshotId: '',
@@ -492,6 +567,12 @@
       if (!Array.isArray(state.xmindCaseGen.history)) state.xmindCaseGen.history = [];
       if (!Array.isArray(state.xmindCaseGen.operationSnapshots)) state.xmindCaseGen.operationSnapshots = [];
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) state.xmindCaseGen.rootSnapshots = [];
+      if (!state.xmindCaseGen.viewState || typeof state.xmindCaseGen.viewState !== 'object') {
+        state.xmindCaseGen.viewState = createDefaultViewState();
+      }
+      if (!Array.isArray(state.xmindCaseGen.viewState.collapsedNodeKeys)) {
+        state.xmindCaseGen.viewState.collapsedNodeKeys = [];
+      }
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineModuleKeys)) state.xmindCaseGen.deletedBaselineModuleKeys = [];
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineCaseKeys)) state.xmindCaseGen.deletedBaselineCaseKeys = [];
       if (!Array.isArray(state.xmindCaseGen.deleteUndoStack)) state.xmindCaseGen.deleteUndoStack = [];
@@ -513,6 +594,27 @@
       state.xmindCaseGen.treeSourceSignature = String(state.xmindCaseGen.treeSourceSignature || '');
       state.xmindCaseGen.hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
       state.xmindCaseGen.hasImportedBaseline = hasImportedBaselineCases();
+      state.xmindCaseGen.viewState.drawerOpen = state.xmindCaseGen.viewState.drawerOpen === true;
+      state.xmindCaseGen.viewState.fullscreen = state.xmindCaseGen.viewState.fullscreen === true;
+      state.xmindCaseGen.viewState.transform = String(state.xmindCaseGen.viewState.transform || '');
+      state.xmindCaseGen.viewState.scaleVal = Number(state.xmindCaseGen.viewState.scaleVal || 1);
+      if (!isFinite(state.xmindCaseGen.viewState.scaleVal) || state.xmindCaseGen.viewState.scaleVal <= 0) {
+        state.xmindCaseGen.viewState.scaleVal = 1;
+      }
+      state.xmindCaseGen.viewState.scrollLeft = Number(state.xmindCaseGen.viewState.scrollLeft || 0);
+      if (!isFinite(state.xmindCaseGen.viewState.scrollLeft) || state.xmindCaseGen.viewState.scrollLeft < 0) {
+        state.xmindCaseGen.viewState.scrollLeft = 0;
+      }
+      state.xmindCaseGen.viewState.scrollTop = Number(state.xmindCaseGen.viewState.scrollTop || 0);
+      if (!isFinite(state.xmindCaseGen.viewState.scrollTop) || state.xmindCaseGen.viewState.scrollTop < 0) {
+        state.xmindCaseGen.viewState.scrollTop = 0;
+      }
+      state.xmindCaseGen.viewState.collapsedNodeKeys = normalizeUniqueStringList(state.xmindCaseGen.viewState.collapsedNodeKeys);
+      state.xmindCaseGen.viewState.treeSourceSignature = String(state.xmindCaseGen.viewState.treeSourceSignature || '');
+      state.xmindCaseGen.viewState.updatedAt = Number(state.xmindCaseGen.viewState.updatedAt || 0);
+      if (!isFinite(state.xmindCaseGen.viewState.updatedAt) || state.xmindCaseGen.viewState.updatedAt < 0) {
+        state.xmindCaseGen.viewState.updatedAt = 0;
+      }
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
       state.xmindCaseGen.deletedBaselineModuleKeys = state.xmindCaseGen.deletedBaselineModuleKeys
@@ -636,6 +738,263 @@
       ensureState().hasImportedBaseline = hasImportedBaselineCases();
       if (useImmediate === true) persistWorkflowStateNow();
       else persistWorkflowState();
+    }
+
+    function getViewState() {
+      return ensureState().viewState;
+    }
+
+    function buildViewStateNodeKey(meta, topic, fallbackPath) {
+      var pathText = Array.isArray(fallbackPath) ? fallbackPath.join('>') : '';
+      if (!meta || typeof meta !== 'object') {
+        return pathText ? ('path::' + pathText) : ('topic::' + String(topic || ''));
+      }
+      if (meta.type === 'root') return 'root';
+      if (meta.type === 'module') {
+        return 'module::' + String(meta.moduleKey || normalizeModuleKey(meta.moduleTitle || topic || ''));
+      }
+      if (meta.type === 'case' || meta.type === 'priority' || meta.type === 'preconditions' || meta.type === 'steps' || meta.type === 'expected') {
+        return [
+          String(meta.type || 'node'),
+          String(meta.moduleKey || normalizeModuleKey(meta.moduleTitle || '')),
+          String(meta.caseSource || ''),
+          String(Number(meta.caseSourceIndex)),
+          String(meta.caseSignature || normalizeCaseTitle(meta.caseTitle || topic || ''))
+        ].join('::');
+      }
+      if (meta.type === 'topup-placeholder') {
+        return 'placeholder::' + String(meta.nodeId || meta.moduleKey || topic || '');
+      }
+      if (meta.nodeId) return 'nodeid::' + String(meta.nodeId);
+      return pathText ? ('path::' + pathText) : ('topic::' + String(topic || ''));
+    }
+
+    function collectCollapsedNodeKeysFromMindData(nodeData) {
+      var keys = [];
+      function walk(node, path) {
+        if (!node || typeof node !== 'object') return;
+        var nextPath = Array.isArray(path) ? path.slice() : [];
+        nextPath.push(String(node.topic || ''));
+        var children = Array.isArray(node.children) ? node.children : [];
+        if (children.length) {
+          var expanded = node.expanded !== false;
+          if (!expanded) {
+            keys.push(buildViewStateNodeKey(node.xmindMeta || null, node.topic, nextPath));
+          }
+          children.forEach(function(child) {
+            walk(child, nextPath);
+          });
+        }
+      }
+      walk(nodeData, []);
+      return normalizeUniqueStringList(keys);
+    }
+
+    function buildCurrentMindDataSnapshot() {
+      if (!mindInstance) return null;
+      try {
+        if (typeof mindInstance.getData === 'function') {
+          var data = mindInstance.getData();
+          if (data && data.nodeData) return cloneJson(data, null);
+        }
+      } catch (err) {}
+      try {
+        if (mindInstance.nodeData) return cloneJson({ nodeData: mindInstance.nodeData }, null);
+      } catch (err2) {}
+      return null;
+    }
+
+    function collectCollapsedNodeKeysFromMindDom() {
+      var keys = [];
+      if (!mindContainer || !mindContainer.querySelectorAll) return keys;
+      var expanders = mindContainer.querySelectorAll('me-parent > me-epd');
+      Array.prototype.forEach.call(expanders, function(expander) {
+        if (!expander || !expander.classList || expander.classList.contains('minus')) return;
+        var parent = expander.parentElement;
+        var topicEl = parent && parent.querySelector ? parent.querySelector('me-tpc') : null;
+        var nodeObj = topicEl && topicEl.nodeObj ? topicEl.nodeObj : null;
+        if (!nodeObj) return;
+        var meta = nodeObj.xmindMeta && typeof nodeObj.xmindMeta === 'object'
+          ? nodeObj.xmindMeta
+          : null;
+        var path = [];
+        var cursor = nodeObj;
+        var guard = 0;
+        while (cursor && guard < 64) {
+          path.unshift(String(cursor.topic || ''));
+          cursor = cursor.parent || null;
+          guard += 1;
+        }
+        keys.push(buildViewStateNodeKey(meta, nodeObj.topic, path));
+      });
+      return normalizeUniqueStringList(keys);
+    }
+
+    function captureCurrentViewState() {
+      var viewState = getViewState();
+      viewState.drawerOpen = isDrawerOpen();
+      if (!viewState.drawerOpen || !mindInstance) {
+        viewState.fullscreen = drawerEl && drawerEl.classList ? drawerEl.classList.contains('xmind-drawer-fullscreen') : false;
+        viewState.updatedAt = Date.now();
+        return cloneJson(viewState, createDefaultViewState());
+      }
+      var captured = mindInstance && typeof mindInstance.__tapCaptureViewState === 'function'
+        ? mindInstance.__tapCaptureViewState()
+        : null;
+      var drawerState = mindInstance && typeof mindInstance.__tapCaptureDrawerState === 'function'
+        ? mindInstance.__tapCaptureDrawerState()
+        : null;
+      var mindData = buildCurrentMindDataSnapshot();
+      viewState.fullscreen = drawerEl && drawerEl.classList
+        ? drawerEl.classList.contains('xmind-drawer-fullscreen')
+        : Boolean(drawerState && drawerState.fullscreen === true);
+      viewState.transform = captured && captured.transform ? String(captured.transform || '') : '';
+      viewState.scaleVal = captured && isFinite(Number(captured.scaleVal)) && Number(captured.scaleVal) > 0
+        ? Number(captured.scaleVal)
+        : 1;
+      viewState.scrollLeft = captured && isFinite(Number(captured.scrollLeft)) && Number(captured.scrollLeft) >= 0
+        ? Number(captured.scrollLeft)
+        : 0;
+      viewState.scrollTop = captured && isFinite(Number(captured.scrollTop)) && Number(captured.scrollTop) >= 0
+        ? Number(captured.scrollTop)
+        : 0;
+      var collapsedFromDom = collectCollapsedNodeKeysFromMindDom();
+      viewState.collapsedNodeKeys = collapsedFromDom.length
+        ? collapsedFromDom
+        : (mindData && mindData.nodeData ? collectCollapsedNodeKeysFromMindData(mindData.nodeData) : []);
+      viewState.treeSourceSignature = String(ensureState().treeSourceSignature || '');
+      viewState.updatedAt = Date.now();
+      return cloneJson(viewState, createDefaultViewState());
+    }
+
+    function scheduleCaptureCurrentViewState(useImmediate) {
+      if (viewStatePersistTimer) clearTimeout(viewStatePersistTimer);
+      if (useImmediate === true) {
+        captureCurrentViewState();
+        persistXmindState(true);
+        return;
+      }
+      viewStatePersistTimer = setTimeout(function() {
+        viewStatePersistTimer = 0;
+        captureCurrentViewState();
+        persistXmindState(false);
+      }, 90);
+    }
+
+    function getRestorableViewState(treeSignature) {
+      var viewState = getViewState();
+      if (viewState.drawerOpen !== true) return null;
+      if (!viewState.transform) return null;
+      if (String(viewState.treeSourceSignature || '') !== String(treeSignature || '')) return null;
+      return {
+        transform: String(viewState.transform || ''),
+        scaleVal: Number(viewState.scaleVal || 1),
+        scrollLeft: Number(viewState.scrollLeft || 0),
+        scrollTop: Number(viewState.scrollTop || 0),
+      };
+    }
+
+    function getRestorableDrawerState(treeSignature) {
+      var viewState = getViewState();
+      if (viewState.drawerOpen !== true) return null;
+      if (treeSignature && String(viewState.treeSourceSignature || '') !== String(treeSignature || '')) return null;
+      return {
+        fullscreen: viewState.fullscreen === true,
+      };
+    }
+
+    function getCollapsedNodeKeyMap() {
+      var viewState = getViewState();
+      var map = Object.create(null);
+      (Array.isArray(viewState.collapsedNodeKeys) ? viewState.collapsedNodeKeys : []).forEach(function(item) {
+        var key = String(item || '').trim();
+        if (!key) return;
+        map[key] = true;
+      });
+      return map;
+    }
+
+    function bindLiveViewStateCapture() {
+      cleanupViewStateBindings();
+      if (!mindContainer || !mindInstance || !isDrawerOpen()) return;
+      viewStateInteractionTarget = mindContainer;
+      viewStateClickHandler = function() {
+        scheduleCaptureCurrentViewState(false);
+      };
+      viewStateWheelHandler = function() {
+        scheduleCaptureCurrentViewState(false);
+      };
+      mindContainer.addEventListener('click', viewStateClickHandler, true);
+      mindContainer.addEventListener('wheel', viewStateWheelHandler, true);
+      var mapEl = mindContainer.querySelector ? mindContainer.querySelector('.map-canvas') : null;
+      var canvasEl = mindContainer.querySelector ? mindContainer.querySelector('[data-mind-canvas]') : null;
+      if (canvasEl) {
+        viewStateScrollTarget = canvasEl;
+        viewStateScrollHandler = function() {
+          scheduleCaptureCurrentViewState(false);
+        };
+        canvasEl.addEventListener('scroll', viewStateScrollHandler, { passive: true });
+      }
+      if (typeof MutationObserver !== 'undefined' && (mapEl || drawerEl)) {
+        viewStateMutationObserver = new MutationObserver(function(mutations) {
+          var shouldPersist = false;
+          (mutations || []).some(function(mutation) {
+            var target = mutation && mutation.target ? mutation.target : null;
+            if (!target) return false;
+            if (target === drawerEl || target === mapEl) {
+              shouldPersist = true;
+              return true;
+            }
+            if (target.closest && target.closest('[data-mind-canvas]')) {
+              shouldPersist = true;
+              return true;
+            }
+            return false;
+          });
+          if (shouldPersist) scheduleCaptureCurrentViewState(false);
+        });
+        try {
+          if (mapEl) {
+            viewStateMutationObserver.observe(mapEl, {
+              attributes: true,
+              attributeFilter: ['style'],
+              childList: true,
+              subtree: true,
+            });
+          }
+          if (drawerEl) {
+            viewStateMutationObserver.observe(drawerEl, {
+              attributes: true,
+              attributeFilter: ['class'],
+            });
+          }
+        } catch (err) {
+          if (viewStateMutationObserver) {
+            viewStateMutationObserver.disconnect();
+            viewStateMutationObserver = null;
+          }
+        }
+      }
+      captureCurrentViewState();
+      scheduleCaptureCurrentViewState(false);
+    }
+
+    function bindViewStatePersistenceLifecycle() {
+      if (viewStateBeforeUnloadBound) return;
+      viewStateBeforeUnloadBound = true;
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('beforeunload', function() {
+          if (!isDrawerOpen()) return;
+          scheduleCaptureCurrentViewState(true);
+        }, true);
+      }
+      if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+        document.addEventListener('visibilitychange', function() {
+          if (!document || document.visibilityState !== 'hidden') return;
+          if (!isDrawerOpen()) return;
+          scheduleCaptureCurrentViewState(true);
+        }, true);
+      }
     }
 
     function buildDeleteHistorySnapshotPayload() {
@@ -1903,11 +2262,13 @@
       if (prepApi && typeof prepApi.resetWorkflowData === 'function') {
         prepApi.resetWorkflowData();
       } else {
+        var preservedViewState = cloneJson(getViewState(), createDefaultViewState());
         state.xmindCaseGen = {
           mode: 'modules',
           treeSourceSignature: '',
           hasModuleSkeleton: false,
           hasImportedBaseline: false,
+          viewState: preservedViewState,
           history: [],
           operationSnapshots: [],
           lastOperationSnapshotId: '',
@@ -4104,12 +4465,13 @@
       return buildNodeId(['module', moduleEntry && moduleEntry.moduleKey ? moduleEntry.moduleKey : 'module']);
     }
 
-    function createNode(topic, meta, children) {
+    function createNode(topic, meta, children, options) {
+      var opts = options || {};
       var stableNodeId = meta && meta.nodeId ? String(meta.nodeId) : '';
       var node = {
         id: stableNodeId || buildNodeId([meta && meta.type ? meta.type : 'node', topic]),
         topic: topic || '-',
-        expanded: true,
+        expanded: opts.expanded === false ? false : true,
         xmindMeta: meta || {},
       };
       if (Array.isArray(children) && children.length) node.children = children;
@@ -4125,6 +4487,13 @@
       return nextMeta;
     }
 
+    function resolveNodeExpandedState(meta, collapsedNodeMap, topic, fallbackPath) {
+      if (!collapsedNodeMap) return true;
+      var key = buildViewStateNodeKey(meta || null, topic, fallbackPath);
+      if (!key) return true;
+      return collapsedNodeMap[key] !== true;
+    }
+
     function buildModulePendingNode(moduleEntry, options) {
       options = options || {};
       return createNode(String(options.label || '追加生成中'), {
@@ -4137,6 +4506,8 @@
           String(options.pendingKey || options.actionId || 'module')
         ]),
         branchColor: '#2563eb',
+      }, null, {
+        expanded: true,
       });
     }
 
@@ -4148,10 +4519,12 @@
         moduleId: '',
         nodeId: buildNodeId(['root-topup-placeholder', actionId || 'root']),
         branchColor: '#2563eb',
+      }, null, {
+        expanded: true,
       });
     }
 
-    function buildCaseTree(moduleEntry, row, caseIndex, topupHighlight) {
+    function buildCaseTree(moduleEntry, row, caseIndex, topupHighlight, collapsedNodeMap) {
       var xmindCoreApi = getXmindCoreApi();
       var moduleTitle = moduleEntry ? moduleEntry.title : '模块';
       var item = row && row.item ? row.item : row;
@@ -4169,7 +4542,7 @@
             item && item.steps ? String(item.steps) : '-',
             item && item.expected ? String(item.expected) : '-',
           ];
-      var expectedNode = createNode(fields[5] || '-', withTopupHighlightMeta({
+      var expectedMeta = withTopupHighlightMeta({
         type: 'expected',
         moduleKey: moduleEntry.moduleKey,
         caseIndex: caseIndex,
@@ -4179,8 +4552,8 @@
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
         segment: 'expected'
-      }, topupHighlight));
-      var stepsNode = createNode(fields[4] || '-', withTopupHighlightMeta({
+      }, topupHighlight);
+      var stepsMeta = withTopupHighlightMeta({
         type: 'steps',
         moduleKey: moduleEntry.moduleKey,
         caseIndex: caseIndex,
@@ -4190,8 +4563,8 @@
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
         segment: 'steps'
-      }, topupHighlight), [expectedNode]);
-      var preNode = createNode(fields[3] || '-', withTopupHighlightMeta({
+      }, topupHighlight);
+      var preMeta = withTopupHighlightMeta({
         type: 'preconditions',
         moduleKey: moduleEntry.moduleKey,
         caseIndex: caseIndex,
@@ -4201,8 +4574,8 @@
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
         segment: 'preconditions'
-      }, topupHighlight), [stepsNode]);
-      var priorityNode = createNode(fields[2] || 'P1', withTopupHighlightMeta({
+      }, topupHighlight);
+      var priorityMeta = withTopupHighlightMeta({
         type: 'priority',
         moduleKey: moduleEntry.moduleKey,
         caseIndex: caseIndex,
@@ -4212,7 +4585,7 @@
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
         segment: 'priority'
-      }, topupHighlight), [preNode]);
+      }, topupHighlight);
       var caseMeta = withTopupHighlightMeta({
         type: 'case',
         moduleKey: moduleEntry.moduleKey,
@@ -4223,13 +4596,54 @@
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
       }, topupHighlight);
-      return createNode(fields[1] || ('用例' + String(caseIndex + 1)), caseMeta, [priorityNode]);
+      var expectedNode = createNode(fields[5] || '-', expectedMeta, null, {
+        expanded: resolveNodeExpandedState(expectedMeta, collapsedNodeMap, fields[5] || '-', [
+          moduleTitle,
+          caseTitle,
+          fields[2] || 'P1',
+          fields[3] || '-',
+          fields[4] || '-',
+          fields[5] || '-'
+        ]),
+      });
+      var stepsNode = createNode(fields[4] || '-', stepsMeta, [expectedNode], {
+        expanded: resolveNodeExpandedState(stepsMeta, collapsedNodeMap, fields[4] || '-', [
+          moduleTitle,
+          caseTitle,
+          fields[2] || 'P1',
+          fields[3] || '-',
+          fields[4] || '-'
+        ]),
+      });
+      var preNode = createNode(fields[3] || '-', preMeta, [stepsNode], {
+        expanded: resolveNodeExpandedState(preMeta, collapsedNodeMap, fields[3] || '-', [
+          moduleTitle,
+          caseTitle,
+          fields[2] || 'P1',
+          fields[3] || '-'
+        ]),
+      });
+      var priorityNode = createNode(fields[2] || 'P1', priorityMeta, [preNode], {
+        expanded: resolveNodeExpandedState(priorityMeta, collapsedNodeMap, fields[2] || 'P1', [
+          moduleTitle,
+          caseTitle,
+          fields[2] || 'P1'
+        ]),
+      });
+      return createNode(fields[1] || ('用例' + String(caseIndex + 1)), caseMeta, [priorityNode], {
+        expanded: resolveNodeExpandedState(caseMeta, collapsedNodeMap, fields[1] || ('用例' + String(caseIndex + 1)), [
+          moduleTitle,
+          caseTitle
+        ]),
+      });
     }
 
     function buildMindData() {
       clearStaleModuleUiState();
       var xmindState = ensureState();
       var rootState = ensureRootUiState();
+      var treeSignature = buildTreeSignature();
+      var collapsedNodeMap = getCollapsedNodeKeyMap();
       var visibleContext = buildVisibleModuleContext();
       var children = [];
 
@@ -4243,9 +4657,10 @@
                 entry,
                 row,
                 caseIndex,
-                getCaseTopupHighlight(moduleState, caseIndex)
+                getCaseTopupHighlight(moduleState, caseIndex),
+                collapsedNodeMap
               ));
-          });
+            });
         }
         if (moduleState && moduleState.running && moduleState.lastAction === MODULE_ACTIONS.APPEND) {
           moduleChildren.push(buildModulePendingNode(entry, {
@@ -4275,7 +4690,14 @@
             ? 'running'
             : (moduleState && moduleState.status === 'error' ? 'error' : ''),
           statusText: moduleState && moduleState.error ? moduleState.error : '',
-        }, getModuleNodeTopupHighlight(moduleState)), moduleChildren));
+        }, getModuleNodeTopupHighlight(moduleState)), moduleChildren, {
+          expanded: resolveNodeExpandedState({
+            type: 'module',
+            moduleKey: entry.moduleKey,
+            moduleTitle: entry.title,
+            moduleId: entry.aiModuleId || '',
+          }, collapsedNodeMap, entry.title, [entry.title]),
+        }));
       });
       if (
         rootState.running
@@ -4284,14 +4706,16 @@
         children.push(buildRootPendingNode(rootState.lastAction));
       }
 
-      xmindState.treeSourceSignature = buildTreeSignature();
+      xmindState.treeSourceSignature = treeSignature;
       return {
         nodeData: createNode(getRequirementLabelText(), {
           type: 'root',
           nodeId: getRootNodeId(),
           status: rootState.running ? 'running' : (rootState.status === 'error' ? 'error' : ''),
           statusText: rootState.error || '',
-        }, children),
+        }, children, {
+          expanded: resolveNodeExpandedState({ type: 'root', nodeId: getRootNodeId() }, collapsedNodeMap, getRequirementLabelText(), [getRequirementLabelText()]),
+        }),
       };
     }
 
@@ -4499,6 +4923,8 @@
         if (options.persist !== false) persistXmindState(false);
         return;
       }
+      var restorableViewState = getRestorableViewState(ensureState().treeSourceSignature);
+      var restorableDrawerState = getRestorableDrawerState(ensureState().treeSourceSignature);
       var mindElixirCoreApi = getMindElixirCoreApi();
       if (!isMindElixirReady(mindElixirCoreApi)) {
         setDebugState({ phase: 'waiting-mind-runtime' });
@@ -4532,8 +4958,10 @@
           allowEdit: false,
           enableCustomBoxSelection: true,
           preserveViewState: Boolean(mindInstance),
+          initialViewState: mindInstance ? null : restorableViewState,
+          initialDrawerState: mindInstance ? null : restorableDrawerState,
           preserveAnchorNodeId: options.anchorNodeId || '',
-          initialCenterNodeId: freshRender ? getRootNodeId() : '',
+          initialCenterNodeId: freshRender && !restorableViewState ? getRootNodeId() : '',
           onExportXmind: exportCurrentXmind,
           getNodeActions: getNodeActions,
           onNodeAction: handleNodeAction,
@@ -4544,6 +4972,7 @@
         mountInlineControls();
         syncDeleteHistoryButtons();
         bindTopupHighlightPresentation();
+        bindLiveViewStateCapture();
         setDebugState({ phase: 'render-success' });
         setTimeout(function() {
           syncTopupHighlightPresentation();
@@ -5157,17 +5586,28 @@
         drawer.open();
         return true;
       }
+      getViewState().drawerOpen = true;
+      getViewState().updatedAt = Date.now();
       render({ reason: 'open-fallback' });
       return false;
     }
 
     function close() {
+      clearDrawerRestoreRetry();
       var drawer = ensureDrawer();
       if (drawer && typeof drawer.close === 'function') {
         drawer.close();
         return true;
       }
+      captureCurrentViewState();
+      getViewState().drawerOpen = false;
+      getViewState().fullscreen = false;
+      getViewState().updatedAt = Date.now();
+      if (drawerEl && drawerEl.classList) {
+        drawerEl.classList.remove('xmind-drawer-fullscreen');
+      }
       destroyMind();
+      persistXmindState(true);
       return false;
     }
 
@@ -5399,10 +5839,74 @@
       }
     }
 
+    function hasDrawerRestoreIntent() {
+      var viewState = getViewState();
+      return viewState.drawerOpen === true;
+    }
+
+    function shouldRestoreDrawerAfterRefresh() {
+      if (!hasDrawerRestoreIntent()) return false;
+      return String(state.activeTab || '') === 'casesgen';
+    }
+
+    function scheduleDrawerRestoreRetry(delayMs) {
+      if (drawerRestoreRetryTimer) {
+        clearTimeout(drawerRestoreRetryTimer);
+        drawerRestoreRetryTimer = 0;
+      }
+      drawerRestoreRetryTimer = setTimeout(function() {
+        drawerRestoreRetryTimer = 0;
+        if (!shouldRestoreDrawerAfterRefresh()) {
+          clearDrawerRestoreRetry();
+          return;
+        }
+        drawerRestoreRetryCount += 1;
+        if (!isDrawerOpen()) {
+          drawerRestoreStableCount = 0;
+          setDebugState({
+            phase: 'drawer-restore-attempt',
+            attempt: drawerRestoreRetryCount,
+          });
+          open();
+        }
+        if (isDrawerOpen()) {
+          drawerRestoreStableCount += 1;
+          setDebugState({
+            phase: 'drawer-restore-open',
+            attempt: drawerRestoreRetryCount,
+            stableCount: drawerRestoreStableCount,
+          });
+        } else {
+          drawerRestoreStableCount = 0;
+        }
+        if (drawerRestoreStableCount >= 2) {
+          clearDrawerRestoreRetry();
+          return;
+        }
+        if (drawerRestoreRetryCount >= DRAWER_RESTORE_RETRY_LIMIT) {
+          setDebugState({
+            phase: 'drawer-restore-timeout',
+            attempt: drawerRestoreRetryCount,
+          });
+          clearDrawerRestoreRetry();
+          return;
+        }
+        scheduleDrawerRestoreRetry(isDrawerOpen() ? 220 : 140);
+      }, Math.max(0, Number(delayMs) || 0));
+    }
+
+    function restoreDrawerAfterRefreshIfNeeded() {
+      clearDrawerRestoreRetry();
+      if (!hasDrawerRestoreIntent()) return;
+      scheduleDrawerRestoreRetry(80);
+    }
+
     ensureDrawer();
+    bindViewStatePersistenceLifecycle();
     bindButtons();
     bindRenderListeners();
     updateSummary();
+    restoreDrawerAfterRefreshIfNeeded();
 
     return {
       open: open,
@@ -5411,6 +5915,7 @@
       exportCurrentXmind: exportCurrentXmind,
       switchTab: switchTab,
       isOpen: isDrawerOpen,
+      restoreAfterWorkflowReady: restoreDrawerAfterRefreshIfNeeded,
     };
   }
 

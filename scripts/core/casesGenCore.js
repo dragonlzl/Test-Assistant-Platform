@@ -268,6 +268,17 @@
           treeSourceSignature: '',
           hasModuleSkeleton: false,
           hasImportedBaseline: false,
+          viewState: {
+            drawerOpen: false,
+            fullscreen: false,
+            transform: '',
+            scaleVal: 1,
+            scrollLeft: 0,
+            scrollTop: 0,
+            collapsedNodeKeys: [],
+            treeSourceSignature: '',
+            updatedAt: 0,
+          },
           history: [],
           operationSnapshots: [],
           lastOperationSnapshotId: '',
@@ -310,6 +321,22 @@
       }
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) {
         state.xmindCaseGen.rootSnapshots = [];
+      }
+      if (!state.xmindCaseGen.viewState || typeof state.xmindCaseGen.viewState !== 'object') {
+        state.xmindCaseGen.viewState = {
+          drawerOpen: false,
+          fullscreen: false,
+          transform: '',
+          scaleVal: 1,
+          scrollLeft: 0,
+          scrollTop: 0,
+          collapsedNodeKeys: [],
+          treeSourceSignature: '',
+          updatedAt: 0,
+        };
+      }
+      if (!Array.isArray(state.xmindCaseGen.viewState.collapsedNodeKeys)) {
+        state.xmindCaseGen.viewState.collapsedNodeKeys = [];
       }
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineModuleKeys)) {
         state.xmindCaseGen.deletedBaselineModuleKeys = [];
