@@ -69,7 +69,6 @@
     var summaryDialogTitleEl = document.getElementById('xmindCaseGenSummaryDialogTitle');
     var summaryDialogDescEl = document.getElementById('xmindCaseGenSummaryDialogDesc');
     var summaryDialogBodyEl = document.getElementById('xmindCaseGenSummaryDialogBody');
-    var prepResetBtn = document.getElementById('xmindCaseGenPrepResetBtn');
     var summaryCloseBtn = document.getElementById('xmindCaseGenSummaryCloseBtn');
     var exportBtn = document.getElementById('xmindCaseGenExportBtn');
     var statusEl = document.getElementById('xmindCaseGenStatus');
@@ -143,6 +142,7 @@
         requirementSupplement: '',
         manualRequirementBlocks: [],
         caseImportMode: '',
+        baseLocked: false,
         completed: false,
       };
     }
@@ -636,6 +636,7 @@
       state.xmindCaseGen.prep.caseImportMode = state.xmindCaseGen.prep.caseImportMode === 'import'
         ? 'import'
         : (state.xmindCaseGen.prep.caseImportMode === 'skip' ? 'skip' : '');
+      state.xmindCaseGen.prep.baseLocked = state.xmindCaseGen.prep.baseLocked === true || state.xmindCaseGen.prep.completed === true;
       state.xmindCaseGen.prep.completed = state.xmindCaseGen.prep.completed === true;
       return state.xmindCaseGen;
     }
@@ -1139,9 +1140,44 @@
 
     function setPrepField(key, value, immediate) {
       var prep = getPrepState();
+      if (prep.baseLocked === true && isPrepBaseField(key)) return false;
       prep[key] = value;
-      if (key !== 'completed') prep.completed = false;
+      if (key !== 'completed' && key !== 'step' && key !== 'baseLocked') prep.completed = false;
       persistXmindState(immediate === true);
+      return true;
+    }
+
+    function isPrepBaseField(key) {
+      return key === 'requirementMode'
+        || key === 'requirementSupplement'
+        || key === 'manualRequirementBlocks'
+        || key === 'caseImportMode';
+    }
+
+    function isPrepBaseLocked() {
+      return getPrepState().baseLocked === true;
+    }
+
+    function getPrepMaxReachableStep() {
+      if (isPrepBaseLocked()) return STEP_OPTIONS;
+      if (!hasRequirementReady()) return STEP_REQUIREMENT;
+      if (!hasCaseStepReady()) return STEP_CASES;
+      return STEP_OPTIONS;
+    }
+
+    function clampPrepStep(step) {
+      var next = Math.max(STEP_REQUIREMENT, Math.min(STEP_OPTIONS, Number(step) || STEP_REQUIREMENT));
+      var maxStep = getPrepMaxReachableStep();
+      if (next > maxStep) next = maxStep;
+      return next;
+    }
+
+    function markPrepNeedsReconfirm(immediate) {
+      var prep = getPrepState();
+      if (prep.completed !== true) return false;
+      prep.completed = false;
+      persistXmindState(immediate === true);
+      return true;
     }
 
     function normalizeText(value) {
@@ -1815,39 +1851,39 @@
     function setCaseGenOption(key, value) {
       if (casesGenApi && typeof casesGenApi.setCaseGenSettingValue === 'function') {
         casesGenApi.setCaseGenSettingValue(key, value);
-        return;
+      } else {
+        state.caseGenSettings = state.caseGenSettings || {};
+        state.caseGenSettings[key] = value;
       }
-      state.caseGenSettings = state.caseGenSettings || {};
-      state.caseGenSettings[key] = value;
+      markPrepNeedsReconfirm(false);
       persistXmindState(false);
     }
 
     function renderPrepStepTabs() {
       var prep = getPrepState();
       var steps = [
-        { step: STEP_REQUIREMENT, label: 'step1：需求导入', done: hasRequirementReady() },
-        { step: STEP_CASES, label: 'step2：是否导入用例', done: hasCaseStepReady() },
-        { step: STEP_OPTIONS, label: 'step3：生成选项', done: prep.completed === true },
+        { step: STEP_REQUIREMENT, label: '需求导入', shortLabel: 'step1', done: hasRequirementReady() },
+        { step: STEP_CASES, label: '是否导入用例', shortLabel: 'step2', done: hasCaseStepReady() },
+        { step: STEP_OPTIONS, label: '生成选项', shortLabel: 'step3', done: prep.completed === true },
       ];
       return '<div class="xmind-casegen-prep-stepper">'
         + steps.map(function(item) {
           var classes = ['xmind-casegen-prep-step'];
           if (prep.step === item.step) classes.push('is-active');
           else if (item.done) classes.push('is-done');
-          return '<button type="button" class="' + classes.join(' ') + '" data-prep-step="' + item.step + '">'
-            + '<span class="xmind-casegen-prep-step-badge">' + String(item.step) + '</span>'
-            + '<span class="xmind-casegen-prep-step-copy">'
-            + '<strong class="xmind-casegen-prep-step-title">' + escapeHtml(item.label) + '</strong>'
-            + '<span class="xmind-casegen-prep-step-status">' + escapeHtml(item.done ? '已完成' : '待处理') + '</span>'
-            + '</span>'
-            + '</button>';
+          return '<span class="' + classes.join(' ') + '" title="' + escapeHtml(item.label) + '"' + (prep.step === item.step ? ' aria-current="step"' : '') + '>'
+            + '<span class="xmind-casegen-prep-step-badge">' + escapeHtml(item.shortLabel) + '</span>'
+            + '</span>';
         }).join('')
         + '</div>';
     }
 
     function renderRequirementStepCard() {
       var prep = getPrepState();
+      var locked = isPrepBaseLocked();
       var mode = prep.requirementMode || '';
+      var readonlyAttr = locked ? ' readonly' : '';
+      var disabledAttr = locked ? ' disabled' : '';
       var rawTextEl = document.getElementById('rawText');
       var docValue = rawTextEl && rawTextEl.value ? String(rawTextEl.value).trim() : '';
       var manualText = getManualRequirementText();
@@ -1858,29 +1894,30 @@
           + '<img src="' + escapeHtml(item.dataUrl || '') + '" alt="' + escapeHtml(name) + '" />'
           + '<div class="xmind-casegen-prep-image-item-copy">'
           +   '<span>' + escapeHtml(name) + '</span>'
-          +   '<button type="button" class="link-toggle" data-prep-action="remove-manual-image" data-image-index="' + index + '">移除</button>'
+          +   '<button type="button" class="link-toggle" data-prep-action="remove-manual-image" data-image-index="' + index + '"' + disabledAttr + '>移除</button>'
           + '</div>'
           + '</div>';
       }).join('');
       return ''
-        + '<div class="xmind-casegen-prep-card xmind-casegen-prep-card-main">'
+        + '<div class="xmind-casegen-prep-card xmind-casegen-prep-card-main ' + (locked ? 'is-readonly' : '') + '">'
         +   '<div class="xmind-casegen-prep-card-head">'
         +     '<div class="xmind-casegen-prep-card-copy">'
-        +       '<span class="xmind-casegen-prep-step-order">步骤 1 / 3</span>'
+        +       '<span class="xmind-casegen-prep-step-order">step1</span>'
         +       '<strong class="xmind-casegen-prep-card-title">需求导入</strong>'
         +     '</div>'
-        +     '<span class="xmind-casegen-prep-status-badge is-' + (hasRequirementReady() ? 'done' : 'ready') + '">' + (hasRequirementReady() ? '已完成' : '待选择') + '</span>'
+        +     '<span class="xmind-casegen-prep-status-badge is-' + (hasRequirementReady() ? 'done' : 'ready') + '">' + (hasRequirementReady() ? '已完成' : '待完成') + '</span>'
         +   '</div>'
+        +   (locked ? '<div class="xmind-casegen-prep-warning">当前步骤仅可查看，若要调整需求或参考用例，请开始新的生成准备。</div>' : '')
         +   '<div class="xmind-casegen-prep-choice-grid">'
-        +     '<label class="xmind-casegen-prep-choice ' + (mode === 'document' ? 'is-active' : '') + '">'
-        +       '<input type="radio" name="xmindRequirementMode" value="document" ' + (mode === 'document' ? 'checked' : '') + ' />'
+        +     '<label class="xmind-casegen-prep-choice is-success ' + (mode === 'document' ? 'is-active ' : '') + (locked ? 'is-readonly' : '') + '">'
+        +       '<input type="radio" name="xmindRequirementMode" value="document" ' + (mode === 'document' ? 'checked ' : '') + disabledAttr + ' />'
         +       '<span class="xmind-casegen-prep-choice-title">导入需求文档</span>'
-        +       '<span class="xmind-casegen-prep-choice-desc">复用现有需求导入链路，可附加需求补充。</span>'
+        +       '<span class="xmind-casegen-prep-choice-desc">复用现有需求导入链路，可补充说明。</span>'
         +     '</label>'
-        +     '<label class="xmind-casegen-prep-choice ' + (mode === 'manual' ? 'is-active' : '') + '">'
-        +       '<input type="radio" name="xmindRequirementMode" value="manual" ' + (mode === 'manual' ? 'checked' : '') + ' />'
+        +     '<label class="xmind-casegen-prep-choice is-success ' + (mode === 'manual' ? 'is-active ' : '') + (locked ? 'is-readonly' : '') + '">'
+        +       '<input type="radio" name="xmindRequirementMode" value="manual" ' + (mode === 'manual' ? 'checked ' : '') + disabledAttr + ' />'
         +       '<span class="xmind-casegen-prep-choice-title">填写需求描述</span>'
-        +       '<span class="xmind-casegen-prep-choice-desc">支持文本 + 图片，作为 XMind 专属需求上下文。</span>'
+        +       '<span class="xmind-casegen-prep-choice-desc">支持文本和图片。</span>'
         +     '</label>'
         +   '</div>'
         +   (mode === 'document'
@@ -1888,25 +1925,25 @@
             + '<div class="xmind-casegen-prep-field">'
             +   '<label>需求文档</label>'
             +   '<div class="xmind-casegen-prep-upload-row">'
-            +     '<button type="button" data-prep-action="import-requirement">' + (docValue ? '重新导入需求文档' : '导入需求文档') + '</button>'
+            +     '<button type="button" data-prep-action="import-requirement"' + disabledAttr + '>' + (docValue ? '重新导入需求文档' : '导入需求文档') + '</button>'
             +     '<span class="hint">' + escapeHtml(docValue ? ('已导入 ' + String(docValue.length) + ' 字') : '导入后才能进入下一步') + '</span>'
             +   '</div>'
             + '</div>'
             + '<div class="xmind-casegen-prep-field">'
             +   '<label for="xmindCaseGenRequirementSupplement">需求补充</label>'
-            +   '<textarea id="xmindCaseGenRequirementSupplement" data-prep-input="requirementSupplement" placeholder="非必填，会与需求文档一起作为生成上下文。">' + escapeHtml(prep.requirementSupplement || '') + '</textarea>'
+            +   '<textarea id="xmindCaseGenRequirementSupplement" data-prep-input="requirementSupplement" placeholder="非必填，会与需求文档一起作为生成上下文。"' + readonlyAttr + disabledAttr + '>' + escapeHtml(prep.requirementSupplement || '') + '</textarea>'
             + '</div>'
           : '')
         +   (mode === 'manual'
           ? ''
             + '<div class="xmind-casegen-prep-field">'
             +   '<label for="xmindCaseGenManualRequirementText">需求描述</label>'
-            +   '<textarea id="xmindCaseGenManualRequirementText" data-manual-requirement-text="1" placeholder="请输入需求描述；也可直接粘贴图片到此区域。">' + escapeHtml(manualText) + '</textarea>'
+            +   '<textarea id="xmindCaseGenManualRequirementText" data-manual-requirement-text="1" placeholder="请输入需求描述；也可直接粘贴图片到此区域。"' + readonlyAttr + disabledAttr + '>' + escapeHtml(manualText) + '</textarea>'
             + '</div>'
             + '<div class="xmind-casegen-prep-field">'
             +   '<label>需求图片</label>'
             +   '<div class="xmind-casegen-prep-upload-row">'
-            +     '<button type="button" class="secondary" data-prep-action="upload-manual-images">上传图片</button>'
+            +     '<button type="button" class="secondary" data-prep-action="upload-manual-images"' + disabledAttr + '>上传图片</button>'
             +     '<span class="hint">' + (manualImages.length ? ('已添加 ' + String(manualImages.length) + ' 张') : '支持上传或粘贴图片') + '</span>'
             +   '</div>'
             +   '<div class="xmind-casegen-prep-image-list">' + manualImagesHtml + '</div>'
@@ -1917,27 +1954,30 @@
 
     function renderCasesStepCard() {
       var prep = getPrepState();
+      var locked = isPrepBaseLocked();
       var mode = prep.caseImportMode || '';
+      var disabledAttr = locked ? ' disabled' : '';
       var casesInfo = buildCasesSummaryInfo();
       return ''
-        + '<div class="xmind-casegen-prep-card xmind-casegen-prep-card-main">'
+        + '<div class="xmind-casegen-prep-card xmind-casegen-prep-card-main ' + (locked ? 'is-readonly' : '') + '">'
         +   '<div class="xmind-casegen-prep-card-head">'
         +     '<div class="xmind-casegen-prep-card-copy">'
-        +       '<span class="xmind-casegen-prep-step-order">步骤 2 / 3</span>'
+        +       '<span class="xmind-casegen-prep-step-order">step2</span>'
         +       '<strong class="xmind-casegen-prep-card-title">是否导入用例</strong>'
         +     '</div>'
         +     '<span class="xmind-casegen-prep-status-badge is-' + (hasCaseStepReady() ? 'done' : 'ready') + '">' + (hasCaseStepReady() ? '已完成' : '待选择') + '</span>'
         +   '</div>'
+        +   (locked ? '<div class="xmind-casegen-prep-warning">当前步骤仅可查看，导入方式和内容已在本次生成中锁定。</div>' : '')
         +   '<div class="xmind-casegen-prep-choice-grid">'
-        +     '<label class="xmind-casegen-prep-choice ' + (mode === 'skip' ? 'is-active' : '') + '">'
-        +       '<input type="radio" name="xmindCaseImportMode" value="skip" ' + (mode === 'skip' ? 'checked' : '') + ' />'
+        +     '<label class="xmind-casegen-prep-choice is-success ' + (mode === 'skip' ? 'is-active ' : '') + (locked ? 'is-readonly' : '') + '">'
+        +       '<input type="radio" name="xmindCaseImportMode" value="skip" ' + (mode === 'skip' ? 'checked ' : '') + disabledAttr + ' />'
         +       '<span class="xmind-casegen-prep-choice-title">不导入用例</span>'
-        +       '<span class="xmind-casegen-prep-choice-desc">主树仅展示 AI 生成层。</span>'
+        +       '<span class="xmind-casegen-prep-choice-desc">主树只展示 AI 生成内容。</span>'
         +     '</label>'
-        +     '<label class="xmind-casegen-prep-choice ' + (mode === 'import' ? 'is-active' : '') + '">'
-        +       '<input type="radio" name="xmindCaseImportMode" value="import" ' + (mode === 'import' ? 'checked' : '') + ' />'
+        +     '<label class="xmind-casegen-prep-choice is-success ' + (mode === 'import' ? 'is-active ' : '') + (locked ? 'is-readonly' : '') + '">'
+        +       '<input type="radio" name="xmindCaseImportMode" value="import" ' + (mode === 'import' ? 'checked ' : '') + disabledAttr + ' />'
         +       '<span class="xmind-casegen-prep-choice-title">导入参考用例</span>'
-        +       '<span class="xmind-casegen-prep-choice-desc">导入后会作为主树可见基线。</span>'
+        +       '<span class="xmind-casegen-prep-choice-desc">导入后作为主树基线。</span>'
         +     '</label>'
         +   '</div>'
         +   (mode === 'import'
@@ -1945,8 +1985,8 @@
             + '<div class="xmind-casegen-prep-field">'
             +   '<label>参考用例来源</label>'
             +   '<div class="xmind-casegen-prep-upload-row">'
-            +     '<button type="button" data-prep-action="import-cases">' + (hasImportedBaselineCases() ? '继续导入用例' : '导入用例') + '</button>'
-            +     '<button type="button" class="secondary" data-prep-action="select-cases-library">从用例库选择</button>'
+            +     '<button type="button" data-prep-action="import-cases"' + disabledAttr + '>' + (hasImportedBaselineCases() ? '继续导入用例' : '导入用例') + '</button>'
+            +     '<button type="button" class="secondary" data-prep-action="select-cases-library"' + disabledAttr + '>从用例库选择</button>'
             +   '</div>'
             +   '<p class="hint">' + escapeHtml(casesInfo.meta) + '</p>'
             + '</div>'
@@ -1979,7 +2019,9 @@
     }
 
     function renderOptionsStepCard() {
+      var prep = getPrepState();
       var settings = getCaseGenSettingsSnapshot();
+      var locked = isPrepBaseLocked();
       var primaryHtml = ''
         + renderOptionToggleCard({
           key: 'needFunctionCondition',
@@ -2051,11 +2093,14 @@
         + '<div class="xmind-casegen-prep-card xmind-casegen-prep-card-main">'
         +   '<div class="xmind-casegen-prep-card-head">'
         +     '<div class="xmind-casegen-prep-card-copy">'
-        +       '<span class="xmind-casegen-prep-step-order">步骤 3 / 3</span>'
+        +       '<span class="xmind-casegen-prep-step-order">step3</span>'
         +       '<strong class="xmind-casegen-prep-card-title">生成选项</strong>'
         +     '</div>'
-        +     '<span class="xmind-casegen-prep-status-badge is-' + (getPrepState().completed ? 'done' : 'ready') + '">' + (getPrepState().completed ? '已确认' : '待确认') + '</span>'
+        +     '<span class="xmind-casegen-prep-status-badge is-' + (prep.completed ? 'done' : 'ready') + '">' + (prep.completed ? '已确认' : (locked ? '待重新确认' : '待确认')) + '</span>'
         +   '</div>'
+        +   '<div class="xmind-casegen-prep-warning">' + escapeHtml(locked
+              ? 'step1 和 step2 已锁定，本次仅可调整生成选项并重新确认。'
+              : '确认后，step1 和 step2 在本次生成中都不可更改。') + '</div>'
         +   '<div class="xmind-casegen-prep-field">'
         +     '<label for="xmindCaseGenOptionCustomRequirement">额外要求</label>'
         +     '<textarea id="xmindCaseGenOptionCustomRequirement" data-casegen-setting="customRequirement" placeholder="非必填，用于补充生成要求。">' + escapeHtml(settings.customRequirement || '') + '</textarea>'
@@ -2080,7 +2125,8 @@
 
     function renderPrepFooter() {
       var prep = getPrepState();
-      var step = prep.step;
+      var step = clampPrepStep(prep.step);
+      var locked = isPrepBaseLocked();
       var nextDisabled = false;
       if (step === STEP_REQUIREMENT) nextDisabled = !hasRequirementReady();
       if (step === STEP_CASES) nextDisabled = !hasCaseStepReady();
@@ -2091,7 +2137,7 @@
         + '<div class="xmind-casegen-prep-nav-main">'
         +   (step < STEP_OPTIONS
           ? '<button type="button" data-prep-nav="next" ' + (nextDisabled ? 'disabled' : '') + '>下一步</button>'
-          : '<button type="button" data-prep-nav="confirm">确认前置准备</button>')
+          : '<button type="button" data-prep-nav="confirm">确认并保存</button>')
         + '</div>'
         + '</div>';
     }
@@ -2099,14 +2145,15 @@
     function renderPrepDialog() {
       if (!summaryDialogBodyEl) return;
       var prep = getPrepState();
+      var currentStep = clampPrepStep(prep.step);
+      if (prep.step !== currentStep) prep.step = currentStep;
       var mainHtml = '';
-      if (prep.step === STEP_REQUIREMENT) mainHtml = renderRequirementStepCard();
-      else if (prep.step === STEP_CASES) mainHtml = renderCasesStepCard();
+      if (currentStep === STEP_REQUIREMENT) mainHtml = renderRequirementStepCard();
+      else if (currentStep === STEP_CASES) mainHtml = renderCasesStepCard();
       else mainHtml = renderOptionsStepCard();
       summaryDialogBodyEl.innerHTML = ''
         + '<div class="xmind-casegen-prep-flow">'
         +   renderPrepStepTabs()
-        +   buildSummaryCardsHtml()
         +   mainHtml
         +   renderPrepFooter()
         + '</div>';
@@ -2134,12 +2181,14 @@
     }
 
     function triggerRequirementImport() {
+      if (isPrepBaseLocked()) return;
       setPrepField('requirementMode', 'document');
       var input = document.getElementById('fileInput');
       if (input && typeof input.click === 'function') input.click();
     }
 
     function triggerCasesImport() {
+      if (isPrepBaseLocked()) return;
       setPrepField('caseImportMode', 'import');
       var input = document.getElementById('caseFileInput');
       if (input && typeof input.click === 'function') input.click();
@@ -2159,6 +2208,7 @@
     }
 
     function triggerCasesLibrarySelect() {
+      if (isPrepBaseLocked()) return;
       setPrepField('caseImportMode', 'import');
       preserveXmindDrawerForNestedDrawer(1600);
       var caseLibraryApi = window.app && window.app.caseLibraryApi ? window.app.caseLibraryApi : null;
@@ -2172,8 +2222,12 @@
 
     function openSummaryDialog(step) {
       var prep = getPrepState();
-      if (Number(step) >= STEP_REQUIREMENT && Number(step) <= STEP_OPTIONS) {
-        prep.step = Number(step);
+      if (isPrepBaseLocked()) {
+        prep.step = STEP_OPTIONS;
+      } else {
+        prep.step = clampPrepStep(Number(step) >= STEP_REQUIREMENT && Number(step) <= STEP_OPTIONS
+          ? Number(step)
+          : prep.step);
       }
       summaryDialogMode = 'prep';
       summaryDialogOpen = true;
@@ -2211,119 +2265,45 @@
         historyBtn.setAttribute('aria-expanded', open && mode === 'history' ? 'true' : 'false');
         historyBtn.textContent = '生成记录';
       }
-      if (prepResetBtn) prepResetBtn.hidden = !(open && mode === 'prep');
       if (summaryDialogTitleEl) {
         summaryDialogTitleEl.textContent = mode === 'history' ? '生成记录' : '生成前置准备';
       }
       if (summaryDialogDescEl) {
         summaryDialogDescEl.textContent = mode === 'history'
           ? '记录当前 XMind 用例生成里每次节点操作的结果摘要。'
-          : '按 3 步完成需求导入、参考用例选择与生成选项配置，然后回到画布触发生成。';
+          : '按 3 步完成前置准备，确认后 step1 和 step2 会在本次生成中锁定。';
       }
       if (!open) return;
       if (mode === 'history') renderHistoryDialog();
       else renderPrepDialog();
     }
 
-    function confirmResetPrepState() {
-      var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
-      var message = '将清空当前已导入的需求、参考用例、前置流程结果和当前 XMind 生成结果，并重置前置准备。是否继续？';
-      if (!confirmDrawer || typeof confirmDrawer.open !== 'function') {
-        var ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
-          ? window.confirm(message)
-          : true;
-        if (!ok) return Promise.resolve(false);
-        executePrepReset();
-        notifyStatus('已重置生成前置准备', 'ok');
-        return Promise.resolve(true);
-      }
-      return confirmDrawer.open({
-        title: '确认重置生成前置准备',
-        message: message,
-        confirmText: '确认重置',
-        cancelText: '取消',
-        danger: true,
-      }).then(function(result) {
-        if (result && result.ok) {
-          executePrepReset();
-          notifyStatus('已重置生成前置准备', 'ok');
-          return true;
-        }
-        return false;
-      });
-    }
-
-    function executePrepReset() {
-      if (prepApi && typeof prepApi.interruptActiveExecutions === 'function') {
-        try {
-          prepApi.interruptActiveExecutions('重置 XMind 生成前置准备');
-        } catch (err) {}
-      }
-      if (prepApi && typeof prepApi.resetWorkflowData === 'function') {
-        prepApi.resetWorkflowData();
-      } else {
-        var preservedViewState = cloneJson(getViewState(), createDefaultViewState());
-        state.xmindCaseGen = {
-          mode: 'modules',
-          treeSourceSignature: '',
-          hasModuleSkeleton: false,
-          hasImportedBaseline: false,
-          viewState: preservedViewState,
-          history: [],
-          operationSnapshots: [],
-          lastOperationSnapshotId: '',
-          rootSnapshotId: '',
-          rootSnapshots: [],
-          deletedBaselineModuleKeys: [],
-          deletedBaselineCaseKeys: [],
-          deleteUndoStack: [],
-          deleteRedoStack: [],
-          root: createDefaultRootState(),
-          summaryCollapsed: false,
-          prep: createDefaultPrepState(),
-          nextSnapshotId: 1,
-          snapshots: [],
-          modules: {},
-        };
-        state.caseGenModules = [];
-        state.caseGenSource = '';
-        state.caseGenResults = {};
-        state.caseSelections = {};
-        state.caseGenSuggestions = {};
-        state.caseGenModuleStatus = {};
-        state.caseGenProgress = {};
-        state.caseGenTiming = {};
-        state.importedCases = [];
-      }
-      ensureState();
-      clearDeleteHistoryStacks();
-      renderOpenedSummaryDialog();
-      scheduleRender('prep-reset');
-      persistXmindState(true);
-    }
-
     function setPrepStep(step) {
-      var next = Math.max(STEP_REQUIREMENT, Math.min(STEP_OPTIONS, Number(step) || STEP_REQUIREMENT));
+      var next = clampPrepStep(step);
       setPrepField('step', next);
       renderOpenedSummaryDialog();
     }
 
     function handlePrepNav(actionId) {
       var prep = getPrepState();
+      var currentStep = clampPrepStep(prep.step);
       if (actionId === 'prev') {
-        setPrepStep(prep.step - 1);
+        setPrepStep(currentStep - 1);
         return true;
       }
       if (actionId === 'next') {
-        if (prep.step === STEP_REQUIREMENT && !hasRequirementReady()) return false;
-        if (prep.step === STEP_CASES && !hasCaseStepReady()) return false;
-        setPrepStep(prep.step + 1);
+        if (currentStep === STEP_REQUIREMENT && !hasRequirementReady()) return false;
+        if (currentStep === STEP_CASES && !hasCaseStepReady()) return false;
+        setPrepStep(currentStep + 1);
         return true;
       }
       if (actionId === 'confirm') {
         if (!hasRequirementReady() || !hasCaseStepReady()) return false;
-        setPrepField('completed', true, true);
-        notifyStatus('已完成生成前置准备', 'ok');
+        prep.baseLocked = true;
+        prep.completed = true;
+        prep.step = STEP_OPTIONS;
+        persistXmindState(true);
+        notifySuccessToast('已保存生成前置准备', 3000);
         closeSummaryDialog({ skipPersist: true });
         return true;
       }
@@ -5651,11 +5631,6 @@
           closeSummaryDialog();
         });
       }
-      if (prepResetBtn) {
-        prepResetBtn.addEventListener('click', function() {
-          confirmResetPrepState();
-        });
-      }
       if (exportBtn) {
         exportBtn.addEventListener('click', function() {
           exportCurrentXmind();
@@ -5663,14 +5638,6 @@
       }
       if (summaryDialogBodyEl) {
         summaryDialogBodyEl.addEventListener('click', function(event) {
-          var stepTarget = event && event.target && event.target.closest
-            ? event.target.closest('[data-prep-step]')
-            : null;
-          if (stepTarget) {
-            var step = Number(stepTarget.getAttribute('data-prep-step'));
-            if (Number.isFinite(step)) setPrepStep(step);
-            return;
-          }
           var navTarget = event && event.target && event.target.closest
             ? event.target.closest('[data-prep-nav]')
             : null;
@@ -5714,11 +5681,19 @@
           var target = event && event.target ? event.target : null;
           if (!target) return;
           if (target.name === 'xmindRequirementMode') {
+            if (isPrepBaseLocked()) {
+              renderOpenedSummaryDialog();
+              return;
+            }
             setPrepField('requirementMode', target.value === 'manual' ? 'manual' : 'document');
             renderOpenedSummaryDialog();
             return;
           }
           if (target.name === 'xmindCaseImportMode') {
+            if (isPrepBaseLocked()) {
+              renderOpenedSummaryDialog();
+              return;
+            }
             setPrepField('caseImportMode', target.value === 'import' ? 'import' : 'skip');
             renderOpenedSummaryDialog();
             scheduleRender('case-import-mode-change');

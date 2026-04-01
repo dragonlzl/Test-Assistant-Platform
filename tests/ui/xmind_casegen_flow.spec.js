@@ -1246,7 +1246,7 @@ test.describe('XMind 用例生成抽屉', () => {
     });
   });
 
-  test('前置准备改为 3 步流程，并支持手填需求图片与最近步骤恢复', async ({ page }) => {
+  test('前置准备改为单步 3 步流程，并在确认后锁定前两步', async ({ page }) => {
     const token = 'token-xmind-prep';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
@@ -1258,10 +1258,13 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.waitForFunction(() => Boolean(document.querySelector('[data-xmind-casegen-inline-actions]')), {}, { timeout: 10000 });
     await clickElementById(page, 'xmindCaseGenSummaryBtn');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
-    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('步骤 1 / 3');
+    await expect(page.locator('#xmindCaseGenPrepResetBtn')).toHaveCount(0);
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-step')).toHaveCount(3);
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
 
-    await page.check('input[name="xmindRequirementMode"][value="manual"]');
+    await page.check('input[name="xmindRequirementMode"][value="manual"]', { force: true });
+    await expect(page.locator('label.xmind-casegen-prep-choice.is-success').filter({ has: page.locator('input[name="xmindRequirementMode"][value="manual"]') })).toHaveClass(/is-active/);
     await page.fill('#xmindCaseGenManualRequirementText', '手填需求：支持用户在移动端完成订单确认。');
     await page.click('[data-prep-action="upload-manual-images"]');
     await page.locator('input[type="file"][accept="image/*"]').last().setInputFiles({
@@ -1273,11 +1276,13 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
 
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
-    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('步骤 2 / 3');
-    await page.check('input[name="xmindCaseImportMode"][value="skip"]');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step2');
+    await page.check('input[name="xmindCaseImportMode"][value="skip"]', { force: true });
+    await expect(page.locator('label.xmind-casegen-prep-choice.is-success').filter({ has: page.locator('input[name="xmindCaseImportMode"][value="skip"]') })).toHaveClass(/is-active/);
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
 
-    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('步骤 3 / 3');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step3');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('确认后，step1 和 step2 在本次生成中都不可更改');
     await page.fill('#xmindCaseGenOptionCustomRequirement', '标题保持简洁');
     await expect(page.locator('[data-casegen-setting-card="needFunctionCondition"]')).toHaveClass(/is-on/);
     await expect(page.locator('[data-casegen-setting-card="needNumericValidation"]')).toHaveClass(/is-on/);
@@ -1289,7 +1294,20 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await clickElementById(page, 'xmindCaseGenSummaryBtn');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
-    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('步骤 3 / 3');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step3');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="prev"]')).toBeEnabled();
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="prev"]');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step2');
+    await expect(page.locator('input[name="xmindCaseImportMode"][value="skip"]')).toBeDisabled();
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-action="import-cases"]')).toHaveCount(0);
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="prev"]');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
+    await expect(page.locator('input[name="xmindRequirementMode"][value="manual"]')).toBeDisabled();
+    await expect(page.locator('#xmindCaseGenManualRequirementText')).toBeDisabled();
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-action="upload-manual-images"]')).toBeDisabled();
+    await clickElementById(page, 'xmindCaseGenSummaryCloseBtn');
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step3');
     await page.waitForFunction(() => {
       var state = window.app && window.app.state ? window.app.state : null;
       var prep = state && state.xmindCaseGen ? state.xmindCaseGen.prep : null;
@@ -1300,6 +1318,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(state && state.xmindCaseGen && state.xmindCaseGen.prep).toBeTruthy();
     expect(state.xmindCaseGen.prep.requirementMode).toBe('manual');
     expect(state.xmindCaseGen.prep.caseImportMode).toBe('skip');
+    expect(state.xmindCaseGen.prep.baseLocked).toBe(true);
     expect(state.xmindCaseGen.prep.completed).toBe(true);
     expect(Array.isArray(state.xmindCaseGen.prep.manualRequirementBlocks)).toBeTruthy();
     expect(state.xmindCaseGen.prep.manualRequirementBlocks.length).toBe(2);
