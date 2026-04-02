@@ -3719,6 +3719,24 @@
     setStatus(dom.editStatus, '已定位到第 ' + String(idx + 1) + ' 条用例', 'ok');
   }
 
+  function resolveCaseLibraryXmindDirection(items) {
+    var modules = {};
+    var count = 0;
+    (Array.isArray(items) ? items : []).forEach(function(item) {
+      var key = normalizeXmindCaseLibraryText(item && item.module ? item.module : '').replace(/\s+/g, ' ');
+      if (!key || modules[key]) return;
+      modules[key] = true;
+      count += 1;
+    });
+    return count > 2 ? 'side' : 'right';
+  }
+
+  function resolveCaseLibraryMindRootNodeId(mindData) {
+    return mindData && mindData.nodeData && mindData.nodeData.id
+      ? String(mindData.nodeData.id)
+      : '';
+  }
+
   function openCaseLibraryXmindStructure() {
     var mindApi = getMindElixirApi();
     if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
@@ -3760,10 +3778,12 @@
       rootTitle: cleanCaseFileName(currentFile.file_name_clean || currentFile.file_name || '用例'),
       fallbackModule: '用例模块',
     });
+    var mindDirection = resolveCaseLibraryXmindDirection(list);
     try {
       caseLibraryXmindMindInstance = mindApi.renderMindMap(container, mindData, {
         instance: caseLibraryXmindMindInstance,
-        direction: 'right',
+        direction: mindDirection,
+        initialCenterNodeId: resolveCaseLibraryMindRootNodeId(mindData),
         enableCustomBoxSelection: true,
         onExportXmind: exportCurrentCaseLibraryXmind,
         editableSessionKey: 'tap-case-library-xmind-edit-' + String(currentFile.id || ''),

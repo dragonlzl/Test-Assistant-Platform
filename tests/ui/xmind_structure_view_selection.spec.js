@@ -151,6 +151,18 @@ async function getNodeCenter(page, viewerSelector, topicText) {
   return position;
 }
 
+async function expectViewerUsesBothSides(page, viewerSelector, rootTopic, moduleTopics) {
+  const rootCenter = await getNodeCenter(page, viewerSelector, rootTopic);
+  const sides = [];
+  for (var i = 0; i < (moduleTopics || []).length; i += 1) {
+    const topic = moduleTopics[i];
+    const center = await getNodeCenter(page, viewerSelector, topic);
+    sides.push(center.x < rootCenter.x ? 'left' : 'right');
+  }
+  expect(sides.includes('left')).toBeTruthy();
+  expect(sides.includes('right')).toBeTruthy();
+}
+
 async function clickReadonlyNode(page, viewerSelector, topicText, ctrlKey) {
   var point = await getNodeCenter(page, viewerSelector, topicText);
   if (ctrlKey === true) await page.keyboard.down('Control');
@@ -371,5 +383,187 @@ test.describe('XMind 只读态节点选择', () => {
     await page.click('#tempExecXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     await runReadonlySelectionAssertions(page, '#tempExecXmindStructureViewer', '余额不足时支付失败', '优惠券支付成功');
+  });
+
+  test('用例库与用例执行的 XMind 结构展示在模块较多时会左右分布', async ({ page }) => {
+    const token = 'token-xmind-view-side-layout';
+    const user = { id: 329, username: 'xmind_view_side_user', role: 'admin', level: 'leader' };
+    const project = { id: 3301, name: 'XMind左右分布项目' };
+    const versions = [{ id: 3401, name: 'v1' }];
+    const now = new Date().toISOString();
+    const caseFileId = 3501;
+    const fileName = '左右分布用例集';
+    const rootTopic = fileName;
+    const modules = ['登录模块', '支付模块', '订单模块', '消息模块'];
+    const caseFiles = [{
+      id: caseFileId,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: fileName,
+      reuse_enabled: false,
+      item_count: 4,
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    }];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFileId] = [{
+      id: 35001,
+      case_file_id: caseFileId,
+      module: modules[0],
+      title: '登录成功',
+      priority: 'P1',
+      precondition: '账号已存在',
+      steps: '输入账号密码并提交',
+      expected: '登录成功',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }, {
+      id: 35002,
+      case_file_id: caseFileId,
+      module: modules[1],
+      title: '支付成功',
+      priority: 'P1',
+      precondition: '余额充足',
+      steps: '提交支付',
+      expected: '支付成功',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }, {
+      id: 35003,
+      case_file_id: caseFileId,
+      module: modules[2],
+      title: '订单创建成功',
+      priority: 'P2',
+      precondition: '商品有库存',
+      steps: '提交订单',
+      expected: '创建订单成功',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }, {
+      id: 35004,
+      case_file_id: caseFileId,
+      module: modules[3],
+      title: '消息发送成功',
+      priority: 'P2',
+      precondition: '消息通道可用',
+      steps: '发送消息',
+      expected: '消息发送成功',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }];
+
+    await buildCaseLibraryRoutes(page, {
+      token,
+      user,
+      project,
+      versions,
+      caseFiles,
+      caseItemsByFileId,
+    });
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('tap-theme-hint', 'light'); } catch (_) {}
+      try { localStorage.setItem('usecase-settings-v1', JSON.stringify({ theme: 'light' })); } catch (_) {}
+    }, { token });
+
+    await gotoCaseLibrary(page);
+    await waitCaseLibraryReady(page);
+    await switchToTab(page, 'case-library');
+
+    await page.click('#openCaseLibraryEditDrawerBtn');
+    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await page.click('#caseLibraryEditListBody [data-case-lib-edit="' + String(caseFileId) + '"]');
+    await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
+    await page.click('#caseLibraryXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    await page.click('#caseLibraryXmindStructureViewer [data-mind-action="zoom-fit"]');
+    await expectViewerUsesBothSides(page, '#caseLibraryXmindStructureViewer', rootTopic, modules);
+
+    const tempExecFileId = 'temp-xmind-side-layout';
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.removeItem('tap-auth-token'); } catch (_) {}
+      try { localStorage.setItem('usecase-temp-exec-v1', JSON.stringify(payload)); } catch (_) {}
+      try { localStorage.setItem('tempexec-focus-v1', JSON.stringify([])); } catch (_) {}
+    }, {
+      files: [{
+        id: tempExecFileId,
+        name: fileName,
+        requirement: '执行左右分布需求',
+        cases: [{
+          module: modules[0],
+          title: '登录成功',
+          priority: 'P1',
+          preconditions: '账号已存在',
+          steps: '输入账号密码并提交',
+          expected: '登录成功',
+          actual: '未执行',
+          remark: '',
+        }, {
+          module: modules[1],
+          title: '支付成功',
+          priority: 'P1',
+          preconditions: '余额充足',
+          steps: '提交支付',
+          expected: '支付成功',
+          actual: '未执行',
+          remark: '',
+        }, {
+          module: modules[2],
+          title: '订单创建成功',
+          priority: 'P2',
+          preconditions: '商品有库存',
+          steps: '提交订单',
+          expected: '创建订单成功',
+          actual: '未执行',
+          remark: '',
+        }, {
+          module: modules[3],
+          title: '消息发送成功',
+          priority: 'P2',
+          preconditions: '消息通道可用',
+          steps: '发送消息',
+          expected: '消息发送成功',
+          actual: '未执行',
+          remark: '',
+        }],
+      }],
+      versions: [],
+      activeId: tempExecFileId,
+    });
+
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.fallback();
+      }
+      return route.abort();
+    });
+
+    await gotoExec(page);
+    await waitExecReady(page);
+    await page.evaluate((nextId) => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
+        window.app.tempExecApi.setTempExecActive(nextId);
+      }
+    }, tempExecFileId);
+    await page.waitForFunction(() => {
+      var btn = document.getElementById('tempExecXmindViewBtn');
+      return Boolean(btn && !btn.disabled && !(btn.classList && btn.classList.contains('hidden')));
+    }, {}, { timeout: 15000 });
+    await page.click('#tempExecXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]');
+    await expectViewerUsesBothSides(page, '#tempExecXmindStructureViewer', fileName, modules);
   });
 });

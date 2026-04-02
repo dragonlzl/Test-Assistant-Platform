@@ -2005,6 +2005,30 @@
       return String(actionId || '');
     }
 
+    function getGenerationFailureLabel(scope, actionId, options) {
+      var opts = options || {};
+      if (scope === 'module') {
+        if (actionId === MODULE_ACTIONS.APPEND) return '追加失败';
+        if (actionId === MODULE_ACTIONS.FULL_CASES) {
+          return opts.hadAiCasesBeforeAction === true ? '重新生成失败' : '生成失败';
+        }
+        return '生成失败';
+      }
+      if (
+        actionId === ROOT_ACTIONS.TOPUP_MODULES
+        || actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES
+        || actionId === ROOT_ACTIONS.EXISTING_CASES
+      ) {
+        return '补全失败';
+      }
+      if (actionId === ROOT_ACTIONS.APPEND_ALL) return '追加失败';
+      if (actionId === ROOT_ACTIONS.REGENERATE_MODULES) return '重新生成失败';
+      if (actionId === ROOT_ACTIONS.FULL_CASES) {
+        return opts.hadAiContentBeforeAction === true ? '重新生成失败' : '生成失败';
+      }
+      return '生成失败';
+    }
+
     function buildHistoryLocationLabel(scope, moduleTitle) {
       if (scope === 'module') {
         return '模块节点 · ' + (normalizeModuleTitle(moduleTitle) || '当前模块');
@@ -2067,6 +2091,7 @@
         locationLabel: buildHistoryLocationLabel(scope, payload && payload.moduleTitle),
         actionId: String(payload && payload.actionId ? payload.actionId : ''),
         actionLabel: String(payload && payload.actionLabel ? payload.actionLabel : ''),
+        summaryText: payload && payload.summaryText ? String(payload.summaryText) : '',
         moduleCount: moduleCount,
         details: details,
         resultKind: payload && (
@@ -2094,9 +2119,12 @@
           var details = Array.isArray(entry.details) ? entry.details : [];
           var diagnostics = normalizeHistoryDiagnostics(entry && entry.diagnostics);
           var resultKind = entry && entry.resultKind ? String(entry.resultKind) : 'changed';
-          var summaryText = '生成模块 ' + String(Number(entry.moduleCount) || 0) + ' 个';
-          if (resultKind === 'error') summaryText = '本次生成未成功';
-          else if (resultKind === 'no-change' && !details.length) summaryText = '本次没有新增结果';
+          var summaryText = entry && entry.summaryText ? String(entry.summaryText) : '';
+          if (!summaryText) {
+            summaryText = '生成模块 ' + String(Number(entry.moduleCount) || 0) + ' 个';
+            if (resultKind === 'error') summaryText = '本次生成未成功';
+            else if (resultKind === 'no-change' && !details.length) summaryText = '本次没有新增结果';
+          }
           var detailHtml = details.length
             ? '<div class="xmind-casegen-history-detail-list">'
                 + details.map(function(detail) {
@@ -5902,10 +5930,15 @@
         rootState.updatedAt = Date.now();
         clearRootPendingModules(actionId);
         var rootErrorInfo = buildGenerationErrorInfo(err);
+        var rootFailureLabel = getGenerationFailureLabel('root', actionId, {
+          hadAiContentBeforeAction: hadAiContentBeforeAction,
+          hadAiCasesBeforeAction: hadAiCasesBeforeAction,
+        });
         recordGenerationHistory({
           scope: 'root',
           actionId: actionId,
           actionLabel: historyActionLabel,
+          summaryText: rootFailureLabel,
           moduleCount: 0,
           details: [],
           resultKind: rootErrorInfo.resultKind,
@@ -5914,7 +5947,7 @@
           previewText: rootErrorInfo.previewText,
         });
         if (hadAiCasesBeforeAction) setAllModuleResultsVisibility(true);
-        notifyStatus('生成失败：' + rootState.error, 'err', { forceInline: true });
+        notifyStatus(rootFailureLabel, 'err', { forceInline: true });
         render({ reason: 'root-error', anchorNodeId: anchorNodeId });
         persistXmindState(true);
         return false;
@@ -6141,11 +6174,15 @@
         moduleState.hideResults = false;
         moduleState.updatedAt = Date.now();
         var moduleErrorInfo = buildGenerationErrorInfo(err);
+        var moduleFailureLabel = getGenerationFailureLabel('module', actionId, {
+          hadAiCasesBeforeAction: hadAiCasesBeforeAction,
+        });
         recordGenerationHistory({
           scope: 'module',
           moduleTitle: normalizeModuleTitle(moduleEntry && moduleEntry.title ? moduleEntry.title : ''),
           actionId: actionId,
           actionLabel: historyActionLabel,
+          summaryText: moduleFailureLabel,
           moduleCount: 0,
           details: [],
           resultKind: moduleErrorInfo.resultKind,
@@ -6153,7 +6190,7 @@
           diagnostics: moduleErrorInfo.diagnostics,
           previewText: moduleErrorInfo.previewText,
         });
-        notifyStatus('生成失败：' + moduleState.error, 'err', { forceInline: true });
+        notifyStatus(moduleFailureLabel, 'err', { forceInline: true });
         render({ reason: 'module-error', anchorNodeId: anchorNodeId });
         persistXmindState(true);
         return false;

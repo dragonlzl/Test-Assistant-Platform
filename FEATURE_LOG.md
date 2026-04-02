@@ -20,6 +20,100 @@
 ```
 
 - 功能名称：XMind 前置准备弹窗打开时自动收起右键菜单
+- 功能名称：用例库与用例执行 XMind 结构视图支持多模块左右分布
+- 功能描述：修正 `用例库` 与 `用例执行` 页的 XMind 结构展示在模块较多时始终单侧展开的问题。现在只读态结构视图会按唯一模块数自动选择布局方向：模块较少时保持原单侧布局，模块较多时切换为左右分布，和 `XMind 用例生成` 页的阅读体验保持一致。
+- 操作方式：
+  - 在 `用例库 -> 查看&编辑` 打开任意用例文件，点击 `XMind结构展示`；
+  - 或在 `用例执行` 页打开任意执行集，点击 `XMind结构展示`；
+  - 当当前数据的唯一模块数大于 2 时，根节点两侧会自动分布模块；模块数较少时仍保持原右侧展开。
+- 使用效果：
+  - 模块较多时不再全部挤在根节点同一侧，结构更均衡、可读性更好；
+  - 少量模块场景继续保持原单侧布局，不影响既有的点击、Ctrl 多选和框选习惯；
+  - `XMind 用例生成`、`用例库`、`用例执行` 三处结构视图的整体阅读感受更一致。
+- 新增内容/接口/组件：
+  - `scripts/modules/caseLibrary.js`：新增只读态 XMind 布局方向判断，按唯一模块数在 `right/side` 间切换；
+  - `scripts/modules/tempexec.js`：同步接入相同的布局方向判断；
+  - `tests/ui/xmind_structure_view_selection.spec.js`：新增“模块较多时左右分布”回归用例，并保留 Ctrl 多选回归。
+- 复用说明：复用现有 `mindElixirCore.renderMindMap()` 的 `direction` 能力，没有新增第二套 XMind 渲染器，也没有改动用例数据结构、编辑逻辑或后端接口。
+- 测试与验证：
+  - 自查 code review：确认仅调整 `caseLibrary` / `tempexec` 只读态 XMind 布局决策；编写态仍保持原单侧布局，不影响编辑链路；
+  - `node --check scripts/modules/caseLibrary.js scripts/modules/tempexec.js tests/ui/xmind_structure_view_selection.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_selection.spec.js -g "用例库与用例执行的 XMind 结构展示在模块较多时会左右分布" --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_selection.spec.js -g "用例库 XMind 结构展示支持 Ctrl 多选|用例执行 XMind 结构展示支持 Ctrl 多选" --reporter=line`，2/2 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-02 为用例库与用例执行页补齐多模块 XMind 左右分布逻辑，并修正回归测试覆盖。
+
+- 功能名称：XMind 前置准备弹窗打开时自动收起右键菜单
+- 功能名称：XMind 用例生成失败提示缩短并同步写入生成记录
+- 功能描述：优化 `XMind 用例生成` 失败反馈。当根节点或模块节点生成失败时，工具栏状态区不再直接展示整段 HTTP/模型错误文本，而是改为按动作显示短提示，如 `生成失败`、`重新生成失败`、`补全失败`、`追加失败`。同时，失败摘要会和通俗失败原因、真实错误信息一起写入 `生成记录`，便于回看定位。
+- 操作方式：
+  - 在 `XMind 用例生成` 抽屉内执行根节点或模块节点生成动作；
+  - 若模型调用失败，工具栏只显示对应的短失败提示；
+  - 点击 `生成记录`，可查看本次失败结果摘要、失败原因和真实错误信息。
+- 使用效果：
+  - 工具栏不再被长错误文本撑满，失败状态更清晰；
+  - 用户仍可通过 `生成记录` 查看完整失败上下文，不会丢失诊断信息；
+  - 不同动作失败时会显示更贴合操作语义的文案，如补全动作失败显示 `补全失败`。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增统一失败标签映射，生成记录支持写入失败摘要，并将工具栏失败提示改为短文案；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充“补全失败时工具栏只显示短提示，详细错误写入生成记录”回归，并同步更新失败记录断言。
+- 复用说明：复用现有 `notifyStatus()`、`recordGenerationHistory()` 和生成记录弹窗结构；本次没有新增第二套错误状态机，也没有改动模型调用接口和结果存储结构。
+- 测试与验证：
+  - 自查 code review：确认只调整失败提示展示与生成记录摘要，不影响根/模块动作执行、结果提交、回滚和持久化；
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "生成记录会把模型错误显示为通俗失败原因|生成记录会展示代理返回的 HTTP 503 具体错误信息|补全失败时工具栏只显示短提示，详细错误写入生成记录" --reporter=line`，3/3 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-02 将 XMind 用例生成失败提示改为短文案，并把失败摘要同步写入生成记录。
+
+- 功能名称：XMind 前置准备弹窗打开时自动收起右键菜单
+- 功能名称：用例执行页 XMind 结构展示打开时自动定位根节点
+- 功能描述：优化 `用例执行` 页的 `XMind 结构展示` 抽屉。现在用户打开执行集的 XMind 视图时，画布会在初始化后自动以根节点为中心展示，不再需要先手动点击 `全览` 才能把根节点拉回视野中心。
+- 操作方式：
+  - 在 `用例执行` 页选择任意执行集；
+  - 点击 `XMind 结构展示`；
+  - 抽屉打开后，根节点会自动定位到画布中心附近，随后仍可继续使用全屏、缩放、搜索和拖拽。
+- 使用效果：
+  - 初次打开执行集 XMind 时可直接看到根节点，阅读起点更稳定；
+  - 与 `XMind 用例生成` 页的打开体验保持一致；
+  - 不影响原有的缩放、全览、搜索、选择和编辑入口。
+- 新增内容/接口/组件：
+  - `scripts/modules/tempexec.js`：在执行页 XMind 渲染时补充根节点 `initialCenterNodeId` 初始化参数；
+  - `tests/ui/xmind_structure_view_buttons.spec.js`：新增执行页打开 XMind 后根节点位于画布中心附近的回归断言。
+- 复用说明：复用现有 `mindElixirCore.renderMindMap()` 的 `initialCenterNodeId` 居中能力，没有新增新的画布定位逻辑或第二套视图状态。
+- 测试与验证：
+  - 自查 code review：确认只影响执行页 XMind 初次打开时的视图定位，不改动执行数据、编辑链路和导出逻辑；
+  - `node --check scripts/modules/tempexec.js tests/ui/xmind_structure_view_buttons.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_buttons.spec.js -g "执行页支持 XMind 结构展示并切换主题" --reporter=line`，1/1 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-02 为用例执行页 XMind 结构展示补齐打开时自动定位根节点能力。
+
+- 功能名称：XMind 前置准备弹窗打开时自动收起右键菜单
+- 功能名称：用例库 XMind 结构展示打开时自动定位根节点
+- 功能描述：优化 `用例库 -> 查看&编辑` 的 `XMind 结构展示` 抽屉。现在打开用例库条目的 XMind 视图时，画布会在初始化后自动以根节点为中心展示，不再需要手动点击 `全览` 才能把根节点拉回画布中央。
+- 操作方式：
+  - 在 `用例库 -> 查看&编辑` 选择任意用例文件；
+  - 点击 `XMind结构展示`；
+  - 抽屉打开后，根节点会自动定位到画布中心附近，随后仍可继续进行全屏、缩放、搜索和定位操作。
+- 使用效果：
+  - 打开用例库 XMind 时会直接从根节点开始阅读，结构起点更稳定；
+  - 与 `XMind 用例生成`、`用例执行` 的打开体验保持一致；
+  - 不影响已有的 XMind 只读选择、搜索、导出与双击定位交互。
+- 新增内容/接口/组件：
+  - `scripts/modules/caseLibrary.js`：在用例库只读态 XMind 渲染时补充根节点 `initialCenterNodeId` 初始化参数；
+  - `tests/ui/xmind_structure_view_buttons.spec.js`：新增用例库打开 XMind 后根节点位于画布中心附近的回归断言。
+- 复用说明：复用现有 `mindElixirCore.renderMindMap()` 的 `initialCenterNodeId` 居中能力，没有新增新的画布定位状态或分叉实现。
+- 测试与验证：
+  - 自查 code review：确认只影响用例库只读态 XMind 初次打开时的视图定位，不改动编写态、编辑保存和导出逻辑；
+  - `node --check scripts/modules/caseLibrary.js tests/ui/xmind_structure_view_buttons.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_structure_view_buttons.spec.js -g "用例库支持 XMind 结构展示并切换主题" --reporter=line`，1/1 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-02 为用例库 XMind 结构展示补齐打开时自动定位根节点能力。
+
+- 功能名称：XMind 前置准备弹窗打开时自动收起右键菜单
 - 功能描述：修正 `XMind 用例生成` 中，当用户在空根节点上通过右键菜单触发生成动作、并因前置准备未完成而弹出 `生成前置准备` 弹窗时，原右键菜单仍残留在弹窗上层的问题。现在弹窗打开前会先统一收起当前 XMind 右键菜单。
 - 操作方式：
   - 打开 `XMind 用例生成` 抽屉；

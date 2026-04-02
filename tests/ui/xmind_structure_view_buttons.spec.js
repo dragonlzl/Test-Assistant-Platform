@@ -136,6 +136,45 @@ async function getCanvasScale(page, selector) {
   });
 }
 
+async function expectNodeNearCanvasCenter(page, viewerSelector, topicText, toleranceX, toleranceY) {
+  var maxOffsetX = Number(toleranceX);
+  var maxOffsetY = Number(toleranceY);
+  if (!isFinite(maxOffsetX) || maxOffsetX <= 0) maxOffsetX = 120;
+  if (!isFinite(maxOffsetY) || maxOffsetY <= 0) maxOffsetY = 90;
+  await expect.poll(async () => {
+    return page.evaluate(({ viewer, topic, tolX, tolY }) => {
+      var viewerEl = document.querySelector(viewer);
+      if (!viewerEl || !viewerEl.querySelector) return false;
+      var canvas = viewerEl.querySelector('.xmind-structure-canvas');
+      if (!canvas || !canvas.getBoundingClientRect) return false;
+      var canvasRect = canvas.getBoundingClientRect();
+      if (!canvasRect || canvasRect.width <= 0 || canvasRect.height <= 0) return false;
+      var nodes = viewerEl.querySelectorAll('me-tpc');
+      var targetRect = null;
+      Array.prototype.some.call(nodes || [], function(node) {
+        var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+        var label = textEl
+          ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+          : '';
+        if (label !== topic) return false;
+        targetRect = (textEl || node).getBoundingClientRect();
+        return Boolean(targetRect && targetRect.width > 0 && targetRect.height > 0);
+      });
+      if (!targetRect) return false;
+      var canvasCenterX = canvasRect.left + (canvasRect.width / 2);
+      var canvasCenterY = canvasRect.top + (canvasRect.height / 2);
+      var nodeCenterX = targetRect.left + (targetRect.width / 2);
+      var nodeCenterY = targetRect.top + (targetRect.height / 2);
+      return Math.abs(nodeCenterX - canvasCenterX) <= tolX && Math.abs(nodeCenterY - canvasCenterY) <= tolY;
+    }, {
+      viewer: viewerSelector,
+      topic: topicText,
+      tolX: maxOffsetX,
+      tolY: maxOffsetY,
+    });
+  }).toBe(true);
+}
+
 async function clickStructureNode(page, viewerSelector, topicText, options) {
   var opts = options || {};
   await page.waitForFunction(({ viewer, topic }) => {
@@ -417,6 +456,7 @@ test.describe('XMind 结构展示按钮', () => {
     await waitTempExecXmindButtonReady(page);
     await page.click('#tempExecXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    await expectNodeNearCanvasCenter(page, '#tempExecXmindStructureViewer', '支付执行集', 120, 90);
 
     const navGuardResult = await page.evaluate(async () => {
       var beforeHref = String(window.location.href || '');
@@ -948,6 +988,7 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#caseLibraryXmindViewBtn')).toBeEnabled();
     await page.click('#caseLibraryXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    await expectNodeNearCanvasCenter(page, '#caseLibraryXmindStructureViewer', '订单用例集', 120, 90);
     await expect(page.locator('#xmindStructureDrawerBody')).toContainText('订单模块');
     await expect(page.locator('#xmindStructureDrawerBody')).toContainText('创建订单成功');
     const caseLibraryViewerModeEnabled = await page.locator('#xmindStructureDrawerBody').evaluate((el) => {

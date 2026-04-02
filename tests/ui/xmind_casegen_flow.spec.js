@@ -2625,7 +2625,7 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
     const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
-    await expect(latestCard).toContainText('本次生成未成功');
+    await expect(latestCard).toContainText('生成失败');
     await expect(latestCard).toContainText('失败原因：');
     await expect(latestCard).toContainText('模型服务暂时不可用，请稍后重试。');
     await expect(latestCard).toContainText('错误信息：503 Service Unavailable');
@@ -2700,7 +2700,61 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
     const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
-    await expect(latestCard).toContainText('本次生成未成功');
+    await expect(latestCard).toContainText('生成失败');
+    await expect(latestCard).toContainText('失败原因：');
+    await expect(latestCard).toContainText('模型服务暂时不可用，请稍后重试。');
+    await expect(latestCard).toContainText('错误信息：HTTP 503：连接模型服务失败：上游服务暂时不可用');
+  });
+
+  test('补全失败时工具栏只显示短提示，详细错误写入生成记录', async ({ page }) => {
+    const token = 'token-xmind-topup-error-short-status';
+    const user = { id: 281, username: 'demo_user_topup_error_short_status', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyHttpError(page, {
+      status: 503,
+      rawBody: JSON.stringify({
+        detail: '连接模型服务失败：上游服务暂时不可用',
+      }),
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：验证补全失败时工具栏只显示短提示，详细错误进入生成记录。',
+      requirementLabel: 'XMind补全失败需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind补全失败需求');
+    await waitForNodeText(page, '登录模块');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '补全模块+用例');
+    await page.waitForFunction(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var history = state && state.xmindCaseGen ? state.xmindCaseGen.history : null;
+      return Boolean(Array.isArray(history) && history.length > 0);
+    }, {}, { timeout: 15000 });
+
+    await expect(page.locator('#xmindCaseGenStatus')).toHaveText('补全失败');
+    await expect(page.locator('#xmindCaseGenStatus')).not.toContainText('HTTP 503');
+    await expect(page.locator('#xmindCaseGenStatus')).not.toContainText('上游服务暂时不可用');
+
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
+    await expect(latestCard).toContainText('补全失败');
     await expect(latestCard).toContainText('失败原因：');
     await expect(latestCard).toContainText('模型服务暂时不可用，请稍后重试。');
     await expect(latestCard).toContainText('错误信息：HTTP 503：连接模型服务失败：上游服务暂时不可用');

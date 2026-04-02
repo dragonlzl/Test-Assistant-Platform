@@ -674,6 +674,24 @@
       });
     }
 
+    function resolveTempExecXmindDirection(items) {
+      var modules = {};
+      var count = 0;
+      (Array.isArray(items) ? items : []).forEach(function(item) {
+        var key = String(item && item.module ? item.module : '').replace(/\s+/g, ' ').trim();
+        if (!key || modules[key]) return;
+        modules[key] = true;
+        count += 1;
+      });
+      return count > 2 ? 'side' : 'right';
+    }
+
+    function resolveTempExecMindRootNodeId(mindData) {
+      return mindData && mindData.nodeData && mindData.nodeData.id
+        ? String(mindData.nodeData.id)
+        : '';
+    }
+
     async function openTempExecXmindStructure() {
       var mindApi = await ensureMindElixirApiReady();
       if (!mindApi || typeof mindApi.buildMindDataFromCases !== 'function' || typeof mindApi.renderMindMap !== 'function') {
@@ -713,10 +731,12 @@
         rootTitle: rootTitle,
         fallbackModule: '执行模块',
       });
+      var mindDirection = resolveTempExecXmindDirection(list);
       try {
         tempExecXmindMindInstance = mindApi.renderMindMap(container, mindData, {
           instance: tempExecXmindMindInstance,
-          direction: 'right',
+          direction: mindDirection,
+          initialCenterNodeId: resolveTempExecMindRootNodeId(mindData),
           enableCustomBoxSelection: true,
           onExportXmind: triggerTempExecXmindExport,
           editableSessionKey: 'tap-temp-exec-xmind-edit-' + String(active.id || state.tempExecActiveId || ''),
