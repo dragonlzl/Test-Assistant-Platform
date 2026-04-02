@@ -19,6 +19,37 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 用例生成支持后台续跑与工具栏中断生成
+- 功能描述：优化 `XMind 用例生成` 抽屉中的生成执行方式。根节点和模块节点的 XMind 生成不再依赖当前页面一次性阻塞等待，而是改为受管后台任务：任务状态会写入本地持久化并带心跳接管，刷新页面后可自动恢复并继续执行，切换到其他页签后也不会卡死在“生成中”。同时新增工具栏 `中断生成` 按钮，可只中断当前 XMind 页发起的模型请求与运行态，不影响其他 AI 功能。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 抽屉里通过根节点或模块节点发起生成；
+  - 生成过程中可切换到其他页签，任务会继续在后台完成；
+  - 刷新当前页面后，若存在未完成任务，会自动恢复抽屉状态并重新接管执行，完成后直接落回共享结果；
+  - 点击工具栏 `中断生成`，可一次中断当前 XMind 页内所有进行中的生成任务，请求会被取消，生成记录会写入一条“已中断”历史。
+- 使用效果：
+  - 刷新页面或暂时切换页签时，不会再长期停留在假性的“生成中”；
+  - 完成结果仍然直接写回共享 `caseGenModules` / `caseGenResults`，返回旧 `casesgen` 视图仍可看到同一份数据；
+  - 中断只影响 XMind 用例生成自身，不会误伤自动流程、缺失提醒或其他模型调用；
+  - 取消后的结果不会再延迟落库，生成记录可回看中断原因。
+- 新增内容/接口/组件：
+  - `services/modelClient.js`：新增按请求归属中断 `abortRequestsByOwner()`，并让模型调用在非超时中断时透传 `AbortError`；
+  - `scripts/modules/app.js`：新增 `initXmindCaseGenTaskManager()`，负责任务持久化、心跳、接管、恢复与中断；
+  - `scripts/core/appRuntime.js`：把 XMind 任务管理器注入到 `xmindGenApi.taskManager`，并补齐 `state.xmindCaseGen.root.taskId` 恢复字段；
+  - `scripts/modules/xmindCasegen.js`：根/模块生成改为后台任务提交与消费，新增恢复同步、中断按钮、取消历史与工具栏状态联动；
+  - `index.html`、`ai-workflow.html`：新增 `中断生成` 工具栏按钮；
+  - `style.css`：补充已中断记录样式；
+  - `tests/ui/xmind_casegen_flow.spec.js`、`tests/ui/casegen_settings_prompt.spec.js`：补充刷新恢复、页签切换续跑、中断取消与当前真实交互回归。
+- 复用说明：复用现有工作流快照持久化、`caseGenModules/caseGenResults` 共享结果真源、`recordGenerationHistory()` 历史记录、`mindElixir` 渲染与既有任务管理模式；没有新增后端接口，也没有引入第二套 XMind 结果存储。
+- 测试与验证：
+  - 自查 code review：确认没有新增第二套结果状态机；XMind 任务完成后仍通过现有提交链路回写共享结果；中断走 owner 级取消，不调用全局 `abortAllRequests()`；
+  - `node --check services/modelClient.js scripts/modules/app.js scripts/core/appRuntime.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js tests/ui/casegen_settings_prompt.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点支持生成全量模块与生成全量用例，并在刷新后恢复共享结果|模块可并发生成，且根节点补模块动作不会阻塞现有模块生成|XMind 生成在刷新后会自动恢复并继续完成，不再卡死在生成中|XMind 生成切换到其他页签后仍会在后台继续，返回后可看到完成结果|工具栏中断生成会停止 XMind 后台任务，并且不会再落下已取消的结果" --reporter=line`，5/5 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_settings_prompt.spec.js -g "XMind 用例生成抽屉使用专属指派与提示词拼装" --reporter=line`，1/1 通过；
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8082` 启动测试后端后，执行 `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line`，2/2 通过。
+- 更新记录：
+  - 2026-04-02 10:50 CST，新增 XMind 用例生成后台续跑、刷新接管、页签切换续跑和工具栏中断能力，并补齐对应 UI/API 回归验证。
+  - 2026-04-02 11:10 CST，补充后台任务恢复上下文兜底：刷新后会自动重开 XMind 抽屉，根节点继续显示原需求标识，并保留已确认的前置准备状态，避免后台任务完成后再次误弹前置准备。
+
 - 功能名称：XMind 前置准备弹窗打开时自动收起右键菜单
 - 功能名称：用例库与用例执行 XMind 结构视图支持多模块左右分布
 - 功能描述：修正 `用例库` 与 `用例执行` 页的 XMind 结构展示在模块较多时始终单侧展开的问题。现在只读态结构视图会按唯一模块数自动选择布局方向：模块较少时保持原单侧布局，模块较多时切换为左右分布，和 `XMind 用例生成` 页的阅读体验保持一致。

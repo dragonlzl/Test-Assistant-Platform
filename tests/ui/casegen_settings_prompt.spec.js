@@ -290,6 +290,49 @@ async function clickXmindNodeQuickAction(page, topicText) {
   expect(clicked).toBeTruthy();
 }
 
+async function openXmindRootContextMenu(page) {
+  const target = page.locator('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text').first();
+  await expect(target).toBeVisible();
+  let opened = false;
+  for (let i = 0; i < 4; i += 1) {
+    await target.click({ button: 'right', force: true });
+    try {
+      await page.waitForFunction(() => {
+        const buttons = document.querySelectorAll('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn');
+        return Boolean(buttons && buttons.length > 0);
+      }, {}, { timeout: i === 0 ? 2500 : 1500 });
+      opened = true;
+      break;
+    } catch (err) {
+      opened = false;
+    }
+  }
+  expect(opened).toBeTruthy();
+}
+
+async function clickXmindContextMenuAction(page, label) {
+  const actionLabel = String(label || '').trim();
+  await page.waitForFunction((text) => {
+    const buttons = document.querySelectorAll('.xmind-node-context-menu-btn');
+    return Array.prototype.some.call(buttons, function(btn) {
+      return String(btn.textContent || '').trim() === String(text || '').trim();
+    });
+  }, actionLabel, { timeout: 10000 });
+  const clicked = await page.evaluate((text) => {
+    const buttons = document.querySelectorAll('.xmind-node-context-menu-btn');
+    let target = null;
+    Array.prototype.some.call(buttons, function(btn) {
+      if (String(btn.textContent || '').trim() !== String(text || '').trim()) return false;
+      target = btn;
+      return true;
+    });
+    if (!target || target.disabled || typeof target.click !== 'function') return false;
+    target.click();
+    return true;
+  }, actionLabel);
+  expect(clicked).toBeTruthy();
+}
+
 test.describe('用例生成-设置项与跳转', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -866,7 +909,8 @@ test.describe('用例生成-设置项与跳转', () => {
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
 
     await installCaseGenPromptCapture(page);
-    await clickXmindNodeQuickAction(page, 'XMind提示词需求');
+    await openXmindRootContextMenu(page);
+    await clickXmindContextMenuAction(page, '生成全量用例');
 
     await page.waitForFunction(() => {
       return Array.isArray(window.__casegenPromptSnapshots) && window.__casegenPromptSnapshots.length > 0;

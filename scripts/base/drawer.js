@@ -167,15 +167,33 @@
     function releaseBodyLock() {
       unlockBodyScroll(body, root);
     }
-    function open() {
+    function clearInstantOpen() {
+      if (drawer.classList.contains('drawer-instant-open')) {
+        drawer.classList.remove('drawer-instant-open');
+      }
+    }
+    function open(openOptions) {
+      var opts = openOptions || {};
       closeToken += 1;
       if (closeFinalizeTimer) {
         clearTimeout(closeFinalizeTimer);
         closeFinalizeTimer = 0;
       }
+      if (opts.instant === true) {
+        drawer.classList.add('drawer-instant-open');
+      } else {
+        clearInstantOpen();
+      }
       if (drawer.classList.contains('closing')) drawer.classList.remove('closing');
       drawer.classList.add('open');
       if (drawer.classList.contains('hidden')) drawer.classList.remove('hidden');
+      if (opts.instant === true) {
+        if (panel && typeof panel.offsetWidth === 'number') panel.offsetWidth;
+        if (mask && typeof mask.offsetWidth === 'number') mask.offsetWidth;
+        setTimeout(function() {
+          clearInstantOpen();
+        }, 0);
+      }
       applyBodyLock();
       if (typeof options.onOpen === 'function') options.onOpen();
     }
@@ -192,6 +210,7 @@
     function close() {
       if (!drawer.classList.contains('open') && !drawer.classList.contains('closing')) return;
       if (shouldSkipClose(drawer)) return;
+      clearInstantOpen();
       closeToken += 1;
       var token = closeToken;
       if (closeFinalizeTimer) clearTimeout(closeFinalizeTimer);

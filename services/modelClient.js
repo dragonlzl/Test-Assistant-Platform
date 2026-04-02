@@ -116,15 +116,27 @@
       return null;
     }
 
-    function registerActiveController(controller) {
+    function registerActiveController(controller, owner) {
       if (!controller) return;
-      if (activeControllers.indexOf(controller) !== -1) return;
-      activeControllers.push(controller);
+      var existed = activeControllers.some(function(entry) {
+        return entry && entry.controller === controller;
+      });
+      if (existed) return;
+      activeControllers.push({
+        controller: controller,
+        owner: owner ? String(owner) : '',
+      });
     }
 
     function unregisterActiveController(controller) {
       if (!controller) return;
-      var idx = activeControllers.indexOf(controller);
+      var idx = -1;
+      for (var i = 0; i < activeControllers.length; i += 1) {
+        if (activeControllers[i] && activeControllers[i].controller === controller) {
+          idx = i;
+          break;
+        }
+      }
       if (idx === -1) return;
       activeControllers.splice(idx, 1);
     }
@@ -132,7 +144,8 @@
     function abortAllRequests(reason) {
       var list = activeControllers.slice();
       activeControllers.length = 0;
-      list.forEach(function(controller) {
+      list.forEach(function(entry) {
+        var controller = entry && entry.controller ? entry.controller : entry;
         if (!controller || typeof controller.abort !== 'function') return;
         try {
           controller.abort(reason || 'cancelled');
@@ -140,6 +153,30 @@
           // ignore
         }
       });
+    }
+
+    function abortRequestsByOwner(owner, reason) {
+      var targetOwner = owner ? String(owner) : '';
+      if (!targetOwner) return 0;
+      var remaining = [];
+      var aborted = 0;
+      activeControllers.forEach(function(entry) {
+        var controller = entry && entry.controller ? entry.controller : null;
+        var entryOwner = entry && entry.owner ? String(entry.owner) : '';
+        if (!controller) return;
+        if (entryOwner !== targetOwner) {
+          remaining.push(entry);
+          return;
+        }
+        try {
+          controller.abort(reason || 'cancelled');
+        } catch (err) {
+          // ignore
+        }
+        aborted += 1;
+      });
+      activeControllers = remaining;
+      return aborted;
     }
 
     function modelIsClaudeFamily(model) {
@@ -735,7 +772,24 @@
       return trimmed;
     }
 
-    async function callModelWithConfig(model, userText, promptText, reasoningEffort, temperature) {
+    function buildAbortError(signal) {
+      var reason = signal && Object.prototype.hasOwnProperty.call(signal, 'reason')
+        ? signal.reason
+        : '';
+      var text = reason ? String(reason) : 'request-aborted';
+      if (text === 'timeout') {
+        var timeoutErr = new Error('request-timeout');
+        timeoutErr.name = 'AbortError';
+        timeoutErr.abortReason = 'timeout';
+        return timeoutErr;
+      }
+      var err = new Error(text);
+      err.name = 'AbortError';
+      err.abortReason = text;
+      return err;
+    }
+
+    async function callModelWithConfig(model, userText, promptText, reasoningEffort, temperature, requestOptions) {
       if (!model || !model.baseUrl || !model.model) {
         throw new Error('模型配置不完整');
       }
@@ -759,9 +813,10 @@
       var timeoutSec = clampTimeoutSeconds(getTimeoutSec());
       var timeoutMs = timeoutSec * 1000;
       var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var requestOwner = requestOptions && requestOptions.owner ? String(requestOptions.owner || '') : '';
       var timer = null;
       if (controller) {
-        registerActiveController(controller);
+        registerActiveController(controller, requestOwner);
         timer = setTimeout(function onTimeout() { controller.abort('timeout'); }, timeoutMs);
       }
       var res;
@@ -776,7 +831,11 @@
         );
       } catch (err) {
         if (isAbortOrTimeoutError(err, controller ? controller.signal : null)) {
-          throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
+          var abortErr = buildAbortError(controller ? controller.signal : null);
+          if (abortErr && abortErr.abortReason === 'timeout') {
+            throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
+          }
+          throw abortErr || err;
         }
         throw err;
       } finally {
@@ -837,9 +896,10 @@
       );
       var timeoutMs = timeoutSec * 1000;
       var controller = typeof AbortController === 'function' ? new AbortController() : null;
+      var requestOwner = opts.owner ? String(opts.owner || '') : '';
       var timer = null;
       if (controller) {
-        registerActiveController(controller);
+        registerActiveController(controller, requestOwner);
         timer = setTimeout(function onTimeout() { controller.abort('timeout'); }, timeoutMs);
       }
       var res;
@@ -854,7 +914,11 @@
         );
       } catch (err) {
         if (isAbortOrTimeoutError(err, controller ? controller.signal : null)) {
-          throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
+          var abortErr = buildAbortError(controller ? controller.signal : null);
+          if (abortErr && abortErr.abortReason === 'timeout') {
+            throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
+          }
+          throw abortErr || err;
         }
         throw err;
       } finally {
@@ -899,6 +963,7 @@
       callModelWithContent: callModelWithContent,
       buildMultimodalRequestBody: buildMultimodalRequestBody,
       abortAllRequests: abortAllRequests,
+      abortRequestsByOwner: abortRequestsByOwner,
     };
   }
 

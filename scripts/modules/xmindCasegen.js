@@ -63,6 +63,7 @@
     var summaryBtn = document.getElementById('xmindCaseGenSummaryBtn');
     var historyBtn = document.getElementById('xmindCaseGenHistoryBtn');
     var storeBtn = document.getElementById('xmindCaseGenStoreBtn');
+    var interruptBtn = document.getElementById('xmindCaseGenInterruptBtn');
     var deleteUndoBtn = document.getElementById('xmindCaseGenDeleteUndoBtn');
     var deleteRedoBtn = document.getElementById('xmindCaseGenDeleteRedoBtn');
     var summaryOverlayEl = document.getElementById('xmindCaseGenSummaryOverlay');
@@ -82,6 +83,7 @@
     var summaryDialogMode = 'prep';
     var currentMindData = null;
     var mindInstance = null;
+    var pendingCasesGenPageRender = false;
     var mindApiReadyPromise = null;
     var inlineControlsHost = null;
     var inlineStatusHost = null;
@@ -109,6 +111,8 @@
     var drawerRestoreRetryCount = 0;
     var drawerRestoreStableCount = 0;
     var storeValidationClearTimer = 0;
+    var xmindTaskListenerBound = false;
+    var xmindTaskProcessingMap = {};
     var storeValidationState = {
       moduleKeys: {},
       caseKeys: {},
@@ -158,6 +162,7 @@
       return {
         lastAction: '',
         running: false,
+        taskId: '',
         hideAiLayer: false,
         snapshotId: '',
         status: '',
@@ -275,6 +280,23 @@
       notifyInlineStatus(text, type || '');
     }
 
+    function syncCasesGenPageRender(options) {
+      var opts = options || {};
+      if (!casesGenApi || typeof casesGenApi.renderCaseGeneration !== 'function') return false;
+      if (opts.force !== true && isDrawerOpen()) {
+        pendingCasesGenPageRender = true;
+        return false;
+      }
+      pendingCasesGenPageRender = false;
+      casesGenApi.renderCaseGeneration();
+      return true;
+    }
+
+    function flushDeferredCasesGenPageRender() {
+      if (pendingCasesGenPageRender !== true) return false;
+      return syncCasesGenPageRender({ force: true });
+    }
+
     function clearStoreValidationState(skipRender) {
       var hadMarks = Object.keys(storeValidationState.moduleKeys || {}).length > 0
         || Object.keys(storeValidationState.caseKeys || {}).length > 0;
@@ -371,6 +393,11 @@
       return window.app && window.app.casesCoreApi ? window.app.casesCoreApi : null;
     }
 
+    function getXmindTaskManager() {
+      if (xmindGenApi && xmindGenApi.taskManager) return xmindGenApi.taskManager;
+      return window.app && window.app.xmindCaseGenTaskManager ? window.app.xmindCaseGenTaskManager : null;
+    }
+
     function isDrawerOpen() {
       var el = drawerInstance && drawerInstance.element ? drawerInstance.element : drawerEl;
       return Boolean(el && el.classList && el.classList.contains('open'));
@@ -386,6 +413,7 @@
         summaryBtn,
         historyBtn,
         storeBtn,
+        interruptBtn,
         deleteUndoBtn,
         deleteRedoBtn,
         exportBtn,
@@ -545,6 +573,7 @@
       if (!controlsRoot || !actionsHost) return false;
       controlsRoot.classList.add('xmind-casegen-inline-controls-ready');
       syncDeleteHistoryButtons();
+      syncInterruptButton();
       getInlineControlButtons().forEach(function(btn) {
         if (!btn || !actionsHost.appendChild) return;
         btn.classList.add('xmind-casegen-inline-btn');
@@ -556,6 +585,15 @@
       }
       syncInlineModelPicker();
       return true;
+    }
+
+    function syncInterruptButton() {
+      if (!interruptBtn) return;
+      var runningCount = collectRunningGenerationOperations().length;
+      interruptBtn.disabled = runningCount <= 0;
+      interruptBtn.title = runningCount > 0
+        ? ('中断当前 XMind 生成中的 ' + String(runningCount) + ' 个任务')
+        : '当前没有进行中的 XMind 生成任务';
     }
 
     function cleanupViewStateBindings() {
@@ -685,6 +723,7 @@
           }
           closeSummaryDialog({ skipPersist: true });
           destroyMind();
+          flushDeferredCasesGenPageRender();
           persistWorkflowStateNow();
         },
       });
@@ -769,6 +808,7 @@
       }
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
+      state.xmindCaseGen.root.taskId = String(state.xmindCaseGen.root.taskId || '');
       state.xmindCaseGen.deletedBaselineModuleKeys = state.xmindCaseGen.deletedBaselineModuleKeys
         .map(function(item) { return normalizeModuleKey(item); })
         .filter(Boolean);
@@ -790,6 +830,11 @@
         : (state.xmindCaseGen.prep.caseImportMode === 'skip' ? 'skip' : '');
       state.xmindCaseGen.prep.baseLocked = state.xmindCaseGen.prep.baseLocked === true || state.xmindCaseGen.prep.completed === true;
       state.xmindCaseGen.prep.completed = state.xmindCaseGen.prep.completed === true;
+      Object.keys(state.xmindCaseGen.modules || {}).forEach(function(key) {
+        var moduleState = state.xmindCaseGen.modules[key];
+        if (!moduleState || typeof moduleState !== 'object') return;
+        moduleState.taskId = String(moduleState.taskId || '');
+      });
       return state.xmindCaseGen;
     }
 
@@ -805,6 +850,7 @@
         rootState.modules[key] = {
           lastAction: '',
           running: false,
+          taskId: '',
           rootPendingActionId: '',
           snapshotId: '',
           status: '',
@@ -869,6 +915,7 @@
       if (xmindState.root) {
         xmindState.root.snapshotId = '';
         xmindState.root.running = false;
+        xmindState.root.taskId = '';
         xmindState.root.hideAiLayer = false;
         xmindState.root.status = '';
         xmindState.root.error = '';
@@ -878,6 +925,7 @@
         if (!moduleState) return;
         moduleState.snapshotId = '';
         moduleState.running = false;
+        moduleState.taskId = '';
         moduleState.rootPendingActionId = '';
         moduleState.status = '';
         moduleState.error = '';
@@ -1022,8 +1070,8 @@
       if (drawerOpen) {
         destroyMind();
       }
-      if (!reusedSharedWorkflowReset && casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
-        casesGenApi.renderCaseGeneration();
+      if (!reusedSharedWorkflowReset) {
+        syncCasesGenPageRender();
       }
       updateSummary();
       if (opts.reopenPrepDialog === true) {
@@ -1343,6 +1391,7 @@
           ? '恢复最近一次撤回的删除（Ctrl/Cmd+Shift+Z）'
           : '暂无可恢复的删除';
       }
+      syncInterruptButton();
     }
 
     function clearDeleteHistoryStacks() {
@@ -1394,9 +1443,7 @@
       ensureState().hasImportedBaseline = hasImportedBaselineCases();
       ensureRootUiState().lastAction = String(actionId || '');
       ensureRootUiState().updatedAt = Date.now();
-      if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
-        casesGenApi.renderCaseGeneration();
-      }
+      syncCasesGenPageRender();
       syncDeleteHistoryButtons();
       return true;
     }
@@ -1543,7 +1590,16 @@
 
     function getRequirementLabelText() {
       var label = state.requirementLabel ? String(state.requirementLabel).trim() : '';
+      if (!label) {
+        label = normalizeRequirementLabelFromFileName(state.lastRawImportName || '');
+      }
       return label || '当前需求';
+    }
+
+    function normalizeRequirementLabelFromFileName(fileName) {
+      var text = String(fileName || '').trim();
+      if (!text) return '';
+      return text.replace(/\.[^.\s]{1,10}$/i, '').trim();
     }
 
     function stripCodeFence(text) {
@@ -2096,6 +2152,7 @@
         details: details,
         resultKind: payload && (
           payload.resultKind === 'no-change'
+          || payload.resultKind === 'cancelled'
           || payload.resultKind === 'error'
         ) ? String(payload.resultKind) : 'changed',
         reasonText: payload && payload.reasonText ? String(payload.reasonText) : '',
@@ -2123,6 +2180,7 @@
           if (!summaryText) {
             summaryText = '生成模块 ' + String(Number(entry.moduleCount) || 0) + ' 个';
             if (resultKind === 'error') summaryText = '本次生成未成功';
+            else if (resultKind === 'cancelled') summaryText = '本次生成已中断';
             else if (resultKind === 'no-change' && !details.length) summaryText = '本次没有新增结果';
           }
           var detailHtml = details.length
@@ -2136,8 +2194,12 @@
               + '</div>'
             : '<div class="xmind-casegen-history-empty-inline">本次未生成新的模块或用例</div>';
           var reasonHtml = entry && entry.reasonText
-            ? '<div class="xmind-casegen-history-reason' + (resultKind === 'error' ? ' is-error' : '') + '">'
-                + '<strong class="xmind-casegen-history-reason-label">' + (resultKind === 'error' ? '失败原因：' : '未新增原因：') + '</strong>'
+            ? '<div class="xmind-casegen-history-reason' + (resultKind === 'error' ? ' is-error' : (resultKind === 'cancelled' ? ' is-cancelled' : '')) + '">'
+                + '<strong class="xmind-casegen-history-reason-label">' + (
+                  resultKind === 'error'
+                    ? '失败原因：'
+                    : (resultKind === 'cancelled' ? '中断原因：' : '未新增原因：')
+                ) + '</strong>'
                 + '<span class="xmind-casegen-history-reason-text">' + escapeHtml(entry.reasonText) + '</span>'
               + '</div>'
             : '';
@@ -3644,7 +3706,15 @@
       };
     }
 
-    async function executeXmindGeneration(contract, visibleContext, moduleEntry) {
+    function estimateTaskContentBlocksSize(blocks) {
+      try {
+        return JSON.stringify(Array.isArray(blocks) ? blocks : []).length;
+      } catch (err) {
+        return 0;
+      }
+    }
+
+    async function buildXmindGenerationTaskInput(contract, visibleContext, moduleEntry) {
       var prompt = buildXmindPrompt(contract);
       var payload = await buildRequirementPayload(contract, visibleContext, moduleEntry);
       var model = xmindGenApi && typeof xmindGenApi.getAssignedModel === 'function'
@@ -3657,9 +3727,10 @@
         ? xmindGenApi.getTemperatureForType('xmindcasegen')
         : 0.2;
       var modelCanSeeImages = modelSupportsVision(model);
-      var start = Date.now();
-      var content = '';
-      var fallbackToTextOnly = false;
+      var requestMode = 'text';
+      var requestText = payload.text;
+      var contentBlocks = [];
+      var degradedToTextOnly = false;
 
       if (payload.images && payload.images.length) {
         if (!modelCanSeeImages && !payload.text) {
@@ -3668,34 +3739,24 @@
         if (modelCanSeeImages && xmindGenApi && typeof xmindGenApi.callModelWithContent === 'function') {
           var imageBlocks = await buildImageContentBlocks(payload.images, payload.mode === 'manual');
           if (imageBlocks.stats.sent > 0) {
-            var blocks = [{ type: 'text', text: payload.text }].concat(imageBlocks.blocks || []);
-            content = await callXmindModelWithGuard(function() {
-              return xmindGenApi.callModelWithContent(model, blocks, prompt, {
-                reasoningEffort: reasoning,
-                temperature: temperature,
-              });
-            });
-          } else {
-            fallbackToTextOnly = true;
+            contentBlocks = [{ type: 'text', text: payload.text }].concat(imageBlocks.blocks || []);
+            if (estimateTaskContentBlocksSize(contentBlocks) > 1800000 && String(payload.text || '').trim()) {
+              degradedToTextOnly = true;
+            } else {
+              requestMode = 'content';
+            }
           }
-        } else {
-          fallbackToTextOnly = true;
         }
-      } else {
-        fallbackToTextOnly = true;
       }
-
-      if (fallbackToTextOnly) {
-        content = await callXmindModelWithGuard(function() {
-          return xmindGenApi.callModelWithConfig(model, payload.text, prompt, reasoning, temperature);
-        });
-      }
-
       return {
-        content: content,
-        durationMs: Date.now() - start,
         prompt: prompt,
-        text: payload.text,
+        requestMode: requestMode,
+        requestText: requestText,
+        contentBlocks: requestMode === 'content' ? contentBlocks : [],
+        degradedToTextOnly: degradedToTextOnly,
+        model: cloneJson(model, null),
+        reasoning: reasoning,
+        temperature: temperature,
       };
     }
 
@@ -4471,12 +4532,14 @@
       xmindState.hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
       xmindState.root.lastAction = ROOT_ACTIONS.ROLLBACK;
       xmindState.root.running = false;
+      xmindState.root.taskId = '';
       xmindState.root.status = '';
       xmindState.root.error = '';
       xmindState.root.updatedAt = Date.now();
       Object.keys(xmindState.modules || {}).forEach(function(key) {
         var moduleState = ensureModuleUiState(key);
         moduleState.running = false;
+        moduleState.taskId = '';
         moduleState.rootPendingActionId = '';
         moduleState.status = '';
         moduleState.error = '';
@@ -4487,9 +4550,7 @@
       syncCaseGenOperationPointersLocal();
       clearAllTopupHighlights();
       clearDeleteHistoryStacks();
-      if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
-        casesGenApi.renderCaseGeneration();
-      }
+      syncCasesGenPageRender();
       persistXmindState(true);
       return true;
     }
@@ -5004,9 +5065,7 @@
       });
       invalidateDeleteConflictingSnapshots();
       pushDeleteHistoryEntry(plan, beforeSnapshot, buildDeleteHistorySnapshotPayload());
-      if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
-        casesGenApi.renderCaseGeneration();
-      }
+      syncCasesGenPageRender();
       notifyStatus('已删除 ' + buildDeleteSummaryText(plan), 'ok');
       render({ reason: 'delete-selection' });
       persistXmindState(true);
@@ -5800,6 +5859,789 @@
       };
     }
 
+    function isManagedTaskTerminal(task) {
+      var status = task && task.status ? String(task.status || '') : '';
+      return status === 'done' || status === 'error' || status === 'cancelled';
+    }
+
+    function listManagedXmindTasks() {
+      var manager = getXmindTaskManager();
+      if (!manager || typeof manager.getTasks !== 'function') return [];
+      var list = manager.getTasks();
+      return Array.isArray(list) ? list : [];
+    }
+
+    function clearManagedRunningUiState() {
+      var rootState = ensureRootUiState();
+      rootState.running = false;
+      rootState.taskId = '';
+      rootState.hideAiLayer = false;
+      clearRootPendingModules();
+      setAllModuleResultsVisibility(true);
+      Object.keys(ensureState().modules || {}).forEach(function(key) {
+        var moduleState = ensureModuleUiState(key);
+        if (!moduleState) return;
+        moduleState.running = false;
+        moduleState.taskId = '';
+        moduleState.rootPendingActionId = '';
+        moduleState.hideResults = false;
+      });
+      syncInterruptButton();
+    }
+
+    function syncManagedRunningUiState(options) {
+      var opts = options || {};
+      var tasks = Array.isArray(opts.tasks) ? opts.tasks : listManagedXmindTasks();
+      var runningTasks = tasks.filter(function(task) {
+        return task && task.status === 'running';
+      });
+      clearManagedRunningUiState();
+      runningTasks.forEach(function(task) {
+        if (!task || !task.id) return;
+        if (task.scope === 'root') {
+          var rootState = ensureRootUiState();
+          rootState.running = true;
+          rootState.taskId = String(task.id || '');
+          rootState.lastAction = String(task.actionId || rootState.lastAction || '');
+          rootState.snapshotId = String(task.snapshotId || rootState.snapshotId || '');
+          rootState.hideAiLayer = task.hadAiLayerBeforeAction === true;
+          rootState.updatedAt = Date.now();
+          if (task.hadAiCasesBeforeAction === true) {
+            setAllModuleResultsVisibility(false);
+          }
+          if (String(task.actionId || '') === ROOT_ACTIONS.EXISTING_CASES) {
+            markRootPendingModules(buildVisibleModuleContext().list, ROOT_ACTIONS.EXISTING_CASES);
+          }
+          return;
+        }
+        if (task.scope === 'module' && task.moduleId) {
+          var moduleState = ensureModuleUiState(task.moduleId);
+          if (!moduleState) return;
+          moduleState.running = true;
+          moduleState.taskId = String(task.id || '');
+          moduleState.lastAction = String(task.actionId || moduleState.lastAction || '');
+          moduleState.snapshotId = String(task.snapshotId || moduleState.snapshotId || '');
+          moduleState.hideResults = task.hadAiCasesBeforeAction === true;
+          moduleState.updatedAt = Date.now();
+        }
+      });
+      syncInterruptButton();
+      if (opts.persist === true) persistXmindState(true);
+      else if (opts.persist === false) {
+        // noop
+      } else persistXmindState(false);
+      if (opts.render === true && isDrawerOpen()) {
+        render({
+          reason: opts.reason || 'task-sync',
+          persist: false,
+          anchorNodeId: opts.anchorNodeId || '',
+        });
+      }
+      return runningTasks;
+    }
+
+    function getTaskErrorMessage(task, err) {
+      var message = '';
+      if (task && task.error) message = String(task.error || '');
+      if (!message && err && err.message) message = String(err.message || '');
+      if (!message) message = '未知错误';
+      return message.replace(/^XMind\s*用例生成失败[:：]\s*/i, '').trim() || '未知错误';
+    }
+
+    function buildGenerationCancelledInfo(task) {
+      var reasonText = task && task.cancelMeta && task.cancelMeta.reason
+        ? String(task.cancelMeta.reason || '')
+        : '已手动中断当前 XMind 生成任务';
+      return {
+        resultKind: 'cancelled',
+        reasonText: reasonText,
+        diagnostics: [],
+        previewText: '',
+      };
+    }
+
+    function shouldSuppressTaskCancelToast(task) {
+      return Boolean(task && task.cancelMeta && String(task.cancelMeta.source || '') === 'toolbar');
+    }
+
+    function resolveTaskModuleEntry(task, visibleContext) {
+      var context = visibleContext && visibleContext.map ? visibleContext : buildVisibleModuleContext();
+      if (task && task.moduleKey && context.map[task.moduleKey]) return context.map[task.moduleKey];
+      if (task && task.moduleId) {
+        var found = null;
+        context.list.some(function(entry) {
+          if (!entry) return false;
+          if (String(entry.aiModuleId || '') !== String(task.moduleId || '')) return false;
+          found = entry;
+          return true;
+        });
+        if (found) return found;
+      }
+      var moduleTitle = normalizeModuleTitle(task && task.moduleTitle ? task.moduleTitle : '');
+      if (!moduleTitle) return null;
+      var moduleId = task && task.moduleId ? String(task.moduleId || '') : '';
+      var moduleRecord = moduleId ? findAiModuleById(moduleId) : null;
+      return {
+        moduleKey: normalizeModuleKey(moduleTitle),
+        title: moduleTitle,
+        baselineCases: [],
+        aiCases: moduleId ? getAiCasesForModule(moduleId) : [],
+        aiModule: moduleRecord,
+        aiModuleId: moduleId,
+      };
+    }
+
+    function buildRootTaskPayload(actionId, taskInput, options) {
+      var opts = options || {};
+      var restoreContext = buildManagedTaskRestoreContext();
+      return {
+        scope: 'root',
+        actionId: actionId,
+        snapshotId: String(opts.snapshotId || ''),
+        contract: cloneJson(opts.contract, {}),
+        historyActionLabel: String(opts.historyActionLabel || ''),
+        hadAiContentBeforeAction: opts.hadAiContentBeforeAction === true,
+        hadAiLayerBeforeAction: opts.hadAiLayerBeforeAction === true,
+        hadAiCasesBeforeAction: opts.hadAiCasesBeforeAction === true,
+        prompt: String(taskInput && taskInput.prompt ? taskInput.prompt : ''),
+        requestMode: String(taskInput && taskInput.requestMode ? taskInput.requestMode : 'text'),
+        requestText: String(taskInput && taskInput.requestText ? taskInput.requestText : ''),
+        contentBlocks: cloneJson(taskInput && taskInput.contentBlocks, []),
+        degradedToTextOnly: taskInput && taskInput.degradedToTextOnly === true,
+        model: cloneJson(taskInput && taskInput.model, null),
+        reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
+        temperature: Number(taskInput && taskInput.temperature),
+        restoreContext: restoreContext,
+      };
+    }
+
+    function buildModuleTaskPayload(moduleEntry, actionId, taskInput, options) {
+      var opts = options || {};
+      var restoreContext = buildManagedTaskRestoreContext();
+      return {
+        scope: 'module',
+        actionId: actionId,
+        moduleId: String(opts.moduleId || (moduleEntry && moduleEntry.aiModuleId) || ''),
+        moduleKey: String(opts.moduleKey || (moduleEntry && moduleEntry.moduleKey) || ''),
+        moduleTitle: normalizeModuleTitle(opts.moduleTitle || (moduleEntry && moduleEntry.title) || ''),
+        snapshotId: String(opts.snapshotId || ''),
+        contract: cloneJson(opts.contract, {}),
+        historyActionLabel: String(opts.historyActionLabel || ''),
+        createdModuleBeforeAction: opts.createdModuleBeforeAction === true,
+        hadAiCasesBeforeAction: opts.hadAiCasesBeforeAction === true,
+        prompt: String(taskInput && taskInput.prompt ? taskInput.prompt : ''),
+        requestMode: String(taskInput && taskInput.requestMode ? taskInput.requestMode : 'text'),
+        requestText: String(taskInput && taskInput.requestText ? taskInput.requestText : ''),
+        contentBlocks: cloneJson(taskInput && taskInput.contentBlocks, []),
+        degradedToTextOnly: taskInput && taskInput.degradedToTextOnly === true,
+        model: cloneJson(taskInput && taskInput.model, null),
+        reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
+        temperature: Number(taskInput && taskInput.temperature),
+        restoreContext: restoreContext,
+      };
+    }
+
+    function buildManagedTaskRestoreContext() {
+      var rawTextEl = document.getElementById('rawText');
+      var caseTextEl = document.getElementById('caseText');
+      var prep = cloneJson(getPrepState(), createDefaultPrepState());
+      var viewState = cloneJson(getViewState(), createDefaultViewState());
+      return {
+        requirementLabel: getRequirementLabelText(),
+        requirementLabelSource: state.requirementLabelSource ? String(state.requirementLabelSource || '') : '',
+        lastRawImportName: state.lastRawImportName ? String(state.lastRawImportName || '') : '',
+        rawText: rawTextEl && rawTextEl.value ? String(rawTextEl.value || '') : '',
+        caseText: caseTextEl && caseTextEl.value ? String(caseTextEl.value || '') : '',
+        importedCases: cloneJson(state.importedCases, []),
+        prep: prep,
+        viewState: {
+          drawerOpen: viewState.drawerOpen === true || isDrawerOpen(),
+          fullscreen: viewState.fullscreen === true || Boolean(drawerEl && drawerEl.classList && drawerEl.classList.contains('xmind-drawer-fullscreen')),
+        },
+      };
+    }
+
+    function pickLatestManagedTaskRestoreContext(tasks) {
+      var latest = null;
+      (Array.isArray(tasks) ? tasks : []).forEach(function(task) {
+        var restoreContext = task && task.restoreContext && typeof task.restoreContext === 'object'
+          ? task.restoreContext
+          : null;
+        if (!restoreContext) return;
+        if (!latest) {
+          latest = task;
+          return;
+        }
+        var prevTime = Number(latest.updatedAt || latest.endedAt || latest.createdAt || 0);
+        var nextTime = Number(task.updatedAt || task.endedAt || task.createdAt || 0);
+        if (nextTime >= prevTime) latest = task;
+      });
+      return latest;
+    }
+
+    function restoreWorkflowContextFromManagedTasks(tasks) {
+      var latestTask = pickLatestManagedTaskRestoreContext(tasks);
+      var restoreContext = latestTask && latestTask.restoreContext && typeof latestTask.restoreContext === 'object'
+        ? latestTask.restoreContext
+        : null;
+      if (!restoreContext) return false;
+      var changed = false;
+      var rawTextEl = document.getElementById('rawText');
+      var fileNameEl = document.getElementById('fileName');
+      var caseTextEl = document.getElementById('caseText');
+      var casesCoreApi = getCasesCoreApi();
+      var currentLabel = state.requirementLabel ? String(state.requirementLabel).trim() : '';
+      var currentLabelSource = state.requirementLabelSource ? String(state.requirementLabelSource).trim() : '';
+      var restoreLabel = restoreContext.requirementLabel ? String(restoreContext.requirementLabel || '').trim() : '';
+      if (!restoreLabel) {
+        restoreLabel = normalizeRequirementLabelFromFileName(restoreContext.lastRawImportName || '');
+      }
+      if ((!currentLabel || currentLabel === '当前需求' || currentLabelSource === 'default') && restoreLabel) {
+        state.requirementLabel = restoreLabel;
+        state.requirementLabelSource = restoreContext.requirementLabelSource
+          ? String(restoreContext.requirementLabelSource || '')
+          : (restoreContext.lastRawImportName ? 'import' : (currentLabelSource || 'task-restore'));
+        changed = true;
+      }
+      if (!state.lastRawImportName && restoreContext.lastRawImportName) {
+        state.lastRawImportName = String(restoreContext.lastRawImportName || '');
+        changed = true;
+      }
+      if (fileNameEl && state.lastRawImportName && String(fileNameEl.textContent || '').trim() !== state.lastRawImportName) {
+        fileNameEl.textContent = state.lastRawImportName;
+        changed = true;
+      }
+      if (rawTextEl && !String(rawTextEl.value || '').trim() && restoreContext.rawText) {
+        rawTextEl.value = String(restoreContext.rawText || '');
+        changed = true;
+      }
+      if ((!Array.isArray(state.importedCases) || !state.importedCases.length) && Array.isArray(restoreContext.importedCases) && restoreContext.importedCases.length) {
+        state.importedCases = cloneJson(restoreContext.importedCases, []);
+        changed = true;
+      }
+      if (caseTextEl && !String(caseTextEl.value || '').trim() && restoreContext.caseText) {
+        caseTextEl.value = String(restoreContext.caseText || '');
+        changed = true;
+      }
+      var prep = getPrepState();
+      var prepSnapshot = restoreContext.prep && typeof restoreContext.prep === 'object'
+        ? restoreContext.prep
+        : null;
+      if (prepSnapshot) {
+        if (!prep.requirementMode && prepSnapshot.requirementMode) {
+          prep.requirementMode = String(prepSnapshot.requirementMode || '');
+          changed = true;
+        }
+        if (!prep.requirementSupplement && prepSnapshot.requirementSupplement) {
+          prep.requirementSupplement = String(prepSnapshot.requirementSupplement || '');
+          changed = true;
+        }
+        if ((!Array.isArray(prep.manualRequirementBlocks) || !prep.manualRequirementBlocks.length) && Array.isArray(prepSnapshot.manualRequirementBlocks) && prepSnapshot.manualRequirementBlocks.length) {
+          prep.manualRequirementBlocks = cloneJson(prepSnapshot.manualRequirementBlocks, []);
+          changed = true;
+        }
+        if (!prep.caseImportMode && prepSnapshot.caseImportMode) {
+          prep.caseImportMode = String(prepSnapshot.caseImportMode || '');
+          changed = true;
+        }
+        if (prep.baseLocked !== true && prepSnapshot.baseLocked === true) {
+          prep.baseLocked = true;
+          changed = true;
+        }
+        if (prep.completed !== true && prepSnapshot.completed === true) {
+          prep.completed = true;
+          changed = true;
+        }
+        var currentStep = Number(prep.step || STEP_REQUIREMENT);
+        var snapshotStep = Number(prepSnapshot.step || STEP_REQUIREMENT);
+        if (snapshotStep > currentStep) {
+          prep.step = snapshotStep;
+          changed = true;
+        }
+      }
+      var viewState = getViewState();
+      var restoreView = restoreContext.viewState && typeof restoreContext.viewState === 'object'
+        ? restoreContext.viewState
+        : null;
+      if (restoreView && viewState.drawerOpen !== true && restoreView.drawerOpen === true) {
+        viewState.drawerOpen = true;
+        changed = true;
+      }
+      if (restoreView && viewState.fullscreen !== true && restoreView.fullscreen === true) {
+        viewState.fullscreen = true;
+        changed = true;
+      }
+      if (changed && casesCoreApi && typeof casesCoreApi.renderImportedCaseList === 'function') {
+        casesCoreApi.renderImportedCaseList();
+      }
+      if (changed && casesCoreApi && typeof casesCoreApi.syncCaseTextWithImports === 'function') {
+        casesCoreApi.syncCaseTextWithImports();
+      }
+      return changed;
+    }
+
+    function startManagedXmindTask(taskPayload) {
+      var manager = getXmindTaskManager();
+      if (!manager || typeof manager.createTask !== 'function' || typeof manager.startTask !== 'function') {
+        throw new Error('XMind 后台任务能力未就绪，请刷新后重试');
+      }
+      var task = manager.createTask(taskPayload);
+      manager.startTask(task, { force: true });
+      return task;
+    }
+
+    function getManagedTaskAnchorNodeId(task, moduleEntry) {
+      if (task && task.scope === 'module') {
+        if (moduleEntry) return getModuleNodeId(moduleEntry);
+        return buildNodeId(['module', task && task.moduleKey ? task.moduleKey : 'module']);
+      }
+      return getRootNodeId();
+    }
+
+    function completeRootTaskSuccess(task) {
+      var actionId = String(task && task.actionId ? task.actionId : '');
+      var rootState = ensureRootUiState();
+      var contract = task && task.contract ? task.contract : createOperationContract(actionId, null);
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
+      var visibleContext = buildVisibleModuleContext();
+      var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
+      var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
+      var modules = filtered.list;
+      var applied = applyRootOutput(actionId, modules, visibleContext, Number(task && task.durationMs || 0));
+      rootState.running = false;
+      rootState.taskId = '';
+      rootState.hideAiLayer = false;
+      rootState.status = '';
+      rootState.error = '';
+      rootState.updatedAt = Date.now();
+      clearRootPendingModules(actionId);
+      if (!applied.changed) {
+        var rootNoChangeInfo = buildRootNoChangeInfo(actionId, filtered.diagnostics, applied.diagnostics, normalizedOutput.diagnostics);
+        recordGenerationHistory({
+          scope: 'root',
+          actionId: actionId,
+          actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getRootHistoryActionLabel(actionId, task && task.hadAiContentBeforeAction),
+          moduleCount: 0,
+          details: [],
+          resultKind: rootNoChangeInfo.resultKind,
+          reasonText: rootNoChangeInfo.reasonText,
+          diagnostics: rootNoChangeInfo.diagnostics,
+          previewText: rootNoChangeInfo.previewText,
+        });
+        discardCaseGenOperationSnapshotEntry(task && task.snapshotId ? task.snapshotId : '');
+        if (task && task.hadAiCasesBeforeAction === true) setAllModuleResultsVisibility(true);
+        notifyStatus('本轮未生成新的模块或用例', 'warn', { forceInline: true });
+        if (isDrawerOpen()) render({ reason: 'root-task-no-change', persist: false, anchorNodeId: anchorNodeId });
+        persistXmindState(true);
+        return false;
+      }
+      ensureState().mode = (
+        actionId === ROOT_ACTIONS.FULL_MODULES
+        || actionId === ROOT_ACTIONS.REGENERATE_MODULES
+      ) ? 'modules' : 'full';
+      rootState.snapshotId = String(ensureState().rootSnapshotId || (task && task.snapshotId ? task.snapshotId : '') || '');
+      recordGenerationHistory({
+        scope: 'root',
+        actionId: actionId,
+        actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getRootHistoryActionLabel(actionId, task && task.hadAiContentBeforeAction),
+        moduleCount: Array.isArray(applied.details) ? applied.details.length : 0,
+        details: applied.details,
+      });
+      var message = '';
+      if (actionId === ROOT_ACTIONS.FULL_MODULES) {
+        message = '已生成 ' + String(applied.createdModules) + ' 个模块';
+      } else if (actionId === ROOT_ACTIONS.REGENERATE_MODULES) {
+        message = '已重新生成 ' + String(applied.createdModules) + ' 个模块';
+      } else if (actionId === ROOT_ACTIONS.FULL_CASES) {
+        message = (task && task.hadAiContentBeforeAction ? '已重新生成 ' : '已生成 ')
+          + String(applied.createdModules) + ' 个模块，' + String(applied.addedCases) + ' 条用例';
+      } else {
+        message = '已补充 ' + String(applied.createdModules) + ' 个模块，' + String(applied.addedCases) + ' 条用例';
+      }
+      notifyStatus(message, 'ok');
+      clearDeleteHistoryStacks();
+      syncCasesGenPageRender();
+      if (isDrawerOpen()) render({ reason: 'root-task-committed', persist: false, anchorNodeId: anchorNodeId });
+      persistXmindState(true);
+      return true;
+    }
+
+    function completeRootTaskError(task, err, options) {
+      var opts = options || {};
+      var actionId = String(task && task.actionId ? task.actionId : '');
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
+      var rootState = ensureRootUiState();
+      discardCaseGenOperationSnapshotEntry(task && task.snapshotId ? task.snapshotId : '');
+      rootState.running = false;
+      rootState.taskId = '';
+      rootState.hideAiLayer = false;
+      rootState.status = opts.resultKind === 'cancelled' ? '' : 'error';
+      rootState.error = opts.resultKind === 'cancelled' ? '' : getTaskErrorMessage(task, err);
+      rootState.updatedAt = Date.now();
+      clearRootPendingModules(actionId);
+      if (task && task.hadAiCasesBeforeAction === true) setAllModuleResultsVisibility(true);
+      var errorInfo = opts.resultKind === 'cancelled'
+        ? buildGenerationCancelledInfo(task)
+        : buildGenerationErrorInfo(new Error(rootState.error));
+      var failureLabel = opts.resultKind === 'cancelled'
+        ? '已中断'
+        : getGenerationFailureLabel('root', actionId, {
+            hadAiContentBeforeAction: task && task.hadAiContentBeforeAction === true,
+            hadAiCasesBeforeAction: task && task.hadAiCasesBeforeAction === true,
+          });
+      recordGenerationHistory({
+        scope: 'root',
+        actionId: actionId,
+        actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getRootHistoryActionLabel(actionId, task && task.hadAiContentBeforeAction),
+        summaryText: failureLabel,
+        moduleCount: 0,
+        details: [],
+        resultKind: errorInfo.resultKind,
+        reasonText: errorInfo.reasonText,
+        diagnostics: errorInfo.diagnostics,
+        previewText: errorInfo.previewText,
+      });
+      if (opts.resultKind === 'cancelled') {
+        if (!shouldSuppressTaskCancelToast(task)) {
+          notifyFloatingStatus('已中断当前 XMind 生成任务', 'warn', 3000);
+        }
+      } else {
+        notifyStatus(failureLabel, 'err', { forceInline: true });
+      }
+      if (isDrawerOpen()) render({ reason: opts.renderReason || 'root-task-error', persist: false, anchorNodeId: anchorNodeId });
+      persistXmindState(true);
+      return false;
+    }
+
+    function completeModuleTaskSuccess(task) {
+      var actionId = String(task && task.actionId ? task.actionId : '');
+      var visibleContext = buildVisibleModuleContext();
+      var resolvedEntry = resolveTaskModuleEntry(task, visibleContext);
+      var historyModuleTitle = normalizeModuleTitle(
+        resolvedEntry && resolvedEntry.title
+          ? resolvedEntry.title
+          : (task && task.moduleTitle ? task.moduleTitle : '')
+      );
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, resolvedEntry);
+      var moduleId = resolvedEntry && resolvedEntry.aiModuleId ? resolvedEntry.aiModuleId : (task && task.moduleId ? task.moduleId : '');
+      var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
+      var contract = task && task.contract ? task.contract : createOperationContract(actionId, resolvedEntry);
+      var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
+      var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
+      var modules = filtered.list;
+      var targetKey = normalizeModuleKey(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : historyModuleTitle);
+      var targetOutput = null;
+      modules.some(function(item) {
+        if (normalizeModuleKey(item.module) === targetKey) {
+          targetOutput = item;
+          return true;
+        }
+        return false;
+      });
+      if (!targetOutput) {
+        targetOutput = {
+          module: historyModuleTitle,
+          key_scenarios: [],
+          test_points: [],
+          coupled_modules: [],
+          cases: [],
+        };
+      }
+      var currentAiCases = getAiCasesForModule(moduleId);
+      var visibleCases = resolvedEntry ? getVisibleCasesForModuleEntry(resolvedEntry).map(function(row) {
+        return normalizeCaseItem(row.item, resolvedEntry.title);
+      }).filter(Boolean) : [];
+      var nextList = [];
+      var appended = [];
+      var mergeDiagnostics = {
+        duplicateAgainstExisting: 0,
+        duplicateWithinAdded: 0,
+      };
+
+      if (actionId === MODULE_ACTIONS.APPEND) {
+        var merged = mergeCasesWithoutDuplicates(currentAiCases, targetOutput.cases || [], visibleCases);
+        nextList = merged.merged;
+        appended = merged.appended;
+        mergeDiagnostics = merged.diagnostics || mergeDiagnostics;
+        if (!appended.length) {
+          var appendNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
+          if (task && task.createdModuleBeforeAction === true && task.snapshotId) {
+            rollbackCaseGenOperationSnapshotEntry(task.snapshotId);
+          } else if (task && task.snapshotId) {
+            discardCaseGenOperationSnapshotEntry(task.snapshotId);
+          }
+          if (task && task.createdModuleBeforeAction === true) {
+            removeAiModuleRecord(moduleId);
+          }
+          if (moduleState) {
+            moduleState.running = false;
+            moduleState.taskId = '';
+            moduleState.hideResults = false;
+            moduleState.snapshotId = '';
+          }
+          recordGenerationHistory({
+            scope: 'module',
+            moduleTitle: historyModuleTitle,
+            actionId: actionId,
+            actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, resolvedEntry, task && task.hadAiCasesBeforeAction),
+            moduleCount: 1,
+            details: [{ module: historyModuleTitle, caseCount: 0 }],
+            resultKind: appendNoChangeInfo.resultKind,
+            reasonText: appendNoChangeInfo.reasonText,
+            diagnostics: appendNoChangeInfo.diagnostics,
+            previewText: appendNoChangeInfo.previewText,
+          });
+          notifyStatus('当前模块未补充到新的用例', 'warn', { forceInline: true });
+          if (isDrawerOpen()) render({ reason: 'module-task-append-empty', persist: false, anchorNodeId: anchorNodeId });
+          persistXmindState(true);
+          return false;
+        }
+        commitCaseList(moduleId, nextList, Number(task && task.durationMs || 0), '', 'keep-valid');
+        if (moduleState) setModuleTopupHighlight(moduleState, resolvedEntry.title, visibleCases.length, appended.length);
+      } else {
+        nextList = Array.isArray(targetOutput.cases) ? targetOutput.cases.slice() : [];
+        if (!nextList.length) {
+          var fullNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
+          if (task && task.createdModuleBeforeAction === true && task.snapshotId) {
+            rollbackCaseGenOperationSnapshotEntry(task.snapshotId);
+          } else if (task && task.snapshotId) {
+            discardCaseGenOperationSnapshotEntry(task.snapshotId);
+          }
+          if (task && task.createdModuleBeforeAction === true) {
+            removeAiModuleRecord(moduleId);
+          }
+          if (moduleState) {
+            moduleState.running = false;
+            moduleState.taskId = '';
+            moduleState.hideResults = false;
+            moduleState.snapshotId = '';
+          }
+          recordGenerationHistory({
+            scope: 'module',
+            moduleTitle: historyModuleTitle,
+            actionId: actionId,
+            actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, resolvedEntry, task && task.hadAiCasesBeforeAction),
+            moduleCount: 1,
+            details: [{ module: historyModuleTitle, caseCount: 0 }],
+            resultKind: fullNoChangeInfo.resultKind,
+            reasonText: fullNoChangeInfo.reasonText,
+            diagnostics: fullNoChangeInfo.diagnostics,
+            previewText: fullNoChangeInfo.previewText,
+          });
+          notifyStatus('当前模块未生成到有效用例', 'warn', { forceInline: true });
+          if (isDrawerOpen()) render({ reason: 'module-task-full-empty', persist: false, anchorNodeId: anchorNodeId });
+          persistXmindState(true);
+          return false;
+        }
+        commitCaseList(moduleId, nextList, Number(task && task.durationMs || 0), '', '');
+        if (moduleState) clearModuleTopupHighlight(moduleState);
+      }
+
+      if (moduleState) {
+        moduleState.running = false;
+        moduleState.taskId = '';
+        moduleState.status = '';
+        moduleState.error = '';
+        moduleState.hideResults = false;
+        moduleState.updatedAt = Date.now();
+      }
+      recordGenerationHistory({
+        scope: 'module',
+        moduleTitle: historyModuleTitle,
+        actionId: actionId,
+        actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, resolvedEntry, task && task.hadAiCasesBeforeAction),
+        moduleCount: 1,
+        details: [{
+          module: historyModuleTitle,
+          caseCount: actionId === MODULE_ACTIONS.APPEND ? appended.length : nextList.length,
+        }],
+      });
+      notifyStatus(
+        actionId === MODULE_ACTIONS.APPEND
+          ? ('已为该模块补充 ' + String(appended.length) + ' 条用例')
+          : ((task && task.hadAiCasesBeforeAction ? '已重新生成 ' : '已生成 ') + String(nextList.length) + ' 条用例'),
+        'ok'
+      );
+      clearDeleteHistoryStacks();
+      syncCasesGenPageRender();
+      if (isDrawerOpen()) render({ reason: 'module-task-committed', persist: false, anchorNodeId: anchorNodeId });
+      persistXmindState(true);
+      return true;
+    }
+
+    function completeModuleTaskError(task, err, options) {
+      var opts = options || {};
+      var actionId = String(task && task.actionId ? task.actionId : '');
+      var moduleId = task && task.moduleId ? String(task.moduleId || '') : '';
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
+      var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
+      if (task && task.createdModuleBeforeAction === true && task.snapshotId) {
+        rollbackCaseGenOperationSnapshotEntry(task.snapshotId);
+        if (moduleId) removeAiModuleRecord(moduleId);
+      } else if (task && task.snapshotId) {
+        discardCaseGenOperationSnapshotEntry(task.snapshotId);
+      }
+      if (moduleState) {
+        moduleState.running = false;
+        moduleState.taskId = '';
+        moduleState.status = opts.resultKind === 'cancelled' ? '' : 'error';
+        moduleState.error = opts.resultKind === 'cancelled' ? '' : getTaskErrorMessage(task, err);
+        moduleState.hideResults = false;
+        moduleState.updatedAt = Date.now();
+      }
+      var moduleTitle = normalizeModuleTitle(task && task.moduleTitle ? task.moduleTitle : '');
+      var errorInfo = opts.resultKind === 'cancelled'
+        ? buildGenerationCancelledInfo(task)
+        : buildGenerationErrorInfo(new Error(moduleState && moduleState.error ? moduleState.error : getTaskErrorMessage(task, err)));
+      var failureLabel = opts.resultKind === 'cancelled'
+        ? '已中断'
+        : getGenerationFailureLabel('module', actionId, {
+            hadAiCasesBeforeAction: task && task.hadAiCasesBeforeAction === true,
+          });
+      recordGenerationHistory({
+        scope: 'module',
+        moduleTitle: moduleTitle,
+        actionId: actionId,
+        actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, null, task && task.hadAiCasesBeforeAction),
+        summaryText: failureLabel,
+        moduleCount: 0,
+        details: [],
+        resultKind: errorInfo.resultKind,
+        reasonText: errorInfo.reasonText,
+        diagnostics: errorInfo.diagnostics,
+        previewText: errorInfo.previewText,
+      });
+      if (opts.resultKind === 'cancelled') {
+        if (!shouldSuppressTaskCancelToast(task)) {
+          notifyFloatingStatus('已中断当前 XMind 生成任务', 'warn', 3000);
+        }
+      } else {
+        notifyStatus(failureLabel, 'err', { forceInline: true });
+      }
+      if (isDrawerOpen()) render({ reason: opts.renderReason || 'module-task-error', persist: false, anchorNodeId: anchorNodeId });
+      persistXmindState(true);
+      return false;
+    }
+
+    function consumeManagedXmindTask(task) {
+      if (!task || !task.id || !isManagedTaskTerminal(task)) return Promise.resolve(false);
+      if (xmindTaskProcessingMap[task.id]) return xmindTaskProcessingMap[task.id];
+      var promise = Promise.resolve()
+        .then(function() {
+          if (task.status === 'done') {
+            if (task.scope === 'root') return completeRootTaskSuccess(task);
+            return completeModuleTaskSuccess(task);
+          }
+          if (task.status === 'cancelled') {
+            if (task.scope === 'root') return completeRootTaskError(task, null, { resultKind: 'cancelled', renderReason: 'root-task-cancelled' });
+            return completeModuleTaskError(task, null, { resultKind: 'cancelled', renderReason: 'module-task-cancelled' });
+          }
+          if (task.scope === 'root') return completeRootTaskError(task, null, { renderReason: 'root-task-error' });
+          return completeModuleTaskError(task, null, { renderReason: 'module-task-error' });
+        })
+        .catch(function(err) {
+          if (task.scope === 'root') return completeRootTaskError(task, err, { renderReason: 'root-task-consume-error' });
+          return completeModuleTaskError(task, err, { renderReason: 'module-task-consume-error' });
+        })
+        .finally(function() {
+          var manager = getXmindTaskManager();
+          if (manager && typeof manager.clearTask === 'function') {
+            manager.clearTask(task.id, 'handled');
+          }
+          delete xmindTaskProcessingMap[task.id];
+          syncManagedRunningUiState({
+            tasks: listManagedXmindTasks(),
+            render: false,
+            reason: 'task-consumed',
+            persist: true,
+          });
+        });
+      xmindTaskProcessingMap[task.id] = promise;
+      return promise;
+    }
+
+    function reconcileManagedXmindTasks(options) {
+      var opts = options || {};
+      var manager = getXmindTaskManager();
+      if (!manager) {
+        syncInterruptButton();
+        return;
+      }
+      if (opts.resume !== false && typeof manager.resumeTasks === 'function') {
+        manager.resumeTasks({ force: true });
+      }
+      var tasks = listManagedXmindTasks();
+      restoreWorkflowContextFromManagedTasks(tasks);
+      syncManagedRunningUiState({
+        tasks: tasks,
+        render: opts.render === true && isDrawerOpen(),
+        reason: opts.reason || 'task-reconcile',
+        persist: opts.persist === true,
+      });
+      tasks.filter(isManagedTaskTerminal).forEach(function(task) {
+        consumeManagedXmindTask(task);
+      });
+    }
+
+    function bindManagedXmindTasks() {
+      if (xmindTaskListenerBound === true) return;
+      if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+      window.addEventListener('xmind-casegen-task', function(event) {
+        var detail = event && event.detail ? event.detail : {};
+        var task = detail && detail.task ? detail.task : null;
+        var action = detail && detail.action ? String(detail.action || '') : '';
+        var tasks = detail && Array.isArray(detail.tasks) ? detail.tasks : listManagedXmindTasks();
+        var isTerminalEventTask = Boolean(task && isManagedTaskTerminal(task));
+        var shouldSkipRender = isTerminalEventTask || action === 'handled' || action === 'clear';
+        if (action !== 'heartbeat') {
+          syncManagedRunningUiState({
+            tasks: tasks,
+            render: isDrawerOpen() && !shouldSkipRender,
+            reason: 'task-event-' + (action || 'update'),
+            persist: action === 'start' || action === 'cancel' || action === 'done' || action === 'error' || action === 'suspend' || action === 'retry',
+            anchorNodeId: task ? getManagedTaskAnchorNodeId(task, null) : '',
+          });
+        } else {
+          syncInterruptButton();
+        }
+        if (task && isManagedTaskTerminal(task)) {
+          consumeManagedXmindTask(task);
+          return;
+        }
+        if (!task) {
+          tasks.filter(isManagedTaskTerminal).forEach(function(item) {
+            consumeManagedXmindTask(item);
+          });
+        }
+      });
+      xmindTaskListenerBound = true;
+    }
+
+    function interruptRunningXmindTasks() {
+      var manager = getXmindTaskManager();
+      if (!manager || typeof manager.cancelAllRunning !== 'function') {
+        notifyFloatingStatus('中断能力未就绪，请刷新后重试', 'err', 5000);
+        return false;
+      }
+      var interruptedCount = Number(manager.cancelAllRunning({
+        reason: '已手动中断当前 XMind 生成任务',
+        source: 'toolbar',
+        abortReason: 'xmind-casegen-cancelled',
+      }) || 0);
+      if (interruptedCount <= 0) {
+        notifyFloatingStatus('当前没有可中断的生成任务', 'warn', 3000);
+        return false;
+      }
+      syncManagedRunningUiState({
+        tasks: listManagedXmindTasks(),
+        render: isDrawerOpen(),
+        reason: 'task-cancel-all',
+        persist: true,
+      });
+      notifyFloatingStatus('已中断 ' + String(interruptedCount) + ' 个生成任务', 'warn', 3000);
+      return true;
+    }
+
     async function runRootAction(actionId, options) {
       options = options || {};
       if (!ensureActionAllowed(actionId, null)) return false;
@@ -5815,6 +6657,7 @@
         if (rolledBack) {
           clearAllTopupHighlights();
           rootState.running = false;
+          rootState.taskId = '';
           rootState.hideAiLayer = false;
           rootState.status = '';
           rootState.error = '';
@@ -5848,6 +6691,7 @@
       rootState.snapshotId = String(currentSnapshotId || ensureState().rootSnapshotId || '');
       rootState.lastAction = actionId;
       rootState.running = true;
+      rootState.taskId = '';
       rootState.hideAiLayer = hadAiLayerBeforeAction;
       rootState.status = '';
       rootState.error = '';
@@ -5857,100 +6701,26 @@
       }
       if (hadAiCasesBeforeAction) setAllModuleResultsVisibility(false);
       render({ reason: 'root-running', anchorNodeId: anchorNodeId, persist: false });
+      var rootTaskMeta = {
+        scope: 'root',
+        actionId: actionId,
+        snapshotId: currentSnapshotId,
+        contract: cloneJson(contract, {}),
+        historyActionLabel: historyActionLabel,
+        hadAiContentBeforeAction: hadAiContentBeforeAction,
+        hadAiLayerBeforeAction: hadAiLayerBeforeAction,
+        hadAiCasesBeforeAction: hadAiCasesBeforeAction,
+      };
 
       try {
-        var modelResult = await executeXmindGeneration(contract, visibleContext, null);
-        var normalizedOutput = normalizeModelModulesOutputDetailed(modelResult.content);
-        var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
-        var modules = filtered.list;
-        var applied = applyRootOutput(actionId, modules, visibleContext, modelResult.durationMs);
-        rootState.running = false;
-        rootState.hideAiLayer = false;
-        rootState.status = '';
-        rootState.error = '';
+        var rootTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, null);
+        var rootTask = startManagedXmindTask(buildRootTaskPayload(actionId, rootTaskInput, rootTaskMeta));
+        rootState.taskId = String(rootTask && rootTask.id ? rootTask.id : '');
         rootState.updatedAt = Date.now();
-        clearRootPendingModules(actionId);
-        if (!applied.changed) {
-          var rootNoChangeInfo = buildRootNoChangeInfo(actionId, filtered.diagnostics, applied.diagnostics, normalizedOutput.diagnostics);
-          recordGenerationHistory({
-            scope: 'root',
-            actionId: actionId,
-            actionLabel: historyActionLabel,
-            moduleCount: 0,
-            details: [],
-            resultKind: rootNoChangeInfo.resultKind,
-            reasonText: rootNoChangeInfo.reasonText,
-            diagnostics: rootNoChangeInfo.diagnostics,
-            previewText: rootNoChangeInfo.previewText,
-          });
-          discardCaseGenOperationSnapshotEntry(currentSnapshotId);
-          if (hadAiCasesBeforeAction) setAllModuleResultsVisibility(true);
-          notifyStatus('本轮未生成新的模块或用例', 'warn', { forceInline: true });
-          render({ reason: 'root-no-change', anchorNodeId: anchorNodeId });
-          persistXmindState(true);
-          return false;
-        }
-        ensureState().mode = (
-          actionId === ROOT_ACTIONS.FULL_MODULES
-          || actionId === ROOT_ACTIONS.REGENERATE_MODULES
-        ) ? 'modules' : 'full';
-        rootState.snapshotId = String(ensureState().rootSnapshotId || currentSnapshotId || '');
-        recordGenerationHistory({
-          scope: 'root',
-          actionId: actionId,
-          actionLabel: historyActionLabel,
-          moduleCount: Array.isArray(applied.details) ? applied.details.length : 0,
-          details: applied.details,
-        });
-        var message = '';
-        if (actionId === ROOT_ACTIONS.FULL_MODULES) {
-          message = '已生成 ' + String(applied.createdModules) + ' 个模块';
-        } else if (actionId === ROOT_ACTIONS.REGENERATE_MODULES) {
-          message = '已重新生成 ' + String(applied.createdModules) + ' 个模块';
-        } else if (actionId === ROOT_ACTIONS.FULL_CASES) {
-          message = (hadAiContentBeforeAction ? '已重新生成 ' : '已生成 ')
-            + String(applied.createdModules) + ' 个模块，' + String(applied.addedCases) + ' 条用例';
-        } else {
-          message = '已补充 ' + String(applied.createdModules) + ' 个模块，' + String(applied.addedCases) + ' 条用例';
-        }
-        notifyStatus(message, 'ok');
-        clearDeleteHistoryStacks();
-        if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
-          casesGenApi.renderCaseGeneration();
-        }
-        render({ reason: 'root-committed', anchorNodeId: anchorNodeId });
         persistXmindState(true);
         return true;
       } catch (err) {
-        discardCaseGenOperationSnapshotEntry(currentSnapshotId);
-        rootState.running = false;
-        rootState.hideAiLayer = false;
-        rootState.status = 'error';
-        rootState.error = err && err.message ? String(err.message) : '未知错误';
-        rootState.updatedAt = Date.now();
-        clearRootPendingModules(actionId);
-        var rootErrorInfo = buildGenerationErrorInfo(err);
-        var rootFailureLabel = getGenerationFailureLabel('root', actionId, {
-          hadAiContentBeforeAction: hadAiContentBeforeAction,
-          hadAiCasesBeforeAction: hadAiCasesBeforeAction,
-        });
-        recordGenerationHistory({
-          scope: 'root',
-          actionId: actionId,
-          actionLabel: historyActionLabel,
-          summaryText: rootFailureLabel,
-          moduleCount: 0,
-          details: [],
-          resultKind: rootErrorInfo.resultKind,
-          reasonText: rootErrorInfo.reasonText,
-          diagnostics: rootErrorInfo.diagnostics,
-          previewText: rootErrorInfo.previewText,
-        });
-        if (hadAiCasesBeforeAction) setAllModuleResultsVisibility(true);
-        notifyStatus(rootFailureLabel, 'err', { forceInline: true });
-        render({ reason: 'root-error', anchorNodeId: anchorNodeId });
-        persistXmindState(true);
-        return false;
+        return completeRootTaskError(rootTaskMeta, err, { renderReason: 'root-start-error' });
       }
     }
 
@@ -5981,6 +6751,7 @@
           }
           if (rolledBack) {
             var rolledState = ensureModuleUiState(moduleEntry.aiModuleId);
+            if (rolledState) rolledState.taskId = '';
             clearModuleTopupHighlight(rolledState);
             clearDeleteHistoryStacks();
             notifyStatus('已放弃该模块最近一次生成', 'ok');
@@ -6009,6 +6780,7 @@
       moduleState.snapshotId = snapshotId;
       moduleState.lastAction = actionId;
       moduleState.running = true;
+      moduleState.taskId = '';
       moduleState.status = '';
       moduleState.error = '';
       moduleState.updatedAt = Date.now();
@@ -6019,181 +6791,35 @@
         clearModuleTopupHighlight(moduleState);
       }
       render({ reason: 'module-running', anchorNodeId: anchorNodeId, persist: false });
+      var moduleTaskMeta = {
+        scope: 'module',
+        actionId: actionId,
+        moduleId: String(moduleEntry.aiModuleId || moduleId || ''),
+        moduleKey: String(moduleEntry.moduleKey || ''),
+        moduleTitle: normalizeModuleTitle(moduleEntry.title || ''),
+        snapshotId: snapshotId,
+        createdModuleBeforeAction: createdModuleBeforeAction,
+        hadAiCasesBeforeAction: hadAiCasesBeforeAction,
+      };
 
       try {
         var visibleContext = buildVisibleModuleContext();
         var resolvedEntry = visibleContext.map[moduleEntry.moduleKey] || moduleEntry;
-        var historyModuleTitle = normalizeModuleTitle(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : moduleEntry.title);
         var contract = createOperationContract(actionId, resolvedEntry);
-        var modelResult = await executeXmindGeneration(contract, visibleContext, resolvedEntry);
-        var normalizedOutput = normalizeModelModulesOutputDetailed(modelResult.content);
-        var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
-        var modules = filtered.list;
-        var targetKey = normalizeModuleKey(resolvedEntry.title);
-        var targetOutput = null;
-        modules.some(function(item) {
-          if (normalizeModuleKey(item.module) === targetKey) {
-            targetOutput = item;
-            return true;
-          }
-          return false;
-        });
-        if (!targetOutput) {
-          targetOutput = {
-            module: resolvedEntry.title,
-            key_scenarios: [],
-            test_points: [],
-            coupled_modules: [],
-            cases: [],
-          };
-        }
-        var currentAiCases = getAiCasesForModule(resolvedEntry.aiModuleId || moduleEntry.aiModuleId);
-        var visibleCases = getVisibleCasesForModuleEntry(resolvedEntry).map(function(row) {
-          return normalizeCaseItem(row.item, resolvedEntry.title);
-        }).filter(Boolean);
-        var nextList = [];
-        var appended = [];
-        var mergeDiagnostics = {
-          duplicateAgainstExisting: 0,
-          duplicateWithinAdded: 0,
-        };
-        if (actionId === MODULE_ACTIONS.APPEND) {
-          var merged = mergeCasesWithoutDuplicates(currentAiCases, targetOutput.cases || [], visibleCases);
-          nextList = merged.merged;
-          appended = merged.appended;
-          mergeDiagnostics = merged.diagnostics || mergeDiagnostics;
-          if (!appended.length) {
-            var appendNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
-            if (createdModuleBeforeAction && snapshotId) {
-              rollbackCaseGenOperationSnapshotEntry(snapshotId);
-            } else if (snapshotId) {
-              discardCaseGenOperationSnapshotEntry(snapshotId);
-            }
-            if (createdModuleBeforeAction) {
-              moduleEntry.aiModule = null;
-              moduleEntry.aiModuleId = '';
-            }
-            recordGenerationHistory({
-              scope: 'module',
-              moduleTitle: historyModuleTitle,
-              actionId: actionId,
-              actionLabel: historyActionLabel,
-              moduleCount: 1,
-              details: [{ module: historyModuleTitle, caseCount: 0 }],
-              resultKind: appendNoChangeInfo.resultKind,
-              reasonText: appendNoChangeInfo.reasonText,
-              diagnostics: appendNoChangeInfo.diagnostics,
-              previewText: appendNoChangeInfo.previewText,
-            });
-            moduleState.running = false;
-            moduleState.hideResults = false;
-            moduleState.snapshotId = '';
-            notifyStatus('当前模块未补充到新的用例', 'warn', { forceInline: true });
-            render({ reason: 'module-append-empty', anchorNodeId: anchorNodeId });
-            persistXmindState(true);
-            return false;
-          }
-          commitCaseList(moduleEntry.aiModuleId, nextList, modelResult.durationMs, '', 'keep-valid');
-          setModuleTopupHighlight(moduleState, resolvedEntry.title, visibleCases.length, appended.length);
-        } else {
-          nextList = Array.isArray(targetOutput.cases) ? targetOutput.cases.slice() : [];
-          if (!nextList.length) {
-            var fullNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
-            if (createdModuleBeforeAction && snapshotId) {
-              rollbackCaseGenOperationSnapshotEntry(snapshotId);
-            } else if (snapshotId) {
-              discardCaseGenOperationSnapshotEntry(snapshotId);
-            }
-            if (createdModuleBeforeAction) {
-              moduleEntry.aiModule = null;
-              moduleEntry.aiModuleId = '';
-            }
-            recordGenerationHistory({
-              scope: 'module',
-              moduleTitle: historyModuleTitle,
-              actionId: actionId,
-              actionLabel: historyActionLabel,
-              moduleCount: 1,
-              details: [{ module: historyModuleTitle, caseCount: 0 }],
-              resultKind: fullNoChangeInfo.resultKind,
-              reasonText: fullNoChangeInfo.reasonText,
-              diagnostics: fullNoChangeInfo.diagnostics,
-              previewText: fullNoChangeInfo.previewText,
-            });
-            moduleState.running = false;
-            moduleState.hideResults = false;
-            moduleState.snapshotId = '';
-            notifyStatus('当前模块未生成到有效用例', 'warn', { forceInline: true });
-            render({ reason: 'module-full-empty', anchorNodeId: anchorNodeId });
-            persistXmindState(true);
-            return false;
-          }
-          commitCaseList(moduleEntry.aiModuleId, nextList, modelResult.durationMs, '', '');
-          clearModuleTopupHighlight(moduleState);
-        }
-        moduleState.running = false;
-        moduleState.status = '';
-        moduleState.error = '';
-        moduleState.hideResults = false;
+        var historyModuleTitle = normalizeModuleTitle(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : moduleEntry.title);
+        moduleTaskMeta.contract = cloneJson(contract, {});
+        moduleTaskMeta.historyActionLabel = historyActionLabel;
+        moduleTaskMeta.moduleTitle = historyModuleTitle;
+        moduleTaskMeta.moduleKey = String(resolvedEntry && resolvedEntry.moduleKey ? resolvedEntry.moduleKey : moduleEntry.moduleKey || '');
+        moduleTaskMeta.moduleId = String(resolvedEntry && resolvedEntry.aiModuleId ? resolvedEntry.aiModuleId : moduleEntry.aiModuleId || moduleId || '');
+        var moduleTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, resolvedEntry);
+        var moduleTask = startManagedXmindTask(buildModuleTaskPayload(resolvedEntry, actionId, moduleTaskInput, moduleTaskMeta));
+        moduleState.taskId = String(moduleTask && moduleTask.id ? moduleTask.id : '');
         moduleState.updatedAt = Date.now();
-        recordGenerationHistory({
-          scope: 'module',
-          moduleTitle: historyModuleTitle,
-          actionId: actionId,
-          actionLabel: historyActionLabel,
-          moduleCount: 1,
-          details: [{
-            module: historyModuleTitle,
-            caseCount: actionId === MODULE_ACTIONS.APPEND ? appended.length : nextList.length,
-          }],
-        });
-        notifyStatus(
-          actionId === MODULE_ACTIONS.APPEND
-            ? ('已为该模块补充 ' + String(appended.length) + ' 条用例')
-            : ((hadAiCasesBeforeAction ? '已重新生成 ' : '已生成 ') + String(nextList.length) + ' 条用例'),
-          'ok'
-        );
-        clearDeleteHistoryStacks();
-        if (casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
-          casesGenApi.renderCaseGeneration();
-        }
-        render({ reason: 'module-committed', anchorNodeId: anchorNodeId });
         persistXmindState(true);
         return true;
       } catch (err) {
-        if (createdModuleBeforeAction && snapshotId) {
-          rollbackCaseGenOperationSnapshotEntry(snapshotId);
-          moduleEntry.aiModule = null;
-          moduleEntry.aiModuleId = '';
-        } else if (snapshotId) {
-          discardCaseGenOperationSnapshotEntry(snapshotId);
-        }
-        moduleState.running = false;
-        moduleState.status = 'error';
-        moduleState.error = err && err.message ? String(err.message) : '未知错误';
-        moduleState.hideResults = false;
-        moduleState.updatedAt = Date.now();
-        var moduleErrorInfo = buildGenerationErrorInfo(err);
-        var moduleFailureLabel = getGenerationFailureLabel('module', actionId, {
-          hadAiCasesBeforeAction: hadAiCasesBeforeAction,
-        });
-        recordGenerationHistory({
-          scope: 'module',
-          moduleTitle: normalizeModuleTitle(moduleEntry && moduleEntry.title ? moduleEntry.title : ''),
-          actionId: actionId,
-          actionLabel: historyActionLabel,
-          summaryText: moduleFailureLabel,
-          moduleCount: 0,
-          details: [],
-          resultKind: moduleErrorInfo.resultKind,
-          reasonText: moduleErrorInfo.reasonText,
-          diagnostics: moduleErrorInfo.diagnostics,
-          previewText: moduleErrorInfo.previewText,
-        });
-        notifyStatus(moduleFailureLabel, 'err', { forceInline: true });
-        render({ reason: 'module-error', anchorNodeId: anchorNodeId });
-        persistXmindState(true);
-        return false;
+        return completeModuleTaskError(moduleTaskMeta, err, { renderReason: 'module-start-error' });
       }
     }
 
@@ -6339,12 +6965,15 @@
       }
     }
 
-    function open() {
+    function open(options) {
+      var opts = options || {};
       switchTab('casesgen');
       setCasesGenModulesView();
       var drawer = ensureDrawer();
       if (drawer && typeof drawer.open === 'function') {
-        drawer.open();
+        drawer.open({
+          instant: opts.instant === true,
+        });
         return true;
       }
       getViewState().drawerOpen = true;
@@ -6368,6 +6997,7 @@
         drawerEl.classList.remove('xmind-drawer-fullscreen');
       }
       destroyMind();
+      flushDeferredCasesGenPageRender();
       persistXmindState(true);
       return false;
     }
@@ -6400,6 +7030,11 @@
       if (storeBtn) {
         storeBtn.addEventListener('click', function() {
           handleStoreToLibrary();
+        });
+      }
+      if (interruptBtn) {
+        interruptBtn.addEventListener('click', function() {
+          interruptRunningXmindTasks();
         });
       }
       if (deleteUndoBtn) {
@@ -6639,7 +7274,17 @@
 
     function hasDrawerRestoreIntent() {
       var viewState = getViewState();
-      return viewState.drawerOpen === true;
+      if (viewState.drawerOpen === true) return true;
+      return hasManagedTaskDrawerRestoreIntent();
+    }
+
+    function hasManagedTaskDrawerRestoreIntent() {
+      return listManagedXmindTasks().some(function(task) {
+        var restoreContext = task && task.restoreContext && typeof task.restoreContext === 'object'
+          ? task.restoreContext
+          : null;
+        return Boolean(restoreContext && restoreContext.viewState && restoreContext.viewState.drawerOpen === true);
+      });
     }
 
     function shouldRestoreDrawerAfterRefresh() {
@@ -6665,7 +7310,7 @@
             phase: 'drawer-restore-attempt',
             attempt: drawerRestoreRetryCount,
           });
-          open();
+          open({ instant: true });
         }
         if (isDrawerOpen()) {
           drawerRestoreStableCount += 1;
@@ -6695,6 +7340,7 @@
 
     function restoreDrawerAfterRefreshIfNeeded() {
       clearDrawerRestoreRetry();
+      reconcileManagedXmindTasks({ resume: true, render: isDrawerOpen(), persist: false, reason: 'workflow-ready' });
       if (!hasDrawerRestoreIntent()) return;
       scheduleDrawerRestoreRetry(80);
     }
@@ -6702,6 +7348,7 @@
     ensureDrawer();
     bindViewStatePersistenceLifecycle();
     bindButtons();
+    bindManagedXmindTasks();
     bindRenderListeners();
     updateSummary();
     restoreDrawerAfterRefreshIfNeeded();

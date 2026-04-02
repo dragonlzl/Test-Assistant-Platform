@@ -95,6 +95,7 @@
     var getAssignedModel = ctx.getAssignedModel || function() {};
     var getReasoningForType = ctx.getReasoningForType || function() { return ''; };
     var getTemperatureForType = ctx.getTemperatureForType || function() { return 0.2; };
+    var xmindCaseGenTaskManager = ctx.xmindCaseGenTaskManager || null;
     var updateModelTiming = ctx.updateModelTiming || function() {};
     var downloadBlob = ctx.downloadBlob || function() {};
     var parseXmindFile = ctx.parseXmindFile || function() { return Promise.resolve({ text: '', list: [] }); };
@@ -423,6 +424,7 @@
         root: {
           lastAction: '',
           running: false,
+          taskId: '',
           snapshotId: '',
           status: '',
           error: '',
@@ -472,6 +474,7 @@
         state.xmindCaseGen.root = {
           lastAction: '',
           running: false,
+          taskId: '',
           snapshotId: '',
           status: '',
           error: '',
@@ -485,6 +488,7 @@
       state.xmindCaseGen.hasImportedBaseline = state.xmindCaseGen.hasImportedBaseline === true;
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
+      state.xmindCaseGen.root.taskId = String(state.xmindCaseGen.root.taskId || '');
       state.xmindCaseGen.viewState.drawerOpen = state.xmindCaseGen.viewState.drawerOpen === true;
       state.xmindCaseGen.viewState.fullscreen = state.xmindCaseGen.viewState.fullscreen === true;
       state.xmindCaseGen.viewState.transform = String(state.xmindCaseGen.viewState.transform || '');
@@ -1750,6 +1754,7 @@
         getAssignedModel: getAssignedModel,
         getReasoningForType: getReasoningForType,
         getTemperatureForType: getTemperatureForType,
+        taskManager: xmindCaseGenTaskManager,
         saveAssignments: saveAssignments,
         renderAssignmentsSelect: renderAssignmentsSelect,
         updateAssignmentStatuses: updateAssignmentStatuses,

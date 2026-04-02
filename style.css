@@ -4098,6 +4098,11 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   background: rgba(254,242,242,0.92);
   color: #b91c1c;
 }
+.xmind-casegen-history-reason.is-cancelled {
+  border-color: rgba(245,158,11,0.3);
+  background: rgba(255,251,235,0.94);
+  color: #92400e;
+}
 .xmind-casegen-history-reason-label {
   flex: 0 0 auto;
   font-weight: 800;
@@ -5581,6 +5586,10 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .drawer.open .drawer-panel {
   pointer-events: auto;
   transform: translateX(0);
+}
+.drawer.drawer-instant-open .drawer-mask,
+.drawer.drawer-instant-open .drawer-panel {
+  transition: none !important;
 }
 .drawer.closing .drawer-panel {
   pointer-events: auto;
@@ -11677,6 +11686,11 @@ button.exec-overview-file-chip,
   border-color: rgba(248,113,113,0.36);
   background: rgba(127,29,29,0.38);
   color: #fecaca;
+}
+:root[data-theme="dark"] .xmind-casegen-history-reason.is-cancelled {
+  border-color: rgba(251,191,36,0.34);
+  background: rgba(120,53,15,0.38);
+  color: #fde68a;
 }
 :root[data-theme="dark"] .xmind-casegen-history-preview {
   border-color: rgba(96,165,250,0.28);

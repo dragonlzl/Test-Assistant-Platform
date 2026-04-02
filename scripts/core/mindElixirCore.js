@@ -944,6 +944,13 @@
         return instance;
       }
 
+      function markViewportInteraction() {
+        var inst = getInstance();
+        if (inst && typeof inst === 'object') {
+          inst.__tapViewportInteracted = true;
+        }
+      }
+
       function getCurrentMindData() {
         return readMindDataFromInstance(getInstance());
       }
@@ -1511,6 +1518,7 @@
       function zoomBy(step) {
         var inst = getInstance();
         if (!inst || typeof inst.scale !== 'function') return;
+        markViewportInteraction();
         syncInstanceScaleBounds(inst, zoomMinScale);
         var current = resolveScale(inst);
         var next = clampScale(current + step, zoomMinScale, maxScale);
@@ -1525,6 +1533,7 @@
         if (!inst || typeof inst.scale !== 'function') return false;
         var deltaY = Number(e.deltaY);
         if (!isFinite(deltaY) || deltaY === 0) return false;
+        markViewportInteraction();
         syncInstanceScaleBounds(inst, zoomMinScale);
         var sensitivity = Number(inst.scaleSensitivity);
         if (!isFinite(sensitivity) || sensitivity <= 0) sensitivity = defaultScaleStep;
@@ -1553,6 +1562,7 @@
         if (!isFinite(deltaX)) deltaX = 0;
         if (!isFinite(deltaY)) deltaY = 0;
         if (deltaX === 0 && deltaY === 0) return false;
+        markViewportInteraction();
         if (e.shiftKey && deltaX === 0 && deltaY !== 0) {
           deltaX = deltaY;
           deltaY = 0;
@@ -1568,6 +1578,7 @@
 
       function zoomFit() {
         var inst = getInstance();
+        markViewportInteraction();
         var fitCenterNodeId = '';
         if (inst && inst.nodeData && inst.nodeData.id !== undefined && inst.nodeData.id !== null) {
           fitCenterNodeId = String(inst.nodeData.id);
@@ -2579,6 +2590,7 @@
         ctrlLeftCanvasDrag.lastX = e.clientX;
         ctrlLeftCanvasDrag.lastY = e.clientY;
         if (deltaX !== 0 || deltaY !== 0) {
+          markViewportInteraction();
           try {
             inst.move(deltaX, deltaY);
           } catch (err) {
@@ -4364,6 +4376,7 @@
         instance.bus.addListener('operation', operationListener);
       }
       if (instance && typeof instance === 'object') {
+        instance.__tapViewportInteracted = false;
         instance.__tapSyncZoomMinScale = function() {
           syncZoomMinScaleWithCurrent(getInstance());
         };
@@ -4554,6 +4567,11 @@
           } catch (err4e) {
             instance.__tapSetDrawerFullscreen = null;
           }
+          try {
+            delete instance.__tapViewportInteracted;
+          } catch (err4f) {
+            instance.__tapViewportInteracted = null;
+          }
         }
         if (nodeDecorateObserver && typeof nodeDecorateObserver.disconnect === 'function') {
           nodeDecorateObserver.disconnect();
@@ -4733,9 +4751,22 @@
       return writeMindTransformState(instance, transformState);
     }
 
+    function scheduleMindViewRestore(instance, viewState, anchorState) {
+      if (!instance || !viewState) return;
+      [0, 16, 48, 96, 180, 320, 520].forEach(function(delayMs) {
+        setTimeout(function() {
+          if (!instance || !instance.map || !instance.el || !instance.el.isConnected) return;
+          restoreMindViewState(instance, viewState);
+          if (anchorState) {
+            restoreMindAnchorState(instance, anchorState);
+          }
+        }, delayMs);
+      });
+    }
+
     function scheduleMindAnchorRestore(instance, anchorState) {
       if (!instance || !anchorState) return;
-      [0, 16, 48, 96].forEach(function(delayMs) {
+      [0, 16, 48, 96, 180, 320, 520, 760, 1080].forEach(function(delayMs) {
         setTimeout(function() {
           if (!instance || !instance.map || !instance.el || !instance.el.isConnected) return;
           restoreMindAnchorState(instance, anchorState);
@@ -4936,12 +4967,16 @@
       var restoredViewState = false;
       if (preservedViewState && !initialEditing) {
         restoredViewState = restoreMindViewState(instance, preservedViewState);
-        if (restoredViewState && preservedAnchorState) {
+        if (preservedAnchorState) {
           restoreMindAnchorState(instance, preservedAnchorState);
+        }
+        scheduleMindViewRestore(instance, preservedViewState, preservedAnchorState);
+        if (preservedAnchorState) {
           scheduleMindAnchorRestore(instance, preservedAnchorState);
         }
       } else if (explicitInitialViewState && !initialEditing) {
         restoredViewState = restoreMindViewState(instance, explicitInitialViewState);
+        scheduleMindViewRestore(instance, explicitInitialViewState, null);
       }
       if (
         explicitInitialDrawerState
@@ -5003,6 +5038,10 @@
           updateViewerDragState(container, instance, false);
           return;
         }
+        if (instance && instance.__tapViewportInteracted === true) {
+          updateViewerDragState(container, instance, false);
+          return;
+        }
         runAutoScaleFitIfStable(true);
         if (initialCenterNodeId) {
           centerMindNode(instance, initialCenterNodeId);
@@ -5011,6 +5050,7 @@
 
       setTimeout(function() {
         if (initialEditing || restoredViewState) return;
+        if (instance && instance.__tapViewportInteracted === true) return;
         runAutoScaleFitIfStable(false);
         if (initialCenterNodeId) {
           centerMindNode(instance, initialCenterNodeId);

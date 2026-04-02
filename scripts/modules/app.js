@@ -406,6 +406,9 @@
     const abortAllModelRequests = modelClient && typeof modelClient.abortAllRequests === 'function'
       ? modelClient.abortAllRequests
       : function noopAbortAllModelRequests() {};
+    const abortModelRequestsByOwner = modelClient && typeof modelClient.abortRequestsByOwner === 'function'
+      ? modelClient.abortRequestsByOwner
+      : function noopAbortModelRequestsByOwner() { return 0; };
 
     function initMissingReminderAiManager(options) {
       const utils = options && options.utils ? options.utils : {};
@@ -1064,6 +1067,434 @@
       };
     }
 
+    function initXmindCaseGenTaskManager(options) {
+      const callModel = options && typeof options.callModelWithConfig === 'function'
+        ? options.callModelWithConfig
+        : async function missingTextModel() {
+          throw new Error('模型客户端不可用，请刷新页面后重试');
+        };
+      const callModelWithContent = options && typeof options.callModelWithContent === 'function'
+        ? options.callModelWithContent
+        : async function missingContentModel() {
+          throw new Error('多模态模型客户端不可用，请刷新页面后重试');
+        };
+      const abortByOwner = options && typeof options.abortRequestsByOwner === 'function'
+        ? options.abortRequestsByOwner
+        : function noopAbortByOwner() { return 0; };
+      const storageKey = 'tap-xmind-casegen-tasks';
+      const runnerId = 'xmind-casegen-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      const runningMap = {};
+      const heartbeatIntervalMs = 2000;
+      const staleMs = 6000;
+      const takeoverTimers = {};
+      var pageUnloading = false;
+
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('pagehide', function() { pageUnloading = true; });
+        window.addEventListener('beforeunload', function() { pageUnloading = true; });
+      }
+
+      function safeJsonParse(raw) {
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw);
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function cloneJson(value, fallback) {
+        if (value === undefined || value === null) return fallback;
+        try {
+          return JSON.parse(JSON.stringify(value));
+        } catch (err) {
+          return fallback;
+        }
+      }
+
+      function readTasks() {
+        if (typeof localStorage === 'undefined') return [];
+        try {
+          var parsed = safeJsonParse(localStorage.getItem(storageKey));
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (err) {
+          return [];
+        }
+      }
+
+      function emitTaskUpdate(task, action, tasks) {
+        if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+        var detail = {
+          task: task || null,
+          action: action || '',
+          tasks: Array.isArray(tasks) ? tasks : [],
+        };
+        try {
+          if (typeof CustomEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('xmind-casegen-task', { detail: detail }));
+          } else if (typeof document !== 'undefined' && typeof document.createEvent === 'function') {
+            var evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent('xmind-casegen-task', false, false, detail);
+            window.dispatchEvent(evt);
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      function writeTasks(tasks, action, task) {
+        var list = Array.isArray(tasks) ? tasks.slice() : [];
+        if (typeof localStorage !== 'undefined') {
+          try {
+            if (!list.length) localStorage.removeItem(storageKey);
+            else localStorage.setItem(storageKey, JSON.stringify(list));
+          } catch (err) {
+            // ignore
+          }
+        }
+        emitTaskUpdate(task || null, action || 'update', list);
+        return list;
+      }
+
+      function getTask(taskId) {
+        var targetId = taskId ? String(taskId || '') : '';
+        if (!targetId) return null;
+        var list = readTasks();
+        for (var i = 0; i < list.length; i += 1) {
+          if (!list[i] || String(list[i].id || '') !== targetId) continue;
+          return list[i];
+        }
+        return null;
+      }
+
+      function getTasks() {
+        return readTasks();
+      }
+
+      function buildTaskId() {
+        return 'xmind-casegen-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+      }
+
+      function normalizeModelSnapshot(model) {
+        if (!model || typeof model !== 'object') return null;
+        return {
+          id: model.id || '',
+          name: model.name || '',
+          provider: model.provider || '',
+          baseUrl: model.baseUrl || '',
+          apiKey: model.apiKey || '',
+          model: model.model || '',
+          maxTokens: model.maxTokens,
+          capabilities: cloneJson(model.capabilities, []),
+        };
+      }
+
+      function createTask(payload) {
+        var base = payload && typeof payload === 'object' ? cloneJson(payload, {}) : {};
+        base.id = base.id || buildTaskId();
+        base.status = 'running';
+        base.createdAt = base.createdAt || Date.now();
+        base.updatedAt = base.updatedAt || base.createdAt;
+        base.retryCount = Number(base.retryCount || 0);
+        base.requestOwner = base.requestOwner ? String(base.requestOwner || '') : ('xmind-casegen:' + base.id);
+        base.requestMode = base.requestMode === 'content' ? 'content' : 'text';
+        base.prompt = base.prompt ? String(base.prompt || '') : '';
+        base.reasoning = base.reasoning ? String(base.reasoning || '') : '';
+        base.temperature = Number(base.temperature);
+        if (!Number.isFinite(base.temperature)) base.temperature = 0.2;
+        base.requestText = base.requestText ? String(base.requestText || '') : '';
+        if (!Array.isArray(base.contentBlocks)) base.contentBlocks = [];
+        if (base.model) base.model = normalizeModelSnapshot(base.model);
+        return base;
+      }
+
+      function upsertTask(task, action) {
+        if (!task || !task.id) return null;
+        var list = readTasks();
+        var next = cloneJson(task, null);
+        if (!next) return null;
+        next.updatedAt = Date.now();
+        var replaced = false;
+        for (var i = 0; i < list.length; i += 1) {
+          if (!list[i] || String(list[i].id || '') !== String(next.id || '')) continue;
+          list[i] = next;
+          replaced = true;
+          break;
+        }
+        if (!replaced) list.push(next);
+        writeTasks(list, action || 'update', next);
+        return next;
+      }
+
+      function clearTask(taskId, action) {
+        var targetId = taskId ? String(taskId || '') : '';
+        if (!targetId) return false;
+        var list = readTasks();
+        var removed = null;
+        var nextList = list.filter(function(item) {
+          var matched = item && String(item.id || '') === targetId;
+          if (matched) removed = item;
+          return !matched;
+        });
+        if (!removed && nextList.length === list.length) return false;
+        writeTasks(nextList, action || 'clear', removed);
+        return true;
+      }
+
+      function resetRunner(task) {
+        if (!task) return;
+        task.runnerId = '';
+        task.heartbeatAt = 0;
+      }
+
+      function isTransientFetchError(err) {
+        if (!err) return false;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (!msg) return false;
+        if (msg.indexOf('Failed to fetch') !== -1) return true;
+        if (msg.indexOf('NetworkError') !== -1) return true;
+        return false;
+      }
+
+      function isModelTimeoutError(err) {
+        if (!err) return false;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (!msg) return false;
+        return msg.indexOf('模型调用超时') !== -1;
+      }
+
+      function isAbortError(err) {
+        if (!err) return false;
+        if (err.name === 'AbortError') return true;
+        var msg = err && err.message ? String(err.message) : String(err || '');
+        if (!msg) return false;
+        return msg.indexOf('AbortError') !== -1 || msg.indexOf('request-aborted') !== -1 || msg.indexOf('cancelled') !== -1;
+      }
+
+      function shouldSuspendForNavigation(err) {
+        if (pageUnloading) return true;
+        if (!err) return false;
+        if (isAbortError(err)) return true;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+          if (isTransientFetchError(err)) return true;
+          if (isModelTimeoutError(err)) return true;
+          return false;
+        }
+        return false;
+      }
+
+      function isTaskStale(task) {
+        if (!task) return true;
+        var heartbeat = Number(task.heartbeatAt || 0);
+        if (!heartbeat) return true;
+        return Date.now() - heartbeat > staleMs;
+      }
+
+      function shouldTakeover(task) {
+        if (!task || task.status !== 'running') return false;
+        if (!task.runnerId || task.runnerId === runnerId) return true;
+        return isTaskStale(task);
+      }
+
+      function startHeartbeat(task) {
+        if (!task || !task.id) return function() {};
+        var timer = setInterval(function() {
+          var current = getTask(task.id);
+          if (!current || current.status !== 'running') {
+            clearInterval(timer);
+            return;
+          }
+          if (current.runnerId && current.runnerId !== runnerId) {
+            clearInterval(timer);
+            return;
+          }
+          current.runnerId = runnerId;
+          current.heartbeatAt = Date.now();
+          current.updatedAt = current.heartbeatAt;
+          upsertTask(current, 'heartbeat');
+        }, heartbeatIntervalMs);
+        return function stopHeartbeat() {
+          clearInterval(timer);
+        };
+      }
+
+      function runTask(task) {
+        if (!task || !task.id) return Promise.resolve(null);
+        if (runningMap[task.id] && runningMap[task.id].taskId === task.id) {
+          return runningMap[task.id].promise;
+        }
+        var stopHeartbeat = startHeartbeat(task);
+        var promise = Promise.resolve()
+          .then(function() {
+            var current = getTask(task.id);
+            if (!current || current.status !== 'running') return current;
+            var model = current.model;
+            if (!model || !model.baseUrl || !model.model) {
+              throw new Error('未找到 XMind 用例生成模型');
+            }
+            if (current.requestMode === 'content') {
+              return callModelWithContent(model, current.contentBlocks || [], current.prompt || '', {
+                reasoningEffort: current.reasoning || '',
+                temperature: current.temperature,
+                owner: current.requestOwner || '',
+              });
+            }
+            var requestText = current.requestText ? String(current.requestText || '') : '';
+            if (!requestText.trim()) {
+              throw new Error('生成上下文缺失');
+            }
+            return callModel(model, requestText, current.prompt || '', current.reasoning || '', current.temperature, {
+              owner: current.requestOwner || '',
+            });
+          })
+          .then(function(content) {
+            var current = getTask(task.id);
+            if (!current) return null;
+            if (current.status !== 'running') return current;
+            if (current.runnerId && current.runnerId !== runnerId) return null;
+            current.status = 'done';
+            current.resultRaw = typeof content === 'string' ? content : JSON.stringify(content || '');
+            current.error = '';
+            current.durationMs = Math.max(0, Date.now() - Number(current.startedAt || current.createdAt || Date.now()));
+            current.endedAt = Date.now();
+            resetRunner(current);
+            upsertTask(current, 'done');
+            return current;
+          })
+          .catch(function(err) {
+            var current = getTask(task.id);
+            if (!current) return null;
+            if (current.status === 'cancelled') return current;
+            if (current.runnerId && current.runnerId !== runnerId) return null;
+            var msg = err && err.message ? err.message : String(err || '');
+            if (shouldSuspendForNavigation(err)) {
+              current.status = 'running';
+              current.error = '';
+              resetRunner(current);
+              current.updatedAt = Date.now();
+              upsertTask(current, 'suspend');
+              return current;
+            }
+            if (isTransientFetchError(err)) {
+              current.retryCount = Number(current.retryCount || 0) + 1;
+              if (current.retryCount <= 2) {
+                current.status = 'running';
+                current.error = '';
+                resetRunner(current);
+                current.updatedAt = Date.now();
+                upsertTask(current, 'retry');
+                return current;
+              }
+            }
+            current.status = 'error';
+            current.error = msg ? ('XMind 用例生成失败：' + msg) : 'XMind 用例生成失败';
+            current.endedAt = Date.now();
+            resetRunner(current);
+            upsertTask(current, 'error');
+            return current;
+          })
+          .finally(function() {
+            stopHeartbeat();
+            if (runningMap[task.id] && runningMap[task.id].taskId === task.id) {
+              delete runningMap[task.id];
+            }
+          });
+        runningMap[task.id] = {
+          taskId: task.id,
+          promise: promise,
+        };
+        return promise;
+      }
+
+      function startTask(task, options) {
+        var active = null;
+        if (typeof task === 'string') active = getTask(task);
+        else active = task ? createTask(task) : null;
+        if (!active || !active.id) return Promise.resolve(null);
+        if (active.status !== 'running') return Promise.resolve(active);
+        if (!options || options.force !== true) {
+          if (!shouldTakeover(active)) {
+            if (!takeoverTimers[active.id]) {
+              takeoverTimers[active.id] = setTimeout(function() {
+                takeoverTimers[active.id] = null;
+                var latest = getTask(active.id);
+                if (latest && latest.status === 'running') {
+                  startTask(latest);
+                }
+              }, staleMs);
+            }
+            return Promise.resolve(active);
+          }
+        }
+        active.runnerId = runnerId;
+        active.heartbeatAt = Date.now();
+        active.startedAt = active.startedAt || active.heartbeatAt;
+        upsertTask(active, 'start');
+        return runTask(active);
+      }
+
+      function resumeTasks(options) {
+        getTasks().forEach(function(task) {
+          if (!task || task.status !== 'running') return;
+          startTask(task, options);
+        });
+      }
+
+      function cancelTask(taskId, options) {
+        var opts = options && typeof options === 'object' ? options : {};
+        var active = getTask(taskId);
+        if (!active || active.status !== 'running') {
+          if (opts.clear === true) clearTask(taskId, 'clear');
+          return false;
+        }
+        var reasonText = opts.reason ? String(opts.reason) : '已中断当前 XMind 生成任务';
+        active.status = 'cancelled';
+        active.error = reasonText;
+        active.cancelledAt = Date.now();
+        active.endedAt = active.cancelledAt;
+        active.cancelMeta = {
+          source: opts.source ? String(opts.source || '') : '',
+          reason: reasonText,
+        };
+        resetRunner(active);
+        upsertTask(active, 'cancel');
+        if (active.requestOwner) {
+          abortByOwner(active.requestOwner, opts.abortReason || 'xmind-casegen-cancelled');
+        }
+        return true;
+      }
+
+      function cancelAllRunning(options) {
+        var count = 0;
+        getTasks().forEach(function(task) {
+          if (!task || task.status !== 'running') return;
+          if (cancelTask(task.id, options)) count += 1;
+        });
+        return count;
+      }
+
+      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        window.addEventListener('storage', function(e) {
+          var key = e && e.key ? String(e.key) : '';
+          if (key !== storageKey) return;
+          emitTaskUpdate(null, 'storage', getTasks());
+        });
+      }
+
+      return {
+        createTask: createTask,
+        startTask: startTask,
+        getTask: getTask,
+        getTasks: getTasks,
+        clearTask: clearTask,
+        cancelTask: cancelTask,
+        cancelAllRunning: cancelAllRunning,
+        resumeTasks: resumeTasks,
+        buildTaskId: buildTaskId,
+        normalizeModelSnapshot: normalizeModelSnapshot,
+      };
+    }
+
     function initAutoWorkflowManager(options) {
       const getSteps = options && typeof options.getSteps === 'function'
         ? options.getSteps
@@ -1524,6 +1955,16 @@
     window.app.caseLibraryAiGen = caseLibraryAiGenManager;
     if (caseLibraryAiGenManager && typeof caseLibraryAiGenManager.resumeTasks === 'function') {
       caseLibraryAiGenManager.resumeTasks({ force: true });
+    }
+
+    const xmindCaseGenTaskManager = initXmindCaseGenTaskManager({
+      callModelWithConfig: callModelWithConfig,
+      callModelWithContent: callModelWithContent,
+      abortRequestsByOwner: abortModelRequestsByOwner,
+    });
+    window.app.xmindCaseGenTaskManager = xmindCaseGenTaskManager;
+    if (xmindCaseGenTaskManager && typeof xmindCaseGenTaskManager.resumeTasks === 'function') {
+      xmindCaseGenTaskManager.resumeTasks({ force: true });
     }
 
     function shouldResumeMissingReminderAi() {
@@ -3674,6 +4115,7 @@
         getAssignedModel,
         getReasoningForType,
         getTemperatureForType,
+        xmindCaseGenTaskManager,
         updateModelTiming,
         downloadBlob,
         parseXmindFile,
