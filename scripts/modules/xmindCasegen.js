@@ -115,6 +115,7 @@
     var storeValidationClearTimer = 0;
     var xmindTaskListenerBound = false;
     var xmindTaskProcessingMap = {};
+    var rootPipelinePumpMap = {};
     var storeValidationState = {
       moduleKeys: {},
       caseKeys: {},
@@ -170,6 +171,7 @@
         status: '',
         error: '',
         updatedAt: 0,
+        pipeline: null,
       };
     }
 
@@ -890,6 +892,62 @@
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
       state.xmindCaseGen.root.taskId = String(state.xmindCaseGen.root.taskId || '');
+      if (!state.xmindCaseGen.root.pipeline || typeof state.xmindCaseGen.root.pipeline !== 'object') {
+        state.xmindCaseGen.root.pipeline = null;
+      } else {
+        state.xmindCaseGen.root.pipeline.id = String(state.xmindCaseGen.root.pipeline.id || '');
+        state.xmindCaseGen.root.pipeline.actionId = String(state.xmindCaseGen.root.pipeline.actionId || '');
+        state.xmindCaseGen.root.pipeline.snapshotId = String(state.xmindCaseGen.root.pipeline.snapshotId || '');
+        state.xmindCaseGen.root.pipeline.historyActionLabel = String(state.xmindCaseGen.root.pipeline.historyActionLabel || '');
+        state.xmindCaseGen.root.pipeline.stage = String(state.xmindCaseGen.root.pipeline.stage || '');
+        state.xmindCaseGen.root.pipeline.discoveryStatus = String(state.xmindCaseGen.root.pipeline.discoveryStatus || '');
+        state.xmindCaseGen.root.pipeline.cancelReason = String(state.xmindCaseGen.root.pipeline.cancelReason || '');
+        state.xmindCaseGen.root.pipeline.hadAiContentBeforeAction = state.xmindCaseGen.root.pipeline.hadAiContentBeforeAction === true;
+        state.xmindCaseGen.root.pipeline.hadAiLayerBeforeAction = state.xmindCaseGen.root.pipeline.hadAiLayerBeforeAction === true;
+        state.xmindCaseGen.root.pipeline.hadAiCasesBeforeAction = state.xmindCaseGen.root.pipeline.hadAiCasesBeforeAction === true;
+        state.xmindCaseGen.root.pipeline.cancelled = state.xmindCaseGen.root.pipeline.cancelled === true;
+        state.xmindCaseGen.root.pipeline.errorCount = Number(state.xmindCaseGen.root.pipeline.errorCount || 0);
+        if (!Number.isFinite(state.xmindCaseGen.root.pipeline.errorCount) || state.xmindCaseGen.root.pipeline.errorCount < 0) {
+          state.xmindCaseGen.root.pipeline.errorCount = 0;
+        }
+        state.xmindCaseGen.root.pipeline.createdModules = Number(state.xmindCaseGen.root.pipeline.createdModules || 0);
+        if (!Number.isFinite(state.xmindCaseGen.root.pipeline.createdModules) || state.xmindCaseGen.root.pipeline.createdModules < 0) {
+          state.xmindCaseGen.root.pipeline.createdModules = 0;
+        }
+        state.xmindCaseGen.root.pipeline.addedCases = Number(state.xmindCaseGen.root.pipeline.addedCases || 0);
+        if (!Number.isFinite(state.xmindCaseGen.root.pipeline.addedCases) || state.xmindCaseGen.root.pipeline.addedCases < 0) {
+          state.xmindCaseGen.root.pipeline.addedCases = 0;
+        }
+        state.xmindCaseGen.root.pipeline.updatedAt = Number(state.xmindCaseGen.root.pipeline.updatedAt || 0);
+        if (!Number.isFinite(state.xmindCaseGen.root.pipeline.updatedAt) || state.xmindCaseGen.root.pipeline.updatedAt < 0) {
+          state.xmindCaseGen.root.pipeline.updatedAt = 0;
+        }
+        if (!state.xmindCaseGen.root.pipeline.detailMap || typeof state.xmindCaseGen.root.pipeline.detailMap !== 'object') {
+          state.xmindCaseGen.root.pipeline.detailMap = {};
+        }
+        if (!Array.isArray(state.xmindCaseGen.root.pipeline.diagnostics)) {
+          state.xmindCaseGen.root.pipeline.diagnostics = [];
+        }
+        if (!Array.isArray(state.xmindCaseGen.root.pipeline.pendingQueue)) {
+          state.xmindCaseGen.root.pipeline.pendingQueue = [];
+        } else {
+          state.xmindCaseGen.root.pipeline.pendingQueue = state.xmindCaseGen.root.pipeline.pendingQueue
+            .map(function(item) {
+              if (!item || typeof item !== 'object') return null;
+              return {
+                moduleId: String(item.moduleId || ''),
+                moduleKey: String(item.moduleKey || ''),
+                moduleTitle: String(item.moduleTitle || ''),
+                actionId: String(item.actionId || ''),
+                rootPendingActionId: String(item.rootPendingActionId || ''),
+                rootPipelineNewModule: item.rootPipelineNewModule === true,
+                forceCreatedModuleBeforeAction: item.forceCreatedModuleBeforeAction === true,
+                anchorNodeId: String(item.anchorNodeId || ''),
+              };
+            })
+            .filter(Boolean);
+        }
+      }
       state.xmindCaseGen.deletedBaselineModuleKeys = state.xmindCaseGen.deletedBaselineModuleKeys
         .map(function(item) { return normalizeModuleKey(item); })
         .filter(Boolean);
@@ -921,6 +979,214 @@
 
     function ensureRootUiState() {
       return ensureState().root;
+    }
+
+    function buildRootPipelineId() {
+      return generateLocalId('xmind-root-pipeline');
+    }
+
+    function getRootPipelineState() {
+      var rootState = ensureRootUiState();
+      return rootState && rootState.pipeline && typeof rootState.pipeline === 'object'
+        ? rootState.pipeline
+        : null;
+    }
+
+    function setRootPipelineState(pipeline) {
+      var rootState = ensureRootUiState();
+      rootState.pipeline = pipeline && typeof pipeline === 'object'
+        ? pipeline
+        : null;
+      rootState.updatedAt = Date.now();
+      return rootState.pipeline;
+    }
+
+    function clearRootPipelineState() {
+      return setRootPipelineState(null);
+    }
+
+    function createRootPipelineState(payload) {
+      var input = payload && typeof payload === 'object' ? payload : {};
+      return {
+        id: input.id ? String(input.id || '') : buildRootPipelineId(),
+        actionId: input.actionId ? String(input.actionId || '') : '',
+        snapshotId: input.snapshotId ? String(input.snapshotId || '') : '',
+        historyActionLabel: input.historyActionLabel ? String(input.historyActionLabel || '') : '',
+        stage: input.stage ? String(input.stage || '') : '',
+        discoveryStatus: input.discoveryStatus ? String(input.discoveryStatus || '') : '',
+        hadAiContentBeforeAction: input.hadAiContentBeforeAction === true,
+        hadAiLayerBeforeAction: input.hadAiLayerBeforeAction === true,
+        hadAiCasesBeforeAction: input.hadAiCasesBeforeAction === true,
+        cancelled: input.cancelled === true,
+        cancelReason: input.cancelReason ? String(input.cancelReason || '') : '',
+        errorCount: Number(input.errorCount || 0),
+        createdModules: Number(input.createdModules || 0),
+        addedCases: Number(input.addedCases || 0),
+        detailMap: cloneJson(input.detailMap, {}) || {},
+        diagnostics: Array.isArray(input.diagnostics) ? input.diagnostics.slice() : [],
+        pendingQueue: Array.isArray(input.pendingQueue) ? cloneJson(input.pendingQueue, []) || [] : [],
+        updatedAt: Date.now(),
+      };
+    }
+
+    function updateRootPipelineState(mutator) {
+      var current = getRootPipelineState();
+      if (!current || typeof mutator !== 'function') return null;
+      mutator(current);
+      current.updatedAt = Date.now();
+      setRootPipelineState(current);
+      return current;
+    }
+
+    function ensureRootPipelineStateFromTask(task) {
+      var taskPipelineId = task && task.rootPipelineId ? String(task.rootPipelineId || '') : '';
+      var current = getRootPipelineState();
+      if (current && taskPipelineId && String(current.id || '') === taskPipelineId) {
+        return current;
+      }
+      if (!taskPipelineId) return current;
+      var reconstructed = createRootPipelineState({
+        id: taskPipelineId,
+        actionId: task && task.rootPipelineActionId ? String(task.rootPipelineActionId || '') : String(task && task.actionId ? task.actionId : ''),
+        snapshotId: task && task.snapshotId ? String(task.snapshotId || '') : '',
+        historyActionLabel: task && task.historyActionLabel ? String(task.historyActionLabel || '') : '',
+        stage: task && task.pipelineStage ? String(task.pipelineStage || '') : 'modules',
+        discoveryStatus: task && task.pipelineStage === 'discovery' ? 'running' : 'done',
+        hadAiContentBeforeAction: task && task.hadAiContentBeforeAction === true,
+        hadAiLayerBeforeAction: task && task.hadAiLayerBeforeAction === true,
+        hadAiCasesBeforeAction: task && task.hadAiCasesBeforeAction === true,
+      });
+      setRootPipelineState(reconstructed);
+      return reconstructed;
+    }
+
+    function isTaskInRootPipeline(task, pipelineId) {
+      if (!task || !pipelineId) return false;
+      return String(task.rootPipelineId || '') === String(pipelineId || '');
+    }
+
+    function collectRootPipelineRunningTasks(pipelineId, tasks) {
+      var targetId = String(pipelineId || '');
+      if (!targetId) return [];
+      var list = Array.isArray(tasks) ? tasks : listManagedXmindTasks();
+      return list.filter(function(task) {
+        return task && task.status === 'running' && isTaskInRootPipeline(task, targetId);
+      });
+    }
+
+    function collectRootPipelineTerminalTasks(pipelineId, tasks) {
+      var targetId = String(pipelineId || '');
+      if (!targetId) return [];
+      var list = Array.isArray(tasks) ? tasks : listManagedXmindTasks();
+      return list.filter(function(task) {
+        return task && isManagedTaskTerminal(task) && isTaskInRootPipeline(task, targetId);
+      });
+    }
+
+    function serializeRootPipelineDescriptor(descriptor) {
+      var moduleEntry = descriptor && descriptor.moduleEntry ? descriptor.moduleEntry : null;
+      return {
+        moduleId: String(moduleEntry && moduleEntry.aiModuleId ? moduleEntry.aiModuleId : ''),
+        moduleKey: String(moduleEntry && moduleEntry.moduleKey ? moduleEntry.moduleKey : ''),
+        moduleTitle: normalizeModuleTitle(moduleEntry && moduleEntry.title ? moduleEntry.title : ''),
+        actionId: String(descriptor && descriptor.actionId ? descriptor.actionId : ''),
+        rootPendingActionId: String(descriptor && descriptor.rootPendingActionId ? descriptor.rootPendingActionId : ''),
+        rootPipelineNewModule: descriptor && descriptor.rootPipelineNewModule === true,
+        forceCreatedModuleBeforeAction: descriptor && descriptor.forceCreatedModuleBeforeAction === true,
+        anchorNodeId: descriptor && Object.prototype.hasOwnProperty.call(descriptor, 'anchorNodeId')
+          ? String(descriptor.anchorNodeId || '')
+          : '',
+      };
+    }
+
+    function resolveRootPipelineDescriptor(serialized, visibleContext) {
+      if (!serialized || typeof serialized !== 'object') return null;
+      var context = visibleContext && visibleContext.list ? visibleContext : buildVisibleModuleContext();
+      var targetModuleId = String(serialized.moduleId || '');
+      var targetModuleKey = String(serialized.moduleKey || '');
+      var targetTitle = normalizeModuleTitle(serialized.moduleTitle || '');
+      var moduleEntry = null;
+      if (targetModuleId) {
+        context.list.some(function(entry) {
+          if (entry && String(entry.aiModuleId || '') === targetModuleId) {
+            moduleEntry = entry;
+            return true;
+          }
+          return false;
+        });
+      }
+      if (!moduleEntry && targetModuleKey && context.map && context.map[targetModuleKey]) {
+        moduleEntry = context.map[targetModuleKey];
+      }
+      if (!moduleEntry && targetTitle) {
+        context.list.some(function(entry) {
+          if (normalizeModuleTitle(entry && entry.title ? entry.title : '') === targetTitle) {
+            moduleEntry = entry;
+            return true;
+          }
+          return false;
+        });
+      }
+      if (!moduleEntry) return null;
+      return {
+        moduleEntry: moduleEntry,
+        actionId: String(serialized.actionId || ''),
+        rootPendingActionId: String(serialized.rootPendingActionId || ''),
+        rootPipelineNewModule: serialized.rootPipelineNewModule === true,
+        forceCreatedModuleBeforeAction: serialized.forceCreatedModuleBeforeAction === true,
+        anchorNodeId: String(serialized.anchorNodeId || ''),
+      };
+    }
+
+    function replaceRootPipelinePendingQueue(pipelineId, descriptors) {
+      var targetId = String(pipelineId || '');
+      return updateRootPipelineState(function(current) {
+        if (String(current.id || '') !== targetId) return;
+        current.pendingQueue = (Array.isArray(descriptors) ? descriptors : [])
+          .map(function(item) { return serializeRootPipelineDescriptor(item); })
+          .filter(function(item) { return Boolean(item && item.actionId); });
+      });
+    }
+
+    function shiftRootPipelinePendingDescriptor(pipelineId) {
+      var targetId = String(pipelineId || '');
+      var nextSerialized = null;
+      updateRootPipelineState(function(current) {
+        if (String(current.id || '') !== targetId) return;
+        if (!Array.isArray(current.pendingQueue)) current.pendingQueue = [];
+        nextSerialized = current.pendingQueue.shift() || null;
+      });
+      return nextSerialized;
+    }
+
+    function ensureRootPipelineDetailEntry(pipeline, moduleTitle) {
+      if (!pipeline || typeof pipeline !== 'object') return null;
+      if (!pipeline.detailMap || typeof pipeline.detailMap !== 'object') {
+        pipeline.detailMap = {};
+      }
+      var title = normalizeModuleTitle(moduleTitle || '');
+      var key = normalizeModuleKey(title || '') || ('module-' + String(Object.keys(pipeline.detailMap).length + 1));
+      if (!pipeline.detailMap[key]) {
+        pipeline.detailMap[key] = {
+          module: title || '未命名模块',
+          caseCount: 0,
+        };
+      }
+      return pipeline.detailMap[key];
+    }
+
+    function appendRootPipelineModuleDetail(pipeline, moduleTitle, caseCount) {
+      var entry = ensureRootPipelineDetailEntry(pipeline, moduleTitle);
+      if (!entry) return;
+      var nextCount = Number(caseCount);
+      if (!Number.isFinite(nextCount) || nextCount < 0) nextCount = 0;
+      entry.caseCount += nextCount;
+    }
+
+    function appendRootPipelineDiagnostics(pipeline, items) {
+      if (!pipeline || typeof pipeline !== 'object') return;
+      var next = Array.isArray(items) ? items : [items];
+      pipeline.diagnostics = normalizeHistoryDiagnostics((pipeline.diagnostics || []).concat(next));
     }
 
     function ensureModuleUiState(moduleId) {
@@ -4125,6 +4391,11 @@
         coverageRetryCount: Number(task && task.coverageRetryCount || 0) + 1,
         coverageRetryReasons: normalizeHistoryDiagnostics((task && Array.isArray(task.coverageRetryReasons) ? task.coverageRetryReasons : []).concat(gapInfo && gapInfo.reasonLabels ? gapInfo.reasonLabels : [])),
         parentTaskId: String(task && task.id ? task.id : ''),
+        rootPipelineId: String(task && task.rootPipelineId ? task.rootPipelineId : ''),
+        rootPipelineActionId: String(task && task.rootPipelineActionId ? task.rootPipelineActionId : ''),
+        pipelineStage: String(task && task.pipelineStage ? task.pipelineStage : ''),
+        historySuppressed: task && task.historySuppressed === true,
+        notifySuppressed: task && task.notifySuppressed === true,
       };
     }
 
@@ -6112,15 +6383,15 @@
               ));
             });
         }
-        if (moduleState && moduleState.running && moduleState.lastAction === MODULE_ACTIONS.APPEND) {
-          moduleChildren.push(buildModulePendingNode(entry, {
-            label: '追加生成中',
-            actionId: MODULE_ACTIONS.APPEND,
-          }));
-        } else if (moduleState && moduleState.rootPendingActionId === ROOT_ACTIONS.EXISTING_CASES) {
+        if (moduleState && moduleState.rootPendingActionId === ROOT_ACTIONS.EXISTING_CASES) {
           moduleChildren.push(buildModulePendingNode(entry, {
             label: '补全用例中',
             actionId: ROOT_ACTIONS.EXISTING_CASES,
+          }));
+        } else if (moduleState && moduleState.running && moduleState.lastAction === MODULE_ACTIONS.APPEND) {
+          moduleChildren.push(buildModulePendingNode(entry, {
+            label: '追加生成中',
+            actionId: MODULE_ACTIONS.APPEND,
           }));
         }
         children.push(createNode(entry.title, withTopupHighlightMeta({
@@ -6136,7 +6407,7 @@
               || moduleState.rootPendingActionId === ROOT_ACTIONS.EXISTING_CASES
             )
           ),
-          status: moduleState && moduleState.running
+          status: moduleState && moduleState.running && moduleState.rootPendingActionId !== ROOT_ACTIONS.EXISTING_CASES
             ? 'running'
             : (moduleState && moduleState.status === 'error' ? 'error' : ''),
           statusText: moduleState && moduleState.error ? moduleState.error : '',
@@ -6715,6 +6986,37 @@
       syncInterruptButton();
     }
 
+    function applyRootPipelineRunningUiState(runningTasks) {
+      var pipeline = getRootPipelineState();
+      if ((!pipeline || !pipeline.id) && Array.isArray(runningTasks)) {
+        var relatedTask = runningTasks.filter(function(task) {
+          return Boolean(task && task.rootPipelineId);
+        })[0] || null;
+        if (relatedTask) pipeline = ensureRootPipelineStateFromTask(relatedTask);
+      }
+      if (!pipeline || !pipeline.id) return;
+      var relatedTasks = collectRootPipelineRunningTasks(pipeline.id, runningTasks);
+      if (!relatedTasks.length) return;
+      var rootState = ensureRootUiState();
+      rootState.running = true;
+      rootState.taskId = relatedTasks[0] && relatedTasks[0].scope === 'root'
+        ? String(relatedTasks[0].id || '')
+        : String(pipeline.id || '');
+      rootState.lastAction = String(pipeline.actionId || rootState.lastAction || '');
+      rootState.snapshotId = String(pipeline.snapshotId || rootState.snapshotId || '');
+      rootState.hideAiLayer = pipeline.stage === 'discovering' && pipeline.hadAiLayerBeforeAction === true;
+      rootState.updatedAt = Date.now();
+      if (pipeline.stage === 'discovering' && pipeline.hadAiCasesBeforeAction === true) {
+        setAllModuleResultsVisibility(false);
+      }
+      relatedTasks.forEach(function(task) {
+        if (!task || task.scope !== 'module' || !task.moduleId) return;
+        if (String(task.rootPipelineActionId || '') === ROOT_ACTIONS.EXISTING_CASES) {
+          setModuleRootPendingAction(ensureModuleUiState(task.moduleId), ROOT_ACTIONS.EXISTING_CASES);
+        }
+      });
+    }
+
     function syncManagedRunningUiState(options) {
       var opts = options || {};
       var tasks = Array.isArray(opts.tasks) ? opts.tasks : listManagedXmindTasks();
@@ -6751,6 +7053,7 @@
           moduleState.updatedAt = Date.now();
         }
       });
+      applyRootPipelineRunningUiState(runningTasks);
       syncInterruptButton();
       if (opts.persist === true) persistXmindState(true);
       else if (opts.persist === false) {
@@ -6838,6 +7141,12 @@
         reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
         temperature: Number(taskInput && taskInput.temperature),
         restoreContext: restoreContext,
+        rootPipelineId: String(opts.rootPipelineId || ''),
+        rootPipelineActionId: String(opts.rootPipelineActionId || ''),
+        pipelineStage: String(opts.pipelineStage || ''),
+        historySuppressed: opts.historySuppressed === true,
+        notifySuppressed: opts.notifySuppressed === true,
+        skipCoverageRetry: opts.skipCoverageRetry === true,
       };
     }
 
@@ -6864,6 +7173,11 @@
         reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
         temperature: Number(taskInput && taskInput.temperature),
         restoreContext: restoreContext,
+        rootPipelineId: String(opts.rootPipelineId || ''),
+        rootPipelineActionId: String(opts.rootPipelineActionId || ''),
+        rootPipelineNewModule: opts.rootPipelineNewModule === true,
+        historySuppressed: opts.historySuppressed === true,
+        notifySuppressed: opts.notifySuppressed === true,
       };
     }
 
@@ -7055,7 +7369,521 @@
       return getRootNodeId();
     }
 
+    function cloneModulesWithoutCases(modules) {
+      return (Array.isArray(modules) ? modules : []).map(function(item) {
+        return {
+          module: normalizeModuleTitle(item && item.module ? item.module : ''),
+          key_scenarios: normalizeArrayField(item && item.key_scenarios),
+          test_points: normalizeArrayField(item && item.test_points),
+          coupled_modules: normalizeArrayField(item && item.coupled_modules),
+          cases: [],
+        };
+      }).filter(function(item) {
+        return Boolean(item && item.module);
+      });
+    }
+
+    function mergeRootPipelineDetails(pipeline, details) {
+      (Array.isArray(details) ? details : []).forEach(function(item) {
+        if (!item) return;
+        appendRootPipelineModuleDetail(pipeline, item.module || item.moduleTitle || '', Number(item.caseCount || 0));
+      });
+    }
+
+    function getRootPipelineDetailList(pipeline) {
+      var detailMap = pipeline && pipeline.detailMap && typeof pipeline.detailMap === 'object'
+        ? pipeline.detailMap
+        : {};
+      return normalizeHistoryDetails(Object.keys(detailMap).map(function(key) {
+        return detailMap[key];
+      }));
+    }
+
+    function buildRootPipelineSuccessMessage(pipeline) {
+      var actionId = pipeline && pipeline.actionId ? String(pipeline.actionId || '') : '';
+      var createdModules = Number(pipeline && pipeline.createdModules || 0);
+      var addedCases = Number(pipeline && pipeline.addedCases || 0);
+      if (!Number.isFinite(createdModules) || createdModules < 0) createdModules = 0;
+      if (!Number.isFinite(addedCases) || addedCases < 0) addedCases = 0;
+      if (actionId === ROOT_ACTIONS.FULL_CASES) {
+        return (pipeline && pipeline.hadAiContentBeforeAction === true ? '已重新生成 ' : '已生成 ')
+          + String(createdModules) + ' 个模块，' + String(addedCases) + ' 条用例';
+      }
+      if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
+        return '已为已有模块补充 ' + String(addedCases) + ' 条用例';
+      }
+      if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES || actionId === ROOT_ACTIONS.APPEND_ALL) {
+        return '已补充 ' + String(createdModules) + ' 个模块，' + String(addedCases) + ' 条用例';
+      }
+      if (actionId === ROOT_ACTIONS.FULL_MODULES) {
+        return '已生成 ' + String(createdModules) + ' 个模块';
+      }
+      if (actionId === ROOT_ACTIONS.REGENERATE_MODULES) {
+        return '已重新生成 ' + String(createdModules) + ' 个模块';
+      }
+      return '已完成当前生成';
+    }
+
+    function buildRootPipelineModuleHighlightLabel(rootActionId, count) {
+      var total = Number(count);
+      if (!Number.isFinite(total) || total < 0) total = 0;
+      if (rootActionId === ROOT_ACTIONS.EXISTING_CASES) {
+        return total > 1 ? ('本轮补全用例 · ' + String(total) + ' 条') : '本轮补全用例';
+      }
+      return buildTopupHighlightLabel(total, 'cases');
+    }
+
+    function finalizeRootPipelineIfReady(pipelineId, options) {
+      var targetId = String(pipelineId || '');
+      var pipeline = getRootPipelineState();
+      if (!pipeline || String(pipeline.id || '') !== targetId) return false;
+      if (Array.isArray(pipeline.pendingQueue) && pipeline.pendingQueue.length > 0) return false;
+      var relatedTasks = listManagedXmindTasks().filter(function(task) {
+        return isTaskInRootPipeline(task, targetId);
+      });
+      if (relatedTasks.length > 0) return false;
+
+      var opts = options || {};
+      var actionId = String(pipeline.actionId || '');
+      var rootState = ensureRootUiState();
+      var detailList = getRootPipelineDetailList(pipeline);
+      var diagnostics = normalizeHistoryDiagnostics(pipeline.diagnostics || []);
+      var changed = Number(pipeline.createdModules || 0) > 0 || Number(pipeline.addedCases || 0) > 0;
+      var actionLabel = pipeline.historyActionLabel || getRootHistoryActionLabel(actionId, pipeline.hadAiContentBeforeAction === true);
+      var renderReason = 'root-pipeline-finalized';
+      var summaryText = '';
+      var reasonText = '';
+      var previewText = '';
+      var resultKind = 'changed';
+      var notifyText = '';
+      var notifyType = 'ok';
+
+      rootState.running = false;
+      rootState.taskId = '';
+      rootState.lastAction = actionId || rootState.lastAction || '';
+      rootState.hideAiLayer = false;
+      rootState.updatedAt = Date.now();
+      clearRootPendingModules();
+      if (pipeline.hadAiCasesBeforeAction === true) {
+        setAllModuleResultsVisibility(true);
+      }
+
+      if (!changed) {
+        if (pipeline.cancelled === true) {
+          resultKind = 'cancelled';
+          reasonText = pipeline.cancelReason || '已手动中断当前 XMind 生成任务';
+          summaryText = '已中断';
+          notifyType = 'warn';
+          renderReason = 'root-pipeline-cancelled';
+        } else if (Number(pipeline.errorCount || 0) > 0 || pipeline.discoveryStatus === 'error') {
+          resultKind = 'error';
+          reasonText = '模型调用出错，请稍后重试。';
+          summaryText = getGenerationFailureLabel('root', actionId, {
+            hadAiContentBeforeAction: pipeline.hadAiContentBeforeAction === true,
+            hadAiCasesBeforeAction: pipeline.hadAiCasesBeforeAction === true,
+          });
+          notifyText = summaryText;
+          notifyType = 'err';
+          rootState.status = 'error';
+          rootState.error = reasonText;
+          renderReason = 'root-pipeline-error';
+        } else {
+          resultKind = 'no-change';
+          reasonText = getFriendlyRootEmptyModulesText(actionId);
+          notifyText = '本轮未生成新的模块或用例';
+          notifyType = 'warn';
+          renderReason = 'root-pipeline-no-change';
+          rootState.status = '';
+          rootState.error = '';
+        }
+        recordGenerationHistory({
+          scope: 'root',
+          actionId: actionId,
+          actionLabel: actionLabel,
+          summaryText: summaryText,
+          moduleCount: 0,
+          details: [],
+          resultKind: resultKind,
+          reasonText: reasonText,
+          diagnostics: diagnostics,
+          previewText: previewText,
+        });
+        discardCaseGenOperationSnapshotEntry(String(pipeline.snapshotId || ''));
+        rootState.snapshotId = '';
+      } else {
+        ensureState().mode = (
+          actionId === ROOT_ACTIONS.FULL_MODULES
+          || actionId === ROOT_ACTIONS.REGENERATE_MODULES
+        ) ? 'modules' : 'full';
+        rootState.status = '';
+        rootState.error = '';
+        rootState.snapshotId = String(ensureState().rootSnapshotId || pipeline.snapshotId || '');
+        if (pipeline.cancelled === true) {
+          diagnostics = normalizeHistoryDiagnostics(diagnostics.concat('已中断未完成任务，已保留已完成结果'));
+          summaryText = '已中断，已保留已完成结果';
+          notifyText = buildRootPipelineSuccessMessage(pipeline) + '，其余任务已中断';
+          notifyType = 'warn';
+        } else if (Number(pipeline.errorCount || 0) > 0) {
+          diagnostics = normalizeHistoryDiagnostics(diagnostics.concat('有 ' + String(Number(pipeline.errorCount || 0)) + ' 个模块未成功完成'));
+          summaryText = '部分模块未成功完成';
+          notifyText = buildRootPipelineSuccessMessage(pipeline) + '，另有 ' + String(Number(pipeline.errorCount || 0)) + ' 个模块失败';
+          notifyType = 'warn';
+        } else {
+          notifyText = buildRootPipelineSuccessMessage(pipeline);
+          notifyType = 'ok';
+        }
+        recordGenerationHistory({
+          scope: 'root',
+          actionId: actionId,
+          actionLabel: actionLabel,
+          summaryText: summaryText,
+          moduleCount: detailList.length,
+          details: detailList,
+          diagnostics: diagnostics,
+        });
+        clearDeleteHistoryStacks();
+        syncCasesGenPageRender();
+      }
+
+      clearRootPipelineState();
+      if (notifyText) {
+        notifyStatus(notifyText, notifyType, { forceInline: true });
+      }
+      if (isDrawerOpen()) {
+        render({
+          reason: renderReason,
+          persist: false,
+          anchorNodeId: Object.prototype.hasOwnProperty.call(opts, 'anchorNodeId') ? String(opts.anchorNodeId || '') : '',
+        });
+      }
+      persistXmindState(true);
+      return changed;
+    }
+
+    async function handleRootPipelineDiscoveryTaskSuccess(task) {
+      var pipeline = ensureRootPipelineStateFromTask(task);
+      if (!pipeline || String(pipeline.id || '') !== String(task && task.rootPipelineId ? task.rootPipelineId : '')) {
+        return false;
+      }
+      var actionId = String(pipeline.actionId || task && task.actionId || '');
+      var rootState = ensureRootUiState();
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
+      var contract = task && task.contract ? task.contract : createOperationContract(actionId, null);
+      var visibleContext = rootState.hideAiLayer === true
+        ? buildVisibleModuleContext({ includeAiLayer: false })
+        : buildVisibleModuleContext();
+      var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
+      var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
+      var modules = filtered.list;
+      var coverageGapInfo = evaluateRootCoverageGaps(task, modules, contract);
+      if (task && task.skipCoverageRetry !== true && coverageGapInfo.shouldRetry === true) {
+        try {
+          if (tryStartRootCoverageRetry(task, coverageGapInfo, anchorNodeId)) {
+            updateRootPipelineState(function(current) {
+              current.stage = 'discovering';
+              current.discoveryStatus = 'running';
+            });
+            return false;
+          }
+        } catch (retryErr) {
+          coverageGapInfo.retryStartError = retryErr && retryErr.message ? String(retryErr.message) : '自动补强未能启动';
+        }
+      }
+
+      var existingDescriptors = actionId === ROOT_ACTIONS.APPEND_ALL
+        ? buildRootPipelineTaskDescriptors(actionId, visibleContext)
+        : [];
+      var newModules = [];
+      var skeletonModules = [];
+      var skeletonActionId = '';
+
+      if (actionId === ROOT_ACTIONS.FULL_CASES) {
+        newModules = modules.slice();
+        skeletonModules = cloneModulesWithoutCases(newModules);
+        skeletonActionId = ROOT_ACTIONS.FULL_MODULES;
+      } else if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES || actionId === ROOT_ACTIONS.APPEND_ALL) {
+        newModules = modules.filter(function(item) {
+          return !visibleContext.map[normalizeModuleKey(item && item.module ? item.module : '')];
+        });
+        skeletonModules = cloneModulesWithoutCases(newModules);
+        skeletonActionId = ROOT_ACTIONS.TOPUP_MODULES;
+      }
+
+      var skeletonApplied = {
+        changed: false,
+        createdModules: 0,
+        addedCases: 0,
+        details: [],
+        diagnostics: {},
+      };
+      if (skeletonModules.length && skeletonActionId) {
+        skeletonApplied = applyRootOutput(skeletonActionId, skeletonModules, visibleContext, Number(task && task.durationMs || 0));
+      }
+      if (actionId === ROOT_ACTIONS.FULL_CASES && skeletonApplied.changed) {
+        rootState.hideAiLayer = false;
+        rootState.updatedAt = Date.now();
+      }
+
+      updateRootPipelineState(function(current) {
+        current.stage = 'modules';
+        current.discoveryStatus = 'done';
+        current.createdModules += Number(skeletonApplied.createdModules || 0);
+        mergeRootPipelineDetails(current, skeletonApplied.details);
+        if (coverageGapInfo && coverageGapInfo.retryStartError) {
+          appendRootPipelineDiagnostics(current, '自动补强未启动：' + summarizeModelOutputText(coverageGapInfo.retryStartError, 80));
+        }
+      });
+
+      var postContext = buildVisibleModuleContext();
+      var descriptors = existingDescriptors.slice();
+      newModules.forEach(function(item) {
+        var moduleKey = normalizeModuleKey(item && item.module ? item.module : '');
+        var resolvedEntry = moduleKey ? postContext.map[moduleKey] : null;
+        if (!resolvedEntry) return;
+        descriptors.push({
+          moduleEntry: resolvedEntry,
+          actionId: MODULE_ACTIONS.FULL_CASES,
+          rootPipelineNewModule: actionId !== ROOT_ACTIONS.FULL_CASES,
+          anchorNodeId: '',
+        });
+      });
+      if (actionId === ROOT_ACTIONS.FULL_CASES) {
+        descriptors = skeletonModules.map(function(item) {
+          var moduleKey = normalizeModuleKey(item && item.module ? item.module : '');
+          var resolvedEntry = moduleKey ? postContext.map[moduleKey] : null;
+          if (!resolvedEntry) return null;
+          return {
+            moduleEntry: resolvedEntry,
+            actionId: MODULE_ACTIONS.FULL_CASES,
+            rootPipelineNewModule: false,
+            anchorNodeId: '',
+          };
+        }).filter(Boolean);
+      }
+
+      if (!descriptors.length && !skeletonApplied.changed) {
+        var discoveryNoChangeInfo = buildRootNoChangeInfo(actionId, filtered.diagnostics, skeletonApplied.diagnostics, normalizedOutput.diagnostics);
+        updateRootPipelineState(function(current) {
+          appendRootPipelineDiagnostics(current, [discoveryNoChangeInfo.reasonText].concat(discoveryNoChangeInfo.diagnostics || []));
+        });
+      }
+
+      if (isDrawerOpen()) {
+        render({ reason: 'root-pipeline-discovery-committed', persist: false, anchorNodeId: '' });
+      }
+      persistXmindState(true);
+
+      var startedCount = await startRootPipelineModuleTasks(pipeline, descriptors);
+      if (startedCount <= 0) {
+        finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: '' });
+      }
+      return startedCount > 0 || skeletonApplied.changed;
+    }
+
+    function handleRootPipelineDiscoveryTaskError(task, err, options) {
+      var pipeline = ensureRootPipelineStateFromTask(task);
+      if (!pipeline || String(pipeline.id || '') !== String(task && task.rootPipelineId ? task.rootPipelineId : '')) {
+        return false;
+      }
+      var opts = options || {};
+      var errorInfo = opts.resultKind === 'cancelled'
+        ? buildGenerationCancelledInfo(task)
+        : buildGenerationErrorInfo(new Error(getTaskErrorMessage(task, err)));
+      updateRootPipelineState(function(current) {
+        current.stage = 'modules';
+        current.discoveryStatus = opts.resultKind === 'cancelled' ? 'cancelled' : 'error';
+        if (opts.resultKind === 'cancelled') {
+          current.cancelled = true;
+          current.cancelReason = errorInfo.reasonText;
+        } else {
+          current.errorCount += 1;
+        }
+        appendRootPipelineDiagnostics(current, (opts.resultKind === 'cancelled'
+          ? ['发现阶段已中断：' + errorInfo.reasonText]
+          : ['发现阶段失败：' + errorInfo.reasonText]
+        ).concat(errorInfo.diagnostics || []));
+      });
+      if (isDrawerOpen()) {
+        render({ reason: opts.renderReason || 'root-pipeline-discovery-error', persist: false, anchorNodeId: '' });
+      }
+      persistXmindState(true);
+      return false;
+    }
+
+    function handleRootPipelineModuleTaskSuccess(task) {
+      var pipeline = ensureRootPipelineStateFromTask(task);
+      if (!pipeline || String(pipeline.id || '') !== String(task && task.rootPipelineId ? task.rootPipelineId : '')) {
+        return false;
+      }
+      var actionId = String(task && task.actionId ? task.actionId : '');
+      var visibleContext = buildVisibleModuleContext();
+      var resolvedEntry = resolveTaskModuleEntry(task, visibleContext);
+      var historyModuleTitle = normalizeModuleTitle(
+        resolvedEntry && resolvedEntry.title
+          ? resolvedEntry.title
+          : (task && task.moduleTitle ? task.moduleTitle : '')
+      );
+      var moduleId = resolvedEntry && resolvedEntry.aiModuleId ? resolvedEntry.aiModuleId : (task && task.moduleId ? task.moduleId : '');
+      var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
+      var contract = task && task.contract ? task.contract : createOperationContract(actionId, resolvedEntry);
+      var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
+      var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
+      var modules = filtered.list;
+      var targetKey = normalizeModuleKey(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : historyModuleTitle);
+      var targetOutput = null;
+      modules.some(function(item) {
+        if (normalizeModuleKey(item.module) === targetKey) {
+          targetOutput = item;
+          return true;
+        }
+        return false;
+      });
+      if (!targetOutput) {
+        targetOutput = {
+          module: historyModuleTitle,
+          key_scenarios: [],
+          test_points: [],
+          coupled_modules: [],
+          cases: [],
+        };
+      }
+
+      var currentAiCases = getAiCasesForModule(moduleId);
+      var visibleCases = resolvedEntry ? getVisibleCasesForModuleEntry(resolvedEntry).map(function(row) {
+        return normalizeCaseItem(row.item, resolvedEntry.title);
+      }).filter(Boolean) : [];
+      var nextList = [];
+      var appended = [];
+      var mergeDiagnostics = {
+        duplicateAgainstExisting: 0,
+        duplicateWithinAdded: 0,
+      };
+      var changed = false;
+      var addedCount = 0;
+
+      if (actionId === MODULE_ACTIONS.APPEND) {
+        var merged = mergeCasesWithoutDuplicates(currentAiCases, targetOutput.cases || [], visibleCases);
+        nextList = merged.merged;
+        appended = merged.appended;
+        mergeDiagnostics = merged.diagnostics || mergeDiagnostics;
+        if (appended.length > 0) {
+          changed = true;
+          addedCount = appended.length;
+          commitCaseList(moduleId, nextList, Number(task && task.durationMs || 0), '', 'keep-valid');
+          if (moduleState) {
+            setModuleTopupHighlight(moduleState, resolvedEntry.title, visibleCases.length, appended.length, {
+              label: buildRootPipelineModuleHighlightLabel(String(task.rootPipelineActionId || ''), appended.length),
+            });
+          }
+        } else {
+          var appendNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
+          if (task && task.createdModuleBeforeAction === true && task.rootPipelineNewModule !== true && moduleId) {
+            removeAiModuleRecord(moduleId);
+          }
+          updateRootPipelineState(function(current) {
+            appendRootPipelineDiagnostics(current, '模块「' + historyModuleTitle + '」未新增用例：' + appendNoChangeInfo.reasonText);
+          });
+        }
+      } else {
+        nextList = Array.isArray(targetOutput.cases) ? targetOutput.cases.slice() : [];
+        if (nextList.length > 0) {
+          changed = true;
+          addedCount = nextList.length;
+          commitCaseList(moduleId, nextList, Number(task && task.durationMs || 0), '', '');
+          if (moduleState) {
+            if (task && task.rootPipelineNewModule === true) {
+              setModuleTopupHighlight(moduleState, resolvedEntry.title, 0, nextList.length, { highlightScope: 'subtree' });
+            } else if (String(task.rootPipelineActionId || '') === ROOT_ACTIONS.EXISTING_CASES) {
+              setModuleTopupHighlight(moduleState, resolvedEntry.title, 0, nextList.length, {
+                label: buildRootPipelineModuleHighlightLabel(String(task.rootPipelineActionId || ''), nextList.length),
+              });
+            } else {
+              clearModuleTopupHighlight(moduleState);
+            }
+          }
+        } else {
+          var fullNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
+          if (task && task.createdModuleBeforeAction === true && task.rootPipelineNewModule !== true && moduleId) {
+            removeAiModuleRecord(moduleId);
+          }
+          updateRootPipelineState(function(current) {
+            appendRootPipelineDiagnostics(current, '模块「' + historyModuleTitle + '」未新增用例：' + fullNoChangeInfo.reasonText);
+          });
+        }
+      }
+
+      if (moduleState) {
+        moduleState.running = false;
+        moduleState.taskId = '';
+        moduleState.status = '';
+        moduleState.error = '';
+        moduleState.hideResults = false;
+        clearModuleRootPendingAction(moduleState);
+        moduleState.updatedAt = Date.now();
+      }
+
+      if (changed) {
+        updateRootPipelineState(function(current) {
+          current.addedCases += addedCount;
+          appendRootPipelineModuleDetail(current, historyModuleTitle, addedCount);
+        });
+        clearDeleteHistoryStacks();
+        syncCasesGenPageRender();
+      }
+      if (isDrawerOpen()) {
+        render({ reason: changed ? 'root-pipeline-module-committed' : 'root-pipeline-module-no-change', persist: false, anchorNodeId: '' });
+      }
+      persistXmindState(true);
+      return changed;
+    }
+
+    function handleRootPipelineModuleTaskError(task, err, options) {
+      var pipeline = ensureRootPipelineStateFromTask(task);
+      if (!pipeline || String(pipeline.id || '') !== String(task && task.rootPipelineId ? task.rootPipelineId : '')) {
+        return false;
+      }
+      var opts = options || {};
+      var moduleId = task && task.moduleId ? String(task.moduleId || '') : '';
+      var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
+      if (moduleState) {
+        moduleState.running = false;
+        moduleState.taskId = '';
+        moduleState.status = opts.resultKind === 'cancelled' ? '' : 'error';
+        moduleState.error = opts.resultKind === 'cancelled' ? '' : getTaskErrorMessage(task, err);
+        moduleState.hideResults = false;
+        clearModuleRootPendingAction(moduleState);
+        moduleState.updatedAt = Date.now();
+      }
+      if (task && task.createdModuleBeforeAction === true && task.rootPipelineNewModule !== true && moduleId) {
+        removeAiModuleRecord(moduleId);
+      }
+      var moduleTitle = normalizeModuleTitle(task && task.moduleTitle ? task.moduleTitle : '');
+      var errorInfo = opts.resultKind === 'cancelled'
+        ? buildGenerationCancelledInfo(task)
+        : buildGenerationErrorInfo(new Error(moduleState && moduleState.error ? moduleState.error : getTaskErrorMessage(task, err)));
+      updateRootPipelineState(function(current) {
+        if (opts.resultKind === 'cancelled') {
+          current.cancelled = true;
+          if (!current.cancelReason) current.cancelReason = errorInfo.reasonText;
+        } else {
+          current.errorCount += 1;
+        }
+        appendRootPipelineDiagnostics(current, (opts.resultKind === 'cancelled'
+          ? ['模块「' + (moduleTitle || '当前模块') + '」已中断：' + errorInfo.reasonText]
+          : ['模块「' + (moduleTitle || '当前模块') + '」失败：' + errorInfo.reasonText]
+        ).concat(errorInfo.diagnostics || []));
+      });
+      if (isDrawerOpen()) {
+        render({ reason: opts.renderReason || 'root-pipeline-module-error', persist: false, anchorNodeId: '' });
+      }
+      persistXmindState(true);
+      return false;
+    }
+
     function completeRootTaskSuccess(task) {
+      if (task && task.rootPipelineId && String(task.pipelineStage || '') === 'discovery') {
+        return handleRootPipelineDiscoveryTaskSuccess(task);
+      }
       var actionId = String(task && task.actionId ? task.actionId : '');
       var rootState = ensureRootUiState();
       var contract = task && task.contract ? task.contract : createOperationContract(actionId, null);
@@ -7139,6 +7967,9 @@
     }
 
     function completeRootTaskError(task, err, options) {
+      if (task && task.rootPipelineId && String(task.pipelineStage || '') === 'discovery') {
+        return handleRootPipelineDiscoveryTaskError(task, err, options);
+      }
       var opts = options || {};
       var actionId = String(task && task.actionId ? task.actionId : '');
       var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
@@ -7187,6 +8018,9 @@
     }
 
     function completeModuleTaskSuccess(task) {
+      if (task && task.rootPipelineId && task.historySuppressed === true) {
+        return handleRootPipelineModuleTaskSuccess(task);
+      }
       var actionId = String(task && task.actionId ? task.actionId : '');
       var visibleContext = buildVisibleModuleContext();
       var resolvedEntry = resolveTaskModuleEntry(task, visibleContext);
@@ -7343,6 +8177,9 @@
     }
 
     function completeModuleTaskError(task, err, options) {
+      if (task && task.rootPipelineId && task.historySuppressed === true) {
+        return handleRootPipelineModuleTaskError(task, err, options);
+      }
       var opts = options || {};
       var actionId = String(task && task.actionId ? task.actionId : '');
       var moduleId = task && task.moduleId ? String(task.moduleId || '') : '';
@@ -7416,12 +8253,16 @@
           if (task.scope === 'root') return completeRootTaskError(task, err, { renderReason: 'root-task-consume-error' });
           return completeModuleTaskError(task, err, { renderReason: 'module-task-consume-error' });
         })
-        .finally(function() {
+        .finally(async function() {
           var manager = getXmindTaskManager();
           if (manager && typeof manager.clearTask === 'function') {
             manager.clearTask(task.id, 'handled');
           }
           delete xmindTaskProcessingMap[task.id];
+          if (task && task.rootPipelineId) {
+            await pumpRootPipelineModuleQueue(String(task.rootPipelineId || ''));
+            finalizeRootPipelineIfReady(String(task.rootPipelineId || ''), { anchorNodeId: '' });
+          }
           syncManagedRunningUiState({
             tasks: listManagedXmindTasks(),
             render: false,
@@ -7451,9 +8292,16 @@
         reason: opts.reason || 'task-reconcile',
         persist: opts.persist === true,
       });
-      tasks.filter(isManagedTaskTerminal).forEach(function(task) {
+      var terminalTasks = tasks.filter(isManagedTaskTerminal);
+      terminalTasks.forEach(function(task) {
         consumeManagedXmindTask(task);
       });
+      var pipeline = getRootPipelineState();
+      if (pipeline && pipeline.id && terminalTasks.length <= 0) {
+        pumpRootPipelineModuleQueue(String(pipeline.id || '')).then(function() {
+          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: '' });
+        });
+      }
     }
 
     function bindManagedXmindTasks() {
@@ -7496,12 +8344,25 @@
         notifyFloatingStatus('中断能力未就绪，请刷新后重试', 'err', 5000);
         return false;
       }
+      var pipeline = getRootPipelineState();
       var interruptedCount = Number(manager.cancelAllRunning({
         reason: '已手动中断当前 XMind 生成任务',
         source: 'toolbar',
         abortReason: 'xmind-casegen-cancelled',
       }) || 0);
+      if (pipeline && pipeline.id) {
+        updateRootPipelineState(function(current) {
+          current.cancelled = true;
+          current.cancelReason = '已手动中断当前 XMind 生成任务';
+          current.pendingQueue = [];
+        });
+      }
       if (interruptedCount <= 0) {
+        if (pipeline && Array.isArray(pipeline.pendingQueue) && pipeline.pendingQueue.length > 0) {
+          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: '' });
+          notifyFloatingStatus('已中断当前 XMind 生成任务', 'warn', 3000);
+          return true;
+        }
         notifyFloatingStatus('当前没有可中断的生成任务', 'warn', 3000);
         return false;
       }
@@ -7512,6 +8373,254 @@
         persist: true,
       });
       notifyFloatingStatus('已中断 ' + String(interruptedCount) + ' 个生成任务', 'warn', 3000);
+      return true;
+    }
+
+    function shouldUseRootPipeline(actionId) {
+      return actionId === ROOT_ACTIONS.FULL_CASES
+        || actionId === ROOT_ACTIONS.EXISTING_CASES
+        || actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES
+        || actionId === ROOT_ACTIONS.APPEND_ALL;
+    }
+
+    function buildRootPipelineTaskDescriptors(actionId, visibleContext) {
+      var descriptors = [];
+      var context = visibleContext && visibleContext.list ? visibleContext : buildVisibleModuleContext();
+      if (actionId !== ROOT_ACTIONS.EXISTING_CASES && actionId !== ROOT_ACTIONS.APPEND_ALL) {
+        return descriptors;
+      }
+      context.list.forEach(function(entry) {
+        if (!entry) return;
+        var hasVisibleCases = getVisibleCasesForModuleEntry(entry).length > 0;
+        descriptors.push({
+          moduleEntry: entry,
+          actionId: hasVisibleCases ? MODULE_ACTIONS.APPEND : MODULE_ACTIONS.FULL_CASES,
+          rootPendingActionId: actionId === ROOT_ACTIONS.EXISTING_CASES && hasVisibleCases
+            ? ROOT_ACTIONS.EXISTING_CASES
+            : '',
+          rootPipelineNewModule: false,
+        });
+      });
+      return descriptors;
+    }
+
+    async function startManagedModuleTask(moduleEntry, actionId, options) {
+      options = options || {};
+      if (!moduleEntry) return null;
+      var anchorNodeId = Object.prototype.hasOwnProperty.call(options, 'anchorNodeId')
+        ? String(options.anchorNodeId || '')
+        : getModuleNodeId(moduleEntry);
+      var moduleId = moduleEntry.aiModuleId || generateLocalId('xmind-mod');
+      var createdModuleRecordBeforeTask = !moduleEntry.aiModuleId;
+      var snapshotId = '';
+
+      if (options.skipSnapshot !== true) {
+        if (casesGenApi && typeof casesGenApi.snapshotModuleCases === 'function') {
+          snapshotId = casesGenApi.snapshotModuleCases(moduleId) || '';
+        } else {
+          snapshotId = createCaseGenOperationSnapshotLocal('module', moduleId) || '';
+        }
+      }
+
+      if (createdModuleRecordBeforeTask) {
+        moduleEntry.aiModule = ensureAiModuleRecord(moduleEntry.title, {
+          module: moduleEntry.title,
+        }, moduleId);
+        moduleEntry.aiModuleId = moduleEntry.aiModule.id;
+      }
+
+      var moduleState = ensureModuleUiState(moduleEntry.aiModuleId);
+      var hadAiCasesBeforeAction = actionId === MODULE_ACTIONS.FULL_CASES && hasAiCasesForModule(moduleEntry.aiModuleId);
+      var historyActionLabel = getModuleHistoryActionLabel(actionId, moduleEntry, hadAiCasesBeforeAction);
+      moduleState.snapshotId = snapshotId;
+      moduleState.lastAction = actionId;
+      moduleState.running = true;
+      moduleState.taskId = '';
+      moduleState.status = '';
+      moduleState.error = '';
+      moduleState.updatedAt = Date.now();
+      moduleState.hideResults = hadAiCasesBeforeAction;
+      clearModuleTopupHighlight(moduleState);
+      if (options.rootPendingActionId) {
+        setModuleRootPendingAction(moduleState, options.rootPendingActionId);
+      }
+      render({ reason: options.renderReason || 'module-running', anchorNodeId: anchorNodeId, persist: false });
+
+      var moduleTaskMeta = {
+        scope: 'module',
+        actionId: actionId,
+        moduleId: String(moduleEntry.aiModuleId || moduleId || ''),
+        moduleKey: String(moduleEntry.moduleKey || ''),
+        moduleTitle: normalizeModuleTitle(moduleEntry.title || ''),
+        snapshotId: snapshotId,
+        createdModuleBeforeAction: Object.prototype.hasOwnProperty.call(options, 'forceCreatedModuleBeforeAction')
+          ? options.forceCreatedModuleBeforeAction === true
+          : createdModuleRecordBeforeTask,
+        hadAiCasesBeforeAction: hadAiCasesBeforeAction,
+        rootPipelineId: String(options.rootPipelineId || ''),
+        rootPipelineActionId: String(options.rootPipelineActionId || ''),
+        rootPipelineNewModule: options.rootPipelineNewModule === true,
+        historySuppressed: options.historySuppressed === true,
+        notifySuppressed: options.notifySuppressed === true,
+      };
+
+      try {
+        var visibleContext = buildVisibleModuleContext();
+        var resolvedEntry = visibleContext.map[moduleEntry.moduleKey] || moduleEntry;
+        var contract = options.contractOverride || createOperationContract(actionId, resolvedEntry);
+        var historyModuleTitle = normalizeModuleTitle(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : moduleEntry.title);
+        moduleTaskMeta.contract = cloneJson(contract, {});
+        moduleTaskMeta.historyActionLabel = historyActionLabel;
+        moduleTaskMeta.moduleTitle = historyModuleTitle;
+        moduleTaskMeta.moduleKey = String(resolvedEntry && resolvedEntry.moduleKey ? resolvedEntry.moduleKey : moduleEntry.moduleKey || '');
+        moduleTaskMeta.moduleId = String(resolvedEntry && resolvedEntry.aiModuleId ? resolvedEntry.aiModuleId : moduleEntry.aiModuleId || moduleId || '');
+        var moduleTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, resolvedEntry);
+        var moduleTask = startManagedXmindTask(buildModuleTaskPayload(resolvedEntry, actionId, moduleTaskInput, moduleTaskMeta));
+        moduleState.taskId = String(moduleTask && moduleTask.id ? moduleTask.id : '');
+        moduleState.updatedAt = Date.now();
+        persistXmindState(true);
+        return {
+          task: moduleTask,
+          moduleEntry: resolvedEntry,
+          moduleState: moduleState,
+        };
+      } catch (err) {
+        completeModuleTaskError(moduleTaskMeta, err, { renderReason: 'module-start-error' });
+        return null;
+      }
+    }
+
+    async function pumpRootPipelineModuleQueue(pipelineId, options) {
+      var targetId = String(pipelineId || '');
+      if (!targetId) return 0;
+      if (rootPipelinePumpMap[targetId]) return rootPipelinePumpMap[targetId];
+      var pumpPromise = Promise.resolve().then(async function() {
+        var pipeline = getRootPipelineState();
+        if (!pipeline || String(pipeline.id || '') !== targetId) return 0;
+        if (pipeline.cancelled === true) {
+          replaceRootPipelinePendingQueue(targetId, []);
+          return 0;
+        }
+        var runningTasks = collectRootPipelineRunningTasks(targetId);
+        if (runningTasks.length > 0) return 0;
+        var visibleContext = buildVisibleModuleContext();
+        while (true) {
+          var nextSerialized = shiftRootPipelinePendingDescriptor(targetId);
+          if (!nextSerialized) return 0;
+          var descriptor = resolveRootPipelineDescriptor(nextSerialized, visibleContext);
+          if (!descriptor || !descriptor.moduleEntry || !descriptor.actionId) {
+            updateRootPipelineState(function(current) {
+              if (String(current.id || '') !== targetId) return;
+              appendRootPipelineDiagnostics(current, '有 1 个待生成模块在当前画布中已不可用，已自动跳过');
+            });
+            visibleContext = buildVisibleModuleContext();
+            continue;
+          }
+          var started = await startManagedModuleTask(descriptor.moduleEntry, descriptor.actionId, {
+            skipSnapshot: true,
+            historySuppressed: true,
+            notifySuppressed: true,
+            rootPipelineId: pipeline && pipeline.id ? pipeline.id : '',
+            rootPipelineActionId: pipeline && pipeline.actionId ? pipeline.actionId : '',
+            rootPipelineNewModule: descriptor.rootPipelineNewModule === true,
+            rootPendingActionId: descriptor.rootPendingActionId || '',
+            forceCreatedModuleBeforeAction: descriptor.forceCreatedModuleBeforeAction === true,
+            anchorNodeId: Object.prototype.hasOwnProperty.call(descriptor, 'anchorNodeId')
+              ? String(descriptor.anchorNodeId || '')
+              : '',
+            renderReason: 'root-pipeline-module-running',
+          });
+          if (started && started.task && started.task.id) {
+            return 1;
+          }
+          visibleContext = buildVisibleModuleContext();
+        }
+      }).finally(function() {
+        delete rootPipelinePumpMap[targetId];
+      });
+      rootPipelinePumpMap[targetId] = pumpPromise;
+      return pumpPromise;
+    }
+
+    async function startRootPipelineModuleTasks(pipeline, descriptors) {
+      var list = Array.isArray(descriptors) ? descriptors : [];
+      var targetId = pipeline && pipeline.id ? String(pipeline.id || '') : '';
+      if (!targetId) return 0;
+      replaceRootPipelinePendingQueue(targetId, []);
+      if (!list.length) return 0;
+      var startedResults = await runConcurrentTasks(list, list.length || 1, async function(descriptor) {
+        if (!descriptor || !descriptor.moduleEntry || !descriptor.actionId) return null;
+        return await startManagedModuleTask(descriptor.moduleEntry, descriptor.actionId, {
+          skipSnapshot: true,
+          historySuppressed: true,
+          notifySuppressed: true,
+          rootPipelineId: pipeline && pipeline.id ? pipeline.id : '',
+          rootPipelineActionId: pipeline && pipeline.actionId ? pipeline.actionId : '',
+          rootPipelineNewModule: descriptor.rootPipelineNewModule === true,
+          rootPendingActionId: descriptor.rootPendingActionId || '',
+          forceCreatedModuleBeforeAction: descriptor.forceCreatedModuleBeforeAction === true,
+          anchorNodeId: Object.prototype.hasOwnProperty.call(descriptor, 'anchorNodeId')
+            ? String(descriptor.anchorNodeId || '')
+            : '',
+          renderReason: 'root-pipeline-module-running',
+        });
+      });
+      return (Array.isArray(startedResults) ? startedResults : []).filter(function(item) {
+        return Boolean(item && item.task && item.task.id);
+      }).length;
+    }
+
+    async function startRootPipeline(actionId, rootTaskMeta, visibleContext) {
+      var rootState = ensureRootUiState();
+      var pipeline = createRootPipelineState({
+        actionId: actionId,
+        snapshotId: rootTaskMeta && rootTaskMeta.snapshotId ? String(rootTaskMeta.snapshotId || '') : '',
+        historyActionLabel: rootTaskMeta && rootTaskMeta.historyActionLabel ? String(rootTaskMeta.historyActionLabel || '') : '',
+        hadAiContentBeforeAction: rootTaskMeta && rootTaskMeta.hadAiContentBeforeAction === true,
+        hadAiLayerBeforeAction: rootTaskMeta && rootTaskMeta.hadAiLayerBeforeAction === true,
+        hadAiCasesBeforeAction: rootTaskMeta && rootTaskMeta.hadAiCasesBeforeAction === true,
+        stage: actionId === ROOT_ACTIONS.EXISTING_CASES ? 'modules' : 'discovering',
+        discoveryStatus: actionId === ROOT_ACTIONS.EXISTING_CASES ? 'skipped' : 'running',
+      });
+      setRootPipelineState(pipeline);
+
+      if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
+        var existingDescriptors = buildRootPipelineTaskDescriptors(actionId, visibleContext).map(function(item) {
+          return Object.assign({}, item, { anchorNodeId: '' });
+        });
+        var startedCount = await startRootPipelineModuleTasks(pipeline, existingDescriptors);
+        rootState.taskId = startedCount > 0 ? String(pipeline.id || '') : '';
+        rootState.updatedAt = Date.now();
+        persistXmindState(true);
+        if (startedCount <= 0) {
+          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: '' });
+        }
+        return true;
+      }
+
+      var contract = rootTaskMeta && rootTaskMeta.contract
+        ? cloneJson(rootTaskMeta.contract, {})
+        : createOperationContract(actionId, null);
+      var rootTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, null);
+      var rootTask = startManagedXmindTask(buildRootTaskPayload(actionId, rootTaskInput, {
+        scope: 'root',
+        actionId: actionId,
+        snapshotId: rootTaskMeta && rootTaskMeta.snapshotId ? String(rootTaskMeta.snapshotId || '') : '',
+        contract: cloneJson(contract, {}),
+        historyActionLabel: rootTaskMeta && rootTaskMeta.historyActionLabel ? String(rootTaskMeta.historyActionLabel || '') : '',
+        hadAiContentBeforeAction: rootTaskMeta && rootTaskMeta.hadAiContentBeforeAction === true,
+        hadAiLayerBeforeAction: rootTaskMeta && rootTaskMeta.hadAiLayerBeforeAction === true,
+        hadAiCasesBeforeAction: rootTaskMeta && rootTaskMeta.hadAiCasesBeforeAction === true,
+        rootPipelineId: pipeline.id,
+        rootPipelineActionId: actionId,
+        pipelineStage: 'discovery',
+        historySuppressed: true,
+        notifySuppressed: true,
+        skipCoverageRetry: actionId !== ROOT_ACTIONS.FULL_CASES,
+      }));
+      rootState.taskId = String(rootTask && rootTask.id ? rootTask.id : '');
+      rootState.updatedAt = Date.now();
+      persistXmindState(true);
       return true;
     }
 
@@ -7587,6 +8696,9 @@
       };
 
       try {
+        if (shouldUseRootPipeline(actionId)) {
+          return await startRootPipeline(actionId, rootTaskMeta, visibleContext);
+        }
         var rootTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, null);
         var rootTask = startManagedXmindTask(buildRootTaskPayload(actionId, rootTaskInput, rootTaskMeta));
         rootState.taskId = String(rootTask && rootTask.id ? rootTask.id : '');
@@ -7594,6 +8706,7 @@
         persistXmindState(true);
         return true;
       } catch (err) {
+        clearRootPipelineState();
         return completeRootTaskError(rootTaskMeta, err, { renderReason: 'root-start-error' });
       }
     }
@@ -7603,12 +8716,9 @@
       if (!moduleEntry) return false;
       if (!ensureActionAllowed(actionId, moduleEntry)) return false;
       if (!ensurePrepReadyOrOpen()) return false;
-      var anchorNodeId = options.anchorNodeId || getModuleNodeId(moduleEntry);
-      var moduleId = moduleEntry.aiModuleId || generateLocalId('xmind-mod');
-      var createdModuleBeforeAction = !moduleEntry.aiModuleId;
-      var snapshotId = '';
 
       if (actionId === MODULE_ACTIONS.ROLLBACK) {
+        var anchorNodeId = options.anchorNodeId || getModuleNodeId(moduleEntry);
         if (moduleEntry.aiModuleId) {
           var rolledBack = false;
           if (casesGenApi && typeof casesGenApi.rollbackModuleCases === 'function') {
@@ -7635,66 +8745,11 @@
         }
         return false;
       }
-
-      if (casesGenApi && typeof casesGenApi.snapshotModuleCases === 'function') {
-        snapshotId = casesGenApi.snapshotModuleCases(moduleId) || '';
-      } else {
-        snapshotId = createCaseGenOperationSnapshotLocal('module', moduleId) || '';
-      }
-      if (createdModuleBeforeAction) {
-        moduleEntry.aiModule = ensureAiModuleRecord(moduleEntry.title, {
-          module: moduleEntry.title,
-        }, moduleId);
-        moduleEntry.aiModuleId = moduleEntry.aiModule.id;
-      }
-
-      var moduleState = ensureModuleUiState(moduleEntry.aiModuleId);
-      var hadAiCasesBeforeAction = actionId === MODULE_ACTIONS.FULL_CASES && hasAiCasesForModule(moduleEntry.aiModuleId);
-      var historyActionLabel = getModuleHistoryActionLabel(actionId, moduleEntry, hadAiCasesBeforeAction);
-      moduleState.snapshotId = snapshotId;
-      moduleState.lastAction = actionId;
-      moduleState.running = true;
-      moduleState.taskId = '';
-      moduleState.status = '';
-      moduleState.error = '';
-      moduleState.updatedAt = Date.now();
-      moduleState.hideResults = hadAiCasesBeforeAction;
-      if (actionId === MODULE_ACTIONS.APPEND) {
-        clearModuleTopupHighlight(moduleState);
-      } else {
-        clearModuleTopupHighlight(moduleState);
-      }
-      render({ reason: 'module-running', anchorNodeId: anchorNodeId, persist: false });
-      var moduleTaskMeta = {
-        scope: 'module',
-        actionId: actionId,
-        moduleId: String(moduleEntry.aiModuleId || moduleId || ''),
-        moduleKey: String(moduleEntry.moduleKey || ''),
-        moduleTitle: normalizeModuleTitle(moduleEntry.title || ''),
-        snapshotId: snapshotId,
-        createdModuleBeforeAction: createdModuleBeforeAction,
-        hadAiCasesBeforeAction: hadAiCasesBeforeAction,
-      };
-
-      try {
-        var visibleContext = buildVisibleModuleContext();
-        var resolvedEntry = visibleContext.map[moduleEntry.moduleKey] || moduleEntry;
-        var contract = createOperationContract(actionId, resolvedEntry);
-        var historyModuleTitle = normalizeModuleTitle(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : moduleEntry.title);
-        moduleTaskMeta.contract = cloneJson(contract, {});
-        moduleTaskMeta.historyActionLabel = historyActionLabel;
-        moduleTaskMeta.moduleTitle = historyModuleTitle;
-        moduleTaskMeta.moduleKey = String(resolvedEntry && resolvedEntry.moduleKey ? resolvedEntry.moduleKey : moduleEntry.moduleKey || '');
-        moduleTaskMeta.moduleId = String(resolvedEntry && resolvedEntry.aiModuleId ? resolvedEntry.aiModuleId : moduleEntry.aiModuleId || moduleId || '');
-        var moduleTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, resolvedEntry);
-        var moduleTask = startManagedXmindTask(buildModuleTaskPayload(resolvedEntry, actionId, moduleTaskInput, moduleTaskMeta));
-        moduleState.taskId = String(moduleTask && moduleTask.id ? moduleTask.id : '');
-        moduleState.updatedAt = Date.now();
-        persistXmindState(true);
-        return true;
-      } catch (err) {
-        return completeModuleTaskError(moduleTaskMeta, err, { renderReason: 'module-start-error' });
-      }
+      var started = await startManagedModuleTask(moduleEntry, actionId, {
+        renderReason: 'module-running',
+        anchorNodeId: options.anchorNodeId || getModuleNodeId(moduleEntry),
+      });
+      return Boolean(started && started.task && started.task.id);
     }
 
     function handleNodeAction(actionId, nodeMeta) {

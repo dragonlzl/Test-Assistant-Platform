@@ -19,6 +19,32 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 根节点生成改为渐进式分批提交展示
+- 功能描述：将 `XMind 用例生成` 中根节点的 `生成全量用例`、`已有模块补全用例`、`补全模块+用例`、`追加生成全部模块+用例` 改为前端渐进式编排。现在根节点动作会先进入 root pipeline：先做 discovery 拿到模块骨架或补全目标，再按模块拆成独立后台任务提交，谁先完成谁先写回共享结果并立即在树上展示；刷新页面后如果 pipeline 仍在执行，会根据后台任务元数据重建 pipeline 并继续消费，不再把结果吞掉。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 抽屉里完成前置准备后，对根节点执行 `生成全量用例`、`已有模块补全用例`、`补全模块+用例` 或 `追加生成全部模块+用例`；
+  - `生成全量用例` 会先落模块骨架，再逐个模块补齐用例；
+  - `已有模块补全用例` 会按模块独立补用例，已完成的模块会先看到新增结果和对应虚线框；
+  - 生成中可刷新页面，抽屉会自动恢复并继续消费后台任务。
+- 使用效果：
+  - 根节点全量生成不再等整次 root 请求结束后一次性跳出全部结果，而是先看到模块，再逐个看到模块内用例；
+  - 已有模块补全用例时，不再叠加模块本体 `running` 徽标，只保留树内 `补全用例中` 占位表现；
+  - 刷新恢复场景下，即使 `root.pipeline` 轻量状态未及时回写，也会从任务元数据重建 pipeline，避免刷新后只剩根节点、模块骨架和结果不再落下。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增 root pipeline 轻量编排状态恢复、root discovery -> module 子任务分发、pipeline 聚合收尾、按任务重建 pipeline 的刷新兜底，以及 `已有模块补全用例` 的状态徽标抑制；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增“根节点生成全量用例会先展示模块骨架，再逐个展示模块用例”回归，并同步调整 root 全量生成/已有模块补全用例断言以匹配渐进式提交结果；
+  - 未新增后端接口、未改动存储表。
+- 复用说明：复用现有 `initXmindCaseGenTaskManager()` 后台任务管理、`caseGenModules/caseGenResults` 共享真源、`recordGenerationHistory()` 生成记录、`mindElixir` 渲染与现有 root/module action contract；没有新增第二套结果仓库，也没有改 `/api/model-proxy` 协议。
+- 测试与验证：
+  - 自查 code review：重点确认 root pipeline 只新增轻量编排状态，没有绕过现有共享结果提交流程；模块子任务仍走原有模型调用和 commit 链路；
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点支持生成全量模块与生成全量用例，并在刷新后恢复共享结果|根节点已有模块补全用例会为已有用例模块新增内容渲染独立虚线框|根节点生成全量用例会先展示模块骨架，再逐个展示模块用例" --reporter=line`，3/3 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "XMind 生成在刷新后会自动恢复并继续完成，不再卡死在生成中|根节点生成全量用例会先展示模块骨架，再逐个展示模块用例" --reporter=line`，2/2 通过；
+  - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8083` 启动测试后端后，执行 `API_BASE_URL=http://127.0.0.1:8083 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line`，2/2 通过。
+- 更新记录：
+  - 2026-04-02 16:35 CST，根节点生成改为渐进式分批提交：先落模块骨架，再按模块逐步落用例，并补齐刷新恢复时的 pipeline 重建兜底。
+  - 2026-04-02 17:10 CST，验证后取消了“人为串行排队”方案，改为 discovery 后立即并发启动模块子任务，并保持“谁先完成谁先展示”。这样不会为了展示效果故意拖慢模块结果落图；刷新恢复和中断逻辑仍保持兼容。
+
 - 功能名称：XMind 首轮生成强化 step3 硬约束与自动补强
 - 功能描述：强化 `XMind 用例生成` 在根节点首轮全量生成时对 step3 生成选项的利用。现在 `功能使用条件`、`数值验证` 等 step3 勾选项不仅继续参与共享设置项拼装，还会作为 XMind 专属 prompt 和用户上下文中的硬约束显式提交；当根节点首轮 `生成全量用例`、`生成全量模块` 或 `重新生成模块` 的结果没有充分覆盖已开启的关键要求时，前端会在不新增后端接口的前提下自动发起一次补强重试，并只提交补强后的最终结果。
 - 操作方式：

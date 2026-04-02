@@ -388,6 +388,127 @@ async function installXmindModelStub(page, delayMs) {
   }, delayMs || 120);
 }
 
+async function installRootPipelineStaggeredStub(page) {
+  await page.evaluate(() => {
+    var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+    if (!client) return;
+
+    function flattenContent(content) {
+      if (typeof content === 'string') return content;
+      if (!Array.isArray(content)) return '';
+      return content.map(function(item) {
+        if (!item || typeof item !== 'object') return '';
+        if (item.type === 'text') return String(item.text || '');
+        return '[image]';
+      }).join('\n');
+    }
+
+    function parseJsonText(text) {
+      var raw = String(text || '').trim();
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw);
+      } catch (err) {}
+      var objStart = raw.indexOf('{');
+      var objEnd = raw.lastIndexOf('}');
+      if (objStart >= 0 && objEnd > objStart) {
+        try {
+          return JSON.parse(raw.slice(objStart, objEnd + 1));
+        } catch (err2) {}
+      }
+      return null;
+    }
+
+    function extractSection(text, marker) {
+      var source = String(text || '');
+      var index = source.indexOf(marker);
+      if (index === -1) return '';
+      var rest = source.slice(index + marker.length);
+      var next = rest.indexOf('\n\n【');
+      if (next !== -1) rest = rest.slice(0, next);
+      return String(rest || '').trim();
+    }
+
+    function makeModule(name, cases) {
+      return {
+        module: name,
+        key_scenarios: [name + '主场景'],
+        test_points: [name + '关键校验'],
+        coupled_modules: [name + '关联模块'],
+        cases: Array.isArray(cases) ? cases : [],
+      };
+    }
+
+    function makeCase(moduleName, title) {
+      return {
+        module: moduleName,
+        title: title,
+        priority: 'P1',
+        preconditions: moduleName + '前置条件',
+        steps: ['1、进入' + moduleName, '2、执行' + title],
+        expected: title + '执行成功',
+      };
+    }
+
+    window.__xmindPipelineCalls = [];
+    client.proxyModelRequest = function(payload, signal) {
+      var modelPayload = payload && payload.payload ? payload.payload : {};
+      var messages = Array.isArray(modelPayload.messages) ? modelPayload.messages : [];
+      var promptText = flattenContent(messages[0] && messages[0].content);
+      var userText = flattenContent(messages[1] && messages[1].content);
+      var contract = parseJsonText(extractSection(userText, '【operation_contract(JSON)】'))
+        || parseJsonText(extractSection(promptText, 'operation_contract(JSON)：'))
+        || {};
+      var mode = String(contract.mode || '');
+      var targetModule = String(contract.targetModule || '');
+      var delayMs = 120;
+      var responseModules = [];
+
+      if (mode === 'full_cases') {
+        delayMs = 120;
+        responseModules = [
+          makeModule('登录模块', [makeCase('登录模块', '登录模块-首批用例')]),
+          makeModule('支付模块', [makeCase('支付模块', '支付模块-尾批用例')]),
+        ];
+      } else if (mode === 'module_full_cases' && targetModule === '登录模块') {
+        delayMs = 900;
+        responseModules = [makeModule('登录模块', [makeCase('登录模块', '登录模块-首批用例')])];
+      } else if (mode === 'module_full_cases' && targetModule === '支付模块') {
+        delayMs = 80;
+        responseModules = [makeModule('支付模块', [makeCase('支付模块', '支付模块-尾批用例')])];
+      } else {
+        responseModules = [makeModule(targetModule || '默认模块', [makeCase(targetModule || '默认模块', '默认模块-完整-1')])];
+      }
+
+      window.__xmindPipelineCalls.push({
+        mode: mode,
+        targetModule: targetModule,
+        startedAt: Date.now(),
+      });
+      var content = JSON.stringify({ modules: responseModules });
+      return new Promise(function(resolve, reject) {
+        var timer = setTimeout(function() {
+          resolve({
+            ok: true,
+            status: 200,
+            text: function() {
+              return Promise.resolve(JSON.stringify({
+                choices: [{ message: { content: content } }],
+              }));
+            },
+          });
+        }, delayMs);
+        if (signal && typeof signal.addEventListener === 'function') {
+          signal.addEventListener('abort', function() {
+            clearTimeout(timer);
+            reject(new Error('aborted'));
+          }, { once: true });
+        }
+      });
+    };
+  });
+}
+
 async function installRawXmindModelResponse(page, contentText, delayMs) {
   await page.evaluate(({ rawContent, delay }) => {
     var client = window.app && window.app.apiClient ? window.app.apiClient : null;
@@ -2327,7 +2448,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.click('#xmindCaseGenMindContainer [data-mind-action="drawer-fullscreen"]');
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
     expect(await toggleXmindCasegenNodeCollapse(page, '登录模块')).toBeTruthy();
-    await waitForNodeTextAbsent(page, '登录成功校验');
+    await waitForNodeTextAbsent(page, '登录模块-完整-1');
     await page.evaluate(() => {
       window.dispatchEvent(new Event('beforeunload'));
     });
@@ -2880,7 +3001,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await clickContextMenuAction(page, '重新生成全量用例');
 
     await waitForNodeStatus(page, 'XMind根节点需求', '生成中');
-    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '登录模块-完整-1');
     await waitForNodeStatusAbsent(page, 'XMind根节点需求');
 
     const stateWithCases = await readState(page);
@@ -2899,7 +3020,7 @@ test.describe('XMind 用例生成抽屉', () => {
           ? String(textEl.innerText || '')
           : (textEl && textEl.textContent ? String(textEl.textContent || '') : '');
         if (content.indexOf('1、进入登录模块') === -1) return false;
-        if (content.indexOf('2、执行登录成功校验') === -1) return false;
+        if (content.indexOf('2、执行登录模块-完整-1') === -1) return false;
         found = content;
         return true;
       });
@@ -2923,11 +3044,11 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeStatus(page, 'XMind根节点需求', '生成中');
     await waitForNodeTextAbsent(page, '登录模块');
     await waitForNodeTextAbsent(page, '支付模块');
-    await waitForNodeTextAbsent(page, '登录成功校验');
+    await waitForNodeTextAbsent(page, '登录模块-完整-1');
     await waitForNodeStatusAbsent(page, 'XMind根节点需求');
     await waitForNodeText(page, '登录模块');
     await waitForNodeText(page, '支付模块');
-    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '登录模块-完整-1');
 
     const stateAfterRegenCases = await readState(page);
     const loginModuleAfterRegenCases = (stateAfterRegenCases.caseGenModules || []).find((item) => String(item.title || '') === '登录模块');
@@ -2958,7 +3079,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeStatus(page, 'XMind根节点需求', '生成中');
     await waitForNodeTextAbsent(page, '登录模块');
     await waitForNodeTextAbsent(page, '支付模块');
-    await waitForNodeTextAbsent(page, '登录成功校验');
+    await waitForNodeTextAbsent(page, '登录模块-完整-1');
     await waitForNodeStatusAbsent(page, 'XMind根节点需求');
     await waitForNodeText(page, '登录模块');
     await waitForNodeText(page, '支付模块');
@@ -2980,6 +3101,86 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '登录模块');
     await waitForNodeText(page, '支付模块');
     await waitForNodeTextAbsent(page, '登录成功校验');
+  });
+
+  test('根节点生成全量用例会先展示模块骨架，再逐个展示模块用例', async ({ page }) => {
+    const token = 'token-xmind-root-pipeline';
+    const user = { id: 202, username: 'demo_user_202', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installRootPipelineStaggeredStub(page);
+    await seedDocumentRequirement(page, {
+      text: '需求：先生成模块骨架，再按模块依次补齐登录与支付用例。',
+      requirementLabel: 'XMind分批展示需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind分批展示需求');
+    await openNodeContextMenu(page, 'XMind分批展示需求');
+    await clickContextMenuAction(page, '生成全量用例');
+
+    await waitForNodeStatus(page, 'XMind分批展示需求', '生成中');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+    await waitForNodeTextAbsent(page, '登录模块-首批用例');
+    await waitForNodeTextAbsent(page, '支付模块-尾批用例');
+
+    await page.waitForFunction(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var modules = state && Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
+      var login = modules.find(function(item) { return String(item && item.title || '') === '登录模块'; });
+      var pay = modules.find(function(item) { return String(item && item.title || '') === '支付模块'; });
+      var results = state && state.caseGenResults ? state.caseGenResults : {};
+      var loginRaw = login && login.id && results[login.id] ? String(results[login.id] || '') : '';
+      var payRaw = pay && pay.id && results[pay.id] ? String(results[pay.id] || '') : '';
+      var root = state && state.xmindCaseGen && state.xmindCaseGen.root ? state.xmindCaseGen.root : null;
+      return Boolean(
+        root &&
+        root.running === true &&
+        payRaw.indexOf('支付模块-尾批用例') !== -1 &&
+        loginRaw.indexOf('登录模块-首批用例') === -1
+      );
+    }, {}, { timeout: 15000 });
+    await waitForNodeText(page, '支付模块-尾批用例');
+    await waitForNodeTextAbsent(page, '登录模块-首批用例');
+    await page.waitForFunction(() => {
+      var calls = Array.isArray(window.__xmindPipelineCalls) ? window.__xmindPipelineCalls : [];
+      var loginCall = null;
+      var payCall = null;
+      calls.forEach(function(item) {
+        if (!item) return;
+        if (item.mode === 'module_full_cases' && item.targetModule === '登录模块') loginCall = item;
+        if (item.mode === 'module_full_cases' && item.targetModule === '支付模块') payCall = item;
+      });
+      if (!loginCall || !payCall) return false;
+      return Math.abs(Number(payCall.startedAt || 0) - Number(loginCall.startedAt || 0)) <= 400;
+    }, {}, { timeout: 10000 });
+
+    await waitForNodeText(page, '登录模块-首批用例');
+    await waitForNodeText(page, '支付模块-尾批用例');
+    await waitForNodeStatusAbsent(page, 'XMind分批展示需求');
+    const pipelineCalls = await page.evaluate(() => {
+      return Array.isArray(window.__xmindPipelineCalls) ? window.__xmindPipelineCalls.slice() : [];
+    });
+    expect(pipelineCalls.map(function(item) {
+      return {
+        mode: item.mode,
+        targetModule: item.targetModule,
+      };
+    })).toEqual([
+      { mode: 'full_cases', targetModule: '' },
+      { mode: 'full_cases', targetModule: '' },
+      { mode: 'module_full_cases', targetModule: '登录模块' },
+      { mode: 'module_full_cases', targetModule: '支付模块' },
+    ]);
   });
 
   test('导入用例作为主树基线后，根节点动作矩阵切换为补全模式并支持回滚到基线', async ({ page }) => {
@@ -3283,8 +3484,7 @@ test.describe('XMind 用例生成抽屉', () => {
       Array.prototype.forEach.call(placeholders, function(node) {
         if (String(node.textContent || '').indexOf('补全用例中') !== -1) casePendingCount += 1;
       });
-      var pendingLinks = document.querySelectorAll('#xmindCaseGenMindContainer path[data-xmind-casegen-link="topup-pending"]');
-      return moduleBadges.length === 0 && casePendingCount === 2 && pendingLinks.length >= 2;
+      return moduleBadges.length === 0 && casePendingCount === 2;
     }, {}, { timeout: 15000 });
     const pendingQuickActionOverlap = await page.evaluate(() => {
       function intersects(a, b) {
@@ -3308,8 +3508,8 @@ test.describe('XMind 用例生成抽屉', () => {
     });
     expect(pendingQuickActionOverlap).toBe(false);
 
-    await waitForNodeText(page, '登录模块-补全用例');
-    await waitForNodeText(page, '支付模块-补全用例');
+    await waitForNodeText(page, '登录模块-追加-1');
+    await waitForNodeText(page, '支付模块-追加-1');
     await waitForNodeStatusAbsent(page, '登录模块');
     await waitForNodeStatusAbsent(page, '支付模块');
     await waitForNodeStatusAbsent(page, 'XMind已有模块补全需求');
@@ -3323,12 +3523,12 @@ test.describe('XMind 用例生成抽屉', () => {
     const groups = await readTopupHighlightGroups(page);
     expect(groups).toHaveLength(2);
     expect(new Set(groups.map((item) => item.token)).size).toBe(2);
-    expect(groups.every((item) => item.label === '本轮追加用例')).toBeTruthy();
+    expect(groups.every((item) => item.label === '本轮补全用例')).toBeTruthy();
     expect(groups.every((item) => item.nodeCount >= 5)).toBeTruthy();
 
     const frames = await readAllTopupHighlightFrames(page);
     expect(frames).toHaveLength(2);
-    expect(frames.every((item) => item.label === '本轮追加用例')).toBeTruthy();
+    expect(frames.every((item) => item.label === '本轮补全用例')).toBeTruthy();
     expect(frames.every((item) => item.highlightedNodeCount >= 5)).toBeTruthy();
 
     await page.evaluate(() => {
