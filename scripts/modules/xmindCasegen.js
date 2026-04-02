@@ -85,9 +85,11 @@
     var mindInstance = null;
     var pendingCasesGenPageRender = false;
     var mindApiReadyPromise = null;
+    var inlinePrimaryHost = null;
     var inlineControlsHost = null;
     var inlineStatusHost = null;
     var inlineModelHost = null;
+    var inlineGroupHosts = {};
     var manualImageInputEl = null;
     var topupHighlightSyncTimer = 0;
     var topupHighlightRetryTimer = 0;
@@ -431,18 +433,23 @@
       if (toolbarEl && statusEl && statusEl.parentNode !== toolbarEl && toolbarEl.appendChild) {
         toolbarEl.appendChild(statusEl);
       }
-      if (inlineControlsHost && inlineControlsHost.parentNode) {
-        inlineControlsHost.parentNode.removeChild(inlineControlsHost);
-      }
       if (inlineStatusHost && inlineStatusHost.parentNode) {
         inlineStatusHost.parentNode.removeChild(inlineStatusHost);
       }
+      Object.keys(inlineGroupHosts).forEach(function(key) {
+        var host = inlineGroupHosts[key];
+        if (host && host.parentNode) {
+          host.parentNode.removeChild(host);
+        }
+      });
       if (inlineModelHost && inlineModelHost.parentNode) {
         inlineModelHost.parentNode.removeChild(inlineModelHost);
       }
+      inlinePrimaryHost = null;
       inlineControlsHost = null;
       inlineStatusHost = null;
       inlineModelHost = null;
+      inlineGroupHosts = {};
     }
 
     function getMindControlsRoot() {
@@ -450,37 +457,69 @@
       return mindContainer.querySelector('[data-mind-controls]');
     }
 
+    function getInlinePrimaryHost() {
+      var controlsRoot = getMindControlsRoot();
+      if (!controlsRoot || !controlsRoot.querySelector) return null;
+      var host = controlsRoot.querySelector('[data-mind-leading-host]');
+      if (!host) {
+        var searchGroup = controlsRoot.querySelector('.xmind-search-group');
+        if (!searchGroup) return null;
+        host = document.createElement('div');
+        host.className = 'xmind-controls-leading-host';
+        host.setAttribute('data-mind-leading-host', '1');
+        if (searchGroup.parentNode && searchGroup.parentNode.insertBefore) {
+          searchGroup.parentNode.insertBefore(host, searchGroup);
+        }
+      }
+      inlinePrimaryHost = host;
+      return host;
+    }
+
     function getInlineControlsHost() {
       var controlsRoot = getMindControlsRoot();
       if (!controlsRoot || !controlsRoot.querySelector) return null;
-      var searchGroup = controlsRoot.querySelector('.xmind-search-group');
-      if (!searchGroup) return null;
-      var host = controlsRoot.querySelector('[data-xmind-casegen-inline-actions]');
+      var host = controlsRoot.querySelector('[data-mind-utility-host]');
       if (!host) {
+        var searchGroup = controlsRoot.querySelector('.xmind-search-group');
+        if (!searchGroup || !searchGroup.parentNode || !searchGroup.parentNode.insertBefore) return null;
         host = document.createElement('div');
-        host.className = 'xmind-casegen-inline-actions';
-        host.setAttribute('data-xmind-casegen-inline-actions', '1');
-        searchGroup.appendChild(host);
+        host.className = 'xmind-controls-utility-host';
+        host.setAttribute('data-mind-utility-host', '1');
+        searchGroup.parentNode.insertBefore(host, searchGroup);
       }
       inlineControlsHost = host;
       return host;
     }
 
+    function getInlineGroupHost(groupName) {
+      var key = groupName ? String(groupName || '') : '';
+      if (!key) return null;
+      if (inlineGroupHosts[key] && inlineGroupHosts[key].parentNode) {
+        return inlineGroupHosts[key];
+      }
+      var controlsHost = getInlineControlsHost();
+      if (!controlsHost) return null;
+      var selector = '[data-xmind-casegen-inline-group="' + key + '"]';
+      var host = controlsHost.querySelector(selector);
+      if (!host) {
+        host = document.createElement('div');
+        host.className = 'xmind-casegen-inline-group xmind-casegen-inline-group-' + key;
+        host.setAttribute('data-xmind-casegen-inline-group', key);
+        controlsHost.appendChild(host);
+      }
+      inlineGroupHosts[key] = host;
+      return host;
+    }
+
     function getInlineStatusHost() {
-      var controlsRoot = getMindControlsRoot();
-      if (!controlsRoot || !controlsRoot.querySelector) return null;
-      var actionGroup = controlsRoot.querySelector('.xmind-action-group');
-      if (!actionGroup) return null;
-      var host = controlsRoot.querySelector('[data-xmind-casegen-inline-status]');
+      var groupHost = getInlineGroupHost('task');
+      if (!groupHost) return null;
+      var host = groupHost.querySelector('[data-xmind-casegen-inline-status]');
       if (!host) {
         host = document.createElement('div');
         host.className = 'xmind-casegen-inline-status';
         host.setAttribute('data-xmind-casegen-inline-status', '1');
-        if (actionGroup.firstChild) {
-          actionGroup.insertBefore(host, actionGroup.firstChild);
-        } else {
-          actionGroup.appendChild(host);
-        }
+        groupHost.appendChild(host);
       }
       inlineStatusHost = host;
       return host;
@@ -566,22 +605,64 @@
       return true;
     }
 
+    function applyInlineButtonStyle(btn, extraClass) {
+      if (!btn || !btn.classList) return;
+      btn.classList.add('xmind-casegen-inline-btn');
+      btn.classList.remove(
+        'xmind-casegen-inline-btn-primary',
+        'xmind-casegen-inline-btn-success',
+        'xmind-casegen-inline-btn-danger'
+      );
+      if (extraClass) {
+        btn.classList.add(extraClass);
+      }
+    }
+
     function mountInlineControls() {
       var controlsRoot = getMindControlsRoot();
-      var actionsHost = getInlineControlsHost();
+      var primaryHost = getInlinePrimaryHost();
+      var historyGroup = getInlineGroupHost('history');
+      var persistenceGroup = getInlineGroupHost('result');
+      var deleteGroup = getInlineGroupHost('delete-history');
+      var taskGroup = getInlineGroupHost('task');
       var statusHost = getInlineStatusHost();
-      if (!controlsRoot || !actionsHost) return false;
+      if (!controlsRoot || !primaryHost || !historyGroup || !persistenceGroup || !deleteGroup || !taskGroup) {
+        return false;
+      }
       controlsRoot.classList.add('xmind-casegen-inline-controls-ready');
       syncDeleteHistoryButtons();
       syncInterruptButton();
-      getInlineControlButtons().forEach(function(btn) {
-        if (!btn || !actionsHost.appendChild) return;
-        btn.classList.add('xmind-casegen-inline-btn');
-        actionsHost.appendChild(btn);
-      });
+      if (summaryBtn && primaryHost.appendChild) {
+        applyInlineButtonStyle(summaryBtn, 'xmind-casegen-inline-btn-primary');
+        primaryHost.appendChild(summaryBtn);
+      }
+      if (historyBtn && historyGroup.appendChild) {
+        applyInlineButtonStyle(historyBtn);
+        historyGroup.appendChild(historyBtn);
+      }
+      if (storeBtn && persistenceGroup.appendChild) {
+        applyInlineButtonStyle(storeBtn, 'xmind-casegen-inline-btn-success');
+        persistenceGroup.appendChild(storeBtn);
+      }
+      if (exportBtn && persistenceGroup.appendChild) {
+        applyInlineButtonStyle(exportBtn);
+        persistenceGroup.appendChild(exportBtn);
+      }
+      if (deleteUndoBtn && deleteGroup.appendChild) {
+        applyInlineButtonStyle(deleteUndoBtn);
+        deleteGroup.appendChild(deleteUndoBtn);
+      }
+      if (deleteRedoBtn && deleteGroup.appendChild) {
+        applyInlineButtonStyle(deleteRedoBtn);
+        deleteGroup.appendChild(deleteRedoBtn);
+      }
       if (statusHost && statusEl) {
         statusEl.classList.add('xmind-casegen-inline-status-text');
         statusHost.appendChild(statusEl);
+      }
+      if (interruptBtn && taskGroup.appendChild) {
+        applyInlineButtonStyle(interruptBtn, 'xmind-casegen-inline-btn-danger');
+        taskGroup.appendChild(interruptBtn);
       }
       syncInlineModelPicker();
       return true;
@@ -2162,6 +2243,7 @@
       });
       if (history.length > HISTORY_LIMIT) history.length = HISTORY_LIMIT;
       xmindState.history = history;
+      persistXmindState(true);
     }
 
     function renderHistoryDialog() {
@@ -4275,6 +4357,7 @@
     function clearTopupHighlightLayer(hostEl) {
       var layerHostEl = getTopupHighlightMapElement(hostEl) || hostEl;
       if (!layerHostEl || !layerHostEl.querySelectorAll) return;
+      clearDashedConnectorPathMarks(layerHostEl);
       var frames = layerHostEl.querySelectorAll('[data-xmind-casegen-topup-frame]');
       if (frames && frames.length) {
         Array.prototype.forEach.call(frames, function(frameEl) {
@@ -4298,6 +4381,300 @@
       layer.setAttribute('data-xmind-casegen-topup-layer', '1');
       layerHostEl.appendChild(layer);
       return layer;
+    }
+
+    function clearDashedConnectorPathMarks(hostEl) {
+      var layerHostEl = getTopupHighlightMapElement(hostEl) || hostEl;
+      if (!layerHostEl || !layerHostEl.querySelectorAll) return;
+      var paths = layerHostEl.querySelectorAll(
+        'svg path.xmind-casegen-pending-link, svg path[data-xmind-casegen-link], svg path[data-xmind-casegen-overlay-source]'
+      );
+      if (!paths || !paths.length) return;
+      Array.prototype.forEach.call(paths, function(pathEl) {
+        if (!pathEl || !pathEl.removeAttribute) return;
+        if (pathEl.classList) pathEl.classList.remove('xmind-casegen-pending-link');
+        pathEl.removeAttribute('data-xmind-casegen-link');
+        pathEl.removeAttribute('data-xmind-casegen-overlay-source');
+        pathEl.removeAttribute('stroke-dasharray');
+        pathEl.removeAttribute('stroke-linecap');
+        pathEl.removeAttribute('stroke-opacity');
+        pathEl.removeAttribute('opacity');
+      });
+    }
+
+    function ensureTopupConnectorSvg(layerEl, mapRect, scale) {
+      if (!layerEl || !layerEl.querySelector || !layerEl.appendChild || !mapRect) return null;
+      var svgEl = layerEl.querySelector('[data-xmind-casegen-topup-connectors]');
+      if (!svgEl) {
+        svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svgEl.setAttribute('data-xmind-casegen-topup-connectors', '1');
+        svgEl.setAttribute('preserveAspectRatio', 'none');
+        svgEl.classList.add('xmind-casegen-topup-connectors');
+        if (layerEl.firstChild) {
+          layerEl.insertBefore(svgEl, layerEl.firstChild);
+        } else {
+          layerEl.appendChild(svgEl);
+        }
+      }
+      var safeScale = Number(scale);
+      if (!Number.isFinite(safeScale) || safeScale <= 0) safeScale = 1;
+      var width = Math.max(1, mapRect.width / safeScale);
+      var height = Math.max(1, mapRect.height / safeScale);
+      svgEl.setAttribute('viewBox', '0 0 ' + String(width) + ' ' + String(height));
+      svgEl.setAttribute('width', String(width));
+      svgEl.setAttribute('height', String(height));
+      while (svgEl.firstChild) {
+        svgEl.removeChild(svgEl.firstChild);
+      }
+      return svgEl;
+    }
+
+    function findDirectChildByTag(parentEl, tagName) {
+      if (!parentEl || !parentEl.children) return null;
+      var targetTag = String(tagName || '').toLowerCase();
+      for (var i = 0; i < parentEl.children.length; i += 1) {
+        var childEl = parentEl.children[i];
+        if (!childEl || !childEl.tagName) continue;
+        if (String(childEl.tagName).toLowerCase() === targetTag) return childEl;
+      }
+      return null;
+    }
+
+    function getParentTopicElement(nodeEl) {
+      var wrapperEl = nodeEl && nodeEl.closest ? nodeEl.closest('me-wrapper') : null;
+      if (!wrapperEl || !wrapperEl.parentElement) return null;
+      var parentContainer = wrapperEl.parentElement;
+      var parentTag = parentContainer.tagName ? String(parentContainer.tagName).toLowerCase() : '';
+      if (parentTag === 'me-children') {
+        var parentHost = parentContainer.parentElement;
+        if (!parentHost) return null;
+        return findDirectChildByTag(parentHost, 'me-tpc');
+      }
+      if (parentTag === 'me-main') {
+        var nodesHost = parentContainer.parentElement;
+        if (!nodesHost) return null;
+        var rootHost = findDirectChildByTag(nodesHost, 'me-root');
+        if (!rootHost || !rootHost.querySelector) return null;
+        return rootHost.querySelector('me-tpc');
+      }
+      return null;
+    }
+
+    function resolveNodeConnectorColor(nodeEl, fallbackColor) {
+      var fallback = fallbackColor || '#2563eb';
+      if (!nodeEl || typeof window === 'undefined' || !window.getComputedStyle) return fallback;
+      var boxEl = nodeEl.querySelector ? nodeEl.querySelector('.box') : null;
+      var sourceEl = boxEl || nodeEl;
+      if (!sourceEl) return fallback;
+      var computed = window.getComputedStyle(sourceEl);
+      if (!computed) return fallback;
+      var borderColor = String(computed.borderColor || '').trim();
+      if (borderColor && borderColor !== 'transparent' && borderColor !== 'rgba(0, 0, 0, 0)') return borderColor;
+      var color = String(computed.color || '').trim();
+      if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') return color;
+      return fallback;
+    }
+
+    function parsePathEdgePoint(pathData, pointType) {
+      var text = String(pathData || '').trim();
+      if (!text) return null;
+      var numberMatches = text.match(/-?\d+(?:\.\d+)?/g);
+      if (!numberMatches || numberMatches.length < 4) return null;
+      if (pointType === 'start') {
+        return {
+          x: Number(numberMatches[0]),
+          y: Number(numberMatches[1]),
+        };
+      }
+      return {
+        x: Number(numberMatches[numberMatches.length - 2]),
+        y: Number(numberMatches[numberMatches.length - 1]),
+      };
+    }
+
+    function computeExpectedConnectorPoint(nodeEl, mapRect, scale, pointType) {
+      if (!nodeEl || !mapRect || !nodeEl.getBoundingClientRect) return null;
+      var safeScale = Number(scale);
+      if (!Number.isFinite(safeScale) || safeScale <= 0) safeScale = 1;
+      var rect = nodeEl.getBoundingClientRect();
+      if (!rect) return null;
+      var leftFlow = isNodeFlowLeft(nodeEl);
+      var isStart = pointType === 'start';
+      var x = 0;
+      if (isStart) {
+        x = leftFlow ? rect.left : rect.right;
+      } else {
+        x = leftFlow ? rect.right : rect.left;
+      }
+      return {
+        x: (x - mapRect.left) / safeScale,
+        y: ((rect.top + (rect.height / 2)) - mapRect.top) / safeScale,
+      };
+    }
+
+    function resolveExistingConnectorPaths(nodeEl, mapEl) {
+      var wrapperEl = nodeEl && nodeEl.closest ? nodeEl.closest('me-wrapper') : null;
+      if (!wrapperEl || !wrapperEl.parentElement || !mapEl || !mapEl.querySelectorAll) return [];
+      var parentContainer = wrapperEl.parentElement;
+      var parentTag = parentContainer.tagName ? String(parentContainer.tagName).toLowerCase() : '';
+      if (parentTag === 'me-main') {
+        return Array.prototype.slice.call(mapEl.querySelectorAll('svg.lines path'));
+      }
+      if (parentTag === 'me-children') {
+        var parentHost = parentContainer.parentElement;
+        if (!parentHost || !parentHost.querySelectorAll) return [];
+        return Array.prototype.slice.call(parentHost.querySelectorAll(':scope > svg.subLines path'));
+      }
+      return [];
+    }
+
+    function findExistingConnectorPathData(fromEl, toEl, mapEl, mapRect, scale) {
+      var candidates = resolveExistingConnectorPaths(toEl, mapEl);
+      if (!candidates.length) return null;
+      var expectedStart = computeExpectedConnectorPoint(fromEl, mapRect, scale, 'start');
+      var expectedEnd = computeExpectedConnectorPoint(toEl, mapRect, scale, 'end');
+      if (!expectedStart || !expectedEnd) return null;
+      var bestData = '';
+      var bestPathEl = null;
+      var bestScore = Number.POSITIVE_INFINITY;
+      candidates.forEach(function(pathEl) {
+        if (!pathEl || !pathEl.getAttribute) return;
+        var d = String(pathEl.getAttribute('d') || '').trim();
+        if (!d) return;
+        var startPoint = parsePathEdgePoint(d, 'start');
+        var endPoint = parsePathEdgePoint(d, 'end');
+        if (!startPoint || !endPoint) return;
+        var score = Math.abs(startPoint.x - expectedStart.x)
+          + Math.abs(startPoint.y - expectedStart.y)
+          + Math.abs(endPoint.x - expectedEnd.x)
+          + Math.abs(endPoint.y - expectedEnd.y);
+        if (score < bestScore) {
+          bestScore = score;
+          bestData = d;
+          bestPathEl = pathEl;
+        }
+      });
+      if (!bestData) return null;
+      return {
+        pathData: bestData,
+        pathEl: bestPathEl
+      };
+    }
+
+    function buildOverlayConnectorPath(fromEl, toEl, mapEl, mapRect, scale) {
+      if (!fromEl || !toEl || !mapRect || !fromEl.getBoundingClientRect || !toEl.getBoundingClientRect) return '';
+      var existingMatch = findExistingConnectorPathData(fromEl, toEl, mapEl, mapRect, scale);
+      if (existingMatch && existingMatch.pathData) return existingMatch;
+      var safeScale = Number(scale);
+      if (!Number.isFinite(safeScale) || safeScale <= 0) safeScale = 1;
+      var fromRect = fromEl.getBoundingClientRect();
+      var toRect = toEl.getBoundingClientRect();
+      if (!fromRect || !toRect) return '';
+      var leftFlow = isNodeFlowLeft(toEl);
+      var startX = ((leftFlow ? fromRect.left : fromRect.right) - mapRect.left) / safeScale;
+      var startY = ((fromRect.top + (fromRect.height / 2)) - mapRect.top) / safeScale;
+      var endX = ((leftFlow ? toRect.right : toRect.left) - mapRect.left) / safeScale;
+      var endY = ((toRect.top + (toRect.height / 2)) - mapRect.top) / safeScale;
+      var distanceX = Math.abs(endX - startX);
+      var control = Math.max(24, distanceX * 0.45);
+      var controlStartX = leftFlow ? (startX - control) : (startX + control);
+      var controlEndX = leftFlow ? (endX + control) : (endX - control);
+      return {
+        pathData: 'M ' + startX + ' ' + startY + ' C ' + controlStartX + ' ' + startY + ', ' + controlEndX + ' ' + endY + ', ' + endX + ' ' + endY,
+        pathEl: null
+      };
+    }
+
+    function resolveOverlayMaskColor(primaryEl, fallbackEl) {
+      function readSolidBackground(el) {
+        if (!el || typeof window === 'undefined' || !window.getComputedStyle) return '';
+        var computed = window.getComputedStyle(el);
+        if (!computed) return '';
+        var bg = String(computed.backgroundColor || '').trim();
+        if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') return '';
+        return bg;
+      }
+      var bg = readSolidBackground(primaryEl) || readSolidBackground(fallbackEl);
+      if (bg) return bg;
+      var theme = typeof document !== 'undefined' && document && document.documentElement
+        ? String(document.documentElement.getAttribute('data-theme') || '')
+        : '';
+      return theme === 'dark' ? '#0f172a' : '#f8fafc';
+    }
+
+    function appendOverlayConnector(svgEl, fromEl, toEl, mapEl, mapRect, scale, color, connectorType, maskColor) {
+      if (!svgEl || !fromEl || !toEl) return false;
+      var connectorPath = buildOverlayConnectorPath(fromEl, toEl, mapEl, mapRect, scale);
+      if (!connectorPath || !connectorPath.pathData) return false;
+      var pathData = connectorPath.pathData;
+      if (connectorPath.pathEl && connectorPath.pathEl.setAttribute) {
+        connectorPath.pathEl.setAttribute('data-xmind-casegen-overlay-source', String(connectorType || 'topup-overlay'));
+        connectorPath.pathEl.setAttribute('stroke-opacity', '0');
+        connectorPath.pathEl.setAttribute('opacity', '0');
+      }
+      var maskPathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      maskPathEl.setAttribute('d', pathData);
+      maskPathEl.setAttribute('fill', 'none');
+      maskPathEl.setAttribute('stroke', maskColor || '#f8fafc');
+      maskPathEl.setAttribute('stroke-width', '7');
+      maskPathEl.setAttribute('stroke-linecap', 'round');
+      maskPathEl.setAttribute('stroke-linejoin', 'round');
+      maskPathEl.setAttribute('data-xmind-casegen-link-mask', String(connectorType || 'topup-overlay'));
+      svgEl.appendChild(maskPathEl);
+      var pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      pathEl.setAttribute('d', pathData);
+      pathEl.setAttribute('fill', 'none');
+      pathEl.setAttribute('stroke', color || '#2563eb');
+      pathEl.setAttribute('stroke-width', '2.6');
+      pathEl.setAttribute('stroke-dasharray', '6 5');
+      pathEl.setAttribute('stroke-linecap', 'round');
+      pathEl.setAttribute('stroke-linejoin', 'round');
+      pathEl.setAttribute('data-xmind-casegen-link', String(connectorType || 'topup-overlay'));
+      pathEl.classList.add('xmind-casegen-pending-link');
+      svgEl.appendChild(pathEl);
+      return true;
+    }
+
+    function renderOverlayConnectors(layerEl, mapEl, mapRect, scale) {
+      if (!layerEl || !mapEl || !mapRect) return;
+      var svgEl = ensureTopupConnectorSvg(layerEl, mapRect, scale);
+      if (!svgEl) return;
+      var viewerEl = getTopupHighlightViewerElement();
+      var maskColor = resolveOverlayMaskColor(viewerEl, mapEl);
+      var placeholderNodes = mapEl.querySelectorAll('me-tpc.xmind-casegen-node-topup-placeholder');
+      Array.prototype.forEach.call(placeholderNodes || [], function(nodeEl) {
+        var parentEl = getParentTopicElement(nodeEl);
+        if (!parentEl) return;
+        appendOverlayConnector(
+          svgEl,
+          parentEl,
+          nodeEl,
+          mapEl,
+          mapRect,
+          scale,
+          resolveNodeConnectorColor(nodeEl, '#2563eb'),
+          'topup-pending',
+          maskColor
+        );
+      });
+      var moduleNodes = mapEl.querySelectorAll('me-tpc.xmind-casegen-node-module[data-xmind-topup-highlight-token][data-xmind-topup-highlight-scope]');
+      Array.prototype.forEach.call(moduleNodes || [], function(nodeEl) {
+        var scope = nodeEl.getAttribute ? String(nodeEl.getAttribute('data-xmind-topup-highlight-scope') || '') : '';
+        if (scope !== 'module' && scope !== 'subtree') return;
+        var parentEl = getParentTopicElement(nodeEl);
+        if (!parentEl) return;
+        appendOverlayConnector(
+          svgEl,
+          parentEl,
+          nodeEl,
+          mapEl,
+          mapRect,
+          scale,
+          resolveNodeConnectorColor(nodeEl, '#2563eb'),
+          'topup-highlight',
+          maskColor
+        );
+      });
     }
 
     function resolveTopupHighlightHost(wrapperEl) {
@@ -4369,7 +4746,9 @@
       if (!viewerEl || !mapEl) return;
       clearTopupHighlightLayer(mapEl);
       var highlightedNodes = mapEl.querySelectorAll('[data-xmind-topup-highlight-token]');
-      if (!highlightedNodes || !highlightedNodes.length) {
+      var placeholderNodes = mapEl.querySelectorAll('me-tpc.xmind-casegen-node-topup-placeholder');
+      var hasOverlayTargets = Boolean((highlightedNodes && highlightedNodes.length) || (placeholderNodes && placeholderNodes.length));
+      if (!hasOverlayTargets) {
         topupHighlightRetryCount = 0;
         setDebugState({ topupPhase: 'empty', topupNodeCount: 0 });
         return;
@@ -4442,6 +4821,7 @@
         layerEl.appendChild(frameEl);
         renderedFrameCount += 1;
       });
+      renderOverlayConnectors(layerEl, mapEl, mapRect, scale);
       if (expectedFrameCount > renderedFrameCount && topupHighlightRetryCount < 4) {
         topupHighlightRetryCount += 1;
         scheduleTopupHighlightRetry(120 + (topupHighlightRetryCount * 60));
@@ -5187,6 +5567,7 @@
       if (!topupHighlight) return nextMeta;
       nextMeta.topupHighlightToken = String(topupHighlight.token || '');
       nextMeta.topupHighlightLabel = String(topupHighlight.label || '本轮追加用例');
+      nextMeta.topupHighlightScope = String(topupHighlight.highlightScope || 'cases');
       return nextMeta;
     }
 
@@ -5463,11 +5844,91 @@
       };
     }
 
-    function markPendingPlaceholderLink(nodeEl) {
+    function findConnectorSvgPaths(parentEl) {
+      if (!parentEl || !parentEl.children) return [];
+      var paths = [];
+      for (var i = 0; i < parentEl.children.length; i += 1) {
+        var childEl = parentEl.children[i];
+        if (!childEl || !childEl.tagName) continue;
+        var tagName = String(childEl.tagName).toLowerCase();
+        if (tagName !== 'svg') continue;
+        if (!(childEl.classList && (childEl.classList.contains('subLines') || childEl.classList.contains('lines')))) {
+          continue;
+        }
+        var pathList = childEl.querySelectorAll ? childEl.querySelectorAll('path') : [];
+        for (var j = 0; j < pathList.length; j += 1) {
+          if (pathList[j]) paths.push(pathList[j]);
+        }
+      }
+      return paths;
+    }
+
+    function findSiblingWrapperIndex(currentEl, parentEl) {
+      if (!currentEl || !parentEl || !parentEl.children) return -1;
+      var wrapperIndex = -1;
+      var currentIndex = 0;
+      for (var i = 0; i < parentEl.children.length; i += 1) {
+        var childEl = parentEl.children[i];
+        if (!childEl || !childEl.tagName) continue;
+        if (String(childEl.tagName).toLowerCase() !== 'me-wrapper') continue;
+        if (childEl === currentEl) {
+          wrapperIndex = currentIndex;
+          break;
+        }
+        currentIndex += 1;
+      }
+      return wrapperIndex;
+    }
+
+    function isNodeFlowLeft(nodeEl) {
+      if (!nodeEl || !nodeEl.closest) return false;
+      var branchMainEl = nodeEl.closest('me-main');
+      return Boolean(branchMainEl && branchMainEl.classList && branchMainEl.classList.contains('lhs'));
+    }
+
+    function scoreConnectorPathForNode(pathEl, nodeEl) {
+      if (!pathEl || !nodeEl || !pathEl.getBoundingClientRect || !nodeEl.getBoundingClientRect) return Number.POSITIVE_INFINITY;
+      var pathRect = pathEl.getBoundingClientRect();
+      var nodeRect = nodeEl.getBoundingClientRect();
+      if (!pathRect || !nodeRect) return Number.POSITIVE_INFINITY;
+      var isLeftFlow = isNodeFlowLeft(nodeEl);
+      var pathTargetX = isLeftFlow ? pathRect.left : pathRect.right;
+      var nodeTargetX = isLeftFlow ? nodeRect.right : nodeRect.left;
+      var pathCenterY = pathRect.top + (pathRect.height / 2);
+      var nodeCenterY = nodeRect.top + (nodeRect.height / 2);
+      return Math.abs(pathCenterY - nodeCenterY) + (Math.abs(pathTargetX - nodeTargetX) * 0.35);
+    }
+
+    function pickConnectorPathForNode(currentEl, parentEl) {
+      var pathList = findConnectorSvgPaths(parentEl);
+      if (!pathList.length) return null;
+      var topicEl = currentEl && currentEl.querySelector ? currentEl.querySelector('me-tpc') : null;
+      if (topicEl && pathList.length > 1) {
+        var bestPath = null;
+        var bestScore = Number.POSITIVE_INFINITY;
+        for (var i = 0; i < pathList.length; i += 1) {
+          var score = scoreConnectorPathForNode(pathList[i], topicEl);
+          if (score < bestScore) {
+            bestScore = score;
+            bestPath = pathList[i];
+          }
+        }
+        if (bestPath) return bestPath;
+      }
+      var wrapperIndex = findSiblingWrapperIndex(currentEl, parentEl);
+      if (wrapperIndex >= 0) {
+        if (pathList[wrapperIndex]) return pathList[wrapperIndex];
+        var reverseIndex = pathList.length - 1 - wrapperIndex;
+        if (reverseIndex >= 0 && pathList[reverseIndex]) return pathList[reverseIndex];
+      }
+      return pathList[pathList.length - 1] || null;
+    }
+
+    function markDashedConnectorLink(nodeEl, linkType) {
       function decoratePendingPath(pathEl) {
         if (!pathEl || !pathEl.setAttribute) return false;
         pathEl.classList.add('xmind-casegen-pending-link');
-        pathEl.setAttribute('data-xmind-casegen-link', 'topup-pending');
+        pathEl.setAttribute('data-xmind-casegen-link', String(linkType || 'topup-pending'));
         pathEl.setAttribute('stroke-dasharray', '6 5');
         pathEl.setAttribute('stroke-linecap', 'round');
         return true;
@@ -5476,23 +5937,7 @@
       while (currentEl && currentEl !== mindContainer) {
         var parentEl = currentEl.parentElement;
         if (!parentEl || !parentEl.children) break;
-        var candidatePath = null;
-        for (var i = 0; i < parentEl.children.length; i += 1) {
-          var childEl = parentEl.children[i];
-          if (!childEl || childEl === currentEl || !childEl.tagName) continue;
-          if (String(childEl.tagName).toLowerCase() !== 'svg') continue;
-          if (!(childEl.classList && childEl.classList.contains('subLines'))) continue;
-          var pathList = childEl.querySelectorAll ? childEl.querySelectorAll('path') : [];
-          if (pathList && pathList.length) {
-            candidatePath = pathList[pathList.length - 1];
-          }
-        }
-        if (!candidatePath && parentEl.querySelectorAll) {
-          var nestedPathList = parentEl.querySelectorAll('svg.subLines path, svg.lines path');
-          if (nestedPathList && nestedPathList.length) {
-            candidatePath = nestedPathList[nestedPathList.length - 1];
-          }
-        }
+        var candidatePath = pickConnectorPathForNode(currentEl, parentEl);
         if (decoratePendingPath(candidatePath)) return true;
         currentEl = parentEl;
       }
@@ -5504,6 +5949,18 @@
         }
       }
       return false;
+    }
+
+    function scheduleDashedConnectorLink(nodeEl, linkType, retriesLeft) {
+      var attempts = Number(retriesLeft);
+      if (!Number.isFinite(attempts) || attempts < 0) attempts = 2;
+      if (!nodeEl || !nodeEl.parentNode) return;
+      if (markDashedConnectorLink(nodeEl, linkType)) return;
+      if (attempts <= 0) return;
+      setTimeout(function() {
+        if (!nodeEl || !nodeEl.parentNode) return;
+        scheduleDashedConnectorLink(nodeEl, linkType, attempts - 1);
+      }, 60);
     }
 
     function decorateNodeElement(nodeEl, nodeMeta) {
@@ -5528,6 +5985,7 @@
       if (nodeEl.removeAttribute) {
         nodeEl.removeAttribute('data-xmind-topup-highlight-token');
         nodeEl.removeAttribute('data-xmind-topup-highlight-label');
+        nodeEl.removeAttribute('data-xmind-topup-highlight-scope');
         nodeEl.removeAttribute('data-xmind-select-group');
         nodeEl.removeAttribute('data-xmind-select-preferred');
       }
@@ -5575,6 +6033,9 @@
           nodeEl.classList.add('xmind-casegen-node-topup-highlight-case');
           nodeEl.setAttribute('data-xmind-topup-highlight-token', String(meta.topupHighlightToken));
           nodeEl.setAttribute('data-xmind-topup-highlight-label', String(meta.topupHighlightLabel || '本轮追加用例'));
+          if (meta.type === 'module' && meta.topupHighlightScope) {
+            nodeEl.setAttribute('data-xmind-topup-highlight-scope', String(meta.topupHighlightScope || ''));
+          }
         }
         if (isInvalidStoreModuleMeta(meta)) {
           nodeEl.classList.add('xmind-casegen-node-invalid', 'xmind-casegen-node-invalid-flash');
@@ -5587,7 +6048,6 @@
         spinnerEl.className = 'xmind-node-topup-spinner';
         spinnerEl.setAttribute('aria-hidden', 'true');
         nodeEl.appendChild(spinnerEl);
-        markPendingPlaceholderLink(nodeEl);
         return;
       }
       if (meta.topupHighlightToken) {
@@ -6053,6 +6513,9 @@
         rawText: rawTextEl && rawTextEl.value ? String(rawTextEl.value || '') : '',
         caseText: caseTextEl && caseTextEl.value ? String(caseTextEl.value || '') : '',
         importedCases: cloneJson(state.importedCases, []),
+        caseGenModules: cloneJson(state.caseGenModules, []),
+        caseGenResults: cloneJson(state.caseGenResults, {}),
+        history: cloneJson(ensureState().history, []),
         prep: prep,
         viewState: {
           drawerOpen: viewState.drawerOpen === true || isDrawerOpen(),
@@ -6119,6 +6582,31 @@
         state.importedCases = cloneJson(restoreContext.importedCases, []);
         changed = true;
       }
+      if (
+        (!Array.isArray(state.caseGenModules) || !state.caseGenModules.length)
+        && Array.isArray(restoreContext.caseGenModules)
+        && restoreContext.caseGenModules.length
+      ) {
+        state.caseGenModules = cloneJson(restoreContext.caseGenModules, []);
+        changed = true;
+      }
+      if (
+        (!state.caseGenResults || !Object.keys(state.caseGenResults).length)
+        && restoreContext.caseGenResults
+        && typeof restoreContext.caseGenResults === 'object'
+        && Object.keys(restoreContext.caseGenResults).length
+      ) {
+        state.caseGenResults = cloneJson(restoreContext.caseGenResults, {});
+        changed = true;
+      }
+      if (
+        (!Array.isArray(ensureState().history) || !ensureState().history.length)
+        && Array.isArray(restoreContext.history)
+        && restoreContext.history.length
+      ) {
+        ensureState().history = cloneJson(restoreContext.history, []);
+        changed = true;
+      }
       if (caseTextEl && !String(caseTextEl.value || '').trim() && restoreContext.caseText) {
         caseTextEl.value = String(restoreContext.caseText || '');
         changed = true;
@@ -6170,6 +6658,9 @@
       if (restoreView && viewState.fullscreen !== true && restoreView.fullscreen === true) {
         viewState.fullscreen = true;
         changed = true;
+      }
+      if (changed) {
+        ensureState().hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
       }
       if (changed && casesCoreApi && typeof casesCoreApi.renderImportedCaseList === 'function') {
         casesCoreApi.renderImportedCaseList();
@@ -6696,6 +7187,7 @@
       rootState.status = '';
       rootState.error = '';
       rootState.updatedAt = Date.now();
+      clearAllTopupHighlights();
       if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
         markRootPendingModules(visibleContext.list, actionId);
       }

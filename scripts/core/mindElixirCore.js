@@ -4842,6 +4842,11 @@
       var editGroupClass = allowEdit ? 'xmind-edit-group' : 'xmind-edit-group is-disabled';
       var controlsHtml = ''
         + '<div class="xmind-structure-controls" data-mind-controls>'
+        + '<div class="xmind-controls-leading">'
+        + '<div class="xmind-controls-leading-host" data-mind-leading-host></div>'
+        + '</div>'
+        + '<div class="xmind-controls-trailing">'
+        + '<div class="xmind-controls-utility-host" data-mind-utility-host></div>'
         + '<div class="xmind-search-group">'
         + '<input class="xmind-search-input" type="search" data-mind-search-input placeholder="搜索节点内容" aria-label="搜索节点内容" />'
         + '<span class="xmind-search-count is-empty" data-mind-search-count>0/0</span>'
@@ -4865,6 +4870,7 @@
         + '<button class="secondary xmind-edit-op-btn hidden" type="button" data-mind-action="node-delete" disabled>删除节点</button>'
         + '<button class="secondary xmind-edit-op-btn hidden" type="button" data-mind-action="undo" disabled>撤回改动</button>'
         + '<button class="secondary xmind-edit-op-btn hidden" type="button" data-mind-action="redo" disabled>恢复改动</button>'
+        + '</div>'
         + '</div>'
         + '</div>'
         + '</div>';
