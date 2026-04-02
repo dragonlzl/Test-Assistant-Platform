@@ -4316,6 +4316,7 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 100%;
 }
 .xmind-casegen-prep-stepper {
   display: flex;
@@ -4541,19 +4542,15 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 }
 .xmind-casegen-prep-actions,
 .xmind-casegen-prep-nav,
-.xmind-casegen-prep-nav-main {
+.xmind-casegen-prep-nav-main,
+.xmind-casegen-prep-footer-side {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
 .xmind-casegen-prep-nav {
-  justify-content: space-between;
-}
-.xmind-casegen-prep-nav-spacer {
-  display: inline-flex;
-  min-width: 1px;
-  min-height: 1px;
+  justify-content: flex-end;
 }
 .xmind-casegen-actions {
   display: flex;
@@ -4991,6 +4988,18 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  padding: 14px 0 2px;
+  background: linear-gradient(180deg, rgba(248,250,252,0), rgba(248,250,252,0.96) 22%, rgba(248,250,252,0.99) 100%);
+}
+.xmind-casegen-prep-footer-side {
+  flex: 0 0 auto;
+}
+.xmind-casegen-prep-footer .xmind-casegen-prep-nav {
+  flex: 1 1 auto;
 }
 .xmind-casegen-prep-reset-btn {
   border-color: rgba(239, 68, 68, 0.34);
@@ -11811,6 +11820,9 @@ button.exec-overview-file-chip,
   border-color: rgba(71,85,105,0.46);
   background: linear-gradient(135deg, rgba(15,23,42,0.98), rgba(17,24,39,0.98));
 }
+:root[data-theme="dark"] .xmind-casegen-prep-footer {
+  background: linear-gradient(180deg, rgba(15,23,42,0), rgba(15,23,42,0.94) 22%, rgba(15,23,42,0.98) 100%);
+}
 :root[data-theme="dark"] .xmind-casegen-summary-card {
   border-color: rgba(71,85,105,0.42);
   background: linear-gradient(135deg, rgba(30,41,59,0.92), rgba(15,23,42,0.96));
@@ -12936,16 +12948,23 @@ button.exec-overview-file-chip,
     align-items: stretch;
   }
   .xmind-casegen-prep-card-head,
-  .xmind-casegen-prep-nav {
+  .xmind-casegen-prep-footer {
     flex-direction: column;
     align-items: stretch;
   }
+  .xmind-casegen-prep-nav {
+    justify-content: stretch;
+  }
   .xmind-casegen-prep-nav-main,
-  .xmind-casegen-prep-actions {
+  .xmind-casegen-prep-actions,
+  .xmind-casegen-prep-nav,
+  .xmind-casegen-prep-footer-side {
     width: 100%;
   }
   .xmind-casegen-prep-actions button,
-  .xmind-casegen-prep-nav-main button {
+  .xmind-casegen-prep-nav-main button,
+  .xmind-casegen-prep-nav button,
+  .xmind-casegen-prep-footer-side button {
     flex: 1 1 calc(50% - 5px);
   }
   .xmind-casegen-toolbar-head {

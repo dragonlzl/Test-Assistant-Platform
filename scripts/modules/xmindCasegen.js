@@ -2054,7 +2054,7 @@
       if (prep.caseImportMode === 'skip') {
         return {
           done: true,
-          title: '本次不导入参考用例',
+          title: '本次不导入已有用例',
           meta: '主树将只展示 AI 生成层。',
         };
       }
@@ -2067,13 +2067,13 @@
       if (!Array.isArray(list) || !list.length) {
         return {
           done: false,
-          title: '未导入参考用例',
+          title: '未导入已有用例',
           meta: text ? '已存在文本，但尚未解析到有效用例。' : '参考用例是可选项，可跳过。',
         };
       }
       return {
         done: true,
-        title: '已导入参考用例',
+        title: '已导入已有用例',
         meta: '当前共 ' + String(list.length) + ' 条，将作为 XMind 可见基线。',
       };
     }
@@ -2329,6 +2329,118 @@
       return state.caseGenSettings || {};
     }
 
+    function buildXmindGenerationOptionsSnapshot() {
+      var settings = getCaseGenSettingsSnapshot() || {};
+      return {
+        customRequirement: String(settings.customRequirement || '').trim(),
+        needFunctionCondition: settings.needFunctionCondition === true,
+        needNumericValidation: settings.needNumericValidation === true,
+        needBoundary: settings.needBoundary === true,
+        needMobile: settings.needMobile === true,
+        needSpecial: settings.needSpecial === true,
+        specialRepeatOperation: settings.needSpecial === true && settings.specialRepeatOperation === true,
+        specialMultiTouch: settings.needSpecial === true && settings.specialMultiTouch === true,
+        specialRepeatExecution: settings.needSpecial === true && settings.specialRepeatExecution === true,
+        specialWeakNetwork: settings.needSpecial === true && settings.specialWeakNetwork === true,
+        specialInterruptResume: settings.needSpecial === true && settings.specialInterruptResume === true,
+      };
+    }
+
+    function buildXmindGenerationOptionsSummary(settingsSnapshot) {
+      var snapshot = settingsSnapshot && typeof settingsSnapshot === 'object'
+        ? settingsSnapshot
+        : buildXmindGenerationOptionsSnapshot();
+      var lines = [];
+      var specialNames = [];
+      if (snapshot.customRequirement) {
+        lines.push('额外要求：' + String(snapshot.customRequirement || ''));
+      }
+      if (snapshot.needFunctionCondition) {
+        lines.push('已开启考虑功能使用条件：生成模块和用例时，需要覆盖解锁条件、可用条件、身份或等级门槛、资源消耗、前置任务和使用时间限制。');
+      }
+      if (snapshot.needNumericValidation) {
+        lines.push('已开启数值验证：生成模块和用例时，需要覆盖数值显示、取值范围、阈值变化、计算结果、累计扣减和结算正确性。');
+      }
+      if (snapshot.needBoundary) {
+        lines.push('已开启考虑边界：生成模块和用例时，需要覆盖上下限、临界值、空值、满值和异常边界。');
+      }
+      if (snapshot.needMobile) {
+        lines.push('已开启考虑移动设备：生成模块和用例时，需要覆盖点击、长按、滑动、拖拽、横竖屏切换和系统手势干扰。');
+      }
+      if (snapshot.needSpecial) {
+        if (snapshot.specialRepeatOperation) specialNames.push('重复操作');
+        if (snapshot.specialMultiTouch) specialNames.push('多点触控');
+        if (snapshot.specialRepeatExecution) specialNames.push('重复执行');
+        if (snapshot.specialWeakNetwork) specialNames.push('弱网');
+        if (snapshot.specialInterruptResume) specialNames.push('中断恢复');
+        lines.push(
+          specialNames.length
+            ? ('已开启考虑特殊场景：本轮重点覆盖 ' + specialNames.join('、') + '。')
+            : '已开启考虑特殊场景：本轮需要补充异常路径、非理想环境和非常规用户操作。'
+        );
+      }
+      if (!lines.length) {
+        lines.push('本轮未额外勾选生成选项，将按默认要求生成。');
+      }
+      return lines.join('\n');
+    }
+
+    function buildEnabledXmindOptionLabels(settingsSnapshot) {
+      var snapshot = settingsSnapshot && typeof settingsSnapshot === 'object'
+        ? settingsSnapshot
+        : buildXmindGenerationOptionsSnapshot();
+      var labels = [];
+      if (snapshot.needFunctionCondition) labels.push('功能使用条件');
+      if (snapshot.needNumericValidation) labels.push('数值验证');
+      if (snapshot.needBoundary) labels.push('边界场景');
+      if (snapshot.needMobile) labels.push('移动设备场景');
+      if (snapshot.needSpecial) labels.push('特殊场景');
+      return labels;
+    }
+
+    function isRootFullGenerationContract(contract) {
+      var scope = contract && contract.scope ? String(contract.scope || '') : '';
+      var mode = contract && contract.mode ? String(contract.mode || '') : '';
+      return scope === 'root' && (
+        mode === 'full_cases'
+        || mode === 'full_modules'
+        || mode === 'regenerate_modules'
+      );
+    }
+
+    function buildXmindHardConstraintText(contract, settingsSnapshot) {
+      var snapshot = settingsSnapshot && typeof settingsSnapshot === 'object'
+        ? settingsSnapshot
+        : buildXmindGenerationOptionsSnapshot();
+      var enabledLabels = buildEnabledXmindOptionLabels(snapshot);
+      var lines = [];
+      if (!enabledLabels.length) return '';
+      lines.push('已开启的生成选项属于本轮输出的硬性覆盖要求，不是参考建议。');
+      lines.push('本轮必须直接覆盖：' + enabledLabels.join('、') + '。');
+      if (isRootFullGenerationContract(contract)) {
+        lines.push('当前是根节点首轮全量/重生成动作，首次输出必须直接覆盖上述要求，不允许把相关覆盖留到后续补全或追加。');
+      }
+      if (snapshot.needFunctionCondition) {
+        lines.push('如果需求存在解锁条件、开放条件、使用条件、身份/权限/等级/资格门槛、资源消耗、前置任务、时间窗、次数或可用前提，必须在模块拆分、关键场景、测试要点或用例中直接体现。');
+      }
+      if (snapshot.needNumericValidation) {
+        lines.push('如果需求存在金额、积分、次数、数量、时长、上限/下限、阈值、比例、概率、累计、扣减或结算规则，必须在模块、测试要点或用例中直接体现数值验证。');
+      }
+      if (snapshot.needBoundary) {
+        lines.push('如果开启了边界场景，首次输出必须直接覆盖上下限、临界值、空值、满值和异常边界。');
+      }
+      if (snapshot.needMobile) {
+        lines.push('如果开启了移动设备场景，首次输出必须直接覆盖移动端交互、系统手势、横竖屏或设备差异带来的影响。');
+      }
+      if (snapshot.needSpecial) {
+        lines.push('如果开启了特殊场景，首次输出必须直接覆盖非理想环境、异常路径和已勾选的特殊操作场景。');
+      }
+      if (snapshot.customRequirement) {
+        lines.push('用户附加要求也属于本轮必须直接落实的内容，不要延后到补全阶段。');
+      }
+      return lines.join('\n');
+    }
+
     function setCaseGenOption(key, value) {
       if (casesGenApi && typeof casesGenApi.setCaseGenSettingValue === 'function') {
         casesGenApi.setCaseGenSettingValue(key, value);
@@ -2452,7 +2564,7 @@
       var disabledAttr = locked ? ' disabled' : '';
       var casesInfo = buildCasesSummaryInfo();
       var importedCaseFileListHtml = hasImportedBaselineCases()
-        ? ('<span class="file-chip">' + escapeHtml(casesInfo.title || '已导入参考用例') + '</span>')
+        ? ('<span class="file-chip">' + escapeHtml(casesInfo.title || '已导入已有用例') + '</span>')
         : '<span class="hint" data-xmind-casegen-case-placeholder="1">未导入文件</span>';
       var caseStatusText = hasImportedBaselineCases()
         ? casesInfo.meta
@@ -2475,7 +2587,7 @@
         +     '</label>'
         +     '<label class="xmind-casegen-prep-choice is-success ' + (mode === 'import' ? 'is-active ' : '') + (locked ? 'is-readonly' : '') + '">'
         +       '<input type="radio" name="xmindCaseImportMode" value="import" ' + (mode === 'import' ? 'checked ' : '') + disabledAttr + ' />'
-        +       '<span class="xmind-casegen-prep-choice-title">导入参考用例</span>'
+        +       '<span class="xmind-casegen-prep-choice-title">导入已有用例</span>'
         +       '<span class="xmind-casegen-prep-choice-desc">导入后作为主树基线。</span>'
         +     '</label>'
         +   '</div>'
@@ -2643,15 +2755,19 @@
       if (step === STEP_REQUIREMENT) nextDisabled = !hasRequirementReady();
       if (step === STEP_CASES) nextDisabled = !hasCaseStepReady();
       return '<div class="xmind-casegen-prep-footer">'
-        + '<button type="button" class="secondary xmind-casegen-prep-reset-btn" id="xmindCaseGenPrepResetBtn" data-prep-action="reset-prep" '
-        +   (resetDisabled ? 'disabled' : '') + '>重置</button>'
-        + (step > STEP_REQUIREMENT
+        + '<div class="xmind-casegen-prep-footer-side">'
+        +   '<button type="button" class="secondary xmind-casegen-prep-reset-btn" id="xmindCaseGenPrepResetBtn" data-prep-action="reset-prep" '
+        +     (resetDisabled ? 'disabled' : '') + '>重置</button>'
+        + '</div>'
+        + '<div class="xmind-casegen-prep-nav">'
+        +   (step > STEP_REQUIREMENT
           ? '<button type="button" class="secondary" data-prep-nav="prev">上一步</button>'
-          : '<span class="xmind-casegen-prep-nav-spacer"></span>')
-        + '<div class="xmind-casegen-prep-nav-main">'
+          : '')
+        +   '<div class="xmind-casegen-prep-nav-main">'
         +   (step < STEP_OPTIONS
           ? '<button type="button" data-prep-nav="next" ' + (nextDisabled ? 'disabled' : '') + '>下一步</button>'
           : '<button type="button" data-prep-nav="confirm">确认并保存</button>')
+        +   '</div>'
         + '</div>'
         + '</div>';
     }
@@ -3697,6 +3813,7 @@
     }
 
     function buildXmindPrompt(contract) {
+      var settingsSnapshot = buildXmindGenerationOptionsSnapshot();
       var assignedPrompt = state.assignments && state.assignments.xmindCaseGenPrompt
         ? String(state.assignments.xmindCaseGenPrompt || '').trim()
         : '';
@@ -3713,6 +3830,10 @@
         extraParts.forEach(function(item) {
           if (item) parts.push(String(item));
         });
+      }
+      var hardConstraintText = buildXmindHardConstraintText(contract, settingsSnapshot);
+      if (hardConstraintText) {
+        parts.push('【XMind 生成硬约束】\n' + hardConstraintText);
       }
       parts.push('operation_contract(JSON)：' + JSON.stringify(contract));
       return parts.join('\n\n');
@@ -3748,6 +3869,8 @@
 
     async function buildRequirementPayload(contract, visibleContext, moduleEntry) {
       var prep = getPrepState();
+      var generationOptions = buildXmindGenerationOptionsSnapshot();
+      var hardConstraintText = buildXmindHardConstraintText(contract, generationOptions);
       var aiLayerSnapshot = contract && (
         contract.mode === 'regenerate_modules'
         || (contract.scope === 'root' && contract.mode === 'full_cases')
@@ -3757,6 +3880,11 @@
       var sections = [];
       sections.push('【需求标识】\n' + getRequirementLabelText());
       sections.push('【operation_contract(JSON)】\n' + JSON.stringify(contract, null, 2));
+      sections.push('【本轮生成选项(JSON)】\n' + JSON.stringify(generationOptions, null, 2));
+      sections.push('【本轮生成选项说明】\n' + buildXmindGenerationOptionsSummary(generationOptions));
+      if (hardConstraintText) {
+        sections.push('【首轮生成硬约束】\n' + hardConstraintText);
+      }
       sections.push('【当前可见模块与用例(JSON)】\n' + JSON.stringify(buildVisibleModuleSnapshot(visibleContext), null, 2));
       sections.push('【当前 AI 生成层(JSON)】\n' + JSON.stringify(aiLayerSnapshot, null, 2));
       if (moduleEntry) {
@@ -3786,6 +3914,244 @@
         text: sections.join('\n\n'),
         images: getManualRequirementImages(),
       };
+    }
+
+    function extractNamedSectionText(text, title) {
+      var source = String(text || '');
+      var marker = '【' + String(title || '').trim() + '】';
+      if (!marker || marker === '【】') return '';
+      var start = source.indexOf(marker);
+      if (start === -1) return '';
+      var rest = source.slice(start + marker.length);
+      if (rest.charAt(0) === '\n') rest = rest.slice(1);
+      var nextIndex = rest.indexOf('\n\n【');
+      if (nextIndex === -1) nextIndex = rest.indexOf('\n【');
+      if (nextIndex !== -1) rest = rest.slice(0, nextIndex);
+      return String(rest || '').trim();
+    }
+
+    function parseJsonSectionText(text) {
+      var extracted = extractJsonPayloadDetailed(text);
+      return extracted && extracted.payload && typeof extracted.payload === 'object'
+        ? extracted.payload
+        : null;
+    }
+
+    function parseTaskGenerationOptions(task) {
+      var requestText = task && task.requestText ? String(task.requestText || '') : '';
+      var sectionText = extractNamedSectionText(requestText, '本轮生成选项(JSON)');
+      var parsed = parseJsonSectionText(sectionText);
+      if (!parsed || typeof parsed !== 'object') return buildXmindGenerationOptionsSnapshot();
+      return {
+        customRequirement: String(parsed.customRequirement || '').trim(),
+        needFunctionCondition: parsed.needFunctionCondition === true,
+        needNumericValidation: parsed.needNumericValidation === true,
+        needBoundary: parsed.needBoundary === true,
+        needMobile: parsed.needMobile === true,
+        needSpecial: parsed.needSpecial === true,
+        specialRepeatOperation: parsed.specialRepeatOperation === true,
+        specialMultiTouch: parsed.specialMultiTouch === true,
+        specialRepeatExecution: parsed.specialRepeatExecution === true,
+        specialWeakNetwork: parsed.specialWeakNetwork === true,
+        specialInterruptResume: parsed.specialInterruptResume === true,
+      };
+    }
+
+    function buildTaskRequirementCoverageText(task) {
+      var requestText = task && task.requestText ? String(task.requestText || '') : '';
+      var parts = [];
+      ['需求标识', '需求正文', '需求补充', '手填需求描述', '本轮生成选项说明', '首轮生成硬约束'].forEach(function(title) {
+        var sectionText = extractNamedSectionText(requestText, title);
+        if (sectionText) parts.push(sectionText);
+      });
+      return String(parts.join('\n') || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function flattenModulesForCoverageText(modules) {
+      var parts = [];
+      (Array.isArray(modules) ? modules : []).forEach(function(item) {
+        if (!item || typeof item !== 'object') return;
+        if (item.module) parts.push(String(item.module || ''));
+        normalizeArrayField(item.key_scenarios).forEach(function(text) { parts.push(String(text || '')); });
+        normalizeArrayField(item.test_points).forEach(function(text) { parts.push(String(text || '')); });
+        normalizeArrayField(item.coupled_modules).forEach(function(text) { parts.push(String(text || '')); });
+        (Array.isArray(item.cases) ? item.cases : []).forEach(function(caseItem) {
+          if (!caseItem || typeof caseItem !== 'object') return;
+          if (caseItem.title) parts.push(String(caseItem.title || ''));
+          if (caseItem.preconditions) parts.push(String(caseItem.preconditions || ''));
+          (Array.isArray(caseItem.steps) ? caseItem.steps : []).forEach(function(step) {
+            parts.push(String(step || ''));
+          });
+          if (caseItem.expected) parts.push(String(caseItem.expected || ''));
+        });
+      });
+      return String(parts.join('\n') || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function textMatchesAnyPattern(text, patterns) {
+      var source = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!source) return false;
+      var list = Array.isArray(patterns) ? patterns : [];
+      for (var i = 0; i < list.length; i += 1) {
+        if (list[i] && list[i].test(source)) return true;
+      }
+      return false;
+    }
+
+    function requirementSuggestsFunctionCondition(text) {
+      return textMatchesAnyPattern(text, [
+        /解锁/,
+        /开放条件|开启条件|使用条件|可用条件/,
+        /身份|权限|等级|资格|门槛/,
+        /前置任务|前置条件/,
+        /资源消耗|消耗.*(次数|积分|金币|钻石|体力|道具)/,
+        /时间限制|使用时间|活动期间|开放时间|时段|冷却/,
+        /(达到|满足).{0,8}(后|才|方可|即可)/,
+        /仅限|才可|才能|方可/
+      ]);
+    }
+
+    function outputHasFunctionConditionCoverage(text) {
+      return textMatchesAnyPattern(text, [
+        /解锁/,
+        /开放条件|开启条件|使用条件|可用条件/,
+        /身份|权限|等级|资格|门槛/,
+        /前置任务/,
+        /资源消耗|消耗.*(次数|积分|金币|钻石|体力|道具)/,
+        /时间限制|使用时间|活动期间|开放时间|时段|冷却/,
+        /(达到|满足).{0,8}(后|才|方可|即可)/,
+        /仅限|才可|才能|方可/
+      ]);
+    }
+
+    function requirementSuggestsNumericCoverage(text) {
+      return textMatchesAnyPattern(text, [
+        /数值|数值验证/,
+        /金额|价格|费用|面额/,
+        /积分|经验|金币|钻石|体力|奖励/,
+        /次数|频次|上限|下限|阈值|临界值|范围/,
+        /累计|扣减|增加|减少|消耗/,
+        /比例|概率|百分比|占比/,
+        /时长|秒|分钟|小时|天/,
+        /\d+\s*(元|次|秒|分钟|小时|天|级|积分|经验|金币|钻石|体力|%|％)/
+      ]);
+    }
+
+    function outputHasNumericCoverage(text) {
+      return textMatchesAnyPattern(text, [
+        /数值|阈值|范围|上限|下限/,
+        /金额|价格|费用/,
+        /积分|经验|金币|钻石|体力|奖励/,
+        /次数|频次|累计|扣减|增加|减少|结算/,
+        /比例|概率|百分比|占比/,
+        /时长|秒|分钟|小时|天/,
+        /\d+\s*(元|次|秒|分钟|小时|天|级|积分|经验|金币|钻石|体力|%|％)/
+      ]);
+    }
+
+    function evaluateRootCoverageGaps(task, modules, contract) {
+      var result = {
+        shouldRetry: false,
+        reasonLabels: [],
+        diagnostics: [],
+      };
+      if (!isRootFullGenerationContract(contract)) return result;
+      if (Number(task && task.coverageRetryCount || 0) >= 1) return result;
+      var generationOptions = parseTaskGenerationOptions(task);
+      var requirementText = buildTaskRequirementCoverageText(task);
+      var outputText = flattenModulesForCoverageText(modules);
+
+      if (
+        generationOptions.needFunctionCondition === true
+        && requirementSuggestsFunctionCondition(requirementText)
+        && !outputHasFunctionConditionCoverage(outputText)
+      ) {
+        result.reasonLabels.push('功能使用条件');
+        result.diagnostics.push('首轮结果未体现功能使用条件相关覆盖');
+      }
+      if (
+        generationOptions.needNumericValidation === true
+        && requirementSuggestsNumericCoverage(requirementText)
+        && !outputHasNumericCoverage(outputText)
+      ) {
+        result.reasonLabels.push('数值验证');
+        result.diagnostics.push('首轮结果未体现数值验证相关覆盖');
+      }
+      result.shouldRetry = result.reasonLabels.length > 0;
+      return result;
+    }
+
+    function buildRootCoverageRetryInstruction(gapInfo) {
+      var labels = Array.isArray(gapInfo && gapInfo.reasonLabels) ? gapInfo.reasonLabels : [];
+      if (!labels.length) return '';
+      var lines = [];
+      lines.push('你上一轮输出没有充分覆盖这些已开启要求：' + labels.join('、') + '。');
+      lines.push('请基于同一份需求重新输出完整 JSON 结果，不要只返回补丁。');
+      lines.push('这次必须在模块拆分、关键场景、测试要点或用例中直接体现上述覆盖点。');
+      lines.push('如果需求里存在解锁、门槛、可用条件、时间限制、资源消耗、次数、阈值、范围或累计扣减，请直接体现在结果中。');
+      lines.push('若确实没有任何相关覆盖点，也要在模块/test_points 中明确说明你已检查且无新增必要。');
+      return lines.join('\n');
+    }
+
+    function buildRootCoverageRetryTaskPayload(task, gapInfo) {
+      var retryInstruction = buildRootCoverageRetryInstruction(gapInfo);
+      var requestText = String(task && task.requestText ? task.requestText : '');
+      var contentBlocks = cloneJson(task && task.contentBlocks, []);
+      if (retryInstruction) {
+        requestText += '\n\n【首轮生成补强指令】\n' + retryInstruction;
+        if (Array.isArray(contentBlocks) && contentBlocks.length && contentBlocks[0] && contentBlocks[0].type === 'text') {
+          contentBlocks[0].text = requestText;
+        }
+      }
+      return {
+        scope: 'root',
+        actionId: String(task && task.actionId ? task.actionId : ''),
+        snapshotId: String(task && task.snapshotId ? task.snapshotId : ''),
+        contract: cloneJson(task && task.contract, {}),
+        historyActionLabel: String(task && task.historyActionLabel ? task.historyActionLabel : ''),
+        hadAiContentBeforeAction: task && task.hadAiContentBeforeAction === true,
+        hadAiLayerBeforeAction: task && task.hadAiLayerBeforeAction === true,
+        hadAiCasesBeforeAction: task && task.hadAiCasesBeforeAction === true,
+        prompt: String(task && task.prompt ? task.prompt : ''),
+        requestMode: task && task.requestMode === 'content' ? 'content' : 'text',
+        requestText: requestText,
+        contentBlocks: Array.isArray(contentBlocks) ? contentBlocks : [],
+        degradedToTextOnly: task && task.degradedToTextOnly === true,
+        model: cloneJson(task && task.model, null),
+        reasoning: String(task && task.reasoning ? task.reasoning : ''),
+        temperature: Number(task && task.temperature),
+        restoreContext: cloneJson(task && task.restoreContext, {}),
+        retryCount: 0,
+        coverageRetryCount: Number(task && task.coverageRetryCount || 0) + 1,
+        coverageRetryReasons: normalizeHistoryDiagnostics((task && Array.isArray(task.coverageRetryReasons) ? task.coverageRetryReasons : []).concat(gapInfo && gapInfo.reasonLabels ? gapInfo.reasonLabels : [])),
+        parentTaskId: String(task && task.id ? task.id : ''),
+      };
+    }
+
+    function buildCoverageRetryHistoryDiagnostics(task) {
+      var labels = task && Array.isArray(task.coverageRetryReasons) ? normalizeHistoryDiagnostics(task.coverageRetryReasons) : [];
+      if (!labels.length) return [];
+      return ['已自动补强覆盖：' + labels.join('、')];
+    }
+
+    function tryStartRootCoverageRetry(task, gapInfo, anchorNodeId) {
+      if (!task || !gapInfo || gapInfo.shouldRetry !== true) return false;
+      var retryTask = startManagedXmindTask(buildRootCoverageRetryTaskPayload(task, gapInfo));
+      var rootState = ensureRootUiState();
+      rootState.running = true;
+      rootState.taskId = String(retryTask && retryTask.id ? retryTask.id : '');
+      rootState.hideAiLayer = task.hadAiLayerBeforeAction === true;
+      rootState.status = '';
+      rootState.error = '';
+      rootState.lastAction = String(task.actionId || rootState.lastAction || '');
+      rootState.snapshotId = String(task.snapshotId || rootState.snapshotId || '');
+      rootState.updatedAt = Date.now();
+      notifyFloatingStatus('首轮结果未充分覆盖已开启要求，正在自动补强', 'warn', 3000);
+      if (isDrawerOpen()) {
+        render({ reason: 'root-coverage-retry', persist: false, anchorNodeId: anchorNodeId });
+      }
+      persistXmindState(true);
+      return true;
     }
 
     function estimateTaskContentBlocksSize(blocks) {
@@ -6698,7 +7064,21 @@
       var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
       var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
       var modules = filtered.list;
+      var coverageGapInfo = evaluateRootCoverageGaps(task, modules, contract);
+      if (coverageGapInfo.shouldRetry === true) {
+        try {
+          if (tryStartRootCoverageRetry(task, coverageGapInfo, anchorNodeId)) {
+            return false;
+          }
+        } catch (retryErr) {
+          coverageGapInfo.retryStartError = retryErr && retryErr.message ? String(retryErr.message) : '自动补强未能启动';
+        }
+      }
       var applied = applyRootOutput(actionId, modules, visibleContext, Number(task && task.durationMs || 0));
+      var historyDiagnostics = buildCoverageRetryHistoryDiagnostics(task);
+      if (coverageGapInfo && coverageGapInfo.retryStartError) {
+        historyDiagnostics.push('自动补强未启动：' + summarizeModelOutputText(coverageGapInfo.retryStartError, 80));
+      }
       rootState.running = false;
       rootState.taskId = '';
       rootState.hideAiLayer = false;
@@ -6716,7 +7096,7 @@
           details: [],
           resultKind: rootNoChangeInfo.resultKind,
           reasonText: rootNoChangeInfo.reasonText,
-          diagnostics: rootNoChangeInfo.diagnostics,
+          diagnostics: (rootNoChangeInfo.diagnostics || []).concat(historyDiagnostics),
           previewText: rootNoChangeInfo.previewText,
         });
         discardCaseGenOperationSnapshotEntry(task && task.snapshotId ? task.snapshotId : '');
@@ -6737,6 +7117,7 @@
         actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getRootHistoryActionLabel(actionId, task && task.hadAiContentBeforeAction),
         moduleCount: Array.isArray(applied.details) ? applied.details.length : 0,
         details: applied.details,
+        diagnostics: historyDiagnostics,
       });
       var message = '';
       if (actionId === ROOT_ACTIONS.FULL_MODULES) {
@@ -6774,6 +7155,7 @@
       var errorInfo = opts.resultKind === 'cancelled'
         ? buildGenerationCancelledInfo(task)
         : buildGenerationErrorInfo(new Error(rootState.error));
+      var retryHistoryDiagnostics = buildCoverageRetryHistoryDiagnostics(task);
       var failureLabel = opts.resultKind === 'cancelled'
         ? '已中断'
         : getGenerationFailureLabel('root', actionId, {
@@ -6789,7 +7171,7 @@
         details: [],
         resultKind: errorInfo.resultKind,
         reasonText: errorInfo.reasonText,
-        diagnostics: errorInfo.diagnostics,
+        diagnostics: (errorInfo.diagnostics || []).concat(retryHistoryDiagnostics),
         previewText: errorInfo.previewText,
       });
       if (opts.resultKind === 'cancelled') {

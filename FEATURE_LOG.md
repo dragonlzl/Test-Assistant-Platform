@@ -19,6 +19,32 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 首轮生成强化 step3 硬约束与自动补强
+- 功能描述：强化 `XMind 用例生成` 在根节点首轮全量生成时对 step3 生成选项的利用。现在 `功能使用条件`、`数值验证` 等 step3 勾选项不仅继续参与共享设置项拼装，还会作为 XMind 专属 prompt 和用户上下文中的硬约束显式提交；当根节点首轮 `生成全量用例`、`生成全量模块` 或 `重新生成模块` 的结果没有充分覆盖已开启的关键要求时，前端会在不新增后端接口的前提下自动发起一次补强重试，并只提交补强后的最终结果。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 抽屉内完成前置准备 step3；
+  - 通过根节点执行 `生成全量用例`、`生成全量模块` 或 `重新生成模块`；
+  - 若首轮结果未体现已开启的 `功能使用条件` / `数值验证` 等关键覆盖，系统会自动再发起一次同上下文补强请求，无需用户手动再点一次补全；
+  - 最终在画布、共享结果和 `生成记录` 中看到的都是补强后的落库结果。
+- 使用效果：
+  - step3 不再只像“提示建议”，而是会在 XMind 首轮 root 全量生成时被更强地落实；
+  - 对于需求中存在解锁条件、可用条件、等级门槛、次数上限、奖励积分等明显条件/数值规则的场景，首轮生成更容易直接覆盖，不必依赖后续补全才能补出来；
+  - 如果触发过自动补强，`生成记录` 会额外标注 `自动补强覆盖：...`，便于回看本次是否发生过自动补强。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增 XMind step3 硬约束拼装、根节点首轮覆盖缺口识别、单次自动补强重试和自动补强历史诊断；
+  - `tests/ui/casegen_settings_prompt.spec.js`：补充 XMind prompt / user payload 中硬约束文案断言；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增根节点首轮自动补强回归场景。
+- 复用说明：复用现有 `caseGenSettings` 共享设置、XMind 专属 `xmindCaseGen` 指派链路、后台任务管理器、`caseGenModules/caseGenResults` 共享真源、现有生成记录与持久化能力；没有新增后端接口、没有新增第二套结果状态机，也没有复制普通 `casesgen` 的模型调用逻辑。
+- 测试与验证：
+  - 自查 code review：确认改动收口在 `xmindCasegen`，未改动后端和共享结果真源；root 首轮补强只做单次重试，不引入新的长期运行状态机；
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/casegen_settings_prompt.spec.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_settings_prompt.spec.js -g "XMind 用例生成抽屉使用专属指派与提示词拼装" --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点首轮生成会在缺少 step3 关键覆盖时自动补强一次，并落下补强后的结果" --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点支持生成全量模块与生成全量用例，并在刷新后恢复共享结果" --reporter=line`，1/1 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-02 15:20 CST，补强 XMind 首轮 root 全量生成对 step3 选项的利用：step3 已开启项会以硬约束进入 prompt 和用户上下文，并在首轮结果缺少关键条件/数值覆盖时自动进行一次补强重试。
+
 - 功能名称：XMind 用例生成支持后台续跑与工具栏中断生成
 - 功能描述：优化 `XMind 用例生成` 抽屉中的生成执行方式。根节点和模块节点的 XMind 生成不再依赖当前页面一次性阻塞等待，而是改为受管后台任务：任务状态会写入本地持久化并带心跳接管，刷新页面后可自动恢复并继续执行，切换到其他页签后也不会卡死在“生成中”。同时新增工具栏 `中断生成` 按钮，可只中断当前 XMind 页发起的模型请求与运行态，不影响其他 AI 功能。
 - 操作方式：
@@ -50,6 +76,8 @@
   - 2026-04-02 10:50 CST，新增 XMind 用例生成后台续跑、刷新接管、页签切换续跑和工具栏中断能力，并补齐对应 UI/API 回归验证。
   - 2026-04-02 11:10 CST，补充后台任务恢复上下文兜底：刷新后会自动重开 XMind 抽屉，根节点继续显示原需求标识，并保留已确认的前置准备状态，避免后台任务完成后再次误弹前置准备。
   - 2026-04-02 13:20 CST，修正 XMind 根节点到“补全中/生成中”占位节点的连线覆写逻辑：overlay 会复用命中的原始 path 并隐藏底层实线，避免根层补全阶段仍显示为实线。
+  - 2026-04-02 13:45 CST，补强 XMind step3 生成选项的上下文提交：除系统提示词外，当前勾选的功能使用条件、数值验证、边界、移动设备、特殊场景及额外要求也会显式写入用户侧生成 payload，降低模型忽略 step3 选项的概率。
+  - 2026-04-02 14:05 CST，优化 XMind 前置准备弹窗底栏：将重置/上一步/下一步按钮改为固定吸附在弹窗底部展示，避免随内容滚动消失；同时把 step2 中的“导入参考用例”统一改名为“导入已有用例”，减少入口文案歧义。
 
 - 功能名称：XMind 前置准备弹窗打开时自动收起右键菜单
 - 功能名称：用例库与用例执行 XMind 结构视图支持多模块左右分布

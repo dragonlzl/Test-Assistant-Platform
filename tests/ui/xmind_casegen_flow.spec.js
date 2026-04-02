@@ -1591,7 +1591,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
   });
 
-  test('前置准备 step2 的参考用例导入复用拖拽上传样式，并在导入后允许下一步', async ({ page }) => {
+  test('前置准备 step2 的已有用例导入复用拖拽上传样式，并在导入后允许下一步', async ({ page }) => {
     const token = 'token-xmind-prep-cases-zone';
     const user = { id: 12, username: 'demo_user_12', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
@@ -1638,6 +1638,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
 
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step2');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('导入已有用例');
     await page.check('input[name="xmindCaseImportMode"][value="import"]', { force: true });
     await expect(page.locator('#xmindCaseGenPrepCasesDropzone')).toBeVisible();
     await expect(page.locator('#xmindCaseGenPrepCasesDropzone')).toContainText('测试用例');
@@ -1685,7 +1686,7 @@ test.describe('XMind 用例生成抽屉', () => {
       return Boolean(st && Array.isArray(st.importedCases) && st.importedCases.length > 0);
     }, {}, { timeout: 20000 });
     await expect(page.locator('#xmindCaseGenPrepCasesDropzone')).toContainText('当前共 1 条');
-    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-filelist')).toContainText('已导入参考用例');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-filelist')).toContainText('已导入已有用例');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
   });
 
@@ -1698,13 +1699,22 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitXmindModelAssigned(page, mockInfo.modelId);
     await openXmindCaseGenDrawer(page);
 
-    await page.waitForFunction(() => Boolean(document.querySelector('[data-xmind-casegen-inline-actions]')), {}, { timeout: 10000 });
+    await page.waitForFunction(() => Boolean(document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]')), {}, { timeout: 10000 });
     await clickElementById(page, 'xmindCaseGenSummaryBtn');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
     await expect(page.locator('#xmindCaseGenPrepResetBtn')).toBeVisible();
     await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-step')).toHaveCount(3);
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+    const footerStyle = await page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-footer').evaluate((el) => {
+      var style = window.getComputedStyle(el);
+      return {
+        position: style.position,
+        bottom: style.bottom,
+      };
+    });
+    expect(footerStyle.position).toBe('sticky');
+    expect(footerStyle.bottom).toBe('0px');
 
     await page.check('input[name="xmindRequirementMode"][value="manual"]', { force: true });
     await expect(page.locator('label.xmind-casegen-prep-choice.is-success').filter({ has: page.locator('input[name="xmindRequirementMode"][value="manual"]') })).toHaveClass(/is-active/);
@@ -1720,6 +1730,7 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step2');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('导入已有用例');
     await page.check('input[name="xmindCaseImportMode"][value="skip"]', { force: true });
     await expect(page.locator('label.xmind-casegen-prep-choice.is-success').filter({ has: page.locator('input[name="xmindCaseImportMode"][value="skip"]') })).toHaveClass(/is-active/);
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
@@ -4590,6 +4601,138 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '支付模块');
     await waitForNodeText(page, '支付成功校验');
     await expect(page.locator('#xmindCaseGenInterruptBtn')).toBeDisabled();
+  });
+
+  test('根节点首轮生成会在缺少 step3 关键覆盖时自动补强一次，并落下补强后的结果', async ({ page }) => {
+    const token = 'token-xmind-root-coverage-retry';
+    const user = { id: 302, username: 'demo_user_root_retry', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：该功能需要达到10级后才解锁，每日最多可领取3次奖励，每次奖励50积分。',
+      requirementLabel: 'XMind首轮补强需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await page.evaluate(() => {
+      var api = window.app && window.app.casesGenApi ? window.app.casesGenApi : null;
+      if (!api || typeof api.setCaseGenSettingValue !== 'function') return;
+      api.setCaseGenSettingValue('needFunctionCondition', true);
+      api.setCaseGenSettingValue('needNumericValidation', true);
+      api.setCaseGenSettingValue('needBoundary', false);
+      api.setCaseGenSettingValue('needMobile', false);
+      api.setCaseGenSettingValue('needSpecial', false);
+    });
+    await page.evaluate(() => {
+      var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (!client) return;
+      window.__xmindCoverageRetryCalls = [];
+      client.proxyModelRequest = function(payload, signal) {
+        var modelPayload = payload && payload.payload ? payload.payload : {};
+        var messages = Array.isArray(modelPayload.messages) ? modelPayload.messages : [];
+        var promptText = messages[0] && messages[0].content ? String(messages[0].content) : '';
+        var userText = messages[1] && messages[1].content ? String(messages[1].content) : '';
+        var index = window.__xmindCoverageRetryCalls.length;
+        window.__xmindCoverageRetryCalls.push({
+          prompt: promptText,
+          user: userText,
+        });
+        var responseText = index === 0
+          ? JSON.stringify({
+              modules: [{
+                module: '功能入口与基础流程',
+                key_scenarios: ['入口展示'],
+                test_points: ['页面展示正确'],
+                coupled_modules: [],
+                cases: [{
+                  module: '功能入口与基础流程',
+                  title: '入口展示校验',
+                  priority: 'P1',
+                  preconditions: '用户已登录',
+                  steps: ['1、进入功能页', '2、查看入口状态'],
+                  expected: '入口展示正确',
+                }],
+              }],
+            })
+          : JSON.stringify({
+              modules: [{
+                module: '功能解锁与可用条件',
+                key_scenarios: ['10级解锁后可用'],
+                test_points: ['等级门槛校验', '未解锁前不可使用'],
+                coupled_modules: [],
+                cases: [{
+                  module: '功能解锁与可用条件',
+                  title: '未达到10级时不可领取奖励',
+                  priority: 'P1',
+                  preconditions: '角色等级为9级',
+                  steps: ['1、进入奖励页面', '2、尝试领取奖励'],
+                  expected: '页面提示未解锁，无法领取奖励',
+                }],
+              }, {
+                module: '奖励次数与积分数值验证',
+                key_scenarios: ['每日次数限制'],
+                test_points: ['每日最多3次', '单次奖励50积分'],
+                coupled_modules: [],
+                cases: [{
+                  module: '奖励次数与积分数值验证',
+                  title: '第4次领取时提示超过上限',
+                  priority: 'P1',
+                  preconditions: '当日已成功领取3次奖励',
+                  steps: ['1、再次点击领取奖励', '2、检查积分变化'],
+                  expected: '提示已达上限，积分不再增加50分',
+                }],
+              }],
+            });
+        return new Promise(function(resolve, reject) {
+          var timer = setTimeout(function() {
+            resolve({
+              ok: true,
+              status: 200,
+              text: function() {
+                return Promise.resolve(JSON.stringify({
+                  choices: [{ message: { content: responseText } }],
+                }));
+              },
+            });
+          }, 90);
+          if (signal && typeof signal.addEventListener === 'function') {
+            signal.addEventListener('abort', function() {
+              clearTimeout(timer);
+              reject(new Error('aborted'));
+            }, { once: true });
+          }
+        });
+      };
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+
+    await page.waitForFunction(() => {
+      return Array.isArray(window.__xmindCoverageRetryCalls) && window.__xmindCoverageRetryCalls.length === 2;
+    }, {}, { timeout: 15000 });
+    await waitForNodeText(page, '功能解锁与可用条件');
+    await waitForNodeText(page, '奖励次数与积分数值验证');
+    await waitForNodeTextAbsent(page, '功能入口与基础流程');
+
+    const retryCalls = await page.evaluate(() => window.__xmindCoverageRetryCalls || []);
+    expect(retryCalls).toHaveLength(2);
+    expect(String(retryCalls[1].user || '')).toContain('【首轮生成补强指令】');
+    expect(String(retryCalls[1].user || '')).toContain('功能使用条件');
+    expect(String(retryCalls[1].user || '')).toContain('数值验证');
+
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
+    await expect(latestCard).toContainText('功能解锁与可用条件');
+    await expect(latestCard).toContainText('奖励次数与积分数值验证');
+    await expect(latestCard).toContainText('自动补强覆盖：功能使用条件、数值验证');
   });
 
   test('工具栏中断生成会停止 XMind 后台任务，并且不会再落下已取消的结果', async ({ page }) => {
