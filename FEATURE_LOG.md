@@ -40,10 +40,15 @@
   - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`，通过；
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点支持生成全量模块与生成全量用例，并在刷新后恢复共享结果|根节点已有模块补全用例会为已有用例模块新增内容渲染独立虚线框|根节点生成全量用例会先展示模块骨架，再逐个展示模块用例" --reporter=line`，3/3 通过；
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "XMind 生成在刷新后会自动恢复并继续完成，不再卡死在生成中|根节点生成全量用例会先展示模块骨架，再逐个展示模块用例" --reporter=line`，2/2 通过；
+  - `node --check scripts/core/mindElixirCore.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js tests/ui/xmind_structure_view_buttons.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js tests/ui/xmind_structure_view_buttons.spec.js -g "根节点生成全量用例会先展示模块骨架，再逐个展示模块用例|XMind 生成在刷新后会自动恢复并继续完成，不再卡死在生成中|执行页支持 XMind 结构展示并切换主题|用例库支持 XMind 结构展示并切换主题" --reporter=line`，4/4 通过；
   - `APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8083` 启动测试后端后，执行 `API_BASE_URL=http://127.0.0.1:8083 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js tests/api/settings_models.spec.js --reporter=line`，2/2 通过。
 - 更新记录：
   - 2026-04-02 16:35 CST，根节点生成改为渐进式分批提交：先落模块骨架，再按模块逐步落用例，并补齐刷新恢复时的 pipeline 重建兜底。
   - 2026-04-02 17:10 CST，验证后取消了“人为串行排队”方案，改为 discovery 后立即并发启动模块子任务，并保持“谁先完成谁先展示”。这样不会为了展示效果故意拖慢模块结果落图；刷新恢复和中断逻辑仍保持兼容。
+  - 2026-04-02 17:18 CST，修正流式生成期间的画布漂移：异步任务刷新不再强制锚定到任务节点；当用户已手动拖动画布后，延迟视图恢复不会再把视口拉回旧位置，并补跑 `XMind 用例生成`、`用例执行`、`用例库` 三处 XMind 视图回归。
+  - 2026-04-02 17:32 CST，进一步修正首个模块成功落图时仍会轻微漂移的问题：撤掉 `XMind 用例生成` 增量刷新时的“视口中心节点自动锚点补偿”，改为只恢复当前画布 `transform`，确保模块展开后仍固定在用户当前停留的位置。
+  - 2026-04-02 17:47 CST，按交互语义把根节点流式生成的固定点收敛为根节点本身：根节点触发的整批生成在发现阶段、模块阶段、完成/失败/中断收尾和后台任务事件同步时，都统一使用根节点锚点恢复，保证用户把根节点拖到哪里，后续模块/用例都只围绕该位置伸展，不再把根节点挤到右侧。
 
 - 功能名称：XMind 首轮生成强化 step3 硬约束与自动补强
 - 功能描述：强化 `XMind 用例生成` 在根节点首轮全量生成时对 step3 生成选项的利用。现在 `功能使用条件`、`数值验证` 等 step3 勾选项不仅继续参与共享设置项拼装，还会作为 XMind 专属 prompt 和用户上下文中的硬约束显式提交；当根节点首轮 `生成全量用例`、`生成全量模块` 或 `重新生成模块` 的结果没有充分覆盖已开启的关键要求时，前端会在不新增后端接口的前提下自动发起一次补强重试，并只提交补强后的最终结果。

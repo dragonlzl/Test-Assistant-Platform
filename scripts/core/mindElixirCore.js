@@ -4696,6 +4696,47 @@
       };
     }
 
+    function captureViewportCenterAnchorState(instance) {
+      if (!instance) return null;
+      var viewerEl = instance.el && instance.el.getBoundingClientRect
+        ? instance.el
+        : (instance.container && instance.container.getBoundingClientRect ? instance.container : null);
+      if (!viewerEl || !viewerEl.getBoundingClientRect || !viewerEl.querySelectorAll) return null;
+      var viewerRect = viewerEl.getBoundingClientRect();
+      var viewerCenterX = Number(viewerRect.left + (viewerRect.width / 2));
+      var viewerCenterY = Number(viewerRect.top + (viewerRect.height / 2));
+      if (!isFinite(viewerCenterX) || !isFinite(viewerCenterY)) return null;
+      var nodeEls = viewerEl.querySelectorAll('me-tpc');
+      var best = null;
+      Array.prototype.forEach.call(nodeEls, function(nodeEl) {
+        if (!nodeEl || !nodeEl.nodeObj || nodeEl.nodeObj.id === undefined || nodeEl.nodeObj.id === null) return;
+        var anchorEl = resolveMindAnchorElement(nodeEl);
+        if (!anchorEl || !anchorEl.getBoundingClientRect) return;
+        var rect = anchorEl.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) return;
+        var centerX = Number(rect.left + (rect.width / 2));
+        var centerY = Number(rect.top + (rect.height / 2));
+        if (!isFinite(centerX) || !isFinite(centerY)) return;
+        var dx = centerX - viewerCenterX;
+        var dy = centerY - viewerCenterY;
+        var distance = Math.sqrt((dx * dx) + (dy * dy));
+        if (!best || distance < best.distance) {
+          best = {
+            nodeId: String(nodeEl.nodeObj.id),
+            centerX: centerX,
+            centerY: centerY,
+            distance: distance,
+          };
+        }
+      });
+      if (!best || !best.nodeId) return null;
+      return {
+        nodeId: best.nodeId,
+        centerX: best.centerX,
+        centerY: best.centerY,
+      };
+    }
+
     function captureMindDrawerState(instance) {
       if (!instance || !instance.container || typeof instance.container.closest !== 'function') return null;
       var drawerEl = instance.container.closest('.drawer');
@@ -4756,6 +4797,7 @@
       [0, 16, 48, 96, 180, 320, 520].forEach(function(delayMs) {
         setTimeout(function() {
           if (!instance || !instance.map || !instance.el || !instance.el.isConnected) return;
+          if (delayMs > 0 && instance.__tapViewportInteracted === true) return;
           restoreMindViewState(instance, viewState);
           if (anchorState) {
             restoreMindAnchorState(instance, anchorState);
@@ -4769,6 +4811,7 @@
       [0, 16, 48, 96, 180, 320, 520, 760, 1080].forEach(function(delayMs) {
         setTimeout(function() {
           if (!instance || !instance.map || !instance.el || !instance.el.isConnected) return;
+          if (delayMs > 0 && instance.__tapViewportInteracted === true) return;
           restoreMindAnchorState(instance, anchorState);
         }, delayMs);
       });
@@ -4816,6 +4859,10 @@
       var preservedAnchorState = opts && opts.preserveViewState === true && opts.preserveAnchorNodeId
         ? captureMindAnchorState(opts.instance || null, opts.preserveAnchorNodeId)
         : null;
+      var preservedAutoAnchorState = !preservedAnchorState && opts && opts.preserveViewState === true && opts.preserveAutoAnchor === true
+        ? captureViewportCenterAnchorState(opts.instance || null)
+        : null;
+      var effectivePreservedAnchorState = preservedAnchorState || preservedAutoAnchorState;
       var preservedDrawerState = opts && opts.preserveViewState === true
         ? captureMindDrawerState(opts.instance || null)
         : null;
@@ -4973,12 +5020,12 @@
       var restoredViewState = false;
       if (preservedViewState && !initialEditing) {
         restoredViewState = restoreMindViewState(instance, preservedViewState);
-        if (preservedAnchorState) {
-          restoreMindAnchorState(instance, preservedAnchorState);
+        if (effectivePreservedAnchorState) {
+          restoreMindAnchorState(instance, effectivePreservedAnchorState);
         }
-        scheduleMindViewRestore(instance, preservedViewState, preservedAnchorState);
-        if (preservedAnchorState) {
-          scheduleMindAnchorRestore(instance, preservedAnchorState);
+        scheduleMindViewRestore(instance, preservedViewState, effectivePreservedAnchorState);
+        if (effectivePreservedAnchorState) {
+          scheduleMindAnchorRestore(instance, effectivePreservedAnchorState);
         }
       } else if (explicitInitialViewState && !initialEditing) {
         restoredViewState = restoreMindViewState(instance, explicitInitialViewState);

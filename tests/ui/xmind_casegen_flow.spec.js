@@ -1350,6 +1350,18 @@ async function readXmindRootCenter(page) {
   });
 }
 
+function parseMindTransformText(text) {
+  const raw = String(text || '');
+  const translate3dMatch = raw.match(/translate3d\(\s*(-?\d+(?:\.\d+)?)px\s*,\s*(-?\d+(?:\.\d+)?)px\s*,/i);
+  const translateMatch = translate3dMatch || raw.match(/translate\(\s*(-?\d+(?:\.\d+)?)px\s*,\s*(-?\d+(?:\.\d+)?)px\s*\)/i);
+  const scaleMatch = raw.match(/scale\(\s*(-?\d+(?:\.\d+)?)\s*\)/i);
+  return {
+    x: translateMatch ? Number(translateMatch[1] || 0) : 0,
+    y: translateMatch ? Number(translateMatch[2] || 0) : 0,
+    scale: scaleMatch ? Number(scaleMatch[1] || 1) : 1,
+  };
+}
+
 async function readCaseResults(page, moduleId) {
   return page.evaluate((id) => {
     if (!window.app || !window.app.state || !window.app.state.caseGenResults) return [];
@@ -3132,6 +3144,18 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '支付模块');
     await waitForNodeTextAbsent(page, '登录模块-首批用例');
     await waitForNodeTextAbsent(page, '支付模块-尾批用例');
+    const beforePan = await readXmindCasegenViewSnapshot(page);
+    await panXmindCasegenCanvas(page, 320, 140);
+    await page.waitForFunction((beforeTransform) => {
+      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+      return Boolean(map && map.style && String(map.style.transform || '') !== String(beforeTransform || ''));
+    }, beforePan.transform || '', { timeout: 10000 });
+    const rootBeforeStream = await readXmindRootCenter(page);
+    expect(rootBeforeStream).not.toBeNull();
+    const transformBeforeStream = await page.evaluate(() => {
+      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+      return map && map.style ? String(map.style.transform || '') : '';
+    });
 
     await page.waitForFunction(() => {
       var state = window.app && window.app.state ? window.app.state : null;
@@ -3151,6 +3175,17 @@ test.describe('XMind 用例生成抽屉', () => {
     }, {}, { timeout: 15000 });
     await waitForNodeText(page, '支付模块-尾批用例');
     await waitForNodeTextAbsent(page, '登录模块-首批用例');
+    const rootAfterFirstStream = await readXmindRootCenter(page);
+    expect(rootAfterFirstStream).not.toBeNull();
+    const transformAfterFirstStream = await page.evaluate(() => {
+      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+      return map && map.style ? String(map.style.transform || '') : '';
+    });
+    const transformBeforeParsed = parseMindTransformText(transformBeforeStream);
+    const transformAfterParsed = parseMindTransformText(transformAfterFirstStream);
+    expect(Math.abs(transformAfterParsed.scale - transformBeforeParsed.scale)).toBeLessThanOrEqual(0.001);
+    expect(Math.abs(rootAfterFirstStream.x - rootBeforeStream.x)).toBeLessThanOrEqual(6);
+    expect(Math.abs(rootAfterFirstStream.y - rootBeforeStream.y)).toBeLessThanOrEqual(6);
     await page.waitForFunction(() => {
       var calls = Array.isArray(window.__xmindPipelineCalls) ? window.__xmindPipelineCalls : [];
       var loginCall = null;
@@ -3166,6 +3201,16 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await waitForNodeText(page, '登录模块-首批用例');
     await waitForNodeText(page, '支付模块-尾批用例');
+    const rootAfterAllStream = await readXmindRootCenter(page);
+    expect(rootAfterAllStream).not.toBeNull();
+    const transformAfterAllStream = await page.evaluate(() => {
+      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+      return map && map.style ? String(map.style.transform || '') : '';
+    });
+    const transformAfterAllParsed = parseMindTransformText(transformAfterAllStream);
+    expect(Math.abs(transformAfterAllParsed.scale - transformBeforeParsed.scale)).toBeLessThanOrEqual(0.001);
+    expect(Math.abs(rootAfterAllStream.x - rootBeforeStream.x)).toBeLessThanOrEqual(6);
+    expect(Math.abs(rootAfterAllStream.y - rootBeforeStream.y)).toBeLessThanOrEqual(6);
     await waitForNodeStatusAbsent(page, 'XMind分批展示需求');
     const pipelineCalls = await page.evaluate(() => {
       return Array.isArray(window.__xmindPipelineCalls) ? window.__xmindPipelineCalls.slice() : [];

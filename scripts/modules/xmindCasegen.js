@@ -4419,7 +4419,7 @@
       rootState.updatedAt = Date.now();
       notifyFloatingStatus('首轮结果未充分覆盖已开启要求，正在自动补强', 'warn', 3000);
       if (isDrawerOpen()) {
-        render({ reason: 'root-coverage-retry', persist: false, anchorNodeId: anchorNodeId });
+        render({ reason: 'root-coverage-retry', persist: false, anchorNodeId: anchorNodeId || getRootNodeId() });
       }
       persistXmindState(true);
       return true;
@@ -7362,6 +7362,9 @@
     }
 
     function getManagedTaskAnchorNodeId(task, moduleEntry) {
+      if (task && task.rootPipelineId) {
+        return getRootNodeId();
+      }
       if (task && task.scope === 'module') {
         if (moduleEntry) return getModuleNodeId(moduleEntry);
         return buildNodeId(['module', task && task.moduleKey ? task.moduleKey : 'module']);
@@ -7644,7 +7647,7 @@
           moduleEntry: resolvedEntry,
           actionId: MODULE_ACTIONS.FULL_CASES,
           rootPipelineNewModule: actionId !== ROOT_ACTIONS.FULL_CASES,
-          anchorNodeId: '',
+          anchorNodeId: anchorNodeId,
         });
       });
       if (actionId === ROOT_ACTIONS.FULL_CASES) {
@@ -7656,7 +7659,7 @@
             moduleEntry: resolvedEntry,
             actionId: MODULE_ACTIONS.FULL_CASES,
             rootPipelineNewModule: false,
-            anchorNodeId: '',
+            anchorNodeId: anchorNodeId,
           };
         }).filter(Boolean);
       }
@@ -7669,13 +7672,13 @@
       }
 
       if (isDrawerOpen()) {
-        render({ reason: 'root-pipeline-discovery-committed', persist: false, anchorNodeId: '' });
+        render({ reason: 'root-pipeline-discovery-committed', persist: false, anchorNodeId: anchorNodeId });
       }
       persistXmindState(true);
 
       var startedCount = await startRootPipelineModuleTasks(pipeline, descriptors);
       if (startedCount <= 0) {
-        finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: '' });
+        finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: anchorNodeId });
       }
       return startedCount > 0 || skeletonApplied.changed;
     }
@@ -7686,6 +7689,7 @@
         return false;
       }
       var opts = options || {};
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
       var errorInfo = opts.resultKind === 'cancelled'
         ? buildGenerationCancelledInfo(task)
         : buildGenerationErrorInfo(new Error(getTaskErrorMessage(task, err)));
@@ -7704,7 +7708,7 @@
         ).concat(errorInfo.diagnostics || []));
       });
       if (isDrawerOpen()) {
-        render({ reason: opts.renderReason || 'root-pipeline-discovery-error', persist: false, anchorNodeId: '' });
+        render({ reason: opts.renderReason || 'root-pipeline-discovery-error', persist: false, anchorNodeId: anchorNodeId });
       }
       persistXmindState(true);
       return false;
@@ -7718,6 +7722,7 @@
       var actionId = String(task && task.actionId ? task.actionId : '');
       var visibleContext = buildVisibleModuleContext();
       var resolvedEntry = resolveTaskModuleEntry(task, visibleContext);
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, resolvedEntry);
       var historyModuleTitle = normalizeModuleTitle(
         resolvedEntry && resolvedEntry.title
           ? resolvedEntry.title
@@ -7831,7 +7836,7 @@
         syncCasesGenPageRender();
       }
       if (isDrawerOpen()) {
-        render({ reason: changed ? 'root-pipeline-module-committed' : 'root-pipeline-module-no-change', persist: false, anchorNodeId: '' });
+        render({ reason: changed ? 'root-pipeline-module-committed' : 'root-pipeline-module-no-change', persist: false, anchorNodeId: anchorNodeId });
       }
       persistXmindState(true);
       return changed;
@@ -7843,6 +7848,7 @@
         return false;
       }
       var opts = options || {};
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
       var moduleId = task && task.moduleId ? String(task.moduleId || '') : '';
       var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
       if (moduleState) {
@@ -7874,7 +7880,7 @@
         ).concat(errorInfo.diagnostics || []));
       });
       if (isDrawerOpen()) {
-        render({ reason: opts.renderReason || 'root-pipeline-module-error', persist: false, anchorNodeId: '' });
+        render({ reason: opts.renderReason || 'root-pipeline-module-error', persist: false, anchorNodeId: anchorNodeId });
       }
       persistXmindState(true);
       return false;
@@ -7885,9 +7891,9 @@
         return handleRootPipelineDiscoveryTaskSuccess(task);
       }
       var actionId = String(task && task.actionId ? task.actionId : '');
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
       var rootState = ensureRootUiState();
       var contract = task && task.contract ? task.contract : createOperationContract(actionId, null);
-      var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
       var visibleContext = buildVisibleModuleContext();
       var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
       var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
@@ -8024,12 +8030,12 @@
       var actionId = String(task && task.actionId ? task.actionId : '');
       var visibleContext = buildVisibleModuleContext();
       var resolvedEntry = resolveTaskModuleEntry(task, visibleContext);
+      var anchorNodeId = getManagedTaskAnchorNodeId(task, resolvedEntry);
       var historyModuleTitle = normalizeModuleTitle(
         resolvedEntry && resolvedEntry.title
           ? resolvedEntry.title
           : (task && task.moduleTitle ? task.moduleTitle : '')
       );
-      var anchorNodeId = getManagedTaskAnchorNodeId(task, resolvedEntry);
       var moduleId = resolvedEntry && resolvedEntry.aiModuleId ? resolvedEntry.aiModuleId : (task && task.moduleId ? task.moduleId : '');
       var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
       var contract = task && task.contract ? task.contract : createOperationContract(actionId, resolvedEntry);
@@ -8182,8 +8188,8 @@
       }
       var opts = options || {};
       var actionId = String(task && task.actionId ? task.actionId : '');
-      var moduleId = task && task.moduleId ? String(task.moduleId || '') : '';
       var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
+      var moduleId = task && task.moduleId ? String(task.moduleId || '') : '';
       var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
       if (task && task.createdModuleBeforeAction === true && task.snapshotId) {
         rollbackCaseGenOperationSnapshotEntry(task.snapshotId);
@@ -8261,7 +8267,9 @@
           delete xmindTaskProcessingMap[task.id];
           if (task && task.rootPipelineId) {
             await pumpRootPipelineModuleQueue(String(task.rootPipelineId || ''));
-            finalizeRootPipelineIfReady(String(task.rootPipelineId || ''), { anchorNodeId: '' });
+            finalizeRootPipelineIfReady(String(task.rootPipelineId || ''), {
+              anchorNodeId: getManagedTaskAnchorNodeId(task, null),
+            });
           }
           syncManagedRunningUiState({
             tasks: listManagedXmindTasks(),
@@ -8299,7 +8307,7 @@
       var pipeline = getRootPipelineState();
       if (pipeline && pipeline.id && terminalTasks.length <= 0) {
         pumpRootPipelineModuleQueue(String(pipeline.id || '')).then(function() {
-          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: '' });
+          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: getRootNodeId() });
         });
       }
     }
@@ -8359,7 +8367,7 @@
       }
       if (interruptedCount <= 0) {
         if (pipeline && Array.isArray(pipeline.pendingQueue) && pipeline.pendingQueue.length > 0) {
-          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: '' });
+          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: getRootNodeId() });
           notifyFloatingStatus('已中断当前 XMind 生成任务', 'warn', 3000);
           return true;
         }
@@ -8586,14 +8594,14 @@
 
       if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
         var existingDescriptors = buildRootPipelineTaskDescriptors(actionId, visibleContext).map(function(item) {
-          return Object.assign({}, item, { anchorNodeId: '' });
+          return Object.assign({}, item, { anchorNodeId: getRootNodeId() });
         });
         var startedCount = await startRootPipelineModuleTasks(pipeline, existingDescriptors);
         rootState.taskId = startedCount > 0 ? String(pipeline.id || '') : '';
         rootState.updatedAt = Date.now();
         persistXmindState(true);
         if (startedCount <= 0) {
-          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: '' });
+          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: getRootNodeId() });
         }
         return true;
       }
