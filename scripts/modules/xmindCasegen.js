@@ -62,6 +62,7 @@
     var toolbarEl = document.getElementById('xmindCaseGenToolbar');
     var summaryBtn = document.getElementById('xmindCaseGenSummaryBtn');
     var historyBtn = document.getElementById('xmindCaseGenHistoryBtn');
+    var storeBtn = document.getElementById('xmindCaseGenStoreBtn');
     var deleteUndoBtn = document.getElementById('xmindCaseGenDeleteUndoBtn');
     var deleteRedoBtn = document.getElementById('xmindCaseGenDeleteRedoBtn');
     var summaryOverlayEl = document.getElementById('xmindCaseGenSummaryOverlay');
@@ -84,6 +85,7 @@
     var mindApiReadyPromise = null;
     var inlineControlsHost = null;
     var inlineStatusHost = null;
+    var inlineModelHost = null;
     var manualImageInputEl = null;
     var topupHighlightSyncTimer = 0;
     var topupHighlightRetryTimer = 0;
@@ -106,6 +108,11 @@
     var drawerRestoreRetryTimer = 0;
     var drawerRestoreRetryCount = 0;
     var drawerRestoreStableCount = 0;
+    var storeValidationClearTimer = 0;
+    var storeValidationState = {
+      moduleKeys: {},
+      caseKeys: {},
+    };
 
     var STEP_REQUIREMENT = 1;
     var STEP_CASES = 2;
@@ -259,6 +266,64 @@
       notifyInlineStatus(text, type || '');
     }
 
+    function notifyFloatingStatus(text, type, durationMs) {
+      if (!text) return;
+      if (typeof showCenterToast === 'function') {
+        showCenterToast(String(text), type || 'warn', durationMs || 5000);
+        return;
+      }
+      notifyInlineStatus(text, type || '');
+    }
+
+    function clearStoreValidationState(skipRender) {
+      var hadMarks = Object.keys(storeValidationState.moduleKeys || {}).length > 0
+        || Object.keys(storeValidationState.caseKeys || {}).length > 0;
+      if (storeValidationClearTimer) {
+        clearTimeout(storeValidationClearTimer);
+        storeValidationClearTimer = 0;
+      }
+      storeValidationState = {
+        moduleKeys: {},
+        caseKeys: {},
+      };
+      if (hadMarks && skipRender !== true && isDrawerOpen()) {
+        render({ reason: 'store-validation-clear', persist: false });
+      }
+    }
+
+    function setStoreValidationState(moduleKeys, caseKeys) {
+      clearStoreValidationState(true);
+      storeValidationState = {
+        moduleKeys: {},
+        caseKeys: {},
+      };
+      (Array.isArray(moduleKeys) ? moduleKeys : []).forEach(function(key) {
+        var stableKey = String(key || '').trim();
+        if (stableKey) storeValidationState.moduleKeys[stableKey] = true;
+      });
+      (Array.isArray(caseKeys) ? caseKeys : []).forEach(function(key) {
+        var stableKey = String(key || '').trim();
+        if (stableKey) storeValidationState.caseKeys[stableKey] = true;
+      });
+      if (Object.keys(storeValidationState.moduleKeys).length || Object.keys(storeValidationState.caseKeys).length) {
+        if (isDrawerOpen()) render({ reason: 'store-validation-mark', persist: false });
+        storeValidationClearTimer = setTimeout(function() {
+          storeValidationClearTimer = 0;
+          clearStoreValidationState(false);
+        }, 5000);
+      }
+    }
+
+    function isInvalidStoreModuleMeta(meta) {
+      if (!meta || meta.type !== 'module') return false;
+      return Boolean(storeValidationState.moduleKeys[String(meta.moduleKey || '')]);
+    }
+
+    function isInvalidStoreCaseMeta(meta) {
+      if (!meta || meta.type !== 'case') return false;
+      return Boolean(storeValidationState.caseKeys[buildDeleteTargetKey(meta)]);
+    }
+
     function getXmindCoreApi() {
       if (ctx.xmindCoreApi) return ctx.xmindCoreApi;
       return window.app && window.app.xmindCoreApi ? window.app.xmindCoreApi : null;
@@ -320,6 +385,7 @@
       return [
         summaryBtn,
         historyBtn,
+        storeBtn,
         deleteUndoBtn,
         deleteRedoBtn,
         exportBtn,
@@ -343,8 +409,12 @@
       if (inlineStatusHost && inlineStatusHost.parentNode) {
         inlineStatusHost.parentNode.removeChild(inlineStatusHost);
       }
+      if (inlineModelHost && inlineModelHost.parentNode) {
+        inlineModelHost.parentNode.removeChild(inlineModelHost);
+      }
       inlineControlsHost = null;
       inlineStatusHost = null;
+      inlineModelHost = null;
     }
 
     function getMindControlsRoot() {
@@ -388,6 +458,86 @@
       return host;
     }
 
+    function getInlineModelHost() {
+      var controlsRoot = getMindControlsRoot();
+      if (!controlsRoot || !controlsRoot.querySelector) return null;
+      var zoomGroup = controlsRoot.querySelector('.xmind-zoom-group');
+      if (!zoomGroup) return null;
+      var exportActionBtn = controlsRoot.querySelector('[data-mind-action="export-xmind"]');
+      if (exportActionBtn && exportActionBtn.classList) {
+        exportActionBtn.classList.add('xmind-casegen-default-export-hidden');
+        exportActionBtn.setAttribute('aria-hidden', 'true');
+        exportActionBtn.tabIndex = -1;
+      }
+      var host = controlsRoot.querySelector('[data-xmind-casegen-model-host]');
+      if (!host) {
+        host = document.createElement('label');
+        host.className = 'xmind-casegen-model-picker';
+        host.setAttribute('data-xmind-casegen-model-host', '1');
+      }
+      if (host.parentNode !== zoomGroup && zoomGroup.appendChild) {
+        zoomGroup.appendChild(host);
+      }
+      inlineModelHost = host;
+      return host;
+    }
+
+    function getAvailableXmindModels() {
+      return (Array.isArray(state && state.models) ? state.models : []).filter(function(item) {
+        return Boolean(item && item.id);
+      });
+    }
+
+    function syncInlineModelPicker() {
+      var host = getInlineModelHost();
+      if (!host) return false;
+      var modelList = getAvailableXmindModels();
+      var assignedId = state && state.assignments && state.assignments.xmindCaseGenId
+        ? String(state.assignments.xmindCaseGenId || '')
+        : '';
+      var hasAssigned = false;
+      var optionsHtml = modelList.map(function(item) {
+        var id = String(item.id || '');
+        var selected = id === assignedId;
+        if (selected) hasAssigned = true;
+        return '<option value="' + escapeHtml(id) + '"' + (selected ? ' selected' : '') + '>'
+          + escapeHtml(item.name || id)
+          + '</option>';
+      }).join('');
+      if (!hasAssigned) {
+        optionsHtml = '<option value="" selected>请选择模型</option>' + optionsHtml;
+      }
+      host.innerHTML = '<span class="xmind-casegen-model-label">模型</span>'
+        + '<select class="xmind-casegen-model-select" data-xmind-casegen-model-select aria-label="XMind 用例生成模型"'
+        + (modelList.length ? '' : ' disabled')
+        + '>'
+        + optionsHtml
+        + '</select>';
+      var selectEl = host.querySelector('[data-xmind-casegen-model-select]');
+      if (!selectEl) return false;
+      selectEl.addEventListener('change', function() {
+        var nextId = selectEl.value ? String(selectEl.value || '') : '';
+        var prevId = state && state.assignments && state.assignments.xmindCaseGenId
+          ? String(state.assignments.xmindCaseGenId || '')
+          : '';
+        if (nextId === prevId) return;
+        state.assignments = state.assignments || {};
+        state.assignments.xmindCaseGenId = nextId;
+        if (xmindGenApi && typeof xmindGenApi.renderAssignmentsSelect === 'function') {
+          xmindGenApi.renderAssignmentsSelect();
+        }
+        if (xmindGenApi && typeof xmindGenApi.saveAssignments === 'function') {
+          xmindGenApi.saveAssignments();
+        }
+        if (xmindGenApi && typeof xmindGenApi.updateAssignmentStatuses === 'function') {
+          xmindGenApi.updateAssignmentStatuses();
+        }
+        persistWorkflowStateNow();
+        notifySuccessToast('已切换 XMind 模型', 2200);
+      });
+      return true;
+    }
+
     function mountInlineControls() {
       var controlsRoot = getMindControlsRoot();
       var actionsHost = getInlineControlsHost();
@@ -404,6 +554,7 @@
         statusEl.classList.add('xmind-casegen-inline-status-text');
         statusHost.appendChild(statusEl);
       }
+      syncInlineModelPicker();
       return true;
     }
 
@@ -524,6 +675,7 @@
         },
         onClose: function() {
           clearDrawerRestoreRetry();
+          clearStoreValidationState(true);
           captureCurrentViewState();
           getViewState().drawerOpen = false;
           getViewState().fullscreen = false;
@@ -739,6 +891,163 @@
       ensureState().hasImportedBaseline = hasImportedBaselineCases();
       if (useImmediate === true) persistWorkflowStateNow();
       else persistWorkflowState();
+    }
+
+    function createInitialXmindState(options) {
+      var opts = options || {};
+      var nextViewState = createDefaultViewState();
+      nextViewState.drawerOpen = opts.drawerOpen === true;
+      nextViewState.fullscreen = opts.fullscreen === true;
+      nextViewState.updatedAt = Date.now();
+      return {
+        mode: 'modules',
+        treeSourceSignature: '',
+        hasModuleSkeleton: false,
+        hasImportedBaseline: false,
+        viewState: nextViewState,
+        history: [],
+        operationSnapshots: [],
+        lastOperationSnapshotId: '',
+        rootSnapshotId: '',
+        rootSnapshots: [],
+        deletedBaselineModuleKeys: [],
+        deletedBaselineCaseKeys: [],
+        deleteUndoStack: [],
+        deleteRedoStack: [],
+        root: createDefaultRootState(),
+        summaryCollapsed: false,
+        prep: createDefaultPrepState(),
+        nextSnapshotId: 1,
+        snapshots: [],
+        modules: {},
+      };
+    }
+
+    function resetRequirementPrepInputs() {
+      var rawTextEl = document.getElementById('rawText');
+      var fileNameEl = document.getElementById('fileName');
+      var fileInputEl = document.getElementById('fileInput');
+      if (rawTextEl) rawTextEl.value = '';
+      if (fileNameEl) fileNameEl.textContent = '未选择文件';
+      if (fileInputEl) fileInputEl.value = '';
+      state.lastRawImportName = '';
+      state.requirementLabel = '';
+      state.requirementLabelSource = '';
+      state.requirementMedia = {
+        docxImages: [],
+        pastedImages: [],
+        lastDocxImageCount: 0,
+        updatedAt: Date.now(),
+      };
+      if (manualImageInputEl) manualImageInputEl.value = '';
+    }
+
+    function resetImportedCasePrepInputs() {
+      var caseTextEl = document.getElementById('caseText');
+      var caseFileInputEl = document.getElementById('caseFileInput');
+      var casesCoreApi = getCasesCoreApi();
+      if (caseTextEl) caseTextEl.value = '';
+      if (caseFileInputEl) caseFileInputEl.value = '';
+      state.importedCases = [];
+      if (casesCoreApi && typeof casesCoreApi.renderImportedCaseList === 'function') {
+        casesCoreApi.renderImportedCaseList();
+      }
+      if (casesCoreApi && typeof casesCoreApi.syncCaseTextWithImports === 'function') {
+        casesCoreApi.syncCaseTextWithImports();
+      }
+      if (casesCoreApi && typeof casesCoreApi.resetImportedCaseView === 'function') {
+        casesCoreApi.resetImportedCaseView();
+      }
+    }
+
+    function resetSharedCaseGenOutputs() {
+      state.caseGenModules = [];
+      state.caseGenSource = '';
+      state.caseGenResults = {};
+      state.caseSelections = {};
+      state.caseGenSuggestions = {};
+      state.caseGenModuleStatus = {};
+      state.caseGenProgress = {};
+      state.caseGenTiming = {};
+      state.caseGenProgressNotice = {};
+      state.caseGenRunning = new Set();
+    }
+
+    function resetWorkflowStateForXmind(drawerOpen, fullscreen) {
+      var didReuseSharedReset = false;
+      if (prepApi && typeof prepApi.interruptActiveExecutions === 'function') {
+        try {
+          prepApi.interruptActiveExecutions('重置当前 XMind 生成前置准备');
+        } catch (err) {
+          // ignore
+        }
+      }
+      if (prepApi && typeof prepApi.resetWorkflowData === 'function') {
+        prepApi.resetWorkflowData();
+        didReuseSharedReset = true;
+      } else {
+        resetRequirementPrepInputs();
+        resetImportedCasePrepInputs();
+        resetSharedCaseGenOutputs();
+      }
+      state.xmindCaseGen = createInitialXmindState({
+        drawerOpen: drawerOpen === true,
+        fullscreen: fullscreen === true,
+      });
+      return didReuseSharedReset;
+    }
+
+    function resetXmindCasegenState(options) {
+      var opts = options || {};
+      if (hasAnyRunningGenerationOperation()) {
+        if (opts.silentBlocked !== true) {
+          notifyFloatingStatus('当前仍有生成任务进行中，请等待完成后再重置', 'warn', 5000);
+        }
+        return false;
+      }
+      var drawerOpen = isDrawerOpen();
+      var fullscreen = drawerEl && drawerEl.classList
+        ? drawerEl.classList.contains('xmind-drawer-fullscreen')
+        : (getViewState().fullscreen === true);
+      if (renderTimer) {
+        clearTimeout(renderTimer);
+        renderTimer = 0;
+      }
+      clearStoreValidationState(true);
+      cleanupTopupHighlightPresentation();
+      clearDrawerRestoreRetry();
+      clearDeleteHistoryStacks();
+      var reusedSharedWorkflowReset = resetWorkflowStateForXmind(drawerOpen, fullscreen);
+      if (manualImageInputEl) manualImageInputEl.value = '';
+      if (drawerOpen) {
+        destroyMind();
+      }
+      if (!reusedSharedWorkflowReset && casesGenApi && typeof casesGenApi.renderCaseGeneration === 'function') {
+        casesGenApi.renderCaseGeneration();
+      }
+      updateSummary();
+      if (opts.reopenPrepDialog === true) {
+        openSummaryDialog(STEP_REQUIREMENT);
+      } else {
+        renderOpenedSummaryDialog();
+      }
+      if (drawerOpen) {
+        render({ reason: opts.reason || 'reset-all', persist: false });
+      }
+      persistXmindState(true);
+      if (opts.toastText) {
+        notifySuccessToast(String(opts.toastText), opts.toastDurationMs || 3000);
+      }
+      return true;
+    }
+
+    function resetAfterStoreSuccess() {
+      return resetXmindCasegenState({
+        reason: 'store-success-reset',
+        reopenPrepDialog: false,
+        toastText: '',
+        silentBlocked: true,
+      });
     }
 
     function getViewState() {
@@ -1886,6 +2195,10 @@
       var disabledAttr = locked ? ' disabled' : '';
       var rawTextEl = document.getElementById('rawText');
       var docValue = rawTextEl && rawTextEl.value ? String(rawTextEl.value).trim() : '';
+      var docImportName = state.lastRawImportName ? String(state.lastRawImportName).trim() : '';
+      var docStatusText = docValue
+        ? ('已导入' + (docImportName ? '：' + docImportName + '，' : '，') + '正文 ' + String(docValue.length) + ' 字')
+        : '导入后内容会同步到当前需求上下文';
       var manualText = getManualRequirementText();
       var manualImages = getManualRequirementImages();
       var manualImagesHtml = manualImages.map(function(item, index) {
@@ -1924,9 +2237,17 @@
           ? ''
             + '<div class="xmind-casegen-prep-field">'
             +   '<label>需求文档</label>'
-            +   '<div class="xmind-casegen-prep-upload-row">'
-            +     '<button type="button" data-prep-action="import-requirement"' + disabledAttr + '>' + (docValue ? '重新导入需求文档' : '导入需求文档') + '</button>'
-            +     '<span class="hint">' + escapeHtml(docValue ? ('已导入 ' + String(docValue.length) + ' 字') : '导入后才能进入下一步') + '</span>'
+            +   '<div class="zone xmind-casegen-prep-dropzone' + (locked ? ' is-disabled' : '') + '"'
+            +     ' id="xmindCaseGenPrepRequirementDropzone"'
+            +     ' data-prep-action="import-requirement"'
+            +     ' role="button"'
+            +     ' tabindex="' + (locked ? '-1' : '0') + '"'
+            +     ' aria-disabled="' + (locked ? 'true' : 'false') + '">'
+            +     '<div class="zone-line">'
+            +       '<strong>原始需求</strong>'
+            +       '<span>拖拽或点击选择</span>'
+            +     '</div>'
+            +     '<div class="status' + (docValue ? ' ok' : '') + '">' + escapeHtml(docStatusText) + '</div>'
             +   '</div>'
             + '</div>'
             + '<div class="xmind-casegen-prep-field">'
@@ -1958,6 +2279,12 @@
       var mode = prep.caseImportMode || '';
       var disabledAttr = locked ? ' disabled' : '';
       var casesInfo = buildCasesSummaryInfo();
+      var importedCaseFileListHtml = hasImportedBaselineCases()
+        ? ('<span class="file-chip">' + escapeHtml(casesInfo.title || '已导入参考用例') + '</span>')
+        : '<span class="hint" data-xmind-casegen-case-placeholder="1">未导入文件</span>';
+      var caseStatusText = hasImportedBaselineCases()
+        ? casesInfo.meta
+        : '导入结果同步到当前 XMind 主树基线';
       return ''
         + '<div class="xmind-casegen-prep-card xmind-casegen-prep-card-main ' + (locked ? 'is-readonly' : '') + '">'
         +   '<div class="xmind-casegen-prep-card-head">'
@@ -1984,11 +2311,24 @@
           ? ''
             + '<div class="xmind-casegen-prep-field">'
             +   '<label>参考用例来源</label>'
-            +   '<div class="xmind-casegen-prep-upload-row">'
-            +     '<button type="button" data-prep-action="import-cases"' + disabledAttr + '>' + (hasImportedBaselineCases() ? '继续导入用例' : '导入用例') + '</button>'
-            +     '<button type="button" class="secondary" data-prep-action="select-cases-library"' + disabledAttr + '>从用例库选择</button>'
+            +   '<div class="zone xmind-casegen-prep-dropzone' + (locked ? ' is-disabled' : '') + '"'
+            +     ' id="xmindCaseGenPrepCasesDropzone"'
+            +     ' data-prep-action="import-cases"'
+            +     ' role="button"'
+            +     ' tabindex="' + (locked ? '-1' : '0') + '"'
+            +     ' aria-disabled="' + (locked ? 'true' : 'false') + '">'
+            +     '<div class="zone-line">'
+            +       '<strong>测试用例</strong>'
+            +       '<span>拖拽或点击选择</span>'
+            +     '</div>'
+            +     '<div class="status' + (hasImportedBaselineCases() ? ' ok' : '') + '">' + escapeHtml(caseStatusText) + '</div>'
             +   '</div>'
-            +   '<p class="hint">' + escapeHtml(casesInfo.meta) + '</p>'
+            +   '<div class="actions case-library-import-actions xmind-casegen-prep-upload-actions">'
+            +     '<button type="button" class="secondary case-library-import-btn" data-prep-action="select-cases-library"' + disabledAttr + '>从用例库选择</button>'
+            +   '</div>'
+            +   '<div class="file-list xmind-casegen-prep-filelist">'
+            +     importedCaseFileListHtml
+            +   '</div>'
             + '</div>'
           : '<p class="hint">' + escapeHtml(casesInfo.meta) + '</p>')
         + '</div>';
@@ -2126,11 +2466,13 @@
     function renderPrepFooter() {
       var prep = getPrepState();
       var step = clampPrepStep(prep.step);
-      var locked = isPrepBaseLocked();
       var nextDisabled = false;
+      var resetDisabled = hasAnyRunningGenerationOperation();
       if (step === STEP_REQUIREMENT) nextDisabled = !hasRequirementReady();
       if (step === STEP_CASES) nextDisabled = !hasCaseStepReady();
       return '<div class="xmind-casegen-prep-footer">'
+        + '<button type="button" class="secondary xmind-casegen-prep-reset-btn" id="xmindCaseGenPrepResetBtn" data-prep-action="reset-prep" '
+        +   (resetDisabled ? 'disabled' : '') + '>重置</button>'
         + (step > STEP_REQUIREMENT
           ? '<button type="button" class="secondary" data-prep-nav="prev">上一步</button>'
           : '<span class="xmind-casegen-prep-nav-spacer"></span>')
@@ -2187,6 +2529,77 @@
       if (input && typeof input.click === 'function') input.click();
     }
 
+    function getPrepRequirementDropzone(target) {
+      if (!target || !target.closest) return null;
+      return target.closest('#xmindCaseGenPrepRequirementDropzone');
+    }
+
+    function getPrepCasesDropzone(target) {
+      if (!target || !target.closest) return null;
+      return target.closest('#xmindCaseGenPrepCasesDropzone');
+    }
+
+    function dispatchFilesToInput(input, fileList) {
+      if (!input || !fileList) return false;
+      var normalized = Array.isArray(fileList)
+        ? fileList.filter(Boolean)
+        : Array.prototype.slice.call(fileList || []).filter(Boolean);
+      if (!normalized.length) return false;
+      var files = null;
+      if (typeof DataTransfer !== 'undefined') {
+        try {
+          var dt = new DataTransfer();
+          if (dt.items && typeof dt.items.add === 'function') {
+            normalized.forEach(function(file) {
+              dt.items.add(file);
+            });
+            files = dt.files || null;
+          }
+        } catch (err) {}
+      }
+      if (!files || !files.length) return false;
+      try {
+        input.files = files;
+      } catch (assignErr) {
+        return false;
+      }
+      var changeEvent = null;
+      if (typeof Event === 'function') {
+        changeEvent = new Event('change', { bubbles: true });
+      } else if (document && document.createEvent) {
+        changeEvent = document.createEvent('Event');
+        changeEvent.initEvent('change', true, false);
+      }
+      if (!changeEvent) return false;
+      input.dispatchEvent(changeEvent);
+      return true;
+    }
+
+    function importRequirementFileFromDrop(file) {
+      if (isPrepBaseLocked()) return false;
+      if (!file) return false;
+      setPrepField('requirementMode', 'document');
+      var input = document.getElementById('fileInput');
+      if (!input) return false;
+      if (dispatchFilesToInput(input, [file])) return true;
+      notifyStatus('当前环境暂不支持拖拽导入，请点击选择文件', 'warn');
+      return false;
+    }
+
+    function importCasesFilesFromDrop(fileList) {
+      if (isPrepBaseLocked()) return false;
+      var files = Array.isArray(fileList)
+        ? fileList.filter(Boolean)
+        : Array.prototype.slice.call(fileList || []).filter(Boolean);
+      if (!files.length) return false;
+      setPrepField('caseImportMode', 'import');
+      var input = document.getElementById('caseFileInput');
+      if (!input) return false;
+      if (dispatchFilesToInput(input, files)) return true;
+      notifyStatus('当前环境暂不支持拖拽导入，请点击选择文件', 'warn');
+      return false;
+    }
+
     function triggerCasesImport() {
       if (isPrepBaseLocked()) return;
       setPrepField('caseImportMode', 'import');
@@ -2220,7 +2633,25 @@
       if (btn && typeof btn.click === 'function') btn.click();
     }
 
+    function hideOpenMindContextMenu() {
+      var mindElixirCoreApi = getMindElixirCoreApi();
+      if (mindElixirCoreApi && typeof mindElixirCoreApi.hideOpenContextMenu === 'function') {
+        try {
+          mindElixirCoreApi.hideOpenContextMenu();
+          return;
+        } catch (err) {
+          // ignore
+        }
+      }
+      if (typeof document === 'undefined' || !document.querySelector) return;
+      var menu = document.querySelector('.xmind-node-context-menu.is-open');
+      if (!menu || !menu.classList) return;
+      menu.classList.remove('is-open');
+      if (menu.setAttribute) menu.setAttribute('aria-hidden', 'true');
+    }
+
     function openSummaryDialog(step) {
+      hideOpenMindContextMenu();
       var prep = getPrepState();
       if (isPrepBaseLocked()) {
         prep.step = STEP_OPTIONS;
@@ -2235,6 +2666,7 @@
     }
 
     function openHistoryDialog() {
+      hideOpenMindContextMenu();
       summaryDialogMode = 'history';
       summaryDialogOpen = true;
       applySummaryDialogState();
@@ -2308,6 +2740,27 @@
         return true;
       }
       return false;
+    }
+
+    function requestPrepReset() {
+      if (hasAnyRunningGenerationOperation()) {
+        notifyFloatingStatus('当前仍有生成任务进行中，请等待完成后再重置', 'warn', 5000);
+        return Promise.resolve(false);
+      }
+      return openStoreConfirmDialog({
+        title: '确认重置前置准备',
+        message: '确认后会清空当前 XMind 画布中的导入和生成结果，并把生成前置准备恢复到初始状态。是否继续？',
+        confirmText: '确认重置',
+        cancelText: '取消',
+      }).then(function(confirmed) {
+        if (!confirmed) return false;
+        return resetXmindCasegenState({
+          reason: 'prep-manual-reset',
+          reopenPrepDialog: true,
+          toastText: '已重置当前 XMind 生成内容',
+          toastDurationMs: 3000,
+        });
+      });
     }
 
     function updateSummary() {
@@ -2765,6 +3218,189 @@
           }).filter(Boolean),
         };
       });
+    }
+
+    function getImportedCaseEntries() {
+      return Array.isArray(state.importedCases) ? state.importedCases.filter(Boolean) : [];
+    }
+
+    function resolveImportedBaselineOrigin() {
+      if (!hasImportedBaselineCases()) {
+        return {
+          hasBaseline: false,
+          sourceType: 'none',
+          entries: [],
+          targets: [],
+        };
+      }
+      var entries = getImportedCaseEntries().filter(function(item) {
+        return item && Array.isArray(item.list) && item.list.length > 0;
+      });
+      var allLibrary = entries.length > 0 && entries.every(function(item) {
+        var meta = item && item.meta && typeof item.meta === 'object' ? item.meta : null;
+        return Boolean(meta && meta.sourceType === 'case-library-select' && meta.caseFileId);
+      });
+      var seenTargets = {};
+      var targets = [];
+      if (allLibrary) {
+        entries.forEach(function(item) {
+          var meta = item && item.meta && typeof item.meta === 'object' ? item.meta : {};
+          var targetKey = [
+            String(meta.projectId || ''),
+            String(meta.versionId || ''),
+            String(meta.caseFileId || '')
+          ].join('::');
+          if (!meta.caseFileId || seenTargets[targetKey]) return;
+          seenTargets[targetKey] = true;
+          targets.push({
+            projectId: meta.projectId ? Number(meta.projectId) : null,
+            versionId: meta.versionId ? Number(meta.versionId) : null,
+            caseFileId: meta.caseFileId ? Number(meta.caseFileId) : null,
+            fileName: meta.fileName ? String(meta.fileName || '') : String(item.name || ''),
+          });
+        });
+      }
+      return {
+        hasBaseline: true,
+        sourceType: allLibrary ? 'case-library-select' : 'external-import',
+        entries: entries,
+        targets: targets,
+      };
+    }
+
+    function createStoreScopeEntry(moduleKey, moduleId, moduleTitle, rows) {
+      return {
+        moduleKey: String(moduleKey || ''),
+        moduleId: moduleId ? String(moduleId || '') : '',
+        moduleTitle: normalizeModuleTitle(moduleTitle || '未命名模块'),
+        rows: Array.isArray(rows) ? rows.slice() : [],
+      };
+    }
+
+    function buildVisibleStoreScopeEntries() {
+      return buildVisibleModuleContext().list.map(function(entry) {
+        return createStoreScopeEntry(
+          entry.moduleKey,
+          entry.aiModuleId || '',
+          entry.title,
+          getVisibleCasesForModuleEntry(entry)
+        );
+      });
+    }
+
+    function buildAiStoreScopeEntries() {
+      return (Array.isArray(state.caseGenModules) ? state.caseGenModules : []).map(function(mod, index) {
+        var moduleTitle = normalizeModuleTitle(mod && (mod.title || mod.module) || ('模块' + String(index + 1)));
+        var moduleId = mod && mod.id ? String(mod.id || '') : '';
+        var rows = getAiCasesForModule(moduleId).map(function(item, caseIndex) {
+          return {
+            source: 'ai',
+            sourceIndex: caseIndex,
+            caseSignature: buildCaseSignature(item, moduleTitle),
+            item: item,
+          };
+        });
+        return createStoreScopeEntry(normalizeModuleKey(moduleTitle), moduleId, moduleTitle, rows);
+      }).filter(function(entry) {
+        return Boolean(entry && entry.moduleKey);
+      });
+    }
+
+    function buildStoreCaseItemFromRow(row, moduleTitle) {
+      var normalized = normalizeCaseItem(row && row.item ? row.item : row, moduleTitle);
+      if (!normalized) return null;
+      return {
+        module: normalized.module,
+        title: normalized.title,
+        priority: normalized.priority,
+        precondition: String(normalized.preconditions || '').trim(),
+        steps: Array.isArray(normalized.steps) ? normalized.steps.join('\n').trim() : '',
+        expected: String(normalized.expected || '').trim(),
+        remark: null,
+      };
+    }
+
+    function buildStoreCaseKey(entry, row) {
+      var item = row && row.item ? row.item : row;
+      return buildDeleteTargetKey({
+        type: 'case',
+        moduleKey: entry && entry.moduleKey ? entry.moduleKey : normalizeModuleKey(entry && entry.moduleTitle ? entry.moduleTitle : ''),
+        moduleTitle: entry && entry.moduleTitle ? entry.moduleTitle : '',
+        caseTitle: item && item.title ? String(item.title || '') : '',
+        caseSource: row && row.source ? String(row.source || '') : 'ai',
+        caseSourceIndex: row && Number.isFinite(Number(row.sourceIndex)) ? Number(row.sourceIndex) : 0,
+        caseSignature: row && row.caseSignature ? String(row.caseSignature || '') : buildCaseSignature(item, entry && entry.moduleTitle ? entry.moduleTitle : ''),
+      });
+    }
+
+    function validateStoreCaseItem(item) {
+      if (!item || typeof item !== 'object') return false;
+      var stepsText = String(item.steps || '').trim();
+      if (!String(item.module || '').trim()) return false;
+      if (!String(item.title || '').trim()) return false;
+      if (!String(item.priority || '').trim()) return false;
+      if (!String(item.precondition || '').trim()) return false;
+      if (!stepsText) return false;
+      if (!String(item.expected || '').trim()) return false;
+      var steps = stepsText.split(/\n+/).map(function(text) { return String(text || '').trim(); }).filter(Boolean);
+      if (!steps.length) return false;
+      return steps.every(function(step, index) {
+        return new RegExp('^' + String(index + 1) + '、').test(step);
+      });
+    }
+
+    function validateStoreScopeEntries(entries) {
+      var result = {
+        items: [],
+        missingModules: [],
+        invalidCaseKeys: [],
+      };
+      (Array.isArray(entries) ? entries : []).forEach(function(entry) {
+        var rows = Array.isArray(entry && entry.rows) ? entry.rows : [];
+        if (!rows.length) {
+          if (entry && entry.moduleKey) {
+            result.missingModules.push({
+              moduleKey: String(entry.moduleKey || ''),
+              moduleTitle: entry.moduleTitle || '未命名模块',
+            });
+          }
+          return;
+        }
+        rows.forEach(function(row) {
+          var item = buildStoreCaseItemFromRow(row, entry.moduleTitle);
+          if (!validateStoreCaseItem(item)) {
+            result.invalidCaseKeys.push(buildStoreCaseKey(entry, row));
+            return;
+          }
+          result.items.push(item);
+        });
+      });
+      return result;
+    }
+
+    function resolveDefaultStoreNewAction() {
+      var select = document.getElementById('caseGenStoreActionSelect');
+      var value = select && select.value ? String(select.value || '') : '';
+      return value || 'store';
+    }
+
+    function openStoreConfirmDialog(options) {
+      var opts = options || {};
+      var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
+      if (confirmDrawer && typeof confirmDrawer.open === 'function') {
+        return confirmDrawer.open({
+          title: opts.title || '确认保存入库',
+          message: opts.message || '',
+          confirmText: opts.confirmText || '确认',
+          cancelText: opts.cancelText || '取消',
+        }).then(function(result) {
+          return Boolean(result && result.ok === true);
+        });
+      }
+      var ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+        ? window.confirm(String(opts.message || '确认继续吗？'))
+        : true;
+      return Promise.resolve(ok === true);
     }
 
     function createOperationContract(actionId, moduleEntry) {
@@ -4792,6 +5428,8 @@
       nodeEl.classList.remove(
         'xmind-casegen-node-root',
         'xmind-casegen-node-module',
+        'xmind-casegen-node-invalid',
+        'xmind-casegen-node-invalid-flash',
         'xmind-casegen-node-topup-placeholder',
         'xmind-casegen-node-topup-highlight-case',
         'xmind-casegen-node-status',
@@ -4851,6 +5489,9 @@
           nodeEl.setAttribute('data-xmind-topup-highlight-token', String(meta.topupHighlightToken));
           nodeEl.setAttribute('data-xmind-topup-highlight-label', String(meta.topupHighlightLabel || '本轮追加用例'));
         }
+        if (isInvalidStoreModuleMeta(meta)) {
+          nodeEl.classList.add('xmind-casegen-node-invalid', 'xmind-casegen-node-invalid-flash');
+        }
         return;
       }
       if (meta.type === 'topup-placeholder') {
@@ -4866,6 +5507,9 @@
         nodeEl.classList.add('xmind-casegen-node-topup-highlight-case');
         nodeEl.setAttribute('data-xmind-topup-highlight-token', String(meta.topupHighlightToken));
         nodeEl.setAttribute('data-xmind-topup-highlight-label', String(meta.topupHighlightLabel || '本轮追加用例'));
+      }
+      if (isInvalidStoreCaseMeta(meta)) {
+        nodeEl.classList.add('xmind-casegen-node-invalid', 'xmind-casegen-node-invalid-flash');
       }
     }
 
@@ -5538,6 +6182,106 @@
       return false;
     }
 
+    function buildStoreValidationMessage(validation) {
+      var parts = [];
+      var missingCount = Array.isArray(validation && validation.missingModules) ? validation.missingModules.length : 0;
+      var invalidCount = Array.isArray(validation && validation.invalidCaseKeys) ? validation.invalidCaseKeys.length : 0;
+      if (missingCount > 0) {
+        parts.push('仍有 ' + String(missingCount) + ' 个模块未生成用例');
+      }
+      if (invalidCount > 0) {
+        parts.push('有 ' + String(invalidCount) + ' 条用例格式不符合入库要求');
+      }
+      return parts.length ? ('请先处理后再保存入库：' + parts.join('；')) : '当前内容暂时不能入库';
+    }
+
+    function validateAndMarkStoreScope(entries) {
+      var validation = validateStoreScopeEntries(entries);
+      if (validation.missingModules.length || validation.invalidCaseKeys.length) {
+        setStoreValidationState(
+          validation.missingModules.map(function(item) { return item && item.moduleKey ? item.moduleKey : ''; }),
+          validation.invalidCaseKeys
+        );
+        notifyFloatingStatus(buildStoreValidationMessage(validation), 'warn', 5000);
+        return null;
+      }
+      clearStoreValidationState(true);
+      return validation;
+    }
+
+    async function handleStoreToLibrary() {
+      if (hasAnyRunningGenerationOperation()) {
+        notifyFloatingStatus('当前仍有生成任务进行中，请等待完成后再保存入库', 'warn', 5000);
+        return false;
+      }
+      var origin = resolveImportedBaselineOrigin();
+      var usesAppendStore = origin.hasBaseline && origin.sourceType === 'case-library-select';
+      var scopeEntries = usesAppendStore ? buildAiStoreScopeEntries() : buildVisibleStoreScopeEntries();
+      var validation = validateAndMarkStoreScope(scopeEntries);
+      if (!validation) return false;
+      if (!validation.items.length) {
+        notifyFloatingStatus(
+          usesAppendStore ? '当前没有新增生成的用例可追加入库' : '当前没有可入库的用例，请先完成生成',
+          'warn',
+          5000
+        );
+        return false;
+      }
+      if (!casesGenApi) {
+        notifyFloatingStatus('入库能力未就绪，请刷新后重试', 'err', 5000);
+        return false;
+      }
+      if (!usesAppendStore) {
+        if (typeof casesGenApi.openCaseGenDbStoreNewDrawerWithItems !== 'function') {
+          notifyFloatingStatus('新用例入库能力未就绪，请刷新后重试', 'err', 5000);
+          return false;
+        }
+        casesGenApi.openCaseGenDbStoreNewDrawerWithItems(validation.items, {
+          newAction: resolveDefaultStoreNewAction(),
+          source: 'xmind_casegen',
+        });
+        return true;
+      }
+
+      if (origin.targets.length !== 1) {
+        var fallbackEntries = buildVisibleStoreScopeEntries();
+        var fallbackValidation = validateAndMarkStoreScope(fallbackEntries);
+        if (!fallbackValidation || !fallbackValidation.items.length) return false;
+        notifyFloatingStatus('当前基线来自多份用例库用例，将按新用例入库处理', 'warn', 5000);
+        if (typeof casesGenApi.openCaseGenDbStoreNewDrawerWithItems !== 'function') {
+          notifyFloatingStatus('新用例入库能力未就绪，请刷新后重试', 'err', 5000);
+          return false;
+        }
+        casesGenApi.openCaseGenDbStoreNewDrawerWithItems(fallbackValidation.items, {
+          newAction: resolveDefaultStoreNewAction(),
+          source: 'xmind_casegen',
+        });
+        return true;
+      }
+
+      var target = origin.targets[0] || {};
+      var confirmed = await openStoreConfirmDialog({
+        title: '确认保存入库',
+        message: '当前参考用例来自用例库。确认后会把本次新增生成的用例保存到【'
+          + String(target.fileName || ('用例#' + String(target.caseFileId || '')))
+          + '】。',
+        confirmText: '继续保存',
+        cancelText: '取消',
+      });
+      if (!confirmed) return false;
+      if (typeof casesGenApi.openCaseGenDbStoreAppendDrawerWithItems !== 'function') {
+        notifyFloatingStatus('旧用例追加入库能力未就绪，请刷新后重试', 'err', 5000);
+        return false;
+      }
+      casesGenApi.openCaseGenDbStoreAppendDrawerWithItems(validation.items, {
+        source: 'xmind_casegen',
+        projectId: target.projectId,
+        versionId: target.versionId,
+        caseFileId: target.caseFileId,
+      });
+      return true;
+    }
+
     async function exportCurrentXmind() {
       var xmindCoreApi = getXmindCoreApi();
       if (!xmindCoreApi || typeof xmindCoreApi.buildXmindPackageFromMindData !== 'function') {
@@ -5616,6 +6360,11 @@
           else openHistoryDialog();
         });
       }
+      if (storeBtn) {
+        storeBtn.addEventListener('click', function() {
+          handleStoreToLibrary();
+        });
+      }
       if (deleteUndoBtn) {
         deleteUndoBtn.addEventListener('click', function() {
           undoLatestDeleteSelection();
@@ -5667,6 +6416,10 @@
           }
           if (actionId === 'upload-manual-images') {
             ensureManualImageInput().click();
+            return;
+          }
+          if (actionId === 'reset-prep') {
+            requestPrepReset();
             return;
           }
           if (actionId === 'remove-manual-image') {
@@ -5744,6 +6497,39 @@
               renderOpenedSummaryDialog();
             }
           });
+        });
+        summaryDialogBodyEl.addEventListener('dragover', function(event) {
+          var target = event && event.target ? event.target : null;
+          var dropZone = getPrepRequirementDropzone(target) || getPrepCasesDropzone(target);
+          if (!dropZone || isPrepBaseLocked()) return;
+          if (event.preventDefault) event.preventDefault();
+          if (dropZone.classList) dropZone.classList.add('dragover');
+        });
+        summaryDialogBodyEl.addEventListener('dragleave', function(event) {
+          var target = event && event.target ? event.target : null;
+          var dropZone = getPrepRequirementDropzone(target) || getPrepCasesDropzone(target);
+          if (!dropZone) return;
+          var related = event ? event.relatedTarget : null;
+          if (related && dropZone.contains && dropZone.contains(related)) return;
+          if (dropZone.classList) dropZone.classList.remove('dragover');
+        });
+        summaryDialogBodyEl.addEventListener('drop', function(event) {
+          var target = event && event.target ? event.target : null;
+          var requirementZone = getPrepRequirementDropzone(target);
+          var casesZone = getPrepCasesDropzone(target);
+          var dropZone = requirementZone || casesZone;
+          if (!dropZone) return;
+          if (event.preventDefault) event.preventDefault();
+          if (dropZone.classList) dropZone.classList.remove('dragover');
+          if (isPrepBaseLocked()) return;
+          var files = event && event.dataTransfer ? event.dataTransfer.files : null;
+          if (requirementZone) {
+            var file = files && files[0] ? files[0] : null;
+            if (!file) return;
+            importRequirementFileFromDrop(file);
+            return;
+          }
+          if (casesZone) importCasesFilesFromDrop(files);
         });
       }
       if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
@@ -5883,7 +6669,7 @@
     updateSummary();
     restoreDrawerAfterRefreshIfNeeded();
 
-    return {
+    var api = {
       open: open,
       close: close,
       render: render,
@@ -5891,7 +6677,11 @@
       switchTab: switchTab,
       isOpen: isDrawerOpen,
       restoreAfterWorkflowReady: restoreDrawerAfterRefreshIfNeeded,
+      resetAllState: resetXmindCasegenState,
+      resetAfterStoreSuccess: resetAfterStoreSuccess,
     };
+    window.app.xmindCasegenApi = api;
+    return api;
   }
 
   window.app = window.app || {};

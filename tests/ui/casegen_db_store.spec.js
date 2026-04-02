@@ -1613,6 +1613,9 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await page.click('#caseGenStoreNewBtn');
 
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreEntryNameRow')).not.toHaveClass(/hidden/);
+    await expect(page.locator('#caseGenDbStoreEntryNameInput')).toHaveValue(requirement);
+    await page.fill('#caseGenDbStoreEntryNameInput', 'UI自动化需求-新入库-自定义名称');
     await page.selectOption('#caseGenDbStoreProjectSelect', String(project.id));
     await page.selectOption('#caseGenDbStoreVersionSelect', String(versions[0].id));
     await expect(page.locator('#caseGenDbStoreConfirmBtn')).toBeEnabled();
@@ -1622,7 +1625,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await expect(page.locator('#caseGenStatus')).toContainText('入库成功', { timeout: 5000 });
     expect(importedPayload && importedPayload.project_id).toBe(project.id);
     expect(importedPayload && importedPayload.version_id).toBe(versions[0].id);
-    expect(String(importedPayload && importedPayload.file_name)).toContain(requirement);
+    expect(String(importedPayload && importedPayload.file_name)).toBe('UI自动化需求-新入库-自定义名称.xmind');
 
   });
 
@@ -1827,6 +1830,7 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await switchCasegenStoreMode(page, 'append');
     await page.click('#caseGenStoreAppendBtn');
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreEntryNameRow')).toHaveClass(/hidden/);
     await page.selectOption('#caseGenDbStoreProjectSelect', String(project.id));
     await page.selectOption('#caseGenDbStoreVersionSelect', String(versions[0].id));
     await expect(page.locator('#caseGenDbStoreCaseFileRow')).not.toHaveClass(/hidden/);

@@ -4592,6 +4592,35 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .xmind-casegen-default-export-hidden {
   display: none !important;
 }
+.xmind-casegen-model-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.xmind-casegen-model-label {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.xmind-casegen-model-select {
+  height: 30px;
+  min-width: 150px;
+  max-width: 220px;
+  padding: 0 28px 0 10px;
+  border-radius: 8px;
+  border: 1px solid #dbe2ea;
+  background: #fff;
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 28px;
+}
+.xmind-casegen-viewer .xmind-casegen-model-select {
+  height: 28px;
+  line-height: 26px;
+}
 .xmind-casegen-canvas-shell {
   position: relative;
   padding: 10px;
@@ -4753,6 +4782,26 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+}
+.xmind-casegen-prep-dropzone {
+  min-height: 116px;
+  cursor: pointer;
+  padding: 20px 18px;
+}
+.xmind-casegen-prep-dropzone .status {
+  width: 100%;
+  margin: 0;
+  white-space: normal;
+}
+.xmind-casegen-prep-dropzone.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+.xmind-casegen-prep-upload-actions {
+  margin-top: 10px;
+}
+.xmind-casegen-prep-filelist {
+  margin-top: 10px;
 }
 .xmind-casegen-prep-option-stack {
   display: flex;
@@ -4937,6 +4986,15 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+.xmind-casegen-prep-reset-btn {
+  border-color: rgba(239, 68, 68, 0.34);
+  background: rgba(254, 242, 242, 0.96);
+  color: #b91c1c;
+}
+.xmind-casegen-prep-reset-btn:hover:not(:disabled) {
+  background: rgba(254, 226, 226, 0.96);
+  box-shadow: 0 8px 18px rgba(239, 68, 68, 0.14);
 }
 .xmind-casegen-prep-bool {
   display: inline-flex;
@@ -9857,6 +9915,24 @@ tr.import-invalid-locate-active td {
   animation: flow-step-spin 0.9s linear infinite;
 }
 
+.xmind-structure-viewer me-tpc.xmind-casegen-node-invalid {
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.3);
+}
+
+.xmind-structure-viewer me-tpc.xmind-casegen-node-invalid .box {
+  border-color: rgba(220, 38, 38, 0.72);
+  background: rgba(254, 226, 226, 0.96);
+}
+
+.xmind-structure-viewer me-tpc.xmind-casegen-node-invalid .text {
+  color: #991b1b;
+}
+
+.xmind-structure-viewer me-tpc.xmind-casegen-node-invalid-flash {
+  animation: xmind-casegen-invalid-flash 0.9s ease-in-out infinite;
+}
+
 .xmind-structure-viewer me-tpc.xmind-casegen-node-topup-placeholder {
   display: inline-flex;
   align-items: center;
@@ -9922,6 +9998,15 @@ tr.import-invalid-locate-active td {
   transform: translate(-50%, -50%);
   white-space: nowrap;
   text-align: center;
+}
+
+@keyframes xmind-casegen-invalid-flash {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.78);
+  }
 }
 
 .xmind-structure-viewer svg path.xmind-casegen-pending-link,
@@ -10115,6 +10200,10 @@ tr.import-invalid-locate-active td {
     max-width: none;
     order: 2;
   }
+  .xmind-casegen-viewer .xmind-casegen-model-picker {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 @media (max-width: 760px) {
@@ -10129,6 +10218,10 @@ tr.import-invalid-locate-active td {
   }
   .xmind-structure-viewer .xmind-export-btn {
     min-width: 78px;
+  }
+  .xmind-casegen-model-select {
+    min-width: 132px;
+    max-width: 180px;
   }
   .xmind-structure-viewer .xmind-edit-btn,
   .xmind-structure-viewer .xmind-edit-op-btn {
@@ -11727,6 +11820,14 @@ button.exec-overview-file-chip,
   background: rgba(127,29,29,0.34);
   border-color: rgba(248,113,113,0.34);
 }
+:root[data-theme="dark"] .xmind-casegen-prep-reset-btn {
+  background: rgba(127, 29, 29, 0.26);
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.42);
+}
+:root[data-theme="dark"] .xmind-casegen-prep-reset-btn:hover:not(:disabled) {
+  background: rgba(153, 27, 27, 0.32);
+}
 :root[data-theme="dark"] .xmind-casegen-prep-context {
   border-top-color: rgba(71,85,105,0.4);
 }
@@ -11753,6 +11854,14 @@ button.exec-overview-file-chip,
 }
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-search-count.is-empty {
   color: #94a3b8;
+}
+:root[data-theme="dark"] .xmind-casegen-model-label {
+  color: #94a3b8;
+}
+:root[data-theme="dark"] .xmind-casegen-model-select {
+  border-color: #475569;
+  background: #1e293b;
+  color: #e2e8f0;
 }
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-search-btn,
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-zoom-btn,
@@ -11830,6 +11939,16 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-node-status-badge.is-error {
   border-color: rgba(248,113,113,0.3);
   background: rgba(127,29,29,0.28);
+  color: #fecaca;
+}
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-casegen-node-invalid {
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.38);
+}
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-casegen-node-invalid .box {
+  border-color: rgba(248, 113, 113, 0.72);
+  background: rgba(127, 29, 29, 0.34);
+}
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-casegen-node-invalid .text {
   color: #fecaca;
 }
 :root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-casegen-node-topup-placeholder {

@@ -52,6 +52,8 @@
     var caseGenStoreModeNewPanel = document.getElementById('caseGenStoreModeNewPanel');
     var caseGenStoreModeAppendPanel = document.getElementById('caseGenStoreModeAppendPanel');
     var caseGenDbStoreDrawerTitle = document.getElementById('caseGenDbStoreDrawerTitle');
+    var caseGenDbStoreEntryNameRow = document.getElementById('caseGenDbStoreEntryNameRow');
+    var caseGenDbStoreEntryNameInput = document.getElementById('caseGenDbStoreEntryNameInput');
     var caseGenDbStoreProjectSelect = document.getElementById('caseGenDbStoreProjectSelect');
     var caseGenDbStoreVersionSelect = document.getElementById('caseGenDbStoreVersionSelect');
     var caseGenDbStoreCaseFileRow = document.getElementById('caseGenDbStoreCaseFileRow');
@@ -248,6 +250,12 @@
         state.caseGenDbStore = {
           mode: '',
           newAction: '',
+          explicitItems: [],
+          explicitMissingModules: [],
+          explicitSource: '',
+          preferredProjectId: '',
+          preferredVersionId: '',
+          preferredCaseFileId: '',
           loading: false,
           confirming: false,
           projects: [],
@@ -256,9 +264,101 @@
           projectId: '',
           versionId: '',
           caseFileId: '',
+          entryName: '',
         };
       }
       return state.caseGenDbStore;
+    }
+
+    function clearExplicitDbStorePayload(st) {
+      var storeState = st || ensureDbStoreState();
+      storeState.explicitItems = [];
+      storeState.explicitMissingModules = [];
+      storeState.explicitSource = '';
+      storeState.preferredProjectId = '';
+      storeState.preferredVersionId = '';
+      storeState.preferredCaseFileId = '';
+    }
+
+    function normalizeExplicitDbStoreItems(items) {
+      return (Array.isArray(items) ? items : []).map(function(item) {
+        return buildCaseItemPayloadFromGenerated(item, item && item.module ? item.module : '');
+      }).filter(Boolean);
+    }
+
+    function applyExplicitDbStorePayload(st, options) {
+      var storeState = st || ensureDbStoreState();
+      var opts = options || {};
+      clearExplicitDbStorePayload(storeState);
+      storeState.explicitItems = normalizeExplicitDbStoreItems(opts.items);
+      storeState.explicitMissingModules = Array.isArray(opts.missingModules)
+        ? opts.missingModules.map(function(item) { return String(item || '').trim(); }).filter(Boolean)
+        : [];
+      storeState.explicitSource = opts.source ? String(opts.source || '') : '';
+      storeState.preferredProjectId = opts.projectId === null || opts.projectId === undefined ? '' : String(opts.projectId || '');
+      storeState.preferredVersionId = opts.versionId === null || opts.versionId === undefined ? '' : String(opts.versionId || '');
+      storeState.preferredCaseFileId = opts.caseFileId === null || opts.caseFileId === undefined ? '' : String(opts.caseFileId || '');
+      if (opts.newAction) storeState.newAction = String(opts.newAction || '');
+    }
+
+    function normalizeCaseGenDbStoreEntryName(name) {
+      var raw = '';
+      if (typeof name === 'string') {
+        raw = name;
+      } else if (name && typeof name.toString === 'function') {
+        raw = name.toString();
+      }
+      var trimmed = raw.trim();
+      if (!trimmed) return '';
+      var withoutExt = trimmed.replace(/\.[^.]+$/, '');
+      var stripped = withoutExt || trimmed;
+      var pattern = /(_result)?_\d{8}(?:_?\d{6})?$/i;
+      while (pattern.test(stripped)) {
+        stripped = stripped.replace(pattern, '');
+      }
+      var candidate = stripped || withoutExt || trimmed;
+      return candidate.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
+    }
+
+    function getCaseGenDbStoreDefaultEntryName() {
+      var currentLabel = '';
+      try {
+        currentLabel = getRequirementLabel(false) || '';
+      } catch (err) {
+        currentLabel = '';
+      }
+      return normalizeCaseGenDbStoreEntryName(currentLabel) || '当前需求';
+    }
+
+    function renderCaseGenDbStoreEntryName() {
+      var st = ensureDbStoreState();
+      if (!caseGenDbStoreEntryNameInput) return;
+      caseGenDbStoreEntryNameInput.value = st.entryName || '';
+    }
+
+    function buildCaseGenDbStoreFileName(entryName) {
+      var normalized = normalizeCaseGenDbStoreEntryName(entryName);
+      return normalized ? (normalized + '.xmind') : '';
+    }
+
+    function hasExplicitDbStoreItems() {
+      var st = ensureDbStoreState();
+      return Array.isArray(st.explicitItems) && st.explicitItems.length > 0;
+    }
+
+    function collectPendingDbStoreItems() {
+      if (hasExplicitDbStoreItems()) {
+        return normalizeExplicitDbStoreItems(ensureDbStoreState().explicitItems);
+      }
+      return collectDbStoreSelectedItems();
+    }
+
+    function listPendingDbStoreMissingModules() {
+      var st = ensureDbStoreState();
+      if (hasExplicitDbStoreItems()) {
+        return Array.isArray(st.explicitMissingModules) ? st.explicitMissingModules.slice() : [];
+      }
+      return listCaseGenModulesMissingSelectionOrGeneration();
     }
 
     function ensureXmindCaseGenState() {
@@ -446,6 +546,9 @@
           st.projectId = '';
           st.versionId = '';
           st.caseFileId = '';
+          st.entryName = '';
+          clearExplicitDbStorePayload(st);
+          renderCaseGenDbStoreEntryName();
           if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
           syncCaseGenDbStoreControls();
         },
@@ -2494,6 +2597,9 @@
     function syncCaseGenDbStoreControls() {
       var st = ensureDbStoreState();
       var mode = st.mode || '';
+      if (caseGenDbStoreEntryNameRow && caseGenDbStoreEntryNameRow.classList) {
+        caseGenDbStoreEntryNameRow.classList.toggle('hidden', mode !== 'new');
+      }
       if (caseGenDbStoreCaseFileRow && caseGenDbStoreCaseFileRow.classList) {
         caseGenDbStoreCaseFileRow.classList.toggle('hidden', mode !== 'append');
       }
@@ -2501,6 +2607,10 @@
       var vid = st.versionId || '';
       var fid = st.caseFileId || '';
       var busy = Boolean(st.loading || st.confirming);
+      var entryName = normalizeCaseGenDbStoreEntryName(st.entryName || '');
+      if (caseGenDbStoreEntryNameInput) {
+        caseGenDbStoreEntryNameInput.disabled = Boolean(busy || mode !== 'new');
+      }
       if (caseGenDbStoreVersionSelect) {
         caseGenDbStoreVersionSelect.disabled = Boolean(busy || !pid);
       }
@@ -2509,7 +2619,8 @@
       }
       if (caseGenDbStoreConfirmBtn) {
         var needCaseFile = mode === 'append';
-        var can = Boolean(!busy && pid && vid && (!needCaseFile || fid));
+        var needEntryName = mode === 'new';
+        var can = Boolean(!busy && pid && vid && (!needCaseFile || fid) && (!needEntryName || entryName));
         caseGenDbStoreConfirmBtn.disabled = !can;
       }
     }
@@ -2686,7 +2797,7 @@
     }
 
     function maybeConfirmIncompleteModulesBeforeStore(actionLabel, drawerRef) {
-      var missing = listCaseGenModulesMissingSelectionOrGeneration();
+      var missing = listPendingDbStoreMissingModules();
       if (!missing.length) return Promise.resolve(true);
       var label = actionLabel ? String(actionLabel) : '写入用例库';
       var msg = missing.join(' ') + ' 没有选择用例，确定继续' + label + '吗？';
@@ -2746,7 +2857,41 @@
         .then(function() { tempApi.setTempExecActive(String(execSetId)); });
     }
 
-    function openCaseGenDbStoreDrawer(mode) {
+    function applyCaseGenDbStorePreferredSelections(mode) {
+      var st = ensureDbStoreState();
+      var pid = String(st.preferredProjectId || '');
+      var vid = String(st.preferredVersionId || '');
+      var fid = String(st.preferredCaseFileId || '');
+      if (!pid) return Promise.resolve(false);
+      st.projectId = pid;
+      renderCaseGenDbStoreProjects();
+      renderCaseGenDbStoreVersions();
+      renderCaseGenDbStoreCaseFiles();
+      syncCaseGenDbStoreControls();
+      return loadCaseGenDbStoreVersions(pid)
+        .then(function() {
+          if (vid) {
+            st.versionId = vid;
+            renderCaseGenDbStoreVersions();
+            renderCaseGenDbStoreCaseFiles();
+            syncCaseGenDbStoreControls();
+          }
+          if (mode !== 'append' || !pid) return true;
+          return loadCaseGenDbStoreCaseFiles(pid).then(function() {
+            if (fid) {
+              st.caseFileId = fid;
+              renderCaseGenDbStoreCaseFiles();
+              syncCaseGenDbStoreControls();
+            }
+            return true;
+          });
+        })
+        .catch(function() {
+          return false;
+        });
+    }
+
+    function openCaseGenDbStoreDrawer(mode, options) {
       if (!isDbStoreReady()) {
         setStatus(caseGenStatus, '后端未就绪，请先启动后端服务后再入库', 'warn');
         return;
@@ -2763,6 +2908,14 @@
       st.projectId = '';
       st.versionId = '';
       st.caseFileId = '';
+      st.entryName = options && Object.prototype.hasOwnProperty.call(options, 'entryName')
+        ? normalizeCaseGenDbStoreEntryName(options.entryName)
+        : getCaseGenDbStoreDefaultEntryName();
+      if (options && Array.isArray(options.items)) {
+        applyExplicitDbStorePayload(st, options);
+      } else {
+        clearExplicitDbStorePayload(st);
+      }
       if (caseGenDbStoreDrawerTitle) {
         caseGenDbStoreDrawerTitle.textContent = (mode === 'append') ? '旧用例追加入库' : '新用例入库';
       }
@@ -2775,18 +2928,34 @@
         caseGenDbStoreCaseFileSelect.value = '';
         caseGenDbStoreCaseFileSelect.disabled = true;
       }
+      renderCaseGenDbStoreEntryName();
       renderCaseGenDbStoreProjects();
       renderCaseGenDbStoreVersions();
       renderCaseGenDbStoreCaseFiles();
       syncCaseGenDbStoreControls();
       drawer.open();
-      loadCaseGenDbStoreProjects();
+      loadCaseGenDbStoreProjects().then(function() {
+        applyCaseGenDbStorePreferredSelections(mode);
+      });
     }
 
     var caseGenDbStoreBound = false;
     function bindCaseGenDbStoreEvents() {
       if (caseGenDbStoreBound) return;
       caseGenDbStoreBound = true;
+      if (caseGenDbStoreEntryNameInput) {
+        caseGenDbStoreEntryNameInput.addEventListener('input', function() {
+          var st = ensureDbStoreState();
+          st.entryName = caseGenDbStoreEntryNameInput.value || '';
+          syncCaseGenDbStoreControls();
+        });
+        caseGenDbStoreEntryNameInput.addEventListener('blur', function() {
+          var st = ensureDbStoreState();
+          st.entryName = normalizeCaseGenDbStoreEntryName(caseGenDbStoreEntryNameInput.value || '');
+          renderCaseGenDbStoreEntryName();
+          syncCaseGenDbStoreControls();
+        });
+      }
       if (caseGenDbStoreProjectSelect) {
         caseGenDbStoreProjectSelect.addEventListener('change', function() {
           var st = ensureDbStoreState();
@@ -2886,17 +3055,29 @@
       }
     }
 
-    function openCaseGenDbStoreNewDrawer() {
+    function openCaseGenDbStoreNewDrawer(options) {
+      options = options || {};
       setCaseGenStoreMode('new', { persist: false });
       var st = ensureDbStoreState();
-      var action = st.newAction || (caseGenStoreActionSelect ? caseGenStoreActionSelect.value : '');
+      var hasExplicitItems = Array.isArray(options.items) && options.items.length > 0;
+      if (hasExplicitItems) {
+        applyExplicitDbStorePayload(st, options);
+      } else {
+        clearExplicitDbStorePayload(st);
+      }
+      var action = options.newAction || st.newAction || (caseGenStoreActionSelect ? caseGenStoreActionSelect.value : '');
       action = String(action || '');
       if (!action) {
         markCaseGenDbStoreNewActionError();
         setStatus(caseGenStatus, '请先选择“直接入库”或“入库并转到执行”', 'warn');
         return;
       }
+      st.newAction = action;
       clearCaseGenDbStoreNewActionError();
+      if (hasExplicitItems) {
+        openCaseGenDbStoreDrawer('new', options);
+        return;
+      }
       if (!hasSelectedGeneratedCases()) {
         if (!hasGeneratedCases()) {
           setStatus(caseGenStatus, '请先生成用例后再入库', 'warn');
@@ -2911,8 +3092,17 @@
       openCaseGenDbStoreDrawer('new');
     }
 
-    function openCaseGenDbStoreAppendDrawer() {
+    function openCaseGenDbStoreAppendDrawer(options) {
+      options = options || {};
       setCaseGenStoreMode('append', { persist: false });
+      var st = ensureDbStoreState();
+      var hasExplicitItems = Array.isArray(options.items) && options.items.length > 0;
+      if (hasExplicitItems) {
+        applyExplicitDbStorePayload(st, options);
+        openCaseGenDbStoreDrawer('append', options);
+        return;
+      }
+      clearExplicitDbStorePayload(st);
       if (!hasSelectedGeneratedCases()) {
         if (!hasGeneratedCases()) {
           setStatus(caseGenStatus, '请先生成用例后再追加入库', 'warn');
@@ -2927,10 +3117,23 @@
       openCaseGenDbStoreDrawer('append');
     }
 
+    function maybeResetXmindCasegenAfterStoreSuccess(source) {
+      if (String(source || '') !== 'xmind_casegen') return;
+      try {
+        var xmindCasegenApi = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+        if (xmindCasegenApi && typeof xmindCasegenApi.resetAfterStoreSuccess === 'function') {
+          xmindCasegenApi.resetAfterStoreSuccess();
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
     function confirmCaseGenDbNewImport() {
       var st = ensureDbStoreState();
+      var explicitStoreSource = String(st.explicitSource || '');
       if (st.loading || st.confirming) return;
-      var items = collectDbStoreSelectedItems();
+      var items = collectPendingDbStoreItems();
       if (!items.length) {
         var viewState = openCaseViewForSelectionHint();
         if (viewState && viewState.blocked) return;
@@ -2957,7 +3160,14 @@
           if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '已取消入库（需求标识为空）', 'warn');
           return;
         }
-        var fileName = String(requirementLabel) + '.xmind';
+        var entryName = normalizeCaseGenDbStoreEntryName(st.entryName || '') || normalizeCaseGenDbStoreEntryName(requirementLabel || '');
+        if (!entryName) {
+          if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '请输入确认入库的用例名', 'warn');
+          return;
+        }
+        st.entryName = entryName;
+        renderCaseGenDbStoreEntryName();
+        var fileName = buildCaseGenDbStoreFileName(entryName);
         var action = st.newAction || (caseGenStoreActionSelect ? caseGenStoreActionSelect.value : '');
         action = String(action || '');
         var projectIdNum = Number(st.projectId);
@@ -2970,12 +3180,12 @@
             project_id: projectIdNum,
             version_id: versionIdNum,
             file_name: fileName,
-            source: 'casegen',
+            source: st.explicitSource || 'casegen',
             items: items,
           })
           .then(function(caseFile) {
-            if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库成功：' + requirementLabel, 'ok');
-            setStatus(caseGenStatus, '入库成功：' + requirementLabel, 'ok');
+            if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库成功：' + entryName, 'ok');
+            setStatus(caseGenStatus, '入库成功：' + entryName, 'ok');
             try {
               if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
                 window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
@@ -2983,6 +3193,7 @@
             } catch (_) {}
             var drawer = ensureCaseGenDbStoreDrawer();
             if (drawer) drawer.close();
+            maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource);
             triggerTempExecCaseLibrarySync('casegen-new');
             if (action === 'store_to_exec' && caseFile && caseFile.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
               var execVersionDrawerApi = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
@@ -3031,7 +3242,7 @@
                   projectId: projectIdNum,
                   versionId: versionIdNum,
                   fileName: fileName,
-                  source: 'casegen',
+                  source: explicitStoreSource || 'casegen',
                   items: items,
                   error: err,
                 })
@@ -3046,6 +3257,7 @@
                       window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
                     }
                   } catch (_) {}
+                  maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource);
                   triggerTempExecCaseLibrarySync('casegen-new-overwrite');
                   if (action === 'store_to_exec' && caseFile2 && caseFile2.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
                     var execVersionDrawerApi2 = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
@@ -3097,8 +3309,9 @@
 
     function confirmCaseGenDbAppend() {
       var st = ensureDbStoreState();
+      var explicitStoreSource = String(st.explicitSource || '');
       if (st.loading || st.confirming) return;
-      var items = collectDbStoreSelectedItems();
+      var items = collectPendingDbStoreItems();
       if (!items.length) {
         var viewState = openCaseViewForSelectionHint();
         if (viewState && viewState.blocked) return;
@@ -3185,6 +3398,7 @@
                   applyAppendResult(res || null, false);
                   var drawer0 = ensureCaseGenDbStoreDrawer();
                   if (drawer0) drawer0.close();
+                  maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource);
                   return null;
                 }).finally(function() {
                   st.loading = false;
@@ -3210,6 +3424,7 @@
                 .then(function(res) {
                   if (res && res.ok === true) {
                     applyAppendResult(res.result || null, true);
+                    maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource);
                     return null;
                   }
                   setStatus(caseGenStatus, '已取消追加入库', 'warn');
@@ -3239,6 +3454,7 @@
             applyAppendResult(res || null, false);
             var drawer = ensureCaseGenDbStoreDrawer();
             if (drawer) drawer.close();
+            maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource);
             return null;
           })
           .catch(function(err) {
@@ -4912,6 +5128,18 @@
       clearCaseGenDbStoreNewActionError: clearCaseGenDbStoreNewActionError,
       openCaseGenDbStoreNewDrawer: function() { bindCaseGenDbStoreEvents(); return openCaseGenDbStoreNewDrawer(); },
       openCaseGenDbStoreAppendDrawer: function() { bindCaseGenDbStoreEvents(); return openCaseGenDbStoreAppendDrawer(); },
+      openCaseGenDbStoreNewDrawerWithItems: function(items, options) {
+        bindCaseGenDbStoreEvents();
+        var nextOptions = options && typeof options === 'object' ? Object.assign({}, options) : {};
+        nextOptions.items = Array.isArray(items) ? items : [];
+        return openCaseGenDbStoreNewDrawer(nextOptions);
+      },
+      openCaseGenDbStoreAppendDrawerWithItems: function(items, options) {
+        bindCaseGenDbStoreEvents();
+        var nextOptions = options && typeof options === 'object' ? Object.assign({}, options) : {};
+        nextOptions.items = Array.isArray(items) ? items : [];
+        return openCaseGenDbStoreAppendDrawer(nextOptions);
+      },
       renderAppendTargetOptions: renderAppendTargetOptions,
       getCaseListForModule: getCaseListForModule,
       exportSelectedCasesData: exportSelectedCasesData,

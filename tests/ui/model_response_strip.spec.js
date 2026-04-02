@@ -264,3 +264,167 @@ test('Claude 模型走 Packy responses 地址时自动兼容为 chat/completions
   expect(captured.hasMessages).toBeTruthy();
   expect(captured.hasInput).toBeFalsy();
 });
+
+test('代理返回 503 时保留真实 HTTP 错误而不是退化成 Failed to fetch', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const errorMsg = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    const client = service.createModelClient({
+      proxyModelRequest: async function mockProxy() {
+        return {
+          ok: false,
+          status: 503,
+          text: async function mockText() {
+            return JSON.stringify({
+              detail: '连接模型服务失败：上游服务暂时不可用',
+            });
+          },
+        };
+      },
+      fetchImpl: async function mockFetch() {
+        throw new Error('Failed to fetch');
+      },
+    });
+    try {
+      await client.callModelWithConfig(
+        { baseUrl: 'http://mock.model/api', model: 'mock-model' },
+        '输入',
+        '提示词'
+      );
+      return '';
+    } catch (err) {
+      return err && err.message ? err.message : String(err);
+    }
+  });
+
+  expect(errorMsg).toBe('HTTP 503：连接模型服务失败：上游服务暂时不可用');
+});
+
+test('代理抛出明确错误且直连失败时优先保留代理错误', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const errorMsg = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    const client = service.createModelClient({
+      proxyModelRequest: async function mockProxy() {
+        throw new Error('503 Service Unavailable');
+      },
+      fetchImpl: async function mockFetch() {
+        throw new Error('Failed to fetch');
+      },
+    });
+    try {
+      await client.callModelWithConfig(
+        { baseUrl: 'http://mock.model/api', model: 'mock-model' },
+        '输入',
+        '提示词'
+      );
+      return '';
+    } catch (err) {
+      return err && err.message ? err.message : String(err);
+    }
+  });
+
+  expect(errorMsg).toBe('503 Service Unavailable');
+});
+
+test('DeepSeek 遇到 XMind 对象结构提示词时不误判为 JSON 数组', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const result = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    const config = window.app && window.app.config ? window.app.config : null;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    if (!config || !config.defaultPrompts || !config.defaultPrompts.xmindcasegen) {
+      throw new Error('XMind 默认提示词未加载');
+    }
+    const captured = { body: '' };
+    const client = service.createModelClient({
+      fetchImpl: async function mockFetch(_, options) {
+        captured.body = options && options.body ? String(options.body) : '';
+        return {
+          ok: true,
+          text: async function mockText() {
+            return JSON.stringify({
+              choices: [{
+                message: {
+                  content: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[],"cases":[]}]}',
+                },
+              }],
+            });
+          },
+        };
+      },
+    });
+    const output = await client.callModelWithConfig(
+      { baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-reasoner', provider: 'deepseek' },
+      '输入',
+      config.defaultPrompts.xmindcasegen
+    );
+    const body = captured.body ? JSON.parse(captured.body) : {};
+    return {
+      output: output,
+      systemPrompt: body && body.messages && body.messages[0] ? String(body.messages[0].content || '') : '',
+      responseFormat: body && body.response_format ? body.response_format : null,
+    };
+  });
+
+  expect(result.output).toContain('"modules"');
+  expect(result.systemPrompt).toMatch(/顶层必须是对象/);
+  expect(result.systemPrompt).not.toMatch(/顶层必须是数组/);
+  expect(result.responseFormat).toEqual({ type: 'json_object' });
+});

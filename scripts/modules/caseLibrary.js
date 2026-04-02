@@ -17751,7 +17751,13 @@
           }
           var name = file.file_name_clean || ('用例#' + file.id);
           var text = JSON.stringify(mapped, null, 2);
-          casesApi.addImportedCase(name, text, mapped);
+          casesApi.addImportedCase(name, text, mapped, {
+            sourceType: 'case-library-select',
+            caseFileId: file && file.id ? Number(file.id) : null,
+            projectId: file && file.project_id ? Number(file.project_id) : null,
+            versionId: file && file.version_id ? Number(file.version_id) : null,
+            fileName: name,
+          });
           successCount += 1;
         })
         .catch(function() {

@@ -182,7 +182,10 @@
             var extracted = handlers.extractRequirementLabelFromText(text);
             if (extracted) handlers.setRequirementLabel(extracted, 'import');
           }
-          addImportedCase(file.name, text.trim(), list);
+          addImportedCase(file.name, text.trim(), list, {
+            sourceType: 'external-import',
+            fileName: file && file.name ? String(file.name) : '',
+          });
         }
         if (setStatus && dom.caseStatus) setStatus(dom.caseStatus, '已导入 ' + files.length + ' 份测试用例', 'ok');
         if (setStatus && dom.casesCoverageStatus) setStatus(dom.casesCoverageStatus, '', '');
@@ -336,13 +339,14 @@
       drawer.open();
     }
 
-    function addImportedCase(name, text, list) {
+    function addImportedCase(name, text, list, meta) {
       if (list === void 0) list = [];
       var entry = {
         id: 'case-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2),
         name: name || ('测试用例' + ((state.importedCases && state.importedCases.length) ? state.importedCases.length + 1 : 1)),
         text: (text || '').trim(),
         list: Array.isArray(list) ? list : [],
+        meta: meta && typeof meta === 'object' ? JSON.parse(JSON.stringify(meta)) : null,
       };
       if (!state.importedCases) state.importedCases = [];
       state.importedCases.push(entry);

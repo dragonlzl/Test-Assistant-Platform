@@ -42,6 +42,7 @@
     var tempExecApi = ctx.tempExecApi || {};
     var setStatus = ctx.setStatus || function() {};
     var renderAssignmentsSelect = ctx.renderAssignmentsSelect || function() {};
+    var saveAssignments = ctx.saveAssignments || function() {};
     var ensureCaseGenModulesFromSplit = ctx.ensureCaseGenModulesFromSplit || function() { return false; };
     var renderCaseGeneration = ctx.renderCaseGeneration || function() {};
     var updateAutoClarifyVisibility = ctx.updateAutoClarifyVisibility || function() {};
@@ -1479,6 +1480,8 @@
       openCaseGenAllView: api.openCaseGenAllView || function() {},
       openCaseGenDbStoreNewDrawer: api.openCaseGenDbStoreNewDrawer || function() {},
       openCaseGenDbStoreAppendDrawer: api.openCaseGenDbStoreAppendDrawer || function() {},
+      openCaseGenDbStoreNewDrawerWithItems: api.openCaseGenDbStoreNewDrawerWithItems || function() {},
+      openCaseGenDbStoreAppendDrawerWithItems: api.openCaseGenDbStoreAppendDrawerWithItems || function() {},
       renderAppendTargetOptions: api.renderAppendTargetOptions || function() {},
       handleCaseSelectionChange: handleCaseSelectionChange,
       handleCaseSelectAll: handleCaseSelectAll,
@@ -1501,6 +1504,7 @@
       refreshExportCaseGenXmindButton: 1,
       setCaseGenDbStoreNewAction: 1, clearCaseGenDbStoreNewActionError: 1,
       openCaseGenAllView: 1, openCaseGenDbStoreNewDrawer: 1, openCaseGenDbStoreAppendDrawer: 1,
+      openCaseGenDbStoreNewDrawerWithItems: 1, openCaseGenDbStoreAppendDrawerWithItems: 1,
       handleCaseSelectionChange: 1, handleCaseSelectAll: 1, handleCaseSelectAllModules: 1,
       exportCaseGenerationResults: 1, ensureCaseGenModulesFromSplit: 1, renderCaseGeneration: 1,
       renderAppendTargetOptions: 1,
@@ -1746,6 +1750,9 @@
         getAssignedModel: getAssignedModel,
         getReasoningForType: getReasoningForType,
         getTemperatureForType: getTemperatureForType,
+        saveAssignments: saveAssignments,
+        renderAssignmentsSelect: renderAssignmentsSelect,
+        updateAssignmentStatuses: updateAssignmentStatuses,
         deriveCaseListFromText: deriveCaseListFromText,
         parseCaseList: parseCaseList,
         getCombinedCaseList: getCombinedCaseList,

@@ -1341,6 +1341,36 @@
       }
     }
 
+    function normalizeHttpErrorBody(raw) {
+      var text = raw === undefined || raw === null ? '' : String(raw).trim();
+      if (!text) return '';
+      try {
+        var parsed = JSON.parse(text);
+        if (parsed && parsed.error) {
+          if (typeof parsed.error === 'string' && parsed.error) return parsed.error;
+          if (typeof parsed.error.message === 'string' && parsed.error.message) return parsed.error.message;
+          if (typeof parsed.error.code === 'string' && parsed.error.code) return parsed.error.code;
+        }
+        if (parsed && typeof parsed.detail === 'string' && parsed.detail) return parsed.detail;
+        if (parsed && typeof parsed.message === 'string' && parsed.message) return parsed.message;
+      } catch (err) {
+        // ignore
+      }
+      return text;
+    }
+
+    function isTransientFetchError(err) {
+      if (!err || err.name === 'AbortError') return false;
+      var msg = err && err.message ? String(err.message) : String(err || '');
+      if (!msg) return false;
+      var lower = msg.toLowerCase();
+      if (lower.indexOf('failed to fetch') !== -1) return true;
+      if (lower.indexOf('networkerror') !== -1) return true;
+      if (lower.indexOf('network request failed') !== -1) return true;
+      if (lower.indexOf('load failed') !== -1) return true;
+      return false;
+    }
+
     async function testModel(id, statusEl) {
       const model = getModelById(id);
       if (!model) {
@@ -1379,6 +1409,8 @@
           ? api.proxyModelRequest
           : null;
         let res;
+        let proxyError = null;
+        let proxyFallbackResponse = null;
         if (proxyFn) {
           try {
             res = await proxyFn({
@@ -1387,26 +1419,40 @@
               payload: body,
               timeout_sec: 30,
             });
+            var statusCode = res ? Number(res.status) : 0;
+            var canFallback = res && [401, 403, 404, 405, 501].indexOf(statusCode) !== -1;
+            if (canFallback) {
+              proxyFallbackResponse = res;
+              res = null;
+            }
           } catch (e) {
+            proxyError = e;
             res = null;
           }
         }
-        var statusCode = res ? Number(res.status) : 0;
-        var shouldFallback = !res
-          || [401, 403, 404, 405, 501].indexOf(statusCode) !== -1
-          || (statusCode >= 500 && statusCode < 600);
-        if (shouldFallback) {
+        if (!res) {
           const headers = { 'Content-Type': 'application/json' };
           if (model.apiKey) headers['Authorization'] = `Bearer ${model.apiKey}`;
-          res = await fetch(requestUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-          });
+          try {
+            res = await fetch(requestUrl, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(body),
+            });
+          } catch (err) {
+            if (proxyFallbackResponse && isTransientFetchError(err)) {
+              res = proxyFallbackResponse;
+            } else if (proxyError && isTransientFetchError(err)) {
+              throw proxyError;
+            } else {
+              throw err;
+            }
+          }
         }
         const raw = await res.text();
         if (!res.ok) {
-          const detail = raw ? ('：' + raw.slice(0, 200)) : '';
+          const detailText = normalizeHttpErrorBody(raw);
+          const detail = detailText ? ('：' + detailText.slice(0, 200)) : '';
           throw new Error(`HTTP ${res.status}${detail}`);
         }
         let data = null;

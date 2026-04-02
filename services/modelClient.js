@@ -412,6 +412,33 @@
       }
     }
 
+    function normalizeHttpErrorBody(rawBody) {
+      var text = rawBody === undefined || rawBody === null ? '' : String(rawBody).trim();
+      if (!text) return '';
+      try {
+        var parsed = JSON.parse(text);
+        var detail = normalizeModelError(parsed && parsed.error ? parsed.error : '')
+          || (parsed && typeof parsed.detail === 'string' ? parsed.detail : '')
+          || (parsed && typeof parsed.message === 'string' ? parsed.message : '');
+        if (detail) return detail;
+      } catch (err) {
+        // ignore
+      }
+      return stripCodeFence(text);
+    }
+
+    function isTransientFetchError(err) {
+      if (!err || err.name === 'AbortError') return false;
+      var msg = err && err.message ? String(err.message) : String(err || '');
+      if (!msg) return false;
+      var lower = msg.toLowerCase();
+      if (lower.indexOf('failed to fetch') !== -1) return true;
+      if (lower.indexOf('networkerror') !== -1) return true;
+      if (lower.indexOf('network request failed') !== -1) return true;
+      if (lower.indexOf('load failed') !== -1) return true;
+      return false;
+    }
+
     function isAbortOrTimeoutError(err, signal) {
       if (err && err.name === 'AbortError') return true;
       if (signal && signal.aborted) return true;
@@ -618,6 +645,8 @@
     async function sendModelRequest(model, headers, body, timeoutSec, signal) {
       var proxyFn = resolveProxyModelRequest();
       var requestUrl = getEffectiveModelBaseUrl(model);
+      var proxyFallbackResponse = null;
+      var proxyError = null;
       if (proxyFn) {
         try {
           var proxied = await proxyFn({
@@ -629,20 +658,29 @@
           // 在纯静态模式（无后端 API）或未登录态下，回退到直连，保持旧行为兼容。
           if (proxied) {
             var status = Number(proxied.status);
-            var canFallback = [401, 403, 404, 405, 501].indexOf(status) !== -1 || (status >= 500 && status < 600);
+            var canFallback = [401, 403, 404, 405, 501].indexOf(status) !== -1;
             if (!canFallback) return proxied;
+            proxyFallbackResponse = proxied;
           }
         } catch (err) {
+          proxyError = err;
           if (!fetchImpl) throw err;
         }
       }
       if (!fetchImpl) throw new Error('当前环境不支持 fetch');
-      return fetchImpl(requestUrl, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(body),
-        signal: signal,
-      });
+      try {
+        return await fetchImpl(requestUrl, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(body),
+          signal: signal,
+        });
+      } catch (err) {
+        if (isAbortOrTimeoutError(err, signal)) throw err;
+        if (proxyFallbackResponse && isTransientFetchError(err)) return proxyFallbackResponse;
+        if (proxyError && isTransientFetchError(err)) throw proxyError;
+        throw err;
+      }
     }
 
     function shouldUseDeepseekJsonMode(model, promptText) {
@@ -655,8 +693,13 @@
       if (!promptText) return '';
       var raw = String(promptText);
       if (!/json/i.test(raw)) return '';
+      if (/顶层[\s\S]{0,20}(对象|\{\})/i.test(raw)) return 'object';
+      if (/(输出结构|返回结构|输出格式|返回格式)[\s\S]{0,40}\{\s*["']?[a-zA-Z0-9_\u4e00-\u9fa5]+["']?\s*:/i.test(raw)) return 'object';
+      if (/\{\s*["']?modules["']?\s*:\s*\[/i.test(raw)) return 'object';
+      if (/返回\s*\{\s*["']?[a-zA-Z0-9_\u4e00-\u9fa5]+["']?\s*:/i.test(raw)) return 'object';
       if (/输出\s*json\s*(数组|列表|用例列表)/i.test(raw)) return 'array';
       if (/json\s*(数组|列表|用例列表)/i.test(raw)) return 'array';
+      if (/顶层[\s\S]{0,20}(数组|\[\])/i.test(raw)) return 'array';
       if (/输出\s*json\s*[:：]\s*\[/i.test(raw)) return 'array';
       if (/输出[\s\S]{0,20}\[\s*\{/i.test(raw)) return 'array';
       return 'object';
@@ -746,7 +789,8 @@
         } catch (err) {
           rawBody = '';
         }
-        var errText = rawBody ? ('：' + rawBody.slice(0, 200)) : '';
+        var normalizedErr = normalizeHttpErrorBody(rawBody);
+        var errText = normalizedErr ? ('：' + normalizedErr.slice(0, 200)) : '';
         throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
       }
       rawBody = await res.text();
@@ -823,7 +867,8 @@
         } catch (err) {
           rawBody = '';
         }
-        var errText = rawBody ? ('：' + rawBody.slice(0, 200)) : '';
+        var normalizedErr = normalizeHttpErrorBody(rawBody);
+        var errText = normalizedErr ? ('：' + normalizedErr.slice(0, 200)) : '';
         throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
       }
       rawBody = await res.text();

@@ -6,6 +6,15 @@
     var defaultScaleStep = 0.15;
     var minScale = 0.1;
     var maxScale = 2.5;
+    var activeContextMenuHider = function() {};
+
+    function hideOpenContextMenu() {
+      try {
+        activeContextMenuHider();
+      } catch (err) {
+        activeContextMenuHider = function() {};
+      }
+    }
 
     function getMindCtor() {
       var source = null;
@@ -2017,6 +2026,7 @@
         nodeContextMenuEl.setAttribute('aria-hidden', 'true');
         nodeContextMenuMeta = null;
       }
+      activeContextMenuHider = hideNodeContextMenu;
 
       function showNodeContextMenu(clientX, clientY, payload) {
         var menu = ensureNodeContextMenuEl();
@@ -4562,6 +4572,9 @@
           }
           nodeContextMenuEl = null;
         }
+        if (activeContextMenuHider === hideNodeContextMenu) {
+          activeContextMenuHider = function() {};
+        }
         resetRightDragGestureBlock();
         resetCtrlLeftCanvasDrag();
         releaseCustomDragGhost();
@@ -5032,6 +5045,7 @@
       buildMindDataFromPaths: buildMindDataFromPaths,
       centerMindNode: centerMindNode,
       renderMindMap: renderMindMap,
+      hideOpenContextMenu: hideOpenContextMenu,
       refreshMindTheme: refreshMindTheme,
       destroyMindMap: destroyMindMap,
     };

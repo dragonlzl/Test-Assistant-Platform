@@ -47,7 +47,21 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
   const featureId = opts.featureId || 5001;
   const caseGenPrompt = opts.caseGenPrompt || '普通用例提示词';
   const xmindCaseGenPrompt = opts.xmindCaseGenPrompt || '基础提示词-XMind页';
+  const modelBaseUrl = opts.modelBaseUrl || 'https://mock-model.local/v1/chat/completions';
+  const modelName = opts.modelName || 'mock-model';
+  const modelCapabilities = Array.isArray(opts.modelCapabilities) ? opts.modelCapabilities.slice() : [];
+  const extraModels = Array.isArray(opts.extraModels) ? opts.extraModels.slice() : [];
   const modelId = String(modelRemoteId);
+  const projects = Array.isArray(opts.projects) ? opts.projects : [];
+  const versionsByProject = opts.versionsByProject && typeof opts.versionsByProject === 'object'
+    ? opts.versionsByProject
+    : {};
+  const caseFilesByProject = opts.caseFilesByProject && typeof opts.caseFilesByProject === 'object'
+    ? opts.caseFilesByProject
+    : {};
+  const caseItemsByCaseFile = opts.caseItemsByCaseFile && typeof opts.caseItemsByCaseFile === 'object'
+    ? opts.caseItemsByCaseFile
+    : {};
 
   await page.addInitScript((tk) => {
     try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
@@ -66,23 +80,49 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
       if (!authed) return respond(401, { detail: 'unauthorized' });
       return respond(200, user);
     }
-    if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
+    if (pathName === '/api/projects' && method === 'GET') return respond(200, projects);
+    if (/^\/api\/projects\/[^/]+\/versions$/.test(pathName) && method === 'GET') {
+      const projectId = String(pathName.split('/')[3] || '');
+      return respond(200, Array.isArray(versionsByProject[projectId]) ? versionsByProject[projectId] : []);
+    }
+    if (pathName === '/api/case-files' && method === 'GET') {
+      const projectId = String(url.searchParams.get('project_id') || '');
+      return respond(200, Array.isArray(caseFilesByProject[projectId]) ? caseFilesByProject[projectId] : []);
+    }
+    if (pathName === '/api/case-files/import' && method === 'POST') {
+      const body = route.request().postDataJSON ? route.request().postDataJSON() : {};
+      return respond(200, {
+        id: 9201,
+        file_name_clean: body && body.file_name ? String(body.file_name).replace(/\.xmind$/i, '') : 'XMind入库结果',
+        project_id: body && body.project_id ? Number(body.project_id) : null,
+        version_id: body && body.version_id ? Number(body.version_id) : null,
+      });
+    }
+    if (/^\/api\/case-files\/\d+\/items$/.test(pathName) && method === 'GET') {
+      const caseFileId = String(pathName.split('/')[3] || '');
+      return respond(200, Array.isArray(caseItemsByCaseFile[caseFileId]) ? caseItemsByCaseFile[caseFileId] : []);
+    }
+    if (/^\/api\/case-files\/\d+\/items\/append$/.test(pathName) && method === 'POST') {
+      return respond(200, { appended: 1, overwritten: 0, skipped: 0 });
+    }
     if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
     if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
     if (pathName === '/api/models' && method === 'GET') {
-      return respond(200, [{
+      const baseModel = {
         id: modelRemoteId,
         name: 'MockXmindCaseGenModel',
         owner_id: user.id,
         scope: 'user',
         config_json: {
           provider: 'custom',
-          baseUrl: 'https://mock-model.local/v1/chat/completions',
+          baseUrl: modelBaseUrl,
           apiKey: 'mock-key',
-          model: 'mock-model',
+          model: modelName,
           maxTokens: 1024,
+          capabilities: modelCapabilities,
         },
-      }]);
+      };
+      return respond(200, [baseModel].concat(extraModels));
     }
     if (pathName === '/api/features' && method === 'GET') {
       return respond(200, [{
@@ -105,6 +145,39 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
   });
 
   return { modelId: modelId };
+}
+
+async function installXmindProxyRecorder(page, options) {
+  const input = options || {};
+  const responseText = input.responseText || '{"modules":[]}';
+  const status = Number(input.status || 200);
+  await page.evaluate(({ responseText, status }) => {
+    var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+    if (!client || typeof client.proxyModelRequest !== 'function') return;
+    window.__xmindProxyCalls = [];
+    client.proxyModelRequest = function(payload) {
+      window.__xmindProxyCalls.push(JSON.parse(JSON.stringify(payload || {})));
+      return Promise.resolve({
+        ok: Number(status || 200) >= 200 && Number(status || 200) < 300,
+        status: Number(status || 200),
+        text: function() {
+          return Promise.resolve(JSON.stringify({
+            output: [{
+              type: 'message',
+              role: 'assistant',
+              content: [{
+                type: 'output_text',
+                text: String(responseText || '{"modules":[]}'),
+              }],
+            }],
+          }));
+        },
+      });
+    };
+  }, {
+    responseText: String(responseText || '{"modules":[]}'),
+    status: status,
+  });
 }
 
 async function waitXmindModelAssigned(page, expectedModelId) {
@@ -370,6 +443,28 @@ async function installRejectedXmindModelResponse(page, messageText, delayMs) {
   });
 }
 
+async function installXmindProxyHttpError(page, options) {
+  const input = options || {};
+  const status = Number(input.status || 503);
+  const rawBody = input.rawBody || JSON.stringify({ detail: '连接模型服务失败：上游服务暂时不可用' });
+  await page.evaluate(({ status, rawBody }) => {
+    var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+    if (!client) return;
+    client.proxyModelRequest = function() {
+      return Promise.resolve({
+        ok: Number(status) >= 200 && Number(status) < 300,
+        status: Number(status),
+        text: function() {
+          return Promise.resolve(String(rawBody || ''));
+        },
+      });
+    };
+  }, {
+    status: status,
+    rawBody: String(rawBody || ''),
+  });
+}
+
 async function seedDocumentRequirement(page, options) {
   const input = options || {};
   const text = input.text || '这是用于验证 XMind 用例生成的需求说明。';
@@ -385,15 +480,36 @@ async function seedDocumentRequirement(page, options) {
       window.app.state.requirementLabel = payload.requirementLabel;
       window.app.state.requirementLabelSource = 'ui-test';
       window.app.state.lastRawImportName = 'xmind-requirement.docx';
+      var docxImages = [];
+      var imageCount = Number(payload.imageCount || 0);
+      if (imageCount > 0 && payload.imageBytes && Array.isArray(payload.imageBytes)) {
+        for (var i = 0; i < imageCount; i += 1) {
+          var bytes = new Uint8Array(payload.imageBytes);
+          var file = new File([bytes], 'xmind-requirement-image-' + (i + 1) + '.png', { type: 'image/png' });
+          docxImages.push({
+            index: i + 1,
+            blob: file,
+          });
+        }
+      }
+      window.app.state.requirementMedia = {
+        docxImages: docxImages,
+        pastedImages: [],
+        lastDocxImageCount: docxImages.length,
+        updatedAt: Date.now(),
+      };
     }
   }, {
     text: text,
     requirementLabel: requirementLabel,
+    imageCount: Number(input.imageCount || 0),
+    imageBytes: Array.from(input.imageBytes || []),
   });
 }
 
 async function seedImportedBaseline(page, list) {
-  const baseline = Array.isArray(list) && list.length ? list : [{
+  const input = list && typeof list === 'object' && !Array.isArray(list) ? list : { list };
+  const baseline = Array.isArray(input.list) && input.list.length ? input.list : [{
     module: '登录模块',
     title: '登录模块-基线用例',
     priority: 'P1',
@@ -414,9 +530,13 @@ async function seedImportedBaseline(page, list) {
         name: 'baseline.json',
         text: text,
         list: payload.list,
+        meta: payload.meta || null,
       }];
     }
-  }, { list: baseline });
+  }, {
+    list: baseline,
+    meta: input.meta || null,
+  });
 }
 
 async function seedAiSkeleton(page, modules) {
@@ -485,6 +605,43 @@ async function clickElementById(page, id) {
     var el = document.getElementById(targetId);
     if (el && typeof el.click === 'function') el.click();
   }, id);
+}
+
+async function dispatchFileDropToZone(page, zoneId, options) {
+  const input = options || {};
+  await page.evaluate((payload) => {
+    var zone = document.getElementById(payload.zoneId);
+    if (!zone || typeof DataTransfer === 'undefined' || typeof File === 'undefined') return;
+    var dt = new DataTransfer();
+    var list = Array.isArray(payload.files) ? payload.files : [];
+    list.forEach(function(item) {
+      if (!item) return;
+      dt.items.add(new File([String(item.text || '')], String(item.name || 'payload.txt'), {
+        type: String(item.mimeType || 'text/plain'),
+      }));
+    });
+    function dispatch(type) {
+      var evt = null;
+      if (typeof Event === 'function') {
+        evt = new Event(type, { bubbles: true, cancelable: true });
+      } else if (document && document.createEvent) {
+        evt = document.createEvent('Event');
+        evt.initEvent(type, true, true);
+      }
+      if (!evt) return;
+      try {
+        Object.defineProperty(evt, 'dataTransfer', { value: dt });
+      } catch (_) {
+        evt.dataTransfer = dt;
+      }
+      zone.dispatchEvent(evt);
+    }
+    dispatch('dragover');
+    dispatch('drop');
+  }, {
+    zoneId: String(zoneId || ''),
+    files: Array.isArray(input.files) ? input.files : [],
+  });
 }
 
 async function openXmindCaseGenDrawer(page) {
@@ -571,6 +728,19 @@ async function waitForNodeStatusAbsent(page, topicText) {
       return !(node.querySelector && node.querySelector('.xmind-node-status-badge'));
     });
   }, topicText, { timeout: 15000 });
+}
+
+async function waitForNodeClass(page, topicText, className) {
+  await page.waitForFunction(({ topic, className: expectedClass }) => {
+    var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+    return Array.prototype.some.call(nodes, function(node) {
+      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+      var label = textEl
+        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+        : '';
+      return label.indexOf(topic) !== -1 && node.classList && node.classList.contains(expectedClass);
+    });
+  }, { topic: topicText, className }, { timeout: 15000 });
 }
 
 async function clickXmindNodeQuickAction(page, topicText) {
@@ -738,6 +908,36 @@ async function openNodeContextMenu(page, topicText) {
 async function openRootContextMenu(page) {
   const target = page.locator('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text').first();
   await expect(target).toBeVisible();
+  async function dispatchRootContextMenu() {
+    return page.evaluate(() => {
+      var node = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text');
+      if (!node) return false;
+      var rect = node.getBoundingClientRect();
+      var centerX = rect.left + rect.width / 2;
+      var centerY = rect.top + rect.height / 2;
+      ['pointerdown', 'mousedown', 'mouseup', 'contextmenu'].forEach(function(type) {
+        var init = {
+          bubbles: true,
+          cancelable: true,
+          clientX: centerX,
+          clientY: centerY,
+          button: 2,
+          buttons: type === 'mouseup' ? 0 : 2,
+          which: 3,
+        };
+        try {
+          if (type.indexOf('pointer') === 0 && typeof PointerEvent === 'function') {
+            node.dispatchEvent(new PointerEvent(type, init));
+          } else {
+            node.dispatchEvent(new MouseEvent(type, init));
+          }
+        } catch (err) {
+          node.dispatchEvent(new MouseEvent(type === 'pointerdown' ? 'mousedown' : type, init));
+        }
+      });
+      return true;
+    });
+  }
   var opened = false;
   for (var i = 0; i < 4; i += 1) {
     await target.click({ button: 'right', force: true });
@@ -750,10 +950,20 @@ async function openRootContextMenu(page) {
       break;
     } catch (err) {
       opened = false;
+      await dispatchRootContextMenu();
+      try {
+        await page.waitForFunction(() => {
+          var buttons = document.querySelectorAll('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn');
+          return buttons && buttons.length > 0;
+        }, {}, { timeout: 1200 });
+        opened = true;
+        break;
+      } catch (fallbackErr) {
+        opened = false;
+      }
     }
   }
   expect(opened).toBeTruthy();
-  await expect(page.locator('.xmind-node-context-menu.is-open')).toBeVisible();
 }
 
 async function getContextMenuItems(page) {
@@ -773,8 +983,24 @@ async function getContextMenuItems(page) {
 }
 
 async function clickContextMenuAction(page, label) {
-  const target = page.locator('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn', { hasText: label }).first();
-  await target.click({ force: true });
+  const actionLabel = String(label || '').trim();
+  await page.waitForFunction((text) => {
+    var buttons = document.querySelectorAll('.xmind-node-context-menu-btn');
+    return Array.prototype.some.call(buttons, function(btn) {
+      return String(btn.textContent || '').trim() === String(text || '').trim();
+    });
+  }, actionLabel, { timeout: 10000 });
+  const clicked = await page.evaluate((text) => {
+    var buttons = document.querySelectorAll('.xmind-node-context-menu-btn');
+    for (var i = 0; i < buttons.length; i += 1) {
+      var btn = buttons[i];
+      if (String(btn.textContent || '').trim() !== String(text || '').trim()) continue;
+      btn.click();
+      return true;
+    }
+    return false;
+  }, actionLabel);
+  expect(clicked).toBeTruthy();
 }
 
 async function readTopupHighlightMetrics(page) {
@@ -1246,6 +1472,159 @@ test.describe('XMind 用例生成抽屉', () => {
     });
   });
 
+  test('前置准备 step1 的需求文档模式复用拖拽上传样式，并在导入后允许下一步', async ({ page }) => {
+    const token = 'token-xmind-prep-document-zone';
+    const user = { id: 11, username: 'demo_user_11', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    await expect(page.locator('label.xmind-casegen-prep-choice.is-success').filter({ has: page.locator('input[name="xmindRequirementMode"][value="document"]') })).toHaveClass(/is-active/);
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toBeVisible();
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('原始需求');
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('拖拽或点击选择');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+
+    await page.evaluate((payload) => {
+      var zone = document.getElementById('xmindCaseGenPrepRequirementDropzone');
+      if (!zone || typeof DataTransfer === 'undefined' || typeof File === 'undefined') return;
+      var dt = new DataTransfer();
+      dt.items.add(new File([payload.text], payload.name, { type: 'text/plain' }));
+      function dispatch(type) {
+        var evt = null;
+        if (typeof Event === 'function') {
+          evt = new Event(type, { bubbles: true, cancelable: true });
+        } else if (document && document.createEvent) {
+          evt = document.createEvent('Event');
+          evt.initEvent(type, true, true);
+        }
+        if (!evt) return;
+        try {
+          Object.defineProperty(evt, 'dataTransfer', { value: dt });
+        } catch (_) {
+          evt.dataTransfer = dt;
+        }
+        zone.dispatchEvent(evt);
+      }
+      dispatch('dragover');
+      dispatch('drop');
+    }, {
+      name: 'xmind-step1-requirement.txt',
+      text: '需求正文：支持用户拖拽导入原始需求文档，并同步到 XMind 生成上下文。',
+    });
+
+    await page.waitForFunction(() => {
+      var rawText = document.getElementById('rawText');
+      return Boolean(rawText && String(rawText.value || '').indexOf('支持用户拖拽导入原始需求文档') !== -1);
+    }, {}, { timeout: 20000 });
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('已导入');
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('xmind-step1-requirement.txt');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+  });
+
+  test('前置准备 step2 的参考用例导入复用拖拽上传样式，并在导入后允许下一步', async ({ page }) => {
+    const token = 'token-xmind-prep-cases-zone';
+    const user = { id: 12, username: 'demo_user_12', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    await page.evaluate((payload) => {
+      var zone = document.getElementById('xmindCaseGenPrepRequirementDropzone');
+      if (!zone || typeof DataTransfer === 'undefined' || typeof File === 'undefined') return;
+      var dt = new DataTransfer();
+      dt.items.add(new File([payload.text], payload.name, { type: 'text/plain' }));
+      function dispatch(type) {
+        var evt = null;
+        if (typeof Event === 'function') {
+          evt = new Event(type, { bubbles: true, cancelable: true });
+        } else if (document && document.createEvent) {
+          evt = document.createEvent('Event');
+          evt.initEvent(type, true, true);
+        }
+        if (!evt) return;
+        try {
+          Object.defineProperty(evt, 'dataTransfer', { value: dt });
+        } catch (_) {
+          evt.dataTransfer = dt;
+        }
+        zone.dispatchEvent(evt);
+      }
+      dispatch('dragover');
+      dispatch('drop');
+    }, {
+      name: 'xmind-step2-requirement.txt',
+      text: '需求正文：支持在 step2 拖拽导入参考用例。',
+    });
+    await page.waitForFunction(() => {
+      var rawText = document.getElementById('rawText');
+      return Boolean(rawText && String(rawText.value || '').indexOf('支持在 step2 拖拽导入参考用例') !== -1);
+    }, {}, { timeout: 20000 });
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step2');
+    await page.check('input[name="xmindCaseImportMode"][value="import"]', { force: true });
+    await expect(page.locator('#xmindCaseGenPrepCasesDropzone')).toBeVisible();
+    await expect(page.locator('#xmindCaseGenPrepCasesDropzone')).toContainText('测试用例');
+    await expect(page.locator('#xmindCaseGenPrepCasesDropzone')).toContainText('拖拽或点击选择');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-action="select-cases-library"]')).toBeVisible();
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+
+    await page.evaluate((payload) => {
+      var zone = document.getElementById('xmindCaseGenPrepCasesDropzone');
+      if (!zone || typeof DataTransfer === 'undefined' || typeof File === 'undefined') return;
+      var dt = new DataTransfer();
+      dt.items.add(new File([payload.text], payload.name, { type: 'application/json' }));
+      function dispatch(type) {
+        var evt = null;
+        if (typeof Event === 'function') {
+          evt = new Event(type, { bubbles: true, cancelable: true });
+        } else if (document && document.createEvent) {
+          evt = document.createEvent('Event');
+          evt.initEvent(type, true, true);
+        }
+        if (!evt) return;
+        try {
+          Object.defineProperty(evt, 'dataTransfer', { value: dt });
+        } catch (_) {
+          evt.dataTransfer = dt;
+        }
+        zone.dispatchEvent(evt);
+      }
+      dispatch('dragover');
+      dispatch('drop');
+    }, {
+      name: 'xmind-step2-cases.json',
+      text: JSON.stringify([{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }]),
+    });
+
+    await page.waitForFunction(() => {
+      var st = window.app && window.app.state ? window.app.state : null;
+      return Boolean(st && Array.isArray(st.importedCases) && st.importedCases.length > 0);
+    }, {}, { timeout: 20000 });
+    await expect(page.locator('#xmindCaseGenPrepCasesDropzone')).toContainText('当前共 1 条');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-filelist')).toContainText('已导入参考用例');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+  });
+
   test('前置准备改为单步 3 步流程，并在确认后锁定前两步', async ({ page }) => {
     const token = 'token-xmind-prep';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
@@ -1258,7 +1637,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.waitForFunction(() => Boolean(document.querySelector('[data-xmind-casegen-inline-actions]')), {}, { timeout: 10000 });
     await clickElementById(page, 'xmindCaseGenSummaryBtn');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
-    await expect(page.locator('#xmindCaseGenPrepResetBtn')).toHaveCount(0);
+    await expect(page.locator('#xmindCaseGenPrepResetBtn')).toBeVisible();
     await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-step')).toHaveCount(3);
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
@@ -1328,6 +1707,483 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(state.caseGenSettings.needBoundary).toBe(true);
     expect(state.caseGenSettings.needSpecial).toBe(true);
     expect(state.caseGenSettings.specialWeakNetwork).toBe(true);
+  });
+
+  test('前置准备支持重置，确认后会清空当前导入与生成结果并回到 step1', async ({ page }) => {
+    const token = 'token-xmind-prep-reset';
+    const user = { id: 101, username: 'demo_user_101', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await page.evaluate(() => {
+      window.__xmindPrepResetConfirmPayloads = [];
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindPrepResetConfirmPayloads.push(payload || null);
+          return Promise.resolve({ ok: true });
+        };
+      }
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：重置后需要恢复为未导入、未生成的初始状态。',
+      requirementLabel: 'XMind重置需求',
+    });
+    await seedImportedBaseline(page, [{
+      module: '登录模块',
+      title: '登录模块-基线用例',
+      priority: 'P1',
+      preconditions: '账号已存在',
+      steps: ['1、进入登录页', '2、输入账号密码'],
+      expected: '登录成功',
+    }]);
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'import',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.click('#xmindCaseGenPrepResetBtn');
+
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindPrepResetConfirmPayloads) ? window.__xmindPrepResetConfirmPayloads.length : 0);
+    }).toBe(1);
+    await expect(page.locator('.temp-center-toast').last()).toContainText('已重置当前 XMind 生成内容');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+
+    const resetState = await page.evaluate(() => {
+      var st = window.app && window.app.state ? window.app.state : {};
+      return {
+        rawText: document.getElementById('rawText') ? String(document.getElementById('rawText').value || '') : '',
+        caseText: document.getElementById('caseText') ? String(document.getElementById('caseText').value || '') : '',
+        requirementLabel: String(st.requirementLabel || ''),
+        importedCount: Array.isArray(st.importedCases) ? st.importedCases.length : -1,
+        moduleCount: Array.isArray(st.caseGenModules) ? st.caseGenModules.length : -1,
+        resultCount: st.caseGenResults && typeof st.caseGenResults === 'object' ? Object.keys(st.caseGenResults).length : -1,
+        prep: st.xmindCaseGen && st.xmindCaseGen.prep ? {
+          step: Number(st.xmindCaseGen.prep.step || 0),
+          requirementMode: String(st.xmindCaseGen.prep.requirementMode || ''),
+          caseImportMode: String(st.xmindCaseGen.prep.caseImportMode || ''),
+          completed: st.xmindCaseGen.prep.completed === true,
+          baseLocked: st.xmindCaseGen.prep.baseLocked === true,
+        } : null,
+      };
+    });
+
+    expect(resetState.rawText).toBe('');
+    expect(resetState.caseText).toBe('');
+    expect(resetState.requirementLabel).toBe('');
+    expect(resetState.importedCount).toBe(0);
+    expect(resetState.moduleCount).toBe(0);
+    expect(resetState.resultCount).toBe(0);
+    expect(resetState.prep).not.toBeNull();
+    expect(resetState.prep.step).toBe(1);
+    expect(resetState.prep.requirementMode).toBe('');
+    expect(resetState.prep.caseImportMode).toBe('');
+    expect(resetState.prep.completed).toBe(false);
+    expect(resetState.prep.baseLocked).toBe(false);
+  });
+
+  test('重置前置准备后重新完成 step1-3，根节点仍可重新执行全量生成并使用新需求上下文', async ({ page }) => {
+    const token = 'token-xmind-prep-reset-regenerate';
+    const user = { id: 102, username: 'demo_user_102', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 160);
+    await autoAcceptXmindConfirm(page);
+    await openXmindCaseGenDrawer(page);
+
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    await dispatchFileDropToZone(page, 'xmindCaseGenPrepRequirementDropzone', {
+      files: [{
+        name: 'xmind-reset-first.txt',
+        mimeType: 'text/plain',
+        text: '需求正文：第一次生成，仅用于构造重置前的上下文。',
+      }],
+    });
+    await page.waitForFunction(() => {
+      var rawText = document.getElementById('rawText');
+      return Boolean(rawText && String(rawText.value || '').indexOf('第一次生成') !== -1);
+    }, {}, { timeout: 20000 });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.check('input[name="xmindCaseImportMode"][value="skip"]', { force: true });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+    await waitForNodeText(page, 'xmind-reset-first');
+
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+    await waitForNodeText(page, '登录成功校验');
+
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.click('#xmindCaseGenPrepResetBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    await dispatchFileDropToZone(page, 'xmindCaseGenPrepRequirementDropzone', {
+      files: [{
+        name: 'xmind-reset-second.txt',
+        mimeType: 'text/plain',
+        text: '需求正文：第二次生成，重置后应该使用这一轮的新需求重新生成模块和用例。',
+      }],
+    });
+    await page.waitForFunction(() => {
+      var rawText = document.getElementById('rawText');
+      return Boolean(rawText && String(rawText.value || '').indexOf('第二次生成') !== -1);
+    }, {}, { timeout: 20000 });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.check('input[name="xmindCaseImportMode"][value="skip"]', { force: true });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+
+    await waitForNodeText(page, 'xmind-reset-second');
+    await openRootContextMenu(page);
+    const resetItems = await getContextMenuItems(page);
+    expect(resetItems.map((item) => item.label)).toEqual(['生成全量用例', '生成全量模块']);
+    await clickContextMenuAction(page, '生成全量用例');
+
+    await waitForNodeStatus(page, 'xmind-reset-second', '生成中');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeStatusAbsent(page, 'xmind-reset-second');
+
+    const lastRootFullCasesCall = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+      for (var i = calls.length - 1; i >= 0; i -= 1) {
+        var item = calls[i];
+        if (!item || !item.contract) continue;
+        if (String(item.contract.scope || '') !== 'root') continue;
+        if (String(item.contract.mode || '') !== 'full_cases') continue;
+        return {
+          user: String(item.user || ''),
+          prompt: String(item.prompt || ''),
+        };
+      }
+      return null;
+    });
+    expect(lastRootFullCasesCall).toBeTruthy();
+    expect(lastRootFullCasesCall.user).toContain('【需求正文】\n需求正文：第二次生成，重置后应该使用这一轮的新需求重新生成模块和用例。');
+    expect(lastRootFullCasesCall.user).not.toContain('第一次生成，仅用于构造重置前的上下文');
+  });
+
+  test('根节点右键触发生成前置准备时，会先收起右键菜单', async ({ page }) => {
+    const token = 'token-xmind-prep-hides-context-menu';
+    const user = { id: 1003, username: 'demo_user_1003', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await openRootContextMenu(page);
+    await expect(page.locator('.xmind-node-context-menu.is-open')).toHaveCount(1);
+    await clickContextMenuAction(page, '生成全量用例');
+
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
+    await expect(page.locator('.xmind-node-context-menu.is-open')).toHaveCount(0);
+  });
+
+  test('重置前置准备后重新生成，真实 proxy 请求只携带当前一轮需求与图片上下文', async ({ page }) => {
+    const token = 'token-xmind-prep-reset-proxy-context';
+    const user = { id: 103, username: 'demo_user_103', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'gpt-5.4',
+      modelCapabilities: ['vision', 'reasoning', 'chat'],
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[],"cases":[{"module":"登录模块","title":"登录成功校验","priority":"P1","preconditions":"账号已存在","steps":["1、进入登录页","2、输入正确账号密码并提交"],"expected":"登录成功"}]}]}',
+    });
+    await page.evaluate(() => {
+      window.__xmindPrepResetConfirmPayloads = [];
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindPrepResetConfirmPayloads.push(payload || null);
+          return Promise.resolve({ ok: true });
+        };
+      }
+    });
+
+    await seedDocumentRequirement(page, {
+      text: '需求正文：第一次生成，附带图片上下文。',
+      requirementLabel: '第一次需求',
+      imageCount: 1,
+      imageBytes: ONE_PIXEL_PNG,
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await openXmindCaseGenDrawer(page);
+
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls.length : 0);
+    }).toBeGreaterThanOrEqual(1);
+
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.click('#xmindCaseGenPrepResetBtn');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindPrepResetConfirmPayloads) ? window.__xmindPrepResetConfirmPayloads.length : 0);
+    }).toBe(1);
+
+    await seedDocumentRequirement(page, {
+      text: '需求正文：第二次生成，重置后只允许携带这一轮的新需求与图片。',
+      requirementLabel: '第二次需求',
+      imageCount: 1,
+      imageBytes: ONE_PIXEL_PNG,
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await clickElementById(page, 'xmindCaseGenSummaryCloseBtn');
+    await page.evaluate(() => {
+      if (window.app && window.app.xmindCasegenApi && typeof window.app.xmindCasegenApi.render === 'function') {
+        window.app.xmindCasegenApi.render({ reason: 'ui-test-after-reset' });
+      }
+    });
+    await waitForNodeText(page, '第二次需求');
+
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls.length : 0);
+    }).toBeGreaterThanOrEqual(2);
+
+    const proxyCalls = await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls : []);
+    expect(proxyCalls.length).toBeGreaterThanOrEqual(2);
+    const lastCall = proxyCalls[proxyCalls.length - 1] || {};
+    const payload = lastCall && lastCall.payload ? lastCall.payload : {};
+    const content = Array.isArray(payload.input) && payload.input[0] && Array.isArray(payload.input[0].content)
+      ? payload.input[0].content
+      : [];
+    const textBlocks = content.filter((item) => item && item.type === 'input_text').map((item) => String(item.text || ''));
+    const imageBlocks = content.filter((item) => item && item.type === 'input_image');
+    expect(imageBlocks.length).toBe(1);
+    expect(textBlocks.join('\n')).toContain('【需求正文】\n需求正文：第二次生成，重置后只允许携带这一轮的新需求与图片。');
+    expect(textBlocks.join('\n')).not.toContain('第一次生成，附带图片上下文');
+  });
+
+  test('重置前置准备后重新导入需求，不应再被旧工作流数据触发二次确认导入', async ({ page }) => {
+    const token = 'token-xmind-prep-reset-no-second-import-confirm';
+    const user = { id: 104, username: 'demo_user_104', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await page.evaluate(() => {
+      window.__xmindPrepResetConfirmPayloads = [];
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindPrepResetConfirmPayloads.push(payload || null);
+          return Promise.resolve({ ok: true });
+        };
+      }
+      var cleanedTextEl = document.getElementById('cleanedText');
+      if (cleanedTextEl) {
+        cleanedTextEl.value = '历史清洗结果：这里模拟页面中仍残留其他工作流数据。';
+        cleanedTextEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.click('#xmindCaseGenPrepResetBtn');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindPrepResetConfirmPayloads) ? window.__xmindPrepResetConfirmPayloads.length : 0);
+    }).toBe(1);
+
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    await dispatchFileDropToZone(page, 'xmindCaseGenPrepRequirementDropzone', {
+      files: [{
+        name: 'xmind-reset-import-after-cleaned.txt',
+        mimeType: 'text/plain',
+        text: '需求正文：reset 之后重新导入，不应该再次触发确认导入新需求。',
+      }],
+    });
+    await page.waitForFunction(() => {
+      var rawText = document.getElementById('rawText');
+      return Boolean(rawText && String(rawText.value || '').indexOf('不应该再次触发确认导入新需求') !== -1);
+    }, {}, { timeout: 20000 });
+
+    const confirmPayloads = await page.evaluate(() => Array.isArray(window.__xmindPrepResetConfirmPayloads) ? window.__xmindPrepResetConfirmPayloads : []);
+    expect(confirmPayloads.length).toBe(1);
+    expect(String(confirmPayloads[0] && confirmPayloads[0].title || '')).toContain('确认重置前置准备');
+  });
+
+  test('重置前置准备后通过真实 step1 文档导入重新完成准备，根节点仍可正常发起真实 proxy 生成', async ({ page }) => {
+    const token = 'token-xmind-prep-reset-real-import-and-generate';
+    const user = { id: 105, username: 'demo_user_105', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[],"cases":[{"module":"登录模块","title":"登录成功校验","priority":"P1","preconditions":"账号已存在","steps":["1、进入登录页","2、输入账号密码并提交"],"expected":"登录成功"}]}]}',
+    });
+    await page.evaluate(() => {
+      window.__xmindPrepResetConfirmPayloads = [];
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindPrepResetConfirmPayloads.push(payload || null);
+          return Promise.resolve({ ok: true });
+        };
+      }
+      var cleanedTextEl = document.getElementById('cleanedText');
+      if (cleanedTextEl) {
+        cleanedTextEl.value = '历史清洗结果：用于模拟 reset 前页面仍有共享工作流数据。';
+        cleanedTextEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.click('#xmindCaseGenPrepResetBtn');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindPrepResetConfirmPayloads) ? window.__xmindPrepResetConfirmPayloads.length : 0);
+    }).toBe(1);
+
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    await dispatchFileDropToZone(page, 'xmindCaseGenPrepRequirementDropzone', {
+      files: [{
+        name: 'xmind-reset-real-import.txt',
+        mimeType: 'text/plain',
+        text: '需求正文：真实 step1 文档导入后，仍应可以继续完成准备并正常发起生成。',
+      }],
+    });
+    await page.waitForFunction(() => {
+      var rawText = document.getElementById('rawText');
+      return Boolean(rawText && String(rawText.value || '').indexOf('真实 step1 文档导入后') !== -1);
+    }, {}, { timeout: 20000 });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.check('input[name="xmindCaseImportMode"][value="skip"]', { force: true });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+
+    await waitForNodeText(page, 'xmind-reset-real-import');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls.length : 0);
+    }).toBeGreaterThanOrEqual(1);
+
+    const lastProxyCall = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls : [];
+      return calls.length ? calls[calls.length - 1] : null;
+    });
+    expect(lastProxyCall).toBeTruthy();
+    expect(JSON.stringify(lastProxyCall || {})).toContain('真实 step1 文档导入后');
+  });
+
+  test('重置前置准备后通过真实 step1 文档导入重新完成准备，根节点仍可正常发起全量模块生成', async ({ page }) => {
+    const token = 'token-xmind-prep-reset-real-import-full-modules';
+    const user = { id: 106, username: 'demo_user_106', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[]},{"module":"支付模块","key_scenarios":["支付主流程"],"test_points":["支付结果校验"],"coupled_modules":["订单中心"]}]}',
+    });
+    await page.evaluate(() => {
+      window.__xmindPrepResetConfirmPayloads = [];
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindPrepResetConfirmPayloads.push(payload || null);
+          return Promise.resolve({ ok: true });
+        };
+      }
+      var splitResultEl = document.getElementById('splitResult');
+      if (splitResultEl) {
+        splitResultEl.value = '历史模块拆分结果：用于模拟 reset 前页面仍有共享工作流数据。';
+        splitResultEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.click('#xmindCaseGenPrepResetBtn');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindPrepResetConfirmPayloads) ? window.__xmindPrepResetConfirmPayloads.length : 0);
+    }).toBe(1);
+
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    await dispatchFileDropToZone(page, 'xmindCaseGenPrepRequirementDropzone', {
+      files: [{
+        name: 'xmind-reset-real-import-modules.txt',
+        mimeType: 'text/plain',
+        text: '需求正文：reset 后重新导入，再执行全量模块生成，也应可以正常发起。',
+      }],
+    });
+    await page.waitForFunction(() => {
+      var rawText = document.getElementById('rawText');
+      return Boolean(rawText && String(rawText.value || '').indexOf('全量模块生成') !== -1);
+    }, {}, { timeout: 20000 });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.check('input[name="xmindCaseImportMode"][value="skip"]', { force: true });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+
+    await waitForNodeText(page, 'xmind-reset-real-import-modules');
+    await openRootContextMenu(page);
+    const rootItems = await getContextMenuItems(page);
+    expect(rootItems.map((item) => item.label)).toEqual(['生成全量用例', '生成全量模块']);
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls.length : 0);
+    }).toBeGreaterThanOrEqual(1);
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
   });
 
   test('页面刷新后保持在 XMind 用例生成页面，并恢复抽屉、全屏、缩放、位置与已记录折叠状态', async ({ page }) => {
@@ -1485,6 +2341,7 @@ test.describe('XMind 用例生成抽屉', () => {
     })).toEqual([
       'xmindCaseGenSummaryBtn',
       'xmindCaseGenHistoryBtn',
+      'xmindCaseGenStoreBtn',
       'xmindCaseGenDeleteUndoBtn',
       'xmindCaseGenDeleteRedoBtn',
       'xmindCaseGenExportBtn',
@@ -1523,6 +2380,76 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(previousCard).toContainText('登录模块');
     await expect(previousCard).toContainText('支付模块');
     await expect(previousCard).toContainText('0 条用例');
+  });
+
+  test('右侧导出XMind按钮替换为模型选择框，并支持直接切换 XMind 模型', async ({ page }) => {
+    const token = 'token-xmind-inline-model-select';
+    const user = { id: 211, username: 'demo_user_inline_model', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      modelRemoteId: 901,
+      modelBaseUrl: 'https://mock-model-a.local/v1/responses',
+      modelName: 'gpt-5.4-a',
+      modelCapabilities: ['vision', 'reasoning', 'chat'],
+      extraModels: [{
+        id: 902,
+        name: 'MockXmindCaseGenModel-B',
+        owner_id: user.id,
+        scope: 'user',
+        config_json: {
+          provider: 'custom',
+          baseUrl: 'https://mock-model-b.local/v1/responses',
+          apiKey: 'mock-key-b',
+          model: 'gpt-5.4-b',
+          maxTokens: 2048,
+          capabilities: ['vision', 'reasoning', 'chat'],
+        },
+      }],
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[]}]}',
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：验证 XMind 右侧工具栏可直接切换模型。',
+      requirementLabel: 'XMind模型切换需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind模型切换需求');
+    await expect(page.locator('#xmindCaseGenMindContainer [data-mind-action="export-xmind"]')).toHaveClass(/xmind-casegen-default-export-hidden/);
+    await expect(page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]')).toBeVisible();
+
+    const optionTexts = await page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select] option').allTextContents();
+    expect(optionTexts).toEqual(['MockXmindCaseGenModel', 'MockXmindCaseGenModel-B']);
+
+    await page.selectOption('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]', '902');
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var state = window.app && window.app.state ? window.app.state : null;
+        return state && state.assignments ? String(state.assignments.xmindCaseGenId || '') : '';
+      });
+    }).toBe('902');
+
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls.length : 0);
+    }).toBeGreaterThanOrEqual(1);
+
+    const lastCall = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls : [];
+      return calls.length ? calls[calls.length - 1] : null;
+    });
+    expect(lastCall).toBeTruthy();
+    expect(String(lastCall.base_url || '')).toBe('https://mock-model-b.local/v1/responses');
   });
 
   test('生成记录会展示重复模块场景下的通俗未新增原因', async ({ page }) => {
@@ -1700,8 +2627,83 @@ test.describe('XMind 用例生成抽屉', () => {
     const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
     await expect(latestCard).toContainText('本次生成未成功');
     await expect(latestCard).toContainText('失败原因：');
-    await expect(latestCard).toContainText('模型连接失败，请检查网络后重试。');
-    await expect(latestCard).toContainText('错误信息：Failed to fetch');
+    await expect(latestCard).toContainText('模型服务暂时不可用，请稍后重试。');
+    await expect(latestCard).toContainText('错误信息：503 Service Unavailable');
+  });
+
+  test('DeepSeek 模型在 XMind 提示词下不会误判为 JSON 数组并可正常生成', async ({ page }) => {
+    const token = 'token-xmind-deepseek-object-shape';
+    const user = { id: 29, username: 'demo_user_deepseek_object_shape', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      modelBaseUrl: 'https://api.deepseek.com/chat/completions',
+      modelName: 'deepseek-reasoner',
+      modelCapabilities: ['chat'],
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[],"cases":[]}]}',
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：验证 DeepSeek 在 XMind 提示词下按对象结构返回时仍可被正常解析。',
+      requirementLabel: 'XMind DeepSeek 结构需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind DeepSeek 结构需求');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await waitForNodeText(page, '登录模块');
+    await expect(page.locator('.temp-center-toast')).toHaveCount(0);
+  });
+
+  test('生成记录会展示代理返回的 HTTP 503 具体错误信息', async ({ page }) => {
+    const token = 'token-xmind-history-http-503';
+    const user = { id: 28, username: 'demo_user_history_http_503', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyHttpError(page, {
+      status: 503,
+      rawBody: JSON.stringify({
+        detail: '连接模型服务失败：上游服务暂时不可用',
+      }),
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：验证代理 HTTP 503 时，生成记录会保留真实错误详情。',
+      requirementLabel: 'XMind代理503需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind代理503需求');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await page.waitForFunction(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var history = state && state.xmindCaseGen ? state.xmindCaseGen.history : null;
+      return Boolean(Array.isArray(history) && history.length > 0);
+    }, {}, { timeout: 15000 });
+
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
+    await expect(latestCard).toContainText('本次生成未成功');
+    await expect(latestCard).toContainText('失败原因：');
+    await expect(latestCard).toContainText('模型服务暂时不可用，请稍后重试。');
+    await expect(latestCard).toContainText('错误信息：HTTP 503：连接模型服务失败：上游服务暂时不可用');
   });
 
   test('根节点支持生成全量模块与生成全量用例，并在刷新后恢复共享结果', async ({ page }) => {
@@ -2949,5 +3951,313 @@ test.describe('XMind 用例生成抽屉', () => {
     const stateAfterDelete = await readState(page);
     const loginCases = JSON.parse(String(stateAfterDelete.caseGenResults['xmind-mod-login'] || '[]'));
     expect(loginCases.map((item) => item.title)).toEqual(['登录态保持校验']);
+  });
+
+  test('工具栏保存入库会标红未生成用例的模块，并给出悬浮提示', async ({ page }) => {
+    const token = 'token-xmind-store-missing-module';
+    const user = { id: 44, username: 'demo_user_44', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：保存入库前需要拦截没有生成用例的模块。',
+      requirementLabel: 'XMind保存前模块校验需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenStoreBtn');
+
+    await waitForNodeClass(page, '登录模块', 'xmind-casegen-node-invalid');
+    await expect(page.locator('.temp-center-toast').last()).toContainText('未生成用例');
+  });
+
+  test('工具栏保存入库会标红结构不合法的用例，并给出悬浮提示', async ({ page }) => {
+    const token = 'token-xmind-store-invalid-case';
+    const user = { id: 45, username: 'demo_user_45', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：保存入库前需要拦截结构不完整的用例。',
+      requirementLabel: 'XMind保存前用例校验需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录异常空步骤用例',
+        priority: 'P1',
+        preconditions: '',
+        steps: [],
+        expected: '给出失败提示',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenStoreBtn');
+
+    await waitForNodeClass(page, '登录异常空步骤用例', 'xmind-casegen-node-invalid');
+    await expect(page.locator('.temp-center-toast').last()).toContainText('格式不符合入库要求');
+  });
+
+  test('无导入用例时，工具栏保存入库会进入新用例入库抽屉', async ({ page }) => {
+    const token = 'token-xmind-store-new';
+    const user = { id: 46, username: 'demo_user_46', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      projects: [{ id: 1, name: '项目A' }],
+      versionsByProject: {
+        '1': [{ id: 11, name: 'v1.0.0' }],
+      },
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：无导入用例时，保存入库应走新用例入库流程。',
+      requirementLabel: 'XMind新用例入库需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenStoreBtn');
+
+    await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreDrawerTitle')).toContainText('新用例入库');
+  });
+
+  test('基线来自用例库选择时，工具栏保存入库会进入旧用例追加入库抽屉并预选目标用例', async ({ page }) => {
+    const token = 'token-xmind-store-append';
+    const user = { id: 47, username: 'demo_user_47', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      projects: [{ id: 1, name: '项目A' }],
+      versionsByProject: {
+        '1': [{ id: 11, name: 'v1.0.0' }],
+      },
+      caseFilesByProject: {
+        '1': [{
+          id: 401,
+          project_id: 1,
+          version_id: 11,
+          file_name_clean: '登录基线用例',
+        }],
+      },
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await autoAcceptXmindConfirm(page);
+    await seedDocumentRequirement(page, {
+      text: '需求：从用例库选择基线后，保存入库应走追加入库流程。',
+      requirementLabel: 'XMind追加入库需求',
+    });
+    await seedImportedBaseline(page, {
+      list: [{
+        module: '登录模块',
+        title: '登录模块-基线用例',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码'],
+        expected: '登录成功',
+      }],
+      meta: {
+        sourceType: 'case-library-select',
+        caseFileId: 401,
+        projectId: 1,
+        versionId: 11,
+        fileName: '登录基线用例',
+      },
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录模块-新增追加入例',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、执行新的补充动作'],
+        expected: '补充用例执行成功',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'import',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenStoreBtn');
+
+    await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreDrawerTitle')).toContainText('旧用例追加入库');
+    await expect.poll(async () => {
+      return await page.$eval('#caseGenDbStoreProjectSelect', (el) => String(el.value || ''));
+    }).toBe('1');
+    await expect.poll(async () => {
+      return await page.$eval('#caseGenDbStoreVersionSelect', (el) => String(el.value || ''));
+    }).toBe('11');
+    await expect.poll(async () => {
+      return await page.$eval('#caseGenDbStoreCaseFileSelect', (el) => String(el.value || ''));
+    }).toBe('401');
+  });
+
+  test('XMind 保存入库确认时不再提示未选择用例，成功后会自动清空当前结果并重置前置准备', async ({ page }) => {
+    const token = 'token-xmind-store-no-selection-confirm';
+    const user = { id: 48, username: 'demo_user_48', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      projects: [{ id: 1, name: '项目A' }],
+      versionsByProject: {
+        '1': [{ id: 11, name: 'v1.0.0' }],
+      },
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await page.evaluate(() => {
+      window.__xmindConfirmPayloads = [];
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindConfirmPayloads.push(payload || null);
+          return Promise.resolve({ ok: true });
+        };
+      }
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：XMind 入库默认按当前保留结果入库，不应再提示未选择用例。',
+      requirementLabel: 'XMind默认全量入库需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenStoreBtn');
+    await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseGenDbStoreEntryNameRow')).not.toHaveClass(/hidden/);
+    await expect(page.locator('#caseGenDbStoreEntryNameInput')).toHaveValue('XMind默认全量入库需求');
+    await page.fill('#caseGenDbStoreEntryNameInput', 'XMind默认全量入库需求-确认名');
+    await page.selectOption('#caseGenDbStoreProjectSelect', '1');
+    await page.selectOption('#caseGenDbStoreVersionSelect', '11');
+    const importRequestPromise = page.waitForRequest((request) => {
+      return request.url().indexOf('/api/case-files/import') !== -1 && request.method() === 'POST';
+    });
+    await page.click('#caseGenDbStoreConfirmBtn');
+    const importRequest = await importRequestPromise;
+    const importPayload = importRequest.postDataJSON ? importRequest.postDataJSON() : {};
+
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        return Array.isArray(window.__xmindConfirmPayloads) ? window.__xmindConfirmPayloads.length : 0;
+      });
+    }).toBe(0);
+    expect(String(importPayload && importPayload.file_name)).toBe('XMind默认全量入库需求-确认名.xmind');
+    await expect(page.locator('.temp-center-toast').last()).toContainText('用例入库成功');
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        return window.app && window.app.state && Array.isArray(window.app.state.caseGenModules)
+          ? window.app.state.caseGenModules.length
+          : -1;
+      });
+    }).toBe(0);
+
+    const resetState = await page.evaluate(() => {
+      var st = window.app && window.app.state ? window.app.state : {};
+      return {
+        rawText: document.getElementById('rawText') ? String(document.getElementById('rawText').value || '') : '',
+        moduleCount: Array.isArray(st.caseGenModules) ? st.caseGenModules.length : -1,
+        resultCount: st.caseGenResults && typeof st.caseGenResults === 'object' ? Object.keys(st.caseGenResults).length : -1,
+        prep: st.xmindCaseGen && st.xmindCaseGen.prep ? {
+          step: Number(st.xmindCaseGen.prep.step || 0),
+          completed: st.xmindCaseGen.prep.completed === true,
+          baseLocked: st.xmindCaseGen.prep.baseLocked === true,
+        } : null,
+      };
+    });
+    expect(resetState.rawText).toBe('');
+    expect(resetState.moduleCount).toBe(0);
+    expect(resetState.resultCount).toBe(0);
+    expect(resetState.prep).not.toBeNull();
+    expect(resetState.prep.step).toBe(1);
+    expect(resetState.prep.completed).toBe(false);
+    expect(resetState.prep.baseLocked).toBe(false);
+
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
   });
 });

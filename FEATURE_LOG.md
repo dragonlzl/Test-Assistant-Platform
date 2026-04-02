@@ -19,6 +19,270 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 前置准备弹窗打开时自动收起右键菜单
+- 功能描述：修正 `XMind 用例生成` 中，当用户在空根节点上通过右键菜单触发生成动作、并因前置准备未完成而弹出 `生成前置准备` 弹窗时，原右键菜单仍残留在弹窗上层的问题。现在弹窗打开前会先统一收起当前 XMind 右键菜单。
+- 操作方式：
+  - 打开 `XMind 用例生成` 抽屉；
+  - 在未完成前置准备的根节点上右键，点击 `生成全量用例` 或其他会触发前置准备的动作；
+  - 系统会先关闭右键菜单，再打开 `生成前置准备` 弹窗。
+- 使用效果：
+  - 前置准备弹窗打开时，不会再出现右键菜单覆盖在弹窗上的残留层；
+  - 交互层级更自然，用户只会看到当前应处理的弹窗内容；
+  - 同样的收口逻辑也覆盖到 `生成记录` 弹窗打开前，避免同类菜单残留。
+- 新增内容/接口/组件：
+  - `scripts/core/mindElixirCore.js`：新增共享方法 `hideOpenContextMenu()`，用于统一关闭当前活动的节点右键菜单；
+  - `scripts/modules/xmindCasegen.js`：在打开 `生成前置准备` / `生成记录` 弹窗前，先调用共享菜单关闭能力；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增“根节点右键触发生成前置准备时，会先收起右键菜单”回归。
+- 复用说明：复用现有 `mindElixirCore` 的右键菜单状态，不在 `xmindCasegen` 里新增第二套菜单状态机；仅补一个共享关闭入口并在现有弹窗打开链路中调用。
+- 测试与验证：
+  - 自查 code review：确认只调整弹窗打开前的菜单收口顺序，不影响根节点动作矩阵、前置准备状态或 XMind 生成链路；
+  - `node --check scripts/core/mindElixirCore.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点右键触发生成前置准备时，会先收起右键菜单" --reporter=line`，1/1 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-01 修正 XMind 前置准备弹窗打开时右键菜单残留在上层的问题。
+
+- 功能名称：XMind 新用例入库支持确认用例名编辑
+- 功能描述：在 `XMind 用例生成 -> 保存入库` 进入的共享“新用例入库”抽屉中，新增可编辑的 `用例名` 确认步骤。用户可以在确认入库前直接修改本次要写入用例库的名称，避免只能沿用需求标识自动命名。
+- 操作方式：
+  - 在 `XMind 用例生成` 画布工具栏点击 `保存入库`；
+  - 当当前流程走的是 `新用例入库` 时，在抽屉顶部先确认或修改 `用例名`；
+  - 选择项目、版本后点击 `确认入库`，最终以当前输入的用例名写入用例库；
+  - `旧用例追加入库` 仍保持原有目标用例选择流程，不显示该名称编辑项。
+- 使用效果：
+  - XMind 全新入库前可以直接改名，不需要退回去修改需求标识；
+  - 同一套共享入库抽屉也同步支持普通 `用例生成` 的新用例入库名称确认，避免两套行为不一致；
+  - 若输入了带扩展名或非法文件字符，前端会在确认前自动归一化，最终仍以合法的 `.xmind` 名称提交。
+- 新增内容/接口/组件：
+  - `index.html`、`ai-workflow.html`：为共享 `caseGenDbStoreDrawer` 新增 `用例名` 输入行；
+  - `scripts/core/casesGenCore.js`：扩展共享入库抽屉状态、名称归一化、按钮可用态与 `confirmCaseGenDbNewImport()` 提交流程，统一以编辑后的名称作为 `file_name`；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充 XMind 保存入库时可编辑确认用例名并实际写入请求体的回归断言；
+  - `tests/ui/casegen_db_store.spec.js`：补充共享新用例入库名称编辑与旧用例追加入库隐藏名称行的回归断言；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：严格复用现有 `caseGenDbStoreDrawer`、`confirmCaseGenDbNewImport()`、XMind 保存入库入口和既有 `importCaseFile` 接口；本次没有新增 XMind 专用入库抽屉，也没有新增第二套入库 API。
+- 测试与验证：
+  - 自查 code review：确认改动只落在共享“新用例入库”边界，不影响 XMind 追加入库、差异对比覆盖入库与入库后重置逻辑；
+  - `node --check scripts/core/casesGenCore.js tests/ui/casegen_db_store.spec.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "新用例入库：直接入库成功，且会校验未选模块二次确认" --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "旧用例追加入库：选择目标用例后二次确认并调用追加接口" --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "XMind 保存入库确认时不再提示未选择用例，成功后会自动清空当前结果并重置前置准备" --reporter=line`，1/1 通过；
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`，1/1 通过。
+- 更新记录：
+  - 2026-04-01 为 XMind 新用例入库补充确认名称编辑流程，并同步收敛到共享入库抽屉。
+
+- 功能名称：DeepSeek 在 XMind 用例生成中按对象结构解析
+- 功能描述：修正 `XMind 用例生成` 使用 `deepseek-r1 / deepseek-reasoner` 一类模型时，被共享 `DeepSeek JSON` 判定逻辑误识别为“顶层必须输出 JSON 数组”，从而在模型实际返回 `{modules:[...]}` 对象结构时抛出 `模型输出不是 JSON 数组` 的问题。现在 XMind 专属提示词会被正确识别为“顶层 JSON 对象”，不再因为 `steps 是数组`、`{modules:[...]}` 等字段描述被误判。
+- 操作方式：
+  - 在 `XMind 用例生成` 页将模型切换为 `DeepSeek` 类模型；
+  - 按原流程执行根节点或模块节点生成；
+  - 模型返回 `{modules:[...]}` 结构时，前端会按 XMind 对象结构正常解析，不再报 `模型输出不是 JSON 数组`。
+- 使用效果：
+  - `gpt-5.4` 和 `deepseek-r1` 在 XMind 用例生成页会统一遵循同一份 XMind 对象结构；
+  - `DeepSeek` 仍保留 JSON 模式与 `response_format`，但只会在“明确要求顶层数组”的场景下才触发数组校验；
+  - XMind 专属生成不会再被共享 `DeepSeek JSON 数组` 规则误伤。
+- 新增内容/接口/组件：
+  - `services/modelClient.js`：收紧 `detectDeepseekJsonShape()`，优先识别 `顶层对象`、`{modules:[...]}`、`输出结构为对象` 等对象结构提示，再只对明确的“顶层数组”场景返回 `array`；
+  - `tests/ui/model_response_strip.spec.js`：新增 `DeepSeek 遇到 XMind 对象结构提示词时不误判为 JSON 数组` 回归；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增 `DeepSeek 模型在 XMind 提示词下不会误判为 JSON 数组并可正常生成` 场景回归；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 `modelClient` 的 DeepSeek JSON 模式、XMind 专属提示词 `defaultPrompts.xmindcasegen` 和现有 XMind 生成链路；本次没有改 XMind 数据结构，也没有新增第二套提示词解析器。
+- 测试与验证：
+  - 自查 code review：确认只修改 DeepSeek 顶层 JSON 形态识别，不影响普通 `casegen/casefilter/review` 等明确数组输出场景；
+  - `node --check services/modelClient.js tests/ui/model_response_strip.spec.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/model_response_strip.spec.js --reporter=line`，7/7 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "DeepSeek 模型在 XMind 提示词下不会误判为 JSON 数组并可正常生成" --reporter=line`，1/1 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-01 修正 DeepSeek 在 XMind 用例生成里把 `{modules:[...]}` 误判成“顶层 JSON 数组”的问题。
+
+- 功能名称：XMind 用例生成右侧导出按钮替换为模型选择框
+- 功能描述：调整 `用例生成 -> XMind 用例生成` 画布工具栏，保留搜索栏内现有的 `导出当前XMind` 按钮，并把最右侧通用 `导出XMind` 按钮替换为 `模型` 下拉框，直接复用当前已配置模型列表，支持在 XMind 抽屉内快速切换本页使用的 XMind 用例生成模型。
+- 操作方式：
+  - 打开 `XMind 用例生成` 抽屉；
+  - 在画布上方搜索/缩放工具栏最右侧，使用新的 `模型` 下拉框选择已配置模型；
+  - 切换后，后续根节点或模块节点的生成都会直接使用新选择的模型；
+  - 原有 `导出当前XMind` 按钮保持不变，继续用于导出当前导图。
+- 使用效果：
+  - XMind 用例生成页不再同时出现 `导出当前XMind` 和 `导出XMind` 两个近义按钮；
+  - 右侧工具区的信息层级更清晰，用户可以在当前生成页直接切换模型，不必跳回功能指派页；
+  - 模型切换直接写回共享 `xmindCaseGenId` 指派，并复用现有保存指派链路，后续生成请求会立即生效。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：在 XMind 画布工具栏内新增模型下拉框挂载逻辑，隐藏当前页重复的通用 `导出XMind` 按钮，并在切换时写回 `state.assignments.xmindCaseGenId`；
+  - `scripts/core/appRuntime.js`、`scripts/modules/app.js`：把 `saveAssignments/renderAssignmentsSelect/updateAssignmentStatuses` 继续透传给 XMind 页，确保抽屉内切换模型时仍复用现有功能指派保存链路；
+  - `style.css`：补充 XMind 页模型选择框的浅色/深色主题与移动端样式；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增“右侧导出XMind按钮替换为模型选择框，并支持直接切换 XMind 模型”回归，并增强现有右键菜单测试辅助函数的稳定性；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：严格复用现有 `state.models` 模型列表、`state.assignments.xmindCaseGenId` 指派真源，以及 `saveAssignments/renderAssignmentsSelect/updateAssignmentStatuses` 功能指派链路；未新增第二套模型配置或持久化逻辑。
+- 测试与验证：
+  - 自查 code review：确认只对 XMind 用例生成页的通用右侧导出按钮做隐藏替换，未改动其他 XMind 页的导出行为；
+  - `node --check scripts/core/appRuntime.js scripts/modules/app.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "右侧导出XMind按钮替换为模型选择框，并支持直接切换 XMind 模型" --reporter=line`，1/1 通过；
+  - 补充执行整份 `tests/ui/xmind_casegen_flow.spec.js` 冒烟时，命中过去已存在的 reset/proxy 右键菜单交互波动；新增模型切换场景本身通过，未发现与本次改动直接相关的问题。
+- 更新记录：
+  - 2026-04-01 将 XMind 用例生成页最右侧重复的 `导出XMind` 按钮替换为模型选择框，并支持抽屉内直接切换 XMind 生成模型。
+
+- 功能名称：XMind 模型错误保留真实原因并与功能指派测试对齐
+- 功能描述：修正 `用例生成 -> XMind 用例生成` 在模型代理已返回具体 `HTTP 5xx` 错误时，前端还继续回退浏览器直连，最终把真实错误覆盖成 `Failed to fetch` 的问题；同时把 `功能指派 -> 测试模型` 的同类 fallback 逻辑一起收紧，避免模型测试页与 XMind 页对同一模型状态给出相互矛盾的结果。
+- 操作方式：
+  - 在 `XMind 用例生成` 里执行根节点或模块节点生成，若模型代理返回 `503/502` 等错误，生成记录会直接展示具体 HTTP 状态与可读错误信息；
+  - 在 `功能指派` 页点击 `测试模型`，若代理已经返回明确错误，也会优先显示该错误，而不是退化成浏览器的 `Failed to fetch`。
+- 使用效果：
+  - XMind 生成失败时，用户可以直接看到更具体的失败原因，例如 `HTTP 503：连接模型服务失败：上游服务暂时不可用`；
+  - 当代理已给出明确错误时，不再被浏览器直连 fallback 覆盖成模糊的网络错误；
+  - 功能指派页和 XMind 页对同一类模型代理错误的表现更一致，便于判断是模型服务不可用，还是生成 payload 本身有问题。
+- 新增内容/接口/组件：
+  - `services/modelClient.js`：收紧 proxy fallback 条件，不再对代理 `5xx` 继续强制直连；当 fallback 本身网络失败时，优先保留代理原始错误；新增 HTTP 错误体解析，自动提取 `error/detail/message`；
+  - `scripts/modules/models.js`：同步修正 `testModel()` 的代理 fallback 与 HTTP 错误解析逻辑；
+  - `tests/ui/model_response_strip.spec.js`：新增 2 条模型客户端回归，覆盖“代理 503 保留真实错误”和“代理抛错 + 直连失败时优先保留代理错误”；
+  - `tests/ui/xmind_casegen_flow.spec.js`：更新模型错误预期，并新增 1 条 `HTTP 503` 生成记录回归；同时增强根节点右键菜单测试辅助函数，消除整套 UI 回归中的偶发波动；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 `apiClient.proxyModelRequest()`、`modelClient.callModelWithConfig/callModelWithContent()`、XMind 生成记录映射和功能指派测试入口；本次没有新增第二套模型请求链路，也没有新增后端代理接口。
+- 测试与验证：
+  - 自查 code review：确认只调整共享请求边界和功能指派测试入口，未改动 XMind 生成编排、提示词拼装和共享结果真源；
+  - `node --check services/modelClient.js scripts/modules/models.js tests/ui/model_response_strip.spec.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/model_response_strip.spec.js --reporter=line`，6/6 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`，36/36 通过；
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`，1/1 通过；
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/settings_models.spec.js --reporter=line`，1/1 通过。
+- 更新记录：
+  - 2026-04-01 修正 XMind 生成失败时 `Failed to fetch` 覆盖真实代理错误的问题，并同步对齐功能指派页测试模型的错误展示。
+
+- 功能名称：XMind 前置准备重置改为复用共享工作流清空链路
+- 功能描述：修正 `用例生成 -> XMind 用例生成 -> 生成前置准备 -> 重置` 后再次导入需求并生成时容易失败的问题。现在 XMind 的 reset 不再只清抽屉本地状态，而是优先复用现有 `resetWorkflowData()` / `interruptActiveExecutions()` 共享链路，把工作流中残留的需求清洗、拆分、覆盖对比等共享数据一并清空，再恢复当前 XMind 抽屉的打开态和全屏态，避免 step1 重新导入需求时又被旧工作流数据误触发“确认导入新需求”的二次重置分支。
+- 操作方式：
+  - 在 `XMind 用例生成` 抽屉点击工具栏中的 `生成前置准备`；
+  - 点击底部 `重置` 并确认；
+  - 重新完成 step1-step3 后，再执行根节点 `生成全量用例` / `生成全量模块` 等生成动作。
+- 使用效果：
+  - reset 后再导入需求，不会再因为页面里残留旧的清洗/拆分结果而额外弹一次“确认导入新需求”；
+  - 重新完成前置准备后，根节点生成会继续使用这一轮最新需求上下文，不会混入 reset 前的旧需求或旧图片上下文；
+  - XMind 抽屉当前打开态、全屏态和重新开始操作路径保持不变，用户不需要重新找入口。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增 `resetWorkflowStateForXmind()`，在 XMind reset 时优先复用 `prepApi.resetWorkflowData()` 和 `prepApi.interruptActiveExecutions()`，再重建当前 XMind 初始态；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增 2 条 reset 专项回归，覆盖“旧工作流数据不再触发二次确认导入”和“真实 proxy 请求只携带当前轮需求/图片上下文”；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：严格复用现有 `scripts/modules/app.js` 中的 `resetWorkflowData()` 全局清空逻辑，以及 `appRuntime` 已注入给 XMind 模块的 `prepApi` 能力；没有新增第二套 reset 状态机。
+- 测试与验证：
+  - 自查 code review：确认 reset 只把 XMind 本地清空收口到共享 reset 链路，未改动生成提示词、模型调用链路或结果真源；
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "重置前置准备后重新导入需求，不应再被旧工作流数据触发二次确认导入|重置前置准备后重新完成 step1-3，根节点仍可重新执行全量生成并使用新需求上下文|重置前置准备后重新生成，真实 proxy 请求只携带当前一轮需求与图片上下文" --reporter=line`，3/3 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`，33/33 通过；
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`，1/1 通过。
+- 更新记录：
+  - 2026-04-01 修正 XMind 前置准备 reset 后与共享工作流残留数据的冲突：reset 后重新导入需求不再触发二次“确认导入新需求”，并补齐真实 proxy 请求上下文回归。
+
+- 功能名称：XMind 前置准备参考用例导入改为拖拽上传样式
+- 功能描述：将 `用例生成 -> XMind 用例生成 -> 生成前置准备 -> step2 是否导入用例` 中“导入用例”的按钮式入口，改为与现有“一键执行/导入数据/测试用例”一致的拖拽 + 点击选择上传区，并继续保留 `从用例库选择` 入口。
+- 操作方式：
+  - 在 `XMind 用例生成` 抽屉点击工具栏中的 `生成前置准备`；
+  - 完成 step1 后进入 `step2：是否导入用例`，选择 `导入参考用例`；
+  - 在上传区内直接拖拽 XMind/文本/JSON 用例文件，或点击上传区选择文件；
+  - 需要从库里复用已有用例时，继续点击下方 `从用例库选择`；
+  - 导入成功后，上传区会显示当前导入用例统计，并解锁 `下一步`。
+- 使用效果：
+  - XMind 前置准备里的参考用例导入入口和现有“一键执行”用例导入保持同一套视觉与交互，不再是单独的操作按钮行；
+  - 文件拖拽、点击选择、多文件导入都继续走共享 `caseFileInput` 链路，导入后会直接更新 `importedCases/caseText`，作为 XMind 主树基线；
+  - `从用例库选择` 保持原位可用，不会因为上传区改造而影响现有库内导入流程。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：step2 改为 `.zone` 风格用例上传区，新增摘要弹窗内的参考用例拖拽事件处理，并把 dropped files 转交给已有 `#caseFileInput` 的多文件 change 链路；
+  - `style.css`：补充 XMind step2 上传区下方操作行和文件列表的轻量样式；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增 step2 参考用例拖拽上传回归，并保留整份 XMind 抽屉回归验证。
+- 复用说明：严格复用现有 `.zone/.zone-line/.status/.file-list/.case-library-import-btn` 样式，以及已有 `scripts/core/casesCore.js` 的 `handleCaseFiles/importCaseFiles` 与 `caseFileInput[multiple]` 导入链路；未新增后端接口、路由或新的解析状态机。
+- 测试与验证：
+  - 自查 code review：确认 step2 只扩展了上传区 UI 和文件转交逻辑，未复制 `casesCore` 的用例解析/导入流程；
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "前置准备 step1 的需求文档模式复用拖拽上传样式，并在导入后允许下一步|前置准备 step2 的参考用例导入复用拖拽上传样式，并在导入后允许下一步|前置准备改为单步 3 步流程，并在确认后锁定前两步" --reporter=line`（3/3 通过）；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（30/30 通过）；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-01 将 XMind 前置准备 step2 的“导入用例”入口替换为拖拽/点击上传区，并保持与现有用例导入链路同源。
+
+- 功能名称：XMind 前置准备需求导入改为拖拽上传样式
+- 功能描述：将 `用例生成 -> XMind 用例生成 -> 生成前置准备 -> step1 需求导入` 中“导入需求文档”的按钮式入口，改为与现有“一键执行/导入需求”一致的拖拽 + 点击选择上传区，保持文档导入体验统一。
+- 操作方式：
+  - 在 `XMind 用例生成` 抽屉点击工具栏中的 `生成前置准备`；
+  - 进入 `step1：需求导入` 后，选择 `导入需求文档`；
+  - 在上传区内直接拖拽需求文档，或点击上传区选择文件；
+  - 导入成功后，上传区会显示已导入文件名与正文长度，同时 `下一步` 自动解锁。
+- 使用效果：
+  - XMind 前置准备里的文档导入入口与现有 `导入需求` 页面保持同一套视觉和交互，不再额外出现一排单独按钮；
+  - 上传后的原始需求仍然直接写回共享 `rawText / lastRawImportName / requirementMedia`，不会产生第二套需求上下文；
+  - 拖拽导入与点击导入都保留在当前 XMind 抽屉与前置准备弹窗内完成，不会打断当前流程。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：step1 文档模式改为 `.zone` 风格上传区，并新增摘要弹窗内的需求拖拽事件委托，将 dropped file 转交给已有 `#fileInput` 的 change 链路；
+  - `style.css`：补充 XMind 前置准备上传区的轻量样式适配；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增 step1 文档模式拖拽上传回归，并继续验证原有前置准备主流程。
+- 复用说明：严格复用现有 `style.css` 中的 `.zone/.zone-line/.status` 上传样式，以及已有 `scripts/modules/upload.js` 的 `fileInput -> maybeHandleFile -> rawText` 需求导入链路；未新增后端接口、路由或新的上传状态机。
+- 测试与验证：
+  - 自查 code review：确认 XMind 仅负责渲染上传区和转交 drag/drop 文件，未复制现有需求解析逻辑；
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "前置准备 step1 的需求文档模式复用拖拽上传样式，并在导入后允许下一步|前置准备改为单步 3 步流程，并在确认后锁定前两步" --reporter=line`（2/2 通过）；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（29/29 通过）；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-01 将 XMind 前置准备 step1 的“导入需求文档”入口替换为拖拽/点击上传区，并保持与现有需求导入链路同源。
+
+- 功能名称：XMind 用例生成支持前置准备重置与入库成功自动清空
+- 功能描述：为 `用例生成 -> XMind 用例生成` 的生成前置准备弹窗补充 `重置` 入口，并在 XMind 来源的保存入库成功后自动清空当前 XMind 画布数据、导入内容和前置准备状态，让用户可以直接开始下一轮新的 XMind 生成。
+- 操作方式：
+  - 在 `XMind 用例生成` 抽屉点击工具栏中的 `生成前置准备`；
+  - 在前置准备弹窗底部点击 `重置`，二次确认后，会清空当前需求导入、参考用例导入、AI 生成结果和删除历史，并把前置准备恢复到 `step1`；
+  - 若从 XMind 工具栏执行 `保存入库` 并成功写入用例库，则会在保留当前 XMind 抽屉的情况下，自动清空当前 XMind 结果并把前置准备重置为初始状态。
+- 使用效果：
+  - 用户在同一轮 XMind 生成结束后，无需手工逐项删除需求、参考用例和生成结果，即可直接重新开始；
+  - 手动重置和入库成功后的自动清空都走同一套 XMind reset 逻辑，画布、共享结果、前置准备和导入上下文保持一致，不会出现“树已清空但上下文残留”的错位；
+  - 普通 `用例生成` 页的入库流程不受影响，只有 `source = xmind_casegen` 的保存成功路径才会触发自动清空。
+- 新增内容/接口/组件：
+  - `scripts/modules/xmindCasegen.js`：新增统一 `resetAllState/resetAfterStoreSuccess` 能力，补齐需求导入、参考用例导入、共享 `caseGen*` 真源、XMind 本地状态与删除历史的一次性重置；前置准备弹窗新增 `重置` 按钮与二次确认逻辑；
+  - `scripts/core/casesGenCore.js`：在共享新用例入库/旧用例追加入库成功后，按 `explicitSource === 'xmind_casegen'` 调用 XMind 专用 reset，并修正同名覆盖导入时的 `source` 透传；
+  - `style.css`：补充前置准备 `重置` 按钮的浅色/深色主题样式；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增“前置准备重置”和“入库成功自动清空”回归，并同步更新工具栏按钮预期。
+- 复用说明：继续复用现有 `casesGenCore` 入库抽屉、共享 `caseGenModules/caseGenResults` 真源、`casesCore` 导入用例视图能力、现有确认抽屉与中心悬浮 toast；本次没有新增后端接口、路由或存储结构。
+- 测试与验证：
+  - 自查 code review：确认 XMind reset 会同时清空需求、参考用例、AI 生成层、删除历史和 XMind 本地快照；确认自动清空只挂在 `xmind_casegen` 来源的共享入库成功回调上；
+  - `node --check scripts/modules/xmindCasegen.js scripts/core/casesGenCore.js tests/ui/xmind_casegen_flow.spec.js`（通过）；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（28/28 通过）；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "新用例入库：直接入库成功，且会校验未选模块二次确认|旧用例追加入库：选择目标用例后二次确认并调用追加接口" --reporter=line`（2/2 通过）；
+  - 本次未改动后端接口，未新增 API 自动化。
+- 更新记录：
+  - 2026-04-01 新增前置准备 `重置` 按钮，二次确认后可把当前 XMind 画布与前置准备恢复到初始状态；
+  - 2026-04-01 新增 XMind 来源保存入库成功后的自动清空与前置准备重置能力；
+  - 2026-04-01 补充普通入库关键回归，确认共享 `casesGenCore` 改动未影响旧页面入库流程。
+
+- 功能名称：XMind 用例生成工具栏支持保存入库
+- 功能描述：为 `用例生成 -> XMind 用例生成` 抽屉工具栏新增 `保存入库` 按钮。保存时会先按当前上下文判断是“无导入用例/外部导入基线的新用例入库”，还是“来自用例库选择基线的旧用例追加入库”，并在真正打开入库抽屉前对当前 XMind 结果做模块缺例与用例结构校验。
+- 操作方式：
+  - 在 `用例生成` 页打开 `XMind 用例生成` 抽屉；
+  - 通过生成前置准备和画布节点操作完成本轮生成后，点击工具栏中的 `保存入库`；
+  - 若当前存在未生成用例的模块，或存在结构不完整的用例，XMind 会直接把对应模块/用例节点标红闪烁，并给出 5 秒悬浮提示；
+  - 若当前未导入参考用例，或导入的是外部文件，点击后会直接进入现有 `新用例入库` 抽屉；
+  - 若当前参考用例来自 `从用例库选择`，点击后会先弹出二次确认，再进入现有 `旧用例追加入库` 抽屉，并自动预选项目、版本和目标用例。
+- 使用效果：
+  - XMind 页内可以直接从当前生成结果发起入库，不需要切回普通用例生成页重新勾选；
+  - 入库前的非法状态会在树内原位提示，用户能直接看到是哪一个模块或哪一条用例有问题；
+  - 保存成功后的后续流程仍复用原有入库抽屉、差异对比和成功悬浮提示，不会新增第二套保存体验；
+  - 当基线来自用例库时，会按“追加入库”语义只带上当前 AI 生成层的数据，避免把基线整棵树重复写回。
+- 新增内容/接口/组件：
+  - `index.html`、`ai-workflow.html`：为 XMind 工具栏新增 `保存入库` 按钮；
+  - `scripts/modules/xmindCasegen.js`：新增保存前范围判定、模块/用例校验、节点标红闪烁、基线来源识别，以及新入库/追加入库分流逻辑；
+  - `scripts/core/casesCore.js`、`scripts/modules/caseLibrary.js`：为导入参考用例补齐来源元数据，区分外部导入和用例库选择；
+  - `scripts/core/casesGenCore.js`、`scripts/core/appRuntime.js`、`scripts/modules/app.js`：新增“显式 items 打开入库抽屉”的共享入口，并支持 XMind 场景预选项目/版本/目标用例；
+  - `style.css`：新增保存前校验失败的红色闪烁高亮样式；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增保存入库按钮的 4 个场景回归；
+  - 未新增后端接口、路由或存储结构。
+- 复用说明：继续复用现有 `casesGenCore` 的新用例入库/旧用例追加入库抽屉、`caseLibrary` 的追加入库 diff 链路、现有中心悬浮 toast 和共享 `caseGenModules/caseGenResults` 真源；本次没有新增第二套入库状态机，也没有新增后端保存接口。
+- 测试与验证：
+  - 自查 code review：确认 XMind 保存只做“当前可见树 -> 校验 -> 分流”，真正入库仍由共享 `casesGenCore` 抽屉处理；确认导入来源元数据只写在 `importedCases.meta`，不会改动已有用例解析结构；
+  - `node --check scripts/core/casesCore.js scripts/core/casesGenCore.js scripts/modules/caseLibrary.js scripts/modules/app.js scripts/core/appRuntime.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "工具栏保存入库会标红未生成用例的模块，并给出悬浮提示|工具栏保存入库会标红结构不合法的用例，并给出悬浮提示|无导入用例时，工具栏保存入库会进入新用例入库抽屉|基线来自用例库选择时，工具栏保存入库会进入旧用例追加入库抽屉并预选目标用例" --reporter=line`（4/4 通过）；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --reporter=line`（26/26 通过）；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_db_store.spec.js -g "新用例入库：直接入库成功，且会校验未选模块二次确认|旧用例追加入库：选择目标用例后二次确认并调用追加接口" --reporter=line`（2/2 通过）；
+  - 本次未改动后端接口，未新增 API 自动化。
+- 更新记录：
+  - 2026-04-01 新增 `保存入库` 按钮，并支持根据导入基线来源自动分流到新用例入库或旧用例追加入库；
+  - 2026-04-01 为保存前校验补齐模块缺例/用例结构异常的树内标红闪烁提示；
+  - 2026-04-01 为 `importedCases` 增加来源元数据，区分外部导入与用例库选择导入。
+
 - 功能名称：XMind 用例生成页面刷新保持视图状态
 - 功能描述：为 `用例生成 -> XMind 用例生成` 抽屉补齐刷新恢复能力。现在页面刷新后会继续停留在 `用例生成` 页面，并自动恢复 XMind 抽屉打开态、全屏态、当前缩放/画布位置，以及已记录的模块折叠状态，不会回到默认视图。
 - 操作方式：
