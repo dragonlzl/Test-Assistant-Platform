@@ -112,6 +112,7 @@
     var drawerRestoreRetryTimer = 0;
     var drawerRestoreRetryCount = 0;
     var drawerRestoreStableCount = 0;
+    var recoveredStatePersistTimer = 0;
     var storeValidationClearTimer = 0;
     var xmindTaskListenerBound = false;
     var xmindTaskProcessingMap = {};
@@ -711,6 +712,17 @@
       }
       drawerRestoreRetryCount = 0;
       drawerRestoreStableCount = 0;
+    }
+
+    function scheduleRecoveredStatePersist() {
+      if (recoveredStatePersistTimer) {
+        clearTimeout(recoveredStatePersistTimer);
+        recoveredStatePersistTimer = 0;
+      }
+      recoveredStatePersistTimer = setTimeout(function() {
+        recoveredStatePersistTimer = 0;
+        persistXmindState(true);
+      }, 0);
     }
 
     function destroyMind() {
@@ -7335,6 +7347,8 @@
         importedCases: cloneJson(state.importedCases, []),
         caseGenModules: cloneJson(state.caseGenModules, []),
         caseGenResults: cloneJson(state.caseGenResults, {}),
+        operationSnapshots: cloneJson(ensureState().operationSnapshots, []),
+        nextSnapshotId: Number(ensureState().nextSnapshotId || 1),
         history: cloneJson(ensureState().history, []),
         rootPipeline: cloneRootPipelineSnapshot(getRootPipelineState()),
         prep: prep,
@@ -7365,6 +7379,69 @@
       return mergedResults;
     }
 
+    function normalizeRestoreOperationSnapshots(list) {
+      return (Array.isArray(list) ? list : []).map(function(item) {
+        if (!item || typeof item !== 'object') return null;
+        return {
+          id: String(item.id || ''),
+          scope: item.scope === 'module' ? 'module' : 'root',
+          moduleId: item.moduleId ? String(item.moduleId || '') : '',
+          caseGenModules: cloneJson(item.caseGenModules, []),
+          caseGenResults: cloneJson(item.caseGenResults, {}),
+          caseSelections: cloneJson(item.caseSelections, {}),
+          caseGenSuggestions: cloneJson(item.caseGenSuggestions, {}),
+          caseGenModuleStatus: cloneJson(item.caseGenModuleStatus, {}),
+          caseGenProgress: cloneJson(item.caseGenProgress, {}),
+          caseGenTiming: cloneJson(item.caseGenTiming, {}),
+          caseGenSource: String(item.caseGenSource || ''),
+          createdAt: Number(item.createdAt || 0),
+        };
+      }).filter(function(item) {
+        return Boolean(item && item.id);
+      });
+    }
+
+    function deriveNextOperationSnapshotId(list, fallback) {
+      var nextId = Number(fallback || 0);
+      if (!Number.isFinite(nextId) || nextId < 0) nextId = 0;
+      (Array.isArray(list) ? list : []).forEach(function(item) {
+        if (!item || !item.id) return;
+        var match = String(item.id || '').match(/op-snap-(\d+)$/);
+        if (!match) return;
+        var value = Number(match[1]);
+        if (!Number.isFinite(value) || value < 0) return;
+        if ((value + 1) > nextId) nextId = value + 1;
+      });
+      return nextId > 0 ? nextId : 1;
+    }
+
+    function buildOperationSnapshotRestoreVersion(list, nextSnapshotId) {
+      var normalizedList = normalizeRestoreOperationSnapshots(list);
+      var latestCreatedAt = 0;
+      normalizedList.forEach(function(item) {
+        var createdAt = Number(item && item.createdAt || 0);
+        if (!Number.isFinite(createdAt) || createdAt < 0) return;
+        if (createdAt > latestCreatedAt) latestCreatedAt = createdAt;
+      });
+      return {
+        list: normalizedList,
+        length: normalizedList.length,
+        latestCreatedAt: latestCreatedAt,
+        nextSnapshotId: deriveNextOperationSnapshotId(normalizedList, nextSnapshotId),
+      };
+    }
+
+    function shouldPreferRestoreOperationSnapshots(baseVersion, incomingVersion) {
+      var base = baseVersion || buildOperationSnapshotRestoreVersion([], 1);
+      var incoming = incomingVersion || buildOperationSnapshotRestoreVersion([], 1);
+      if (!incoming.length) return false;
+      if (!base.length) return true;
+      if (incoming.nextSnapshotId > base.nextSnapshotId) return true;
+      if (incoming.length > base.length) return true;
+      if (incoming.latestCreatedAt > base.latestCreatedAt) return true;
+      return false;
+    }
+
     function mergeTaskRestoreContext(baseContext, incomingContext) {
       var base = baseContext && typeof baseContext === 'object' ? cloneJson(baseContext, {}) : {};
       var incoming = incomingContext && typeof incomingContext === 'object' ? cloneJson(incomingContext, {}) : {};
@@ -7392,6 +7469,18 @@
       }
 
       base.caseGenResults = mergeRestoreResultMap(base.caseGenResults, incoming.caseGenResults);
+      var baseOperationVersion = buildOperationSnapshotRestoreVersion(base.operationSnapshots, base.nextSnapshotId);
+      var incomingOperationVersion = buildOperationSnapshotRestoreVersion(incoming.operationSnapshots, incoming.nextSnapshotId);
+      if (shouldPreferRestoreOperationSnapshots(baseOperationVersion, incomingOperationVersion)) {
+        base.operationSnapshots = cloneJson(incomingOperationVersion.list, []);
+        base.nextSnapshotId = incomingOperationVersion.nextSnapshotId;
+      } else {
+        base.operationSnapshots = cloneJson(baseOperationVersion.list, []);
+        base.nextSnapshotId = Math.max(
+          baseOperationVersion.nextSnapshotId,
+          incomingOperationVersion.nextSnapshotId
+        );
+      }
 
       var baseHistory = Array.isArray(base.history) ? base.history : [];
       var incomingHistory = Array.isArray(incoming.history) ? incoming.history : [];
@@ -7558,6 +7647,30 @@
         state.caseGenResults = cloneJson(mergedResults, {});
         changed = true;
       }
+      var xmindState = ensureState();
+      var currentOperationVersion = buildOperationSnapshotRestoreVersion(
+        xmindState.operationSnapshots,
+        xmindState.nextSnapshotId
+      );
+      var restoreOperationVersion = buildOperationSnapshotRestoreVersion(
+        restoreContext.operationSnapshots,
+        restoreContext.nextSnapshotId
+      );
+      if (shouldPreferRestoreOperationSnapshots(currentOperationVersion, restoreOperationVersion)) {
+        xmindState.operationSnapshots = cloneJson(restoreOperationVersion.list, []);
+        xmindState.nextSnapshotId = restoreOperationVersion.nextSnapshotId;
+        syncCaseGenOperationPointersLocal();
+        changed = true;
+      } else {
+        var currentNextSnapshotId = deriveNextOperationSnapshotId(
+          xmindState.operationSnapshots,
+          xmindState.nextSnapshotId
+        );
+        if (currentNextSnapshotId !== Number(xmindState.nextSnapshotId || 1)) {
+          xmindState.nextSnapshotId = currentNextSnapshotId;
+          changed = true;
+        }
+      }
       var currentHistory = Array.isArray(ensureState().history) ? ensureState().history : [];
       if (
         Array.isArray(restoreContext.history)
@@ -7633,6 +7746,9 @@
       }
       if (changed && casesCoreApi && typeof casesCoreApi.syncCaseTextWithImports === 'function') {
         casesCoreApi.syncCaseTextWithImports();
+      }
+      if (changed) {
+        scheduleRecoveredStatePersist();
       }
       return changed;
     }

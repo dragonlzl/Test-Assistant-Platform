@@ -5063,6 +5063,14 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(String(page.url())).toContain('ai-workflow.html');
     expect(String(page.url())).toContain('tab=casesgen');
     expect(String(workflowUrl)).toContain('ai-workflow.html');
+
+    await openNodeContextMenu(page, 'XMind后台恢复需求');
+    const rootItemsAfterRefresh = await getContextMenuItems(page);
+    expect(rootItemsAfterRefresh.find((item) => item.label === '放弃本次生成').disabled).toBe(false);
+    await clickContextMenuAction(page, '放弃本次生成');
+    await waitForNodeText(page, 'XMind后台恢复需求');
+    await waitForNodeTextAbsent(page, '登录模块');
+    await waitForNodeTextAbsent(page, '登录成功校验');
   });
 
   test('XMind 刷新接管后，生成完成不会改变当前画布位置', async ({ page }) => {
