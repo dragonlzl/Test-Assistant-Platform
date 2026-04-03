@@ -509,6 +509,122 @@ async function installRootPipelineStaggeredStub(page) {
   });
 }
 
+async function installRootPipelineStaggeredRoute(page) {
+  const calls = [];
+  function flattenContent(content) {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content.map((item) => {
+      if (!item || typeof item !== 'object') return '';
+      if (item.type === 'text') return String(item.text || '');
+      return '[image]';
+    }).join('\n');
+  }
+  function parseJsonText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (_) {}
+    const objStart = raw.indexOf('{');
+    const objEnd = raw.lastIndexOf('}');
+    if (objStart >= 0 && objEnd > objStart) {
+      try {
+        return JSON.parse(raw.slice(objStart, objEnd + 1));
+      } catch (_) {}
+    }
+    return null;
+  }
+  function extractSection(text, marker) {
+    const source = String(text || '');
+    const index = source.indexOf(marker);
+    if (index === -1) return '';
+    let rest = source.slice(index + marker.length);
+    const next = rest.indexOf('\n\n【');
+    if (next !== -1) rest = rest.slice(0, next);
+    return String(rest || '').trim();
+  }
+  function makeModule(name, cases) {
+    return {
+      module: name,
+      key_scenarios: [name + '主场景'],
+      test_points: [name + '关键校验'],
+      coupled_modules: [name + '关联模块'],
+      cases: Array.isArray(cases) ? cases : [],
+    };
+  }
+  function makeCase(moduleName, title) {
+    return {
+      module: moduleName,
+      title: title,
+      priority: 'P1',
+      preconditions: moduleName + '前置条件',
+      steps: ['1、进入' + moduleName, '2、执行' + title],
+      expected: title + '执行成功',
+    };
+  }
+
+  await page.route('**/api/model-proxy', async (route) => {
+    const request = route.request();
+    const body = request.postDataJSON ? request.postDataJSON() : {};
+    const modelPayload = body && body.payload ? body.payload : {};
+    const messages = Array.isArray(modelPayload.messages) ? modelPayload.messages : [];
+    const promptText = flattenContent(messages[0] && messages[0].content);
+    const userText = flattenContent(messages[1] && messages[1].content);
+    const contract = parseJsonText(extractSection(userText, '【operation_contract(JSON)】'))
+      || parseJsonText(extractSection(promptText, 'operation_contract(JSON)：'))
+      || {};
+    const mode = String(contract.mode || '');
+    const targetModule = String(contract.targetModule || '');
+    let delayMs = 120;
+    let responseModules = [];
+
+    if (mode === 'full_cases') {
+      delayMs = 120;
+      responseModules = [
+        makeModule('登录模块', [makeCase('登录模块', '登录模块-首批用例')]),
+        makeModule('支付模块', [makeCase('支付模块', '支付模块-尾批用例')]),
+      ];
+    } else if (mode === 'module_full_cases' && targetModule === '登录模块') {
+      delayMs = 900;
+      responseModules = [makeModule('登录模块', [makeCase('登录模块', '登录模块-首批用例')])];
+    } else if (mode === 'module_full_cases' && targetModule === '支付模块') {
+      delayMs = 80;
+      responseModules = [makeModule('支付模块', [makeCase('支付模块', '支付模块-尾批用例')])];
+    } else {
+      responseModules = [makeModule(targetModule || '默认模块', [makeCase(targetModule || '默认模块', '默认模块-完整-1')])];
+    }
+
+    calls.push({
+      mode: mode,
+      targetModule: targetModule,
+      startedAt: Date.now(),
+    });
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        output: [{
+          type: 'message',
+          role: 'assistant',
+          content: [{
+            type: 'output_text',
+            text: JSON.stringify({ modules: responseModules }),
+          }],
+        }],
+      }),
+    });
+  });
+  return {
+    getCalls() {
+      return calls.slice();
+    },
+  };
+}
+
 async function installRawXmindModelResponse(page, contentText, delayMs) {
   await page.evaluate(({ rawContent, delay }) => {
     var client = window.app && window.app.apiClient ? window.app.apiClient : null;
@@ -5043,5 +5159,80 @@ test.describe('XMind 用例生成抽屉', () => {
       }
     });
     expect(Array.isArray(taskState) ? taskState.length : 1).toBe(0);
+  });
+
+  test('流式展示首个模块结果后刷新，已展示用例不会丢失且剩余模块可继续完成', async ({ page }) => {
+    const token = 'token-xmind-stream-refresh-keep-partial';
+    const user = { id: 302, username: 'demo_user_stream_refresh_keep_partial', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+    const routeCtl = await installRootPipelineStaggeredRoute(page);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：流式生成部分模块后刷新，已展示的模块用例不能丢失。',
+      requirementLabel: 'XMind流式刷新保留需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+    await waitForNodeText(page, '支付模块-尾批用例');
+    await waitForNodeTextAbsent(page, '登录模块-首批用例');
+
+    const partialBeforeReload = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      if (!state) return null;
+      var modules = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
+      var pay = null;
+      for (var i = 0; i < modules.length; i += 1) {
+        if (String(modules[i] && modules[i].title || '') === '支付模块') {
+          pay = modules[i];
+          break;
+        }
+      }
+      var raw = pay && pay.id && state.caseGenResults ? String(state.caseGenResults[pay.id] || '') : '';
+      return {
+        payModuleId: pay ? String(pay.id || '') : '',
+        payHasCase: raw.indexOf('支付模块-尾批用例') !== -1,
+      };
+    });
+    expect(partialBeforeReload).not.toBeNull();
+    expect(partialBeforeReload.payHasCase).toBe(true);
+
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await waitForNodeText(page, 'XMind流式刷新保留需求');
+    await waitForNodeText(page, '支付模块');
+    await waitForNodeText(page, '支付模块-尾批用例');
+    await waitForNodeText(page, '登录模块-首批用例');
+
+    const finalState = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      if (!state) return null;
+      var modules = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
+      var summary = {};
+      modules.forEach(function(item) {
+        if (!item || !item.id) return;
+        var raw = state.caseGenResults ? String(state.caseGenResults[item.id] || '') : '';
+        summary[String(item.title || '')] = raw;
+      });
+      return summary;
+    });
+    expect(finalState).not.toBeNull();
+    expect(String(finalState['支付模块'] || '')).toContain('支付模块-尾批用例');
+    expect(String(finalState['登录模块'] || '')).toContain('登录模块-首批用例');
+    expect(routeCtl.getCalls().length).toBeGreaterThanOrEqual(4);
   });
 });

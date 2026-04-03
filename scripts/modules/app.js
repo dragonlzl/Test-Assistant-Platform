@@ -1473,6 +1473,50 @@
         return count;
       }
 
+      function updateTasksContext(patch, options) {
+        var opts = options && typeof options === 'object' ? options : {};
+        var list = readTasks();
+        if (!Array.isArray(list) || !list.length) return 0;
+        var taskIds = Array.isArray(opts.taskIds) ? opts.taskIds.map(function(item) {
+          return String(item || '');
+        }).filter(Boolean) : null;
+        var changedCount = 0;
+        var latestChangedTask = null;
+        var nextList = list.map(function(item) {
+          if (!item || !item.id) return item;
+          if (opts.onlyRunning === true && item.status !== 'running') return item;
+          if (taskIds && taskIds.indexOf(String(item.id || '')) === -1) return item;
+          var nextTask = cloneJson(item, null);
+          if (!nextTask) return item;
+          var nextContext = nextTask.restoreContext && typeof nextTask.restoreContext === 'object'
+            ? cloneJson(nextTask.restoreContext, {})
+            : {};
+          if (typeof patch === 'function') {
+            try {
+              patch(nextContext, nextTask);
+            } catch (err) {
+              return item;
+            }
+          } else if (patch && typeof patch === 'object') {
+            Object.keys(patch).forEach(function(key) {
+              if (patch[key] === undefined) {
+                delete nextContext[key];
+              } else {
+                nextContext[key] = patch[key];
+              }
+            });
+          }
+          nextTask.restoreContext = nextContext;
+          nextTask.updatedAt = Date.now();
+          changedCount += 1;
+          latestChangedTask = nextTask;
+          return nextTask;
+        });
+        if (changedCount <= 0) return 0;
+        writeTasks(nextList, opts.action || 'context', latestChangedTask);
+        return changedCount;
+      }
+
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
         window.addEventListener('storage', function(e) {
           var key = e && e.key ? String(e.key) : '';
@@ -1489,6 +1533,7 @@
         clearTask: clearTask,
         cancelTask: cancelTask,
         cancelAllRunning: cancelAllRunning,
+        updateTasksContext: updateTasksContext,
         resumeTasks: resumeTasks,
         buildTaskId: buildTaskId,
         normalizeModelSnapshot: normalizeModelSnapshot,
