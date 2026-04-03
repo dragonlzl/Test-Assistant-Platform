@@ -3573,6 +3573,56 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(latestCard).toContainText('错误信息：503 Service Unavailable');
   });
 
+  test('生成记录会完整展示长错误信息，不再截断为省略号', async ({ page }) => {
+    const token = 'token-xmind-history-long-error';
+    const user = { id: 251, username: 'demo_user_history_long_error', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+    const longError = 'HTTP 429: InvokeModel: operation error Bedrock Runtime: InvokeModel, exceeded maximum number of attempts, 3, https response headers: x-request-id=req-001 retry-after=60 upstream-trace=bedrock-limit-test long-tail-marker-bedrock-rate-limit';
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installRejectedXmindModelResponse(page, longError, 120);
+    await seedDocumentRequirement(page, {
+      text: '需求：验证长错误信息在生成记录里会完整展示，不会被截断。',
+      requirementLabel: 'XMind长错误信息需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind长错误信息需求');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await page.waitForFunction(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var history = state && state.xmindCaseGen ? state.xmindCaseGen.history : null;
+      return Boolean(Array.isArray(history) && history.length > 0);
+    }, {}, { timeout: 15000 });
+
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
+    await expect(latestCard).toContainText('生成失败');
+    await expect(latestCard).toContainText('long-tail-marker-bedrock-rate-limit');
+    const errorBlock = latestCard.locator('.xmind-casegen-history-diagnostic-block').first();
+    await expect(errorBlock).toContainText('错误信息：');
+    await expect(errorBlock).toContainText('long-tail-marker-bedrock-rate-limit');
+    const blockStyle = await errorBlock.evaluate((node) => {
+      var textEl = node && node.querySelector ? node.querySelector('.xmind-casegen-history-diagnostic-block-text') : null;
+      var target = textEl || node;
+      var style = window.getComputedStyle(target);
+      return {
+        whiteSpace: String(style.whiteSpace || ''),
+        textOverflow: String(style.textOverflow || ''),
+      };
+    });
+    expect(blockStyle.whiteSpace).not.toBe('nowrap');
+    expect(blockStyle.textOverflow).not.toBe('ellipsis');
+  });
+
   test('DeepSeek 模型在 XMind 提示词下不会误判为 JSON 数组并可正常生成', async ({ page }) => {
     const token = 'token-xmind-deepseek-object-shape';
     const user = { id: 29, username: 'demo_user_deepseek_object_shape', role: 'user', level: 'member' };

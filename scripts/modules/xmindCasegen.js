@@ -2860,6 +2860,49 @@
       persistXmindState(true);
     }
 
+    function buildHistoryDiagnosticSectionsHtml(diagnostics) {
+      var detailedDiagnostics = [];
+      var chipDiagnostics = [];
+      (Array.isArray(diagnostics) ? diagnostics : []).forEach(function(item) {
+        var text = String(item || '').trim();
+        if (!text) return;
+        if (/^错误信息：/.test(text) || text.length > 120) {
+          detailedDiagnostics.push(text);
+          return;
+        }
+        chipDiagnostics.push(text);
+      });
+      var sections = [];
+      if (detailedDiagnostics.length) {
+        sections.push(
+          '<div class="xmind-casegen-history-diagnostics xmind-casegen-history-diagnostics-blocks">'
+            + detailedDiagnostics.map(function(text) {
+              var clean = String(text || '').trim();
+              var match = clean.match(/^([^：]{2,20}：)\s*(.+)$/);
+              var label = match ? String(match[1] || '') : '';
+              var value = match ? String(match[2] || '') : clean;
+              return '<div class="xmind-casegen-history-diagnostic-block">'
+                + (label
+                  ? '<strong class="xmind-casegen-history-diagnostic-block-label">' + escapeHtml(label) + '</strong>'
+                  : '')
+                + '<span class="xmind-casegen-history-diagnostic-block-text">' + escapeHtml(value) + '</span>'
+                + '</div>';
+            }).join('')
+          + '</div>'
+        );
+      }
+      if (chipDiagnostics.length) {
+        sections.push(
+          '<div class="xmind-casegen-history-diagnostics">'
+            + chipDiagnostics.map(function(text) {
+              return '<span class="xmind-casegen-history-diagnostic-chip">' + escapeHtml(text) + '</span>';
+            }).join('')
+          + '</div>'
+        );
+      }
+      return sections.join('');
+    }
+
     function renderHistoryDialog() {
       if (!summaryDialogBodyEl) return;
       var history = ensureState().history || [];
@@ -2905,13 +2948,7 @@
                 + '<span class="xmind-casegen-history-preview-text">' + escapeHtml(entry.previewText) + '</span>'
               + '</div>'
             : '';
-          var diagnosticsHtml = diagnostics.length
-            ? '<div class="xmind-casegen-history-diagnostics">'
-                + diagnostics.map(function(text) {
-                  return '<span class="xmind-casegen-history-diagnostic-chip">' + escapeHtml(text) + '</span>';
-                }).join('')
-              + '</div>'
-            : '';
+          var diagnosticsHtml = buildHistoryDiagnosticSectionsHtml(diagnostics);
           return '<article class="xmind-casegen-history-card">'
             + '<div class="xmind-casegen-history-head">'
             +   '<div class="xmind-casegen-history-copy">'
@@ -3956,6 +3993,15 @@
       var clean = String(text || '').replace(/\s+/g, ' ').trim();
       if (!clean) return '';
       if (!Number.isFinite(limit) || limit <= 0) limit = 120;
+      if (clean.length <= limit) return clean;
+      return clean.slice(0, limit).trim() + '…';
+    }
+
+    function normalizeHistoryLongText(text, maxLength) {
+      var limit = Number(maxLength);
+      var clean = String(text || '').replace(/\s+/g, ' ').trim();
+      if (!clean) return '';
+      if (!Number.isFinite(limit) || limit <= 0) limit = 2000;
       if (clean.length <= limit) return clean;
       return clean.slice(0, limit).trim() + '…';
     }
@@ -5016,7 +5062,7 @@
 
     function buildGenerationErrorInfo(err) {
       var rawMessage = err && err.message ? String(err.message) : '未知错误';
-      var summary = summarizeModelOutputText(rawMessage, 120);
+      var detailText = normalizeHistoryLongText(rawMessage, 2000);
       var reasonText = '模型调用出错，请稍后重试。';
       if (/超时/.test(rawMessage)) {
         reasonText = '模型响应超时，请稍后重试。';
@@ -5028,7 +5074,7 @@
       return {
         resultKind: 'error',
         reasonText: reasonText,
-        diagnostics: summary ? ['错误信息：' + summary] : [],
+        diagnostics: detailText ? ['错误信息：' + detailText] : [],
         previewText: '',
       };
     }

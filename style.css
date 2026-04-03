@@ -4152,6 +4152,32 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   flex-wrap: wrap;
   gap: 8px;
 }
+.xmind-casegen-history-diagnostics-blocks {
+  display: flex;
+  flex-direction: column;
+}
+.xmind-casegen-history-diagnostic-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(148,163,184,0.24);
+  background: rgba(248,250,252,0.96);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.xmind-casegen-history-diagnostic-block-label {
+  flex: 0 0 auto;
+  font-weight: 800;
+  color: #475569;
+}
+.xmind-casegen-history-diagnostic-block-text {
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
+}
 .xmind-casegen-history-diagnostic-chip {
   display: inline-flex;
   align-items: center;
@@ -12081,6 +12107,14 @@ button.exec-overview-file-chip,
 }
 :root[data-theme="dark"] .xmind-casegen-history-preview-label {
   color: #bfdbfe;
+}
+:root[data-theme="dark"] .xmind-casegen-history-diagnostic-block {
+  border-color: rgba(71,85,105,0.42);
+  background: rgba(15,23,42,0.72);
+  color: #e2e8f0;
+}
+:root[data-theme="dark"] .xmind-casegen-history-diagnostic-block-label {
+  color: #cbd5e1;
 }
 :root[data-theme="dark"] .xmind-casegen-history-diagnostic-chip {
   border-color: rgba(71,85,105,0.42);
