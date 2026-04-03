@@ -2014,6 +2014,27 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
   });
 
+  test('前置准备 step1 的手填需求模式会实时更新下一步按钮状态', async ({ page }) => {
+    const token = 'token-xmind-prep-manual-realtime';
+    const user = { id: 111, username: 'demo_user_111', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.check('input[name="xmindRequirementMode"][value="manual"]', { force: true });
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+
+    await page.fill('#xmindCaseGenManualRequirementText', '手填需求：支持用户填写需求描述后立即进入下一步。');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+
+    await page.fill('#xmindCaseGenManualRequirementText', '');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+  });
+
   test('前置准备 step2 的已有用例导入复用拖拽上传样式，并在导入后允许下一步', async ({ page }) => {
     const token = 'token-xmind-prep-cases-zone';
     const user = { id: 12, username: 'demo_user_12', role: 'user', level: 'member' };
@@ -2678,6 +2699,79 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(lastRootFullCasesCall).toBeTruthy();
     expect(lastRootFullCasesCall.user).toContain('【需求正文】\n需求正文：第二次生成，重置后应该使用这一轮的新需求重新生成模块和用例。');
     expect(lastRootFullCasesCall.user).not.toContain('第一次生成，仅用于构造重置前的上下文');
+  });
+
+  test('当前 step1 选中的需求来源会决定 XMind 生成上下文', async ({ page }) => {
+    const token = 'token-xmind-prep-source-selection';
+    const user = { id: 1002, username: 'demo_user_1002', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+    async function runWithSelectedRequirementMode(mode, requirementLabel) {
+      await gotoCasesgenWorkflow(page);
+      await waitXmindModelAssigned(page, mockInfo.modelId);
+      await installXmindModelStub(page, 180);
+      await autoAcceptXmindConfirm(page);
+      await page.evaluate(() => {
+        if (window.app && window.app.xmindCasegenApi && typeof window.app.xmindCasegenApi.resetAllState === 'function') {
+          window.app.xmindCasegenApi.resetAllState({ silentBlocked: true });
+        }
+      });
+      await page.evaluate(() => {
+        if (!window.app || !window.app.state) return;
+        window.app.state.caseGenSettings = window.app.state.caseGenSettings || {};
+        window.app.state.caseGenSettings.needFunctionCondition = false;
+        window.app.state.caseGenSettings.needNumericValidation = false;
+        window.app.state.caseGenSettings.needBoundary = false;
+        window.app.state.caseGenSettings.needMobile = false;
+        window.app.state.caseGenSettings.needSpecial = false;
+        window.app.state.caseGenSettings.specialRepeatOperation = false;
+        window.app.state.caseGenSettings.specialMultiTouch = false;
+        window.app.state.caseGenSettings.specialRepeatExecution = false;
+        window.app.state.caseGenSettings.specialWeakNetwork = false;
+        window.app.state.caseGenSettings.specialInterruptResume = false;
+      });
+      await seedDocumentRequirement(page, {
+        text: '需求正文：文档上下文只应在选中文档模式时提交。',
+        requirementLabel: requirementLabel,
+      });
+      await seedPrepState(page, {
+        step: 3,
+        requirementMode: mode,
+        manualRequirementBlocks: [{ type: 'text', text: '手填需求：手填上下文只应在选中手填模式时提交。' }],
+        caseImportMode: 'skip',
+        completed: true,
+      });
+      await openXmindCaseGenDrawer(page);
+      await waitForNodeText(page, requirementLabel);
+      await openRootContextMenu(page);
+      const items = await getContextMenuItems(page);
+      const fullCasesAction = items.some((item) => item.label === '生成全量用例') ? '生成全量用例' : '重新生成全量用例';
+      await clickContextMenuAction(page, fullCasesAction);
+      await waitForNodeStatus(page, requirementLabel, '生成中');
+      await waitForNodeStatusAbsent(page, requirementLabel);
+      return page.evaluate(() => {
+        var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+        for (var i = calls.length - 1; i >= 0; i -= 1) {
+          var item = calls[i];
+          if (!item || !item.contract) continue;
+          if (String(item.contract.scope || '') !== 'root') continue;
+          if (String(item.contract.mode || '') !== 'full_cases') continue;
+          return {
+            user: String(item.user || ''),
+          };
+        }
+        return null;
+      });
+    }
+
+    const manualCall = await runWithSelectedRequirementMode('manual', 'XMind双来源切换需求-手填');
+    expect(manualCall).toBeTruthy();
+    expect(manualCall.user).toContain('【手填需求描述】\n手填需求：手填上下文只应在选中手填模式时提交。');
+    expect(manualCall.user).not.toContain('需求正文：文档上下文只应在选中文档模式时提交。');
+
+    const documentCall = await runWithSelectedRequirementMode('document', 'XMind双来源切换需求-文档');
+    expect(documentCall).toBeTruthy();
+    expect(documentCall.user).toContain('【需求正文】\n需求正文：文档上下文只应在选中文档模式时提交。');
+    expect(documentCall.user).not.toContain('手填需求：手填上下文只应在选中手填模式时提交。');
   });
 
   test('根节点右键触发生成前置准备时，会先收起右键菜单', async ({ page }) => {
