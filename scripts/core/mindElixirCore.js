@@ -1503,6 +1503,17 @@
         fullscreenToggleBtn.setAttribute('aria-pressed', fullscreen ? 'true' : 'false');
       }
 
+      function notifyViewportStateChange(reason) {
+        if (!opts || typeof opts.onViewStateChange !== 'function') return;
+        try {
+          opts.onViewStateChange({
+            reason: reason ? String(reason || '') : '',
+          });
+        } catch (err) {
+          // ignore
+        }
+      }
+
       function setDrawerFullscreen(enabled) {
         if (!canToggleDrawerFullscreen()) {
           syncFullscreenButtonState();
@@ -1512,6 +1523,7 @@
         else drawerEl.classList.remove(drawerFullscreenClassName);
         syncFullscreenButtonState();
         updateViewerDragState(viewerEl, getInstance(), false);
+        notifyViewportStateChange('drawer-fullscreen');
         return enabled === true;
       }
 
@@ -1525,6 +1537,7 @@
         var center = getCanvasCenterPoint();
         inst.scale(next, center);
         updateViewerDragState(viewerEl, inst, false);
+        notifyViewportStateChange(step > 0 ? 'zoom-in' : 'zoom-out');
       }
 
       function zoomByWheelEvent(e) {
@@ -1550,6 +1563,7 @@
         };
         inst.scale(next, center);
         updateViewerDragState(viewerEl, inst, false);
+        notifyViewportStateChange('zoom-wheel');
         return true;
       }
 
@@ -1573,6 +1587,7 @@
           return false;
         }
         updateViewerDragState(viewerEl, inst, false);
+        notifyViewportStateChange('pan-wheel');
         return true;
       }
 
@@ -1598,6 +1613,7 @@
           }
         }
         updateViewerDragState(viewerEl, inst, false);
+        notifyViewportStateChange('zoom-fit');
       }
 
       function ensureBoxRectEl() {

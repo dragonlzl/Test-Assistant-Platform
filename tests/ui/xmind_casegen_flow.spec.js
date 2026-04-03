@@ -2724,8 +2724,13 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '登录模块');
     await waitForNodeText(page, '支付模块');
     const beforeZoomSnapshot = await readXmindCasegenViewSnapshot(page);
+    const beforeZoomTransform = parseMindTransformText(beforeZoomSnapshot.transform || '');
     await page.click('#xmindCaseGenMindContainer [data-mind-action="zoom-in"]');
     await page.click('#xmindCaseGenMindContainer [data-mind-action="zoom-in"]');
+    await expect.poll(async () => {
+      const snapshot = await readXmindCasegenViewSnapshot(page);
+      return parseMindTransformText(snapshot && snapshot.transform ? snapshot.transform : '').scale;
+    }).toBeGreaterThan(beforeZoomTransform.scale);
     const panResult = await panXmindCasegenCanvas(page, 180, 120);
     expect(panResult.dispatched).toBeTruthy();
     await page.waitForFunction((beforeTransform) => {
@@ -2756,6 +2761,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(beforeReload.drawerOpen).toBe(true);
     expect(beforeReload.drawerFullscreen).toBe(true);
     expect(beforeReload.transform).not.toBe('');
+    expect(parseMindTransformText(beforeReload.transform || '').scale).toBeGreaterThan(beforeZoomTransform.scale);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
@@ -2793,6 +2799,8 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(afterReload.viewState.drawerOpen).toBe(true);
     expect(afterReload.viewState.fullscreen).toBe(true);
     expect(afterReload.viewState.transform).toBe(beforeReload.transform);
+    expect(Number(afterReload.viewState.scaleVal || 0)).toBeGreaterThan(beforeZoomTransform.scale);
+    expect(Number(afterReload.viewState.scaleVal || 0)).toBeCloseTo(parseMindTransformText(beforeReload.transform || '').scale, 4);
     expect(afterReload.viewState.collapsedNodeKeys).toContain('module::登录模块');
   });
 

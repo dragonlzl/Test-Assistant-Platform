@@ -1799,6 +1799,14 @@
       scheduleCaptureCurrentViewState(false);
     }
 
+    function persistViewportActionViewState() {
+      setTimeout(function() {
+        if (!isDrawerOpen() || !mindInstance) return;
+        captureCurrentViewState();
+        persistXmindState(true);
+      }, 0);
+    }
+
     function bindViewStatePersistenceLifecycle() {
       if (viewStateBeforeUnloadBound) return;
       viewStateBeforeUnloadBound = true;
@@ -6891,6 +6899,19 @@
           onDeleteSelection: handleDeleteSelection,
           getNodeQuickAction: getNodeQuickAction,
           decorateNodeElement: decorateNodeElement,
+          onViewStateChange: function(detail) {
+            var reason = detail && detail.reason ? String(detail.reason || '') : '';
+            if (
+              reason === 'zoom-in'
+              || reason === 'zoom-out'
+              || reason === 'zoom-fit'
+              || reason === 'drawer-fullscreen'
+            ) {
+              persistViewportActionViewState();
+              return;
+            }
+            scheduleCaptureCurrentViewState(false);
+          },
         });
         mountInlineControls();
         syncDeleteHistoryButtons();
