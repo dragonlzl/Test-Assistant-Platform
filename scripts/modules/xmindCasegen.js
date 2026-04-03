@@ -114,6 +114,7 @@
     var drawerRestoreRetryCount = 0;
     var drawerRestoreStableCount = 0;
     var recoveredStatePersistTimer = 0;
+    var pendingOpenCenterRoot = false;
     var storeValidationClearTimer = 0;
     var xmindTaskListenerBound = false;
     var xmindTaskProcessingMap = {};
@@ -831,6 +832,8 @@
         openButtons: [],
         closeButtons: ['closeXmindCaseGenDrawerBtn'],
         onOpen: function() {
+          var shouldCenterRootAfterOpen = pendingOpenCenterRoot === true;
+          pendingOpenCenterRoot = false;
           getViewState().drawerOpen = true;
           getViewState().updatedAt = Date.now();
           clearOpenButtonCompletionNotice({ persist: true });
@@ -871,7 +874,11 @@
             setDebugState({ phase: 'drawer-open-schedule-render' });
             setTimeout(function() {
               setDebugState({ phase: 'drawer-open-render-callback' });
-              render({ reason: 'drawer-open', persist: false });
+              render({
+                reason: 'drawer-open',
+                persist: false,
+                centerRootAfterRender: shouldCenterRootAfterOpen,
+              });
             }, 90);
           } catch (errRender) {
             setDebugState({
@@ -7142,6 +7149,9 @@
         setTimeout(function() {
           syncTopupHighlightPresentation();
         }, 90);
+        if (options.centerRootAfterRender === true) {
+          centerRootNodeView({ persist: true });
+        }
       } catch (err) {
         setDebugState({ phase: 'render-error', error: err && err.message ? String(err.message) : '未知错误' });
         cleanupTopupHighlightPresentation();
@@ -9530,6 +9540,8 @@
 
     function open(options) {
       var opts = options || {};
+      var wasOpen = isDrawerOpen();
+      pendingOpenCenterRoot = opts.restoreOpening === true ? false : !wasOpen;
       clearOpenButtonCompletionNotice({ persist: false });
       switchTab('casesgen');
       setCasesGenModulesView();
@@ -9543,7 +9555,11 @@
       getViewState().drawerOpen = true;
       getViewState().updatedAt = Date.now();
       syncOpenButtonState();
-      render({ reason: 'open-fallback' });
+      render({
+        reason: 'open-fallback',
+        centerRootAfterRender: pendingOpenCenterRoot === true,
+      });
+      pendingOpenCenterRoot = false;
       persistXmindState(true);
       return false;
     }
@@ -9877,7 +9893,7 @@
             phase: 'drawer-restore-attempt',
             attempt: drawerRestoreRetryCount,
           });
-          open({ instant: true });
+          open({ instant: true, restoreOpening: true });
         }
         if (isDrawerOpen()) {
           drawerRestoreStableCount += 1;

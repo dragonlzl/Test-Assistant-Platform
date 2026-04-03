@@ -2310,6 +2310,92 @@ test.describe('XMind 用例生成抽屉', () => {
     }, {}, { timeout: 10000 });
   });
 
+  test('已有用例时关闭后重新通过入口进入，会重新定位到根节点', async ({ page }) => {
+    const token = 'token-xmind-reopen-centers-root';
+    const user = { id: 131, username: 'demo_user_131', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：重新进入 XMind 用例生成时，需要先回到根节点视角。',
+      requirementLabel: 'XMind重进定位根节点需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-root-reopen-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }, {
+      id: 'xmind-root-reopen-pay',
+      title: '支付模块',
+      scenarios: ['支付主场景'],
+      points: ['支付成功校验'],
+      coupled: ['订单中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-root-reopen-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }],
+      'xmind-root-reopen-pay': [{
+        module: '支付模块',
+        title: '支付成功校验',
+        priority: 'P1',
+        preconditions: '订单已创建',
+        steps: ['1、进入支付页', '2、完成支付'],
+        expected: '支付成功',
+      }],
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '支付成功校验');
+
+    const panResult = await panXmindCasegenCanvas(page, 280, 180);
+    expect(panResult.dispatched).toBeTruthy();
+    await page.waitForFunction((beforeTransform) => {
+      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+      return Boolean(map && map.style && String(map.style.transform || '') !== String(beforeTransform || ''));
+    }, panResult.before || '', { timeout: 10000 });
+
+    const centerBeforeReopen = await page.evaluate(() => {
+      var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+        || document.getElementById('xmindCaseGenMindContainer');
+      var textEl = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text');
+      if (!viewer || !viewer.getBoundingClientRect || !textEl || !textEl.getBoundingClientRect) return null;
+      var viewerRect = viewer.getBoundingClientRect();
+      var nodeRect = textEl.getBoundingClientRect();
+      return {
+        dx: Math.abs((nodeRect.left + (nodeRect.width / 2)) - (viewerRect.left + (viewerRect.width / 2))),
+        dy: Math.abs((nodeRect.top + (nodeRect.height / 2)) - (viewerRect.top + (viewerRect.height / 2))),
+      };
+    });
+    expect(centerBeforeReopen).not.toBeNull();
+    expect(Math.max(centerBeforeReopen.dx, centerBeforeReopen.dy)).toBeGreaterThan(30);
+
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
+
+    await openXmindCaseGenDrawer(page);
+    await page.waitForFunction(() => {
+      var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+        || document.getElementById('xmindCaseGenMindContainer');
+      var textEl = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text');
+      if (!viewer || !viewer.getBoundingClientRect || !textEl || !textEl.getBoundingClientRect) return false;
+      var viewerRect = viewer.getBoundingClientRect();
+      var nodeRect = textEl.getBoundingClientRect();
+      var dx = Math.abs((nodeRect.left + (nodeRect.width / 2)) - (viewerRect.left + (viewerRect.width / 2)));
+      var dy = Math.abs((nodeRect.top + (nodeRect.height / 2)) - (viewerRect.top + (viewerRect.height / 2)));
+      return dx <= 10 && dy <= 10;
+    }, {}, { timeout: 10000 });
+  });
+
   test('前置准备改为单步 3 步流程，并在确认后锁定前两步', async ({ page }) => {
     const token = 'token-xmind-prep';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
