@@ -2423,7 +2423,13 @@
       var input = tempExecToolbar.querySelector('input[data-temp-search-input]');
       if (!input || !input.dataset) return;
       if (String(input.dataset.tempSearchInput || '') !== String(info.fileId || '')) return;
-      if (typeof input.focus === 'function') input.focus();
+      if (typeof input.focus === 'function') {
+        try {
+          input.focus({ preventScroll: true });
+        } catch (err) {
+          input.focus();
+        }
+      }
       if (typeof input.setSelectionRange === 'function' && info.selectionStart !== null && info.selectionEnd !== null) {
         var len = input.value ? input.value.length : 0;
         var start = Math.max(0, Math.min(len, info.selectionStart));
@@ -5692,6 +5698,7 @@
 
     function renderTempExecView() {
       if (!tempExecView) return;
+      var searchFocusSnapshot = snapshotTempExecSearchFocus();
       var preserveScroll = Boolean(state.tempExecPreserveScrollOnce);
       var scrollSnapshot = null;
       if (preserveScroll && typeof window !== 'undefined' && tempExecView.getBoundingClientRect) {
@@ -5768,6 +5775,7 @@
         }
         tempExecView.classList.remove('hidden');
         restoreScroll();
+        restoreTempExecSearchFocus(searchFocusSnapshot);
         return;
       }
       renderTempExecToolbar(active);
@@ -5808,6 +5816,7 @@
         scheduleTempExecMissingReminderLazyLoad();
       }
       restoreScroll();
+      restoreTempExecSearchFocus(searchFocusSnapshot);
     }
 
     function normalizeDbTimeInput(input) {

@@ -3251,6 +3251,79 @@ test.describe('XMind 用例生成抽屉', () => {
     });
   });
 
+  test('非全屏抽屉下工具栏会自动换层排布，避免搜索清空按钮被压坏', async ({ page }) => {
+    const token = 'token-xmind-toolbar-nonfullscreen-layout';
+    const user = { id: 212, username: 'demo_user_toolbar_layout', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await page.setViewportSize({ width: 1800, height: 980 });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：验证非全屏 XMind 工具栏在大屏抽屉宽度下也能合理排版，不会把清空按钮压坏。',
+      requirementLabel: 'XMind非全屏工具栏布局需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await page.evaluate(() => {
+      var status = document.getElementById('xmindCaseGenStatus');
+      if (status) {
+        status.textContent = '已选中 2 个节点，可继续删除或保存入库';
+      }
+    });
+
+    const layout = await page.evaluate(() => {
+      var drawer = document.getElementById('xmindCaseGenDrawer');
+      var controls = document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]');
+      var utilityHost = controls ? controls.querySelector('[data-mind-utility-host]') : null;
+      var searchGroup = controls ? controls.querySelector('.xmind-search-group') : null;
+      var clearBtn = controls ? controls.querySelector('[data-mind-action="search-clear"]') : null;
+      var interruptBtn = controls ? controls.querySelector('#xmindCaseGenInterruptBtn') : null;
+      var clearStyle = clearBtn ? window.getComputedStyle(clearBtn) : null;
+      var rect = controls && controls.getBoundingClientRect ? controls.getBoundingClientRect() : null;
+      var utilityRect = utilityHost && utilityHost.getBoundingClientRect ? utilityHost.getBoundingClientRect() : null;
+      var searchRect = searchGroup && searchGroup.getBoundingClientRect ? searchGroup.getBoundingClientRect() : null;
+      var clearRect = clearBtn && clearBtn.getBoundingClientRect ? clearBtn.getBoundingClientRect() : null;
+      var interruptRect = interruptBtn && interruptBtn.getBoundingClientRect ? interruptBtn.getBoundingClientRect() : null;
+      return {
+        drawerFullscreen: Boolean(drawer && drawer.classList && drawer.classList.contains('xmind-drawer-fullscreen')),
+        controlsOverflowX: controls ? Math.max(0, controls.scrollWidth - controls.clientWidth) : 0,
+        controlsOverflowY: controls ? Math.max(0, controls.scrollHeight - controls.clientHeight) : 0,
+        controlsWidth: rect ? rect.width : 0,
+        utilityBottom: utilityRect ? utilityRect.bottom : 0,
+        searchTop: searchRect ? searchRect.top : 0,
+        clearWidth: clearRect ? clearRect.width : 0,
+        clearHeight: clearRect ? clearRect.height : 0,
+        clearOverflowX: clearBtn ? Math.max(0, clearBtn.scrollWidth - clearBtn.clientWidth) : 0,
+        clearText: clearBtn ? String(clearBtn.textContent || '').replace(/\s+/g, ' ').trim() : '',
+        clearWritingMode: clearStyle ? String(clearStyle.writingMode || '') : '',
+        clearWhiteSpace: clearStyle ? String(clearStyle.whiteSpace || '') : '',
+        interruptWidth: interruptRect ? interruptRect.width : 0,
+        interruptRight: interruptRect ? interruptRect.right : 0,
+        utilityRight: utilityRect ? utilityRect.right : 0,
+      };
+    });
+
+    expect(layout.drawerFullscreen).toBeFalsy();
+    expect(layout.controlsWidth).toBeGreaterThan(900);
+    expect(layout.controlsOverflowX).toBeLessThanOrEqual(4);
+    expect(layout.searchTop).toBeGreaterThanOrEqual(layout.utilityBottom - 2);
+    expect(layout.clearText).toBe('清空');
+    expect(layout.clearWidth).toBeGreaterThan(46);
+    expect(layout.clearHeight).toBeLessThan(layout.clearWidth);
+    expect(layout.clearOverflowX).toBeLessThanOrEqual(1);
+    expect(layout.clearWritingMode).toBe('horizontal-tb');
+    expect(layout.clearWhiteSpace).toBe('nowrap');
+    expect(layout.interruptWidth).toBeGreaterThan(80);
+    expect(layout.interruptRight).toBeLessThanOrEqual(layout.utilityRight + 1);
+  });
+
   test('右侧导出XMind按钮替换为模型选择框，并支持直接切换 XMind 模型', async ({ page }) => {
     const token = 'token-xmind-inline-model-select';
     const user = { id: 211, username: 'demo_user_inline_model', role: 'user', level: 'member' };

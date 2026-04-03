@@ -90,6 +90,84 @@ test.describe('临时执行搜索功能', () => {
     await expect(caseRows).toHaveCount(3);
   });
 
+  test('复用展开并滚动后，执行视图搜索框输入不会失焦', async ({ page }) => {
+    await page.evaluate(() => {
+      var cases = [];
+      for (var i = 0; i < 120; i += 1) {
+        cases.push({
+          module: '模块' + String(i + 1),
+          title: i === 67 ? '目标检索用例' : ('普通用例' + String(i + 1)),
+          priority: 'P1',
+          preconditions: '',
+          steps: '步骤' + String(i + 1),
+          expected: '结果' + String(i + 1),
+          actual: '未执行',
+          remark: '',
+          reuseDetails: i === 0
+            ? [{ id: 'reuse-detail-focus', text: '复用子项1', note: '', status: '未执行' }]
+            : [],
+          defectLinks: [],
+        });
+      }
+      window.localStorage.setItem('tempexec-page-size', '200');
+      window.localStorage.setItem('usecase-temp-exec-v1', JSON.stringify({
+        files: [{
+          id: 'reuse-search-focus-file',
+          name: '复用搜索焦点',
+          reuseEnabled: true,
+          reusePresets: [],
+          createdAt: Date.now(),
+          requirement: '',
+          projectId: '',
+          versionId: '',
+          cases: cases,
+        }],
+        versions: [],
+        placement: { requirementOrder: [], fileOrder: {}, versionOrder: [] },
+        collapsed: { req: false, version: false },
+        activeId: 'reuse-search-focus-file',
+      }));
+    });
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
+
+    await page.click('[data-group="cases"]');
+    await page.click('[data-tab-btn="tempexec"]');
+    await page.waitForSelector('[data-section-id="tempexec-view"]:not(.hidden)');
+    await page.evaluate(() => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.applyTempExecPageSize === 'function') {
+        window.app.tempExecApi.applyTempExecPageSize(200);
+      }
+      if (window.scrollTo) window.scrollTo(0, 0);
+    });
+
+    await page.click('[data-temp-reuse-panel="reuse-search-focus-file"][data-index="0"]');
+    await expect(page.locator('.reuse-row.visible')).toHaveCount(1);
+
+    for (let i = 0; i < 12; i += 1) {
+      await page.mouse.wheel(0, 700);
+      const scrollTop = await page.evaluate(() => {
+        return window.scrollY || document.documentElement.scrollTop || 0;
+      });
+      if (scrollTop > 1800) break;
+    }
+    await page.waitForFunction(() => {
+      return (window.scrollY || document.documentElement.scrollTop || 0) > 800;
+    }, null, { timeout: 10000 });
+    await page.waitForTimeout(300);
+
+    const searchInput = page.locator('#tempExecToolbar input[placeholder="搜索用例关键字"]');
+    await expect(searchInput).toBeVisible();
+    await searchInput.click();
+    await page.keyboard.type('目标检索', { delay: 40 });
+
+    await expect(searchInput).toBeFocused();
+    await expect(searchInput).toHaveValue('目标检索');
+    const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });
+    await expect(caseRows).toHaveCount(1, { timeout: 15000 });
+    await expect(caseRows.first()).toContainText('目标检索用例');
+  });
+
   test('删除用例改为确认抽屉', async ({ page }) => {
     await page.click('[data-group="cases"]');
     await page.click('[data-tab-btn="tempexec"]');

@@ -9754,6 +9754,12 @@ tr.import-invalid-locate-active td {
   min-width: 34px;
   padding: 0 10px;
   line-height: 28px;
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
+}
+.xmind-casegen-viewer .xmind-search-btn[data-mind-action="search-clear"] {
+  min-width: 54px;
+  padding: 0 12px;
 }
 
 .xmind-structure-viewer .xmind-export-btn {
@@ -9916,9 +9922,102 @@ tr.import-invalid-locate-active td {
 }
 .xmind-casegen-viewer .xmind-casegen-inline-status {
   max-width: 200px;
+  min-width: 0;
 }
 .xmind-casegen-viewer .xmind-casegen-inline-status-text {
+  display: block;
+  max-width: 100%;
   padding-left: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-structure-controls {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 12px;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-controls-leading,
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-controls-trailing {
+  width: 100%;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-controls-leading {
+  margin-right: 0;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-controls-leading-host {
+  width: 100%;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-casegen-inline-overview {
+  flex: 1 1 360px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-casegen-inline-task-indicator,
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-casegen-inline-counts {
+  max-width: 100%;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-controls-trailing {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 10px;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-controls-utility-host {
+  width: auto;
+  flex: 1 1 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding-right: 2px;
+  justify-content: flex-start;
+  gap: 0;
+  row-gap: 6px;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-casegen-inline-group {
+  max-width: 100%;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-casegen-inline-group-task {
+  margin-left: auto;
+  flex: 1 1 220px;
+  min-width: 0;
+  justify-content: flex-end;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-casegen-inline-status {
+  flex: 1 1 240px;
+  max-width: 320px;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-casegen-inline-group-task .xmind-casegen-inline-btn-danger {
+  flex: 0 0 auto;
+  min-width: 86px;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-search-group {
+  order: 2;
+  flex: 1 1 320px;
+  min-width: 280px;
+  justify-content: flex-start;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-search-input {
+  width: auto;
+  min-width: 180px;
+  flex: 1 1 220px;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-action-group {
+  order: 3;
+  flex: 0 1 auto;
+  margin-left: auto;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-zoom-group {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-casegen-model-picker {
+  flex: 0 1 auto;
+}
+#xmindCaseGenDrawer:not(.xmind-drawer-fullscreen) .xmind-casegen-viewer .xmind-casegen-model-select {
+  min-width: 132px;
+  max-width: 180px;
 }
 
 .xmind-structure-viewer .xmind-fullscreen-btn {
