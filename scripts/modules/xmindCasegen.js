@@ -2629,6 +2629,7 @@
       prep[key] = value;
       if (key !== 'completed' && key !== 'step' && key !== 'baseLocked') prep.completed = false;
       persistXmindState(immediate === true);
+      syncPrepDialogState();
       return true;
     }
 
@@ -3029,6 +3030,49 @@
       return changed;
     }
 
+    function getSelectedRequirementSource() {
+      var prep = getPrepState();
+      var mode = prep.requirementMode === 'manual'
+        ? 'manual'
+        : (prep.requirementMode === 'document' ? 'document' : '');
+      var rawTextEl = document.getElementById('rawText');
+      var documentText = rawTextEl && rawTextEl.value ? String(rawTextEl.value).trim() : '';
+      var manualText = getManualRequirementText();
+      var manualImages = getManualRequirementImages();
+      if (mode === 'manual') {
+        return {
+          mode: 'manual',
+          text: manualText,
+          supplement: '',
+          importName: '',
+          images: manualImages,
+          imageCount: manualImages.length,
+          hasContent: Boolean(manualText) || manualImages.length > 0,
+        };
+      }
+      if (mode === 'document') {
+        var documentImages = collectDocumentRequirementImages();
+        return {
+          mode: 'document',
+          text: documentText,
+          supplement: String(prep.requirementSupplement || '').trim(),
+          importName: state.lastRawImportName ? String(state.lastRawImportName).trim() : '',
+          images: documentImages,
+          imageCount: documentImages.length,
+          hasContent: Boolean(documentText),
+        };
+      }
+      return {
+        mode: '',
+        text: '',
+        supplement: '',
+        importName: '',
+        images: [],
+        imageCount: 0,
+        hasContent: false,
+      };
+    }
+
     function setManualRequirementText(value) {
       var text = String(value || '');
       var images = getManualRequirementImages().map(function(item) { return cloneJson(item, null); }).filter(Boolean);
@@ -3129,19 +3173,11 @@
     }
 
     function getRequirementContextText() {
-      var prep = getPrepState();
-      if (prep.requirementMode === 'manual') {
-        return getManualRequirementText();
-      }
-      var rawTextEl = document.getElementById('rawText');
-      return rawTextEl && rawTextEl.value ? String(rawTextEl.value).trim() : '';
+      return getSelectedRequirementSource().text;
     }
 
     function hasRequirementReady() {
-      var prep = getPrepState();
-      if (prep.requirementMode === 'manual') return hasManualRequirementContent();
-      if (prep.requirementMode === 'document') return hasDocumentRequirementContent();
-      return false;
+      return getSelectedRequirementSource().hasContent === true;
     }
 
     function hasCaseStepReady() {
@@ -3157,27 +3193,22 @@
     }
 
     function buildRequirementSummaryInfo() {
-      var prep = getPrepState();
-      if (prep.requirementMode === 'manual') {
-        var text = getManualRequirementText();
-        var images = getManualRequirementImages().length;
+      var requirementSource = getSelectedRequirementSource();
+      if (requirementSource.mode === 'manual') {
         return {
-          done: hasManualRequirementContent(),
-          title: hasManualRequirementContent() ? '已填写需求描述' : '未填写需求描述',
-          meta: hasManualRequirementContent()
-            ? ('文本 ' + String(text.length) + ' 字' + (images ? '，图片 ' + String(images) + ' 张' : ''))
+          done: requirementSource.hasContent === true,
+          title: requirementSource.hasContent === true ? '已填写需求描述' : '未填写需求描述',
+          meta: requirementSource.hasContent === true
+            ? ('文本 ' + String(requirementSource.text.length) + ' 字' + (requirementSource.imageCount ? '，图片 ' + String(requirementSource.imageCount) + ' 张' : ''))
             : '请先填写文本或上传图片。',
         };
       }
-      var rawTextEl = document.getElementById('rawText');
-      var rawText = rawTextEl && rawTextEl.value ? String(rawTextEl.value).trim() : '';
-      var supplement = String(prep.requirementSupplement || '').trim();
-      var importName = state.lastRawImportName ? String(state.lastRawImportName) : '当前文档';
+      var importName = requirementSource.importName || '当前文档';
       return {
-        done: Boolean(rawText),
-        title: rawText ? '已导入需求文档' : '未导入需求文档',
-        meta: rawText
-          ? ('来源：' + importName + '，正文 ' + String(rawText.length) + ' 字' + (supplement ? '，补充已填写' : ''))
+        done: requirementSource.hasContent === true,
+        title: requirementSource.hasContent === true ? '已导入需求文档' : '未导入需求文档',
+        meta: requirementSource.hasContent === true
+          ? ('来源：' + importName + '，正文 ' + String(requirementSource.text.length) + ' 字' + (requirementSource.supplement ? '，补充已填写' : ''))
           : '请先导入需求文档。',
       };
     }
@@ -3503,6 +3534,63 @@
       else renderPrepDialog();
     }
 
+    function syncPrepDialogState() {
+      if (summaryDialogOpen !== true || summaryDialogMode !== 'prep' || !summaryDialogBodyEl) return;
+      var prep = getPrepState();
+      var currentStep = clampPrepStep(prep.step);
+      var stepStates = {};
+      stepStates[STEP_REQUIREMENT] = hasRequirementReady();
+      stepStates[STEP_CASES] = hasCaseStepReady();
+      stepStates[STEP_OPTIONS] = prep.completed === true;
+      var stepEls = summaryDialogBodyEl.querySelectorAll('[data-prep-step]');
+      Array.prototype.forEach.call(stepEls, function(stepEl) {
+        var step = Number(stepEl.getAttribute('data-prep-step') || 0);
+        if (!stepEl.classList) return;
+        if (step === currentStep) {
+          stepEl.classList.add('is-active');
+          stepEl.classList.remove('is-done');
+        } else if (stepStates[step] === true) {
+          stepEl.classList.remove('is-active');
+          stepEl.classList.add('is-done');
+        } else {
+          stepEl.classList.remove('is-active');
+          stepEl.classList.remove('is-done');
+        }
+      });
+      var statusBadge = summaryDialogBodyEl.querySelector('[data-prep-card-status="current"]');
+      if (statusBadge) {
+        var done = false;
+        var text = '';
+        if (currentStep === STEP_REQUIREMENT) {
+          done = stepStates[STEP_REQUIREMENT] === true;
+          text = done ? '已完成' : '待完成';
+        } else if (currentStep === STEP_CASES) {
+          done = stepStates[STEP_CASES] === true;
+          text = done ? '已完成' : '待选择';
+        } else {
+          done = stepStates[STEP_OPTIONS] === true;
+          text = done ? '已确认' : (isPrepBaseLocked() ? '待重新确认' : '待确认');
+        }
+        if (statusBadge.classList) {
+          if (done) {
+            statusBadge.classList.add('is-done');
+            statusBadge.classList.remove('is-ready');
+          } else {
+            statusBadge.classList.add('is-ready');
+            statusBadge.classList.remove('is-done');
+          }
+        }
+        statusBadge.textContent = text;
+      }
+      var nextBtn = summaryDialogBodyEl.querySelector('[data-prep-nav="next"]');
+      if (nextBtn) {
+        var shouldDisable = false;
+        if (currentStep === STEP_REQUIREMENT) shouldDisable = stepStates[STEP_REQUIREMENT] !== true;
+        if (currentStep === STEP_CASES) shouldDisable = stepStates[STEP_CASES] !== true;
+        nextBtn.disabled = shouldDisable;
+      }
+    }
+
     function getCaseGenSettingsSnapshot() {
       if (casesGenApi && typeof casesGenApi.ensureCaseGenSettings === 'function') {
         return casesGenApi.ensureCaseGenSettings();
@@ -3647,7 +3735,7 @@
           var classes = ['xmind-casegen-prep-step'];
           if (prep.step === item.step) classes.push('is-active');
           else if (item.done) classes.push('is-done');
-          return '<span class="' + classes.join(' ') + '" title="' + escapeHtml(item.label) + '"' + (prep.step === item.step ? ' aria-current="step"' : '') + '>'
+          return '<span class="' + classes.join(' ') + '" data-prep-step="' + item.step + '" title="' + escapeHtml(item.label) + '"' + (prep.step === item.step ? ' aria-current="step"' : '') + '>'
             + '<span class="xmind-casegen-prep-step-badge">' + escapeHtml(item.shortLabel) + '</span>'
             + '</span>';
         }).join('')
@@ -3685,7 +3773,7 @@
         +       '<span class="xmind-casegen-prep-step-order">step1</span>'
         +       '<strong class="xmind-casegen-prep-card-title">需求导入</strong>'
         +     '</div>'
-        +     '<span class="xmind-casegen-prep-status-badge is-' + (hasRequirementReady() ? 'done' : 'ready') + '">' + (hasRequirementReady() ? '已完成' : '待完成') + '</span>'
+        +     '<span class="xmind-casegen-prep-status-badge is-' + (hasRequirementReady() ? 'done' : 'ready') + '" data-prep-card-status="current">' + (hasRequirementReady() ? '已完成' : '待完成') + '</span>'
         +   '</div>'
         +   (locked ? '<div class="xmind-casegen-prep-warning">当前步骤仅可查看，若要调整需求或参考用例，请开始新的生成准备。</div>' : '')
         +   '<div class="xmind-casegen-prep-choice-grid">'
@@ -3759,7 +3847,7 @@
         +       '<span class="xmind-casegen-prep-step-order">step2</span>'
         +       '<strong class="xmind-casegen-prep-card-title">是否导入用例</strong>'
         +     '</div>'
-        +     '<span class="xmind-casegen-prep-status-badge is-' + (hasCaseStepReady() ? 'done' : 'ready') + '">' + (hasCaseStepReady() ? '已完成' : '待选择') + '</span>'
+        +     '<span class="xmind-casegen-prep-status-badge is-' + (hasCaseStepReady() ? 'done' : 'ready') + '" data-prep-card-status="current">' + (hasCaseStepReady() ? '已完成' : '待选择') + '</span>'
         +   '</div>'
         +   (locked ? '<div class="xmind-casegen-prep-warning">当前步骤仅可查看，导入方式和内容已在本次生成中锁定。</div>' : '')
         +   '<div class="xmind-casegen-prep-choice-grid">'
@@ -3903,7 +3991,7 @@
         +       '<span class="xmind-casegen-prep-step-order">step3</span>'
         +       '<strong class="xmind-casegen-prep-card-title">生成选项</strong>'
         +     '</div>'
-        +     '<span class="xmind-casegen-prep-status-badge is-' + (prep.completed ? 'done' : 'ready') + '">' + (prep.completed ? '已确认' : (locked ? '待重新确认' : '待确认')) + '</span>'
+        +     '<span class="xmind-casegen-prep-status-badge is-' + (prep.completed ? 'done' : 'ready') + '" data-prep-card-status="current">' + (prep.completed ? '已确认' : (locked ? '待重新确认' : '待确认')) + '</span>'
         +   '</div>'
         +   '<div class="xmind-casegen-prep-warning">' + escapeHtml(locked
               ? 'step1 和 step2 已锁定，本次仅可调整生成选项并重新确认。'
@@ -5225,7 +5313,7 @@
     }
 
     async function buildRequirementPayload(contract, visibleContext, moduleEntry) {
-      var prep = getPrepState();
+      var requirementSource = getSelectedRequirementSource();
       var generationOptions = buildXmindGenerationOptionsSnapshot();
       var hardConstraintText = buildXmindHardConstraintText(contract, generationOptions);
       var aiLayerSnapshot = contract && (
@@ -5252,24 +5340,20 @@
           }).filter(Boolean),
         }, null, 2));
       }
-      if (prep.requirementMode === 'document') {
-        var rawTextEl = document.getElementById('rawText');
-        var rawText = rawTextEl && rawTextEl.value ? String(rawTextEl.value).trim() : '';
-        var supplement = String(prep.requirementSupplement || '').trim();
-        sections.push('【需求正文】\n' + (rawText || '（无文本）'));
-        if (supplement) sections.push('【需求补充】\n' + supplement);
-        var images = collectDocumentRequirementImages();
+      if (requirementSource.mode === 'document') {
+        sections.push('【需求正文】\n' + (requirementSource.text || '（无文本）'));
+        if (requirementSource.supplement) sections.push('【需求补充】\n' + requirementSource.supplement);
         return {
           mode: 'document',
           text: sections.join('\n\n'),
-          images: images,
+          images: requirementSource.images,
         };
       }
-      sections.push('【手填需求描述】\n' + (getManualRequirementText() || '（仅图片）'));
+      sections.push('【手填需求描述】\n' + (requirementSource.text || '（仅图片）'));
       return {
-        mode: 'manual',
+        mode: requirementSource.mode || 'manual',
         text: sections.join('\n\n'),
-        images: getManualRequirementImages(),
+        images: requirementSource.images,
       };
     }
 

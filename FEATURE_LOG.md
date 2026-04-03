@@ -19,6 +19,28 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 前置准备 step1 手填联动与需求来源按当前选择提交
+- 功能描述：修复 `XMind 用例生成` 的 `生成前置准备` 弹窗在 step1 切到“填写需求描述”后，输入/清空文本时“下一步”按钮不实时联动的问题；同时收口 step1 需求真源，当“导入需求文档”和“填写需求描述”两类内容同时存在时，实际生成上下文严格按当前单选项选择，只提交当前选中的那一份需求来源。
+- 操作方式：
+  - 打开 `用例生成 -> XMind 用例生成` 抽屉，点击 `生成前置准备` 进入 step1；
+  - 选择 `填写需求描述` 后直接输入文本，`下一步` 会立刻变为可点；清空文本后会立刻恢复禁用；
+  - 若此前已导入需求文档、同时又填写了手填描述，则保持 step1 当前选中项，再从根节点触发 `生成全量用例` / `重新生成全量用例` 即可。
+- 使用效果：
+  - step1 手填模式不再需要“切回导入需求文档再切回来”才能点下一步；
+  - 手填文本被清空后，`下一步` 会立即禁用，不再残留上一次可点击状态；
+  - 文档导入与手填描述并存时，模型请求只会带上当前 step1 选中的上下文，避免串用错误来源。
+- 新增内容/接口/组件：
+  - 前端：为 XMind 前置准备补充统一的需求来源选择器，并增加弹窗 stepper/状态徽标/下一步按钮的局部实时同步（无须整窗重渲染，不会打断手填输入）；
+  - 测试：在 `tests/ui/xmind_casegen_flow.spec.js` 新增“手填模式实时更新下一步按钮状态”“当前 step1 选中的需求来源会决定 XMind 生成上下文”两条 UI 回归。
+- 复用说明：完全复用现有 `xmindCasegen` 前置准备状态、summary dialog 和 XMind 模型请求拼装链路；未新增后端接口、未新增存储结构，也未复制第二套需求上下文状态。
+- 测试与验证：
+  - 自查 code review：确认改动收口在现有 XMind 前置准备状态与请求拼装链路，未改动后端协议与普通用例生成逻辑；
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "前置准备 step1 的需求文档模式复用拖拽上传样式，并在导入后允许下一步|前置准备 step1 的手填需求模式会实时更新下一步按钮状态|当前 step1 选中的需求来源会决定 XMind 生成上下文" --reporter=line`，3/3 通过；
+  - `APP_DB_FILE=apitest.db python3 -m uvicorn backend.main:app --host 127.0.0.1 --port 8083` 启动测试后端后，执行 `API_BASE_URL=http://127.0.0.1:8083 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`，1/1 通过。
+- 更新记录：
+  - 2026-04-03 16:18 CST，修复 step1 手填文本输入/清空后的按钮联动时序问题，并确保文档/手填双来源并存时，XMind 生成上下文严格按当前选中来源提交。
+
 - 功能名称：XMind 生成记录错误详情完整展示
 - 功能描述：修正 `XMind 用例生成 -> 生成记录` 中模型调用失败场景下的错误详情展示。现在历史记录会保留完整错误信息，不再在入历史时截断为短摘要；当错误信息较长时，会在生成记录卡片里以独立多行信息块展示，而不是继续挤在单行诊断胶囊里被截断。
 - 操作方式：
