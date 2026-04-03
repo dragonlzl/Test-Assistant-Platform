@@ -1029,6 +1029,109 @@
       };
     }
 
+    function cloneRootPipelineSnapshot(snapshot) {
+      if (!snapshot || typeof snapshot !== 'object') return null;
+      var cloned = createRootPipelineState({
+        id: snapshot.id,
+        actionId: snapshot.actionId,
+        snapshotId: snapshot.snapshotId,
+        historyActionLabel: snapshot.historyActionLabel,
+        stage: snapshot.stage,
+        discoveryStatus: snapshot.discoveryStatus,
+        hadAiContentBeforeAction: snapshot.hadAiContentBeforeAction === true,
+        hadAiLayerBeforeAction: snapshot.hadAiLayerBeforeAction === true,
+        hadAiCasesBeforeAction: snapshot.hadAiCasesBeforeAction === true,
+        cancelled: snapshot.cancelled === true,
+        cancelReason: snapshot.cancelReason,
+        errorCount: snapshot.errorCount,
+        createdModules: snapshot.createdModules,
+        addedCases: snapshot.addedCases,
+        detailMap: snapshot.detailMap,
+        diagnostics: snapshot.diagnostics,
+        pendingQueue: snapshot.pendingQueue,
+      });
+      cloned.updatedAt = Number(snapshot.updatedAt || 0);
+      if (!Number.isFinite(cloned.updatedAt) || cloned.updatedAt < 0) {
+        cloned.updatedAt = 0;
+      }
+      return cloned;
+    }
+
+    function getRootPipelineSnapshotWeight(pipeline) {
+      var detailMap = pipeline && pipeline.detailMap && typeof pipeline.detailMap === 'object'
+        ? pipeline.detailMap
+        : {};
+      var detailCount = Object.keys(detailMap).length;
+      var diagnosticsCount = Array.isArray(pipeline && pipeline.diagnostics) ? pipeline.diagnostics.length : 0;
+      var pendingCount = Array.isArray(pipeline && pipeline.pendingQueue) ? pipeline.pendingQueue.length : 0;
+      return (
+        Number(pipeline && pipeline.createdModules || 0) * 1000
+        + Number(pipeline && pipeline.addedCases || 0) * 10
+        + detailCount * 100
+        + diagnosticsCount * 10
+        + pendingCount
+      );
+    }
+
+    function mergeRootPipelineSnapshot(baseSnapshot, incomingSnapshot) {
+      var base = cloneRootPipelineSnapshot(baseSnapshot);
+      var incoming = cloneRootPipelineSnapshot(incomingSnapshot);
+      if (!base) return incoming;
+      if (!incoming) return base;
+      var baseId = String(base.id || '');
+      var incomingId = String(incoming.id || '');
+      if (baseId && incomingId && baseId !== incomingId) {
+        return getRootPipelineSnapshotWeight(incoming) >= getRootPipelineSnapshotWeight(base)
+          ? incoming
+          : base;
+      }
+
+      function pickString(existingValue, nextValue) {
+        var nextText = nextValue === null || nextValue === undefined ? '' : String(nextValue || '').trim();
+        if (nextText) return nextValue;
+        return existingValue;
+      }
+
+      base.id = pickString(base.id, incoming.id);
+      base.actionId = pickString(base.actionId, incoming.actionId);
+      base.snapshotId = pickString(base.snapshotId, incoming.snapshotId);
+      base.historyActionLabel = pickString(base.historyActionLabel, incoming.historyActionLabel);
+      base.stage = pickString(base.stage, incoming.stage);
+      base.discoveryStatus = pickString(base.discoveryStatus, incoming.discoveryStatus);
+      base.cancelReason = pickString(base.cancelReason, incoming.cancelReason);
+      base.hadAiContentBeforeAction = base.hadAiContentBeforeAction === true || incoming.hadAiContentBeforeAction === true;
+      base.hadAiLayerBeforeAction = base.hadAiLayerBeforeAction === true || incoming.hadAiLayerBeforeAction === true;
+      base.hadAiCasesBeforeAction = base.hadAiCasesBeforeAction === true || incoming.hadAiCasesBeforeAction === true;
+      base.cancelled = base.cancelled === true || incoming.cancelled === true;
+      base.errorCount = Math.max(Number(base.errorCount || 0), Number(incoming.errorCount || 0));
+      base.createdModules = Math.max(Number(base.createdModules || 0), Number(incoming.createdModules || 0));
+      base.addedCases = Math.max(Number(base.addedCases || 0), Number(incoming.addedCases || 0));
+      base.updatedAt = Math.max(Number(base.updatedAt || 0), Number(incoming.updatedAt || 0));
+
+      var mergedDetailMap = {};
+      [base.detailMap, incoming.detailMap].forEach(function(map) {
+        var source = map && typeof map === 'object' ? map : {};
+        Object.keys(source).forEach(function(key) {
+          var item = source[key];
+          if (!item) return;
+          var caseCount = Number(item.caseCount || 0);
+          if (!Number.isFinite(caseCount) || caseCount < 0) caseCount = 0;
+          if (!mergedDetailMap[key] || caseCount >= Number(mergedDetailMap[key].caseCount || 0)) {
+            mergedDetailMap[key] = {
+              module: normalizeModuleTitle(item.module || ''),
+              caseCount: caseCount,
+            };
+          }
+        });
+      });
+      base.detailMap = mergedDetailMap;
+      base.diagnostics = normalizeHistoryDiagnostics((base.diagnostics || []).concat(incoming.diagnostics || []));
+      if (Array.isArray(incoming.pendingQueue) && incoming.pendingQueue.length >= (Array.isArray(base.pendingQueue) ? base.pendingQueue.length : 0)) {
+        base.pendingQueue = cloneJson(incoming.pendingQueue, []) || [];
+      }
+      return base;
+    }
+
     function updateRootPipelineState(mutator) {
       var current = getRootPipelineState();
       if (!current || typeof mutator !== 'function') return null;
@@ -1056,6 +1159,15 @@
         hadAiLayerBeforeAction: task && task.hadAiLayerBeforeAction === true,
         hadAiCasesBeforeAction: task && task.hadAiCasesBeforeAction === true,
       });
+      var restorePipeline = task
+        && task.restoreContext
+        && task.restoreContext.rootPipeline
+        && typeof task.restoreContext.rootPipeline === 'object'
+        ? task.restoreContext.rootPipeline
+        : null;
+      if (restorePipeline && String(restorePipeline.id || '') === taskPipelineId) {
+        reconstructed = mergeRootPipelineSnapshot(restorePipeline, reconstructed);
+      }
       setRootPipelineState(reconstructed);
       return reconstructed;
     }
@@ -7203,6 +7315,7 @@
         caseGenModules: cloneJson(state.caseGenModules, []),
         caseGenResults: cloneJson(state.caseGenResults, {}),
         history: cloneJson(ensureState().history, []),
+        rootPipeline: cloneRootPipelineSnapshot(getRootPipelineState()),
         prep: prep,
         viewState: {
           drawerOpen: viewState.drawerOpen === true || isDrawerOpen(),
@@ -7264,6 +7377,7 @@
       if (incomingHistory.length >= baseHistory.length) {
         base.history = cloneJson(incomingHistory, []);
       }
+      base.rootPipeline = mergeRootPipelineSnapshot(base.rootPipeline, incoming.rootPipeline);
 
       var basePrep = base.prep && typeof base.prep === 'object' ? base.prep : createDefaultPrepState();
       var incomingPrep = incoming.prep && typeof incoming.prep === 'object' ? incoming.prep : {};
@@ -7303,6 +7417,39 @@
         onlyRunning: true,
         action: 'context',
       }) || 0);
+    }
+
+    function syncManagedTaskRestoreContexts(taskIds, options) {
+      var manager = getXmindTaskManager();
+      if (!manager || typeof manager.updateTasksContext !== 'function') return 0;
+      var ids = Array.isArray(taskIds) ? taskIds.map(function(item) {
+        return String(item || '');
+      }).filter(Boolean) : [];
+      if (!ids.length) return 0;
+      var opts = options || {};
+      var restoreContext = buildManagedTaskRestoreContext();
+      return Number(manager.updateTasksContext(function(nextContext) {
+        var merged = mergeTaskRestoreContext(nextContext, restoreContext);
+        Object.keys(nextContext || {}).forEach(function(key) {
+          delete nextContext[key];
+        });
+        Object.keys(merged).forEach(function(key) {
+          nextContext[key] = cloneJson(merged[key], merged[key]);
+        });
+      }, {
+        taskIds: ids,
+        onlyRunning: opts.onlyRunning === true,
+        action: opts.action || 'context',
+      }) || 0);
+    }
+
+    function syncTerminalTaskRestoreContext(task) {
+      var taskId = task && task.id ? String(task.id || '') : '';
+      if (!taskId) return 0;
+      return syncManagedTaskRestoreContexts([taskId], {
+        onlyRunning: false,
+        action: 'context',
+      });
     }
 
     function pickLatestManagedTaskRestoreContext(tasks) {
@@ -7407,6 +7554,12 @@
       var prepSnapshot = restoreContext.prep && typeof restoreContext.prep === 'object'
         ? restoreContext.prep
         : null;
+      var currentPipeline = getRootPipelineState();
+      var mergedPipeline = mergeRootPipelineSnapshot(currentPipeline, restoreContext.rootPipeline);
+      if (JSON.stringify(mergedPipeline || null) !== JSON.stringify(currentPipeline || null)) {
+        setRootPipelineState(mergedPipeline);
+        changed = true;
+      }
       if (prepSnapshot) {
         if (!prep.requirementMode && prepSnapshot.requirementMode) {
           prep.requirementMode = String(prepSnapshot.requirementMode || '');
@@ -7521,6 +7674,9 @@
       if (!Number.isFinite(createdModules) || createdModules < 0) createdModules = 0;
       if (!Number.isFinite(addedCases) || addedCases < 0) addedCases = 0;
       if (actionId === ROOT_ACTIONS.FULL_CASES) {
+        if (createdModules <= 0) {
+          createdModules = getRootPipelineDetailList(pipeline).length;
+        }
         return (pipeline && pipeline.hadAiContentBeforeAction === true ? '已重新生成 ' : '已生成 ')
           + String(createdModules) + ' 个模块，' + String(addedCases) + ' 条用例';
       }
@@ -7786,6 +7942,7 @@
       if (isDrawerOpen()) {
         render({ reason: 'root-pipeline-discovery-committed', persist: false, anchorNodeId: anchorNodeId });
       }
+      syncTerminalTaskRestoreContext(task);
       persistXmindState(true);
 
       var startedCount = await startRootPipelineModuleTasks(pipeline, descriptors);
@@ -7822,6 +7979,7 @@
       if (isDrawerOpen()) {
         render({ reason: opts.renderReason || 'root-pipeline-discovery-error', persist: false, anchorNodeId: anchorNodeId });
       }
+      syncTerminalTaskRestoreContext(task);
       persistXmindState(true);
       return false;
     }
@@ -7950,6 +8108,7 @@
       if (isDrawerOpen()) {
         render({ reason: changed ? 'root-pipeline-module-committed' : 'root-pipeline-module-no-change', persist: false, anchorNodeId: anchorNodeId });
       }
+      syncTerminalTaskRestoreContext(task);
       persistXmindState(true);
       return changed;
     }
@@ -7994,6 +8153,7 @@
       if (isDrawerOpen()) {
         render({ reason: opts.renderReason || 'root-pipeline-module-error', persist: false, anchorNodeId: anchorNodeId });
       }
+      syncTerminalTaskRestoreContext(task);
       persistXmindState(true);
       return false;
     }

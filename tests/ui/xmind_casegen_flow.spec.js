@@ -388,6 +388,166 @@ async function installXmindModelStub(page, delayMs) {
   }, delayMs || 120);
 }
 
+async function installXmindModelRouteStub(page, delayMs) {
+  const calls = [];
+
+  function flattenContent(content) {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    return content.map((item) => {
+      if (!item || typeof item !== 'object') return '';
+      if (item.type === 'text') return String(item.text || '');
+      return '[image]';
+    }).join('\n');
+  }
+
+  function parseJsonText(text) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (_) {}
+    const objStart = raw.indexOf('{');
+    const objEnd = raw.lastIndexOf('}');
+    if (objStart >= 0 && objEnd > objStart) {
+      try {
+        return JSON.parse(raw.slice(objStart, objEnd + 1));
+      } catch (_) {}
+    }
+    const arrStart = raw.indexOf('[');
+    const arrEnd = raw.lastIndexOf(']');
+    if (arrStart >= 0 && arrEnd > arrStart) {
+      try {
+        return JSON.parse(raw.slice(arrStart, arrEnd + 1));
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  function extractSection(text, marker) {
+    const source = String(text || '');
+    const index = source.indexOf(marker);
+    if (index === -1) return '';
+    let rest = source.slice(index + marker.length);
+    const next = rest.indexOf('\n\n【');
+    if (next !== -1) rest = rest.slice(0, next);
+    return String(rest || '').trim();
+  }
+
+  function makeCase(moduleName, title, index) {
+    const order = Number(index) || 1;
+    return {
+      module: moduleName,
+      title: title,
+      priority: order % 2 === 0 ? 'P2' : 'P1',
+      preconditions: moduleName + '前置条件',
+      steps: [
+        '1、进入' + moduleName,
+        '2、执行' + title,
+      ],
+      expected: title + '执行成功',
+    };
+  }
+
+  function makeModule(name, cases) {
+    return {
+      module: name,
+      key_scenarios: [name + '主场景'],
+      test_points: [name + '关键校验'],
+      coupled_modules: [name + '关联模块'],
+      cases: Array.isArray(cases) ? cases : [],
+    };
+  }
+
+  await page.route('**/api/model-proxy', async (route) => {
+    const request = route.request();
+    const body = request.postDataJSON ? request.postDataJSON() : {};
+    const modelPayload = body && body.payload ? body.payload : {};
+    const messages = Array.isArray(modelPayload.messages) ? modelPayload.messages : [];
+    const promptText = flattenContent(messages[0] && messages[0].content);
+    const userText = flattenContent(messages[1] && messages[1].content);
+    const contract = parseJsonText(extractSection(userText, '【operation_contract(JSON)】'))
+      || parseJsonText(extractSection(promptText, 'operation_contract(JSON)：'))
+      || {};
+    const visibleModules = parseJsonText(extractSection(userText, '【当前可见模块与用例(JSON)】'));
+    const visibleList = Array.isArray(visibleModules) ? visibleModules : [];
+    const firstVisibleModule = visibleList[0] && visibleList[0].module
+      ? String(visibleList[0].module)
+      : '登录模块';
+    const targetModule = String(contract.targetModule || firstVisibleModule || '登录模块');
+    const mode = String(contract.mode || '');
+    let responseModules = [];
+
+    if (mode === 'full_modules' || mode === 'regenerate_modules') {
+      responseModules = [
+        makeModule('登录模块'),
+        makeModule('支付模块'),
+      ];
+    } else if (mode === 'full_cases') {
+      responseModules = [
+        makeModule('登录模块', [
+          makeCase('登录模块', '登录成功校验', 1),
+          makeCase('登录模块', '登录失败提示', 2),
+        ]),
+        makeModule('支付模块', [
+          makeCase('支付模块', '支付成功校验', 1),
+          makeCase('支付模块', '支付失败提示', 2),
+        ]),
+      ];
+    } else if (mode === 'module_full_cases' && targetModule === '登录模块') {
+      responseModules = [
+        makeModule('登录模块', [
+          makeCase('登录模块', '登录成功校验', 1),
+          makeCase('登录模块', '登录失败提示', 2),
+        ]),
+      ];
+    } else if (mode === 'module_full_cases' && targetModule === '支付模块') {
+      responseModules = [
+        makeModule('支付模块', [
+          makeCase('支付模块', '支付成功校验', 1),
+          makeCase('支付模块', '支付失败提示', 2),
+        ]),
+      ];
+    } else {
+      responseModules = [
+        makeModule(targetModule, [
+          makeCase(targetModule, targetModule + '-完整-1', 1),
+          makeCase(targetModule, targetModule + '-完整-2', 2),
+        ]),
+      ];
+    }
+
+    calls.push({
+      mode,
+      targetModule,
+      responseModules,
+    });
+    if (Number(delayMs || 120) > 0) {
+      await new Promise((resolve) => setTimeout(resolve, Number(delayMs || 120)));
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        output: [{
+          type: 'message',
+          role: 'assistant',
+          content: [{
+            type: 'output_text',
+            text: JSON.stringify({ modules: responseModules }),
+          }],
+        }],
+      }),
+    });
+  });
+
+  return {
+    getCalls() {
+      return calls.slice();
+    },
+  };
+}
+
 async function installRootPipelineStaggeredStub(page) {
   await page.evaluate(() => {
     var client = window.app && window.app.apiClient ? window.app.apiClient : null;
@@ -3231,6 +3391,68 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeTextAbsent(page, '登录成功校验');
   });
 
+  test('先生成模块再刷新，再重新生成全量用例并刷新，完成提示仍保留正确模块数', async ({ page }) => {
+    const token = 'token-xmind-root-refresh-status';
+    const user = { id: 212, username: 'demo_user_root_refresh_status', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+    await installXmindModelRouteStub(page, 420);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：先生成模块后刷新，再生成完整用例并刷新，最终完成提示仍应保留正确模块数。',
+      requirementLabel: 'XMind刷新提示需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind刷新提示需求');
+    await openNodeContextMenu(page, 'XMind刷新提示需求');
+    await clickContextMenuAction(page, '生成全量模块');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind刷新提示需求');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+
+    await openNodeContextMenu(page, 'XMind刷新提示需求');
+    await clickContextMenuAction(page, '重新生成全量用例');
+    await page.waitForFunction(() => {
+      var state = window.app && window.app.state && window.app.state.xmindCaseGen
+        ? window.app.state.xmindCaseGen
+        : null;
+      if (state && state.root && state.root.running === true) return true;
+      try {
+        var raw = localStorage.getItem('tap-xmind-casegen-tasks');
+        var list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) && list.some(function(item) {
+          return item && item.status === 'running';
+        });
+      } catch (err) {
+        return false;
+      }
+    }, {}, { timeout: 10000 });
+
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await waitForNodeText(page, 'XMind刷新提示需求');
+    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '支付成功校验');
+    await expect(page.locator('#xmindCaseGenStatus')).toHaveText('已重新生成 2 个模块，4 条用例');
+  });
+
   test('根节点生成全量用例会先展示模块骨架，再逐个展示模块用例', async ({ page }) => {
     const token = 'token-xmind-root-pipeline';
     const user = { id: 202, username: 'demo_user_202', role: 'user', level: 'member' };
@@ -5217,6 +5439,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '支付模块');
     await waitForNodeText(page, '支付模块-尾批用例');
     await waitForNodeText(page, '登录模块-首批用例');
+    await expect(page.locator('#xmindCaseGenStatus')).toHaveText('已生成 2 个模块，2 条用例');
 
     const finalState = await page.evaluate(() => {
       var state = window.app && window.app.state ? window.app.state : null;
