@@ -1658,6 +1658,20 @@ async function readState(page) {
   });
 }
 
+async function readXmindToolbarOverview(page) {
+  return page.evaluate(() => {
+    var taskEl = document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-task-state]');
+    var moduleEl = document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-count-modules] strong');
+    var caseEl = document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-count-cases] strong');
+    return {
+      state: taskEl ? String(taskEl.getAttribute('data-xmind-casegen-task-state') || '') : '',
+      label: taskEl ? String(taskEl.textContent || '').replace(/\s+/g, ' ').trim() : '',
+      modules: moduleEl ? Number(moduleEl.textContent || 0) : -1,
+      cases: caseEl ? Number(caseEl.textContent || 0) : -1,
+    };
+  });
+}
+
 async function autoAcceptXmindConfirm(page) {
   await page.evaluate(() => {
     window.__xmindConfirmPayload = null;
@@ -2825,19 +2839,24 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await openXmindCaseGenDrawer(page);
     expect(await page.evaluate(() => {
-      var host = document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-inline-actions]');
-      if (!host || !host.children) return [];
-      return Array.prototype.map.call(host.children, function(el) {
-        return String(el.id || '');
-      });
-    })).toEqual([
-      'xmindCaseGenSummaryBtn',
-      'xmindCaseGenHistoryBtn',
-      'xmindCaseGenStoreBtn',
-      'xmindCaseGenDeleteUndoBtn',
-      'xmindCaseGenDeleteRedoBtn',
-      'xmindCaseGenExportBtn',
-    ]);
+      return {
+        summaryInLeading: Boolean(document.querySelector('#xmindCaseGenMindContainer .xmind-controls-leading-host #xmindCaseGenSummaryBtn')),
+        overviewVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-inline-overview]')),
+        historyVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenHistoryBtn')),
+        storeVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenStoreBtn')),
+        deleteUndoVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDeleteUndoBtn')),
+        deleteRedoVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDeleteRedoBtn')),
+        exportVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenExportBtn')),
+      };
+    })).toEqual({
+      summaryInLeading: true,
+      overviewVisible: true,
+      historyVisible: true,
+      storeVisible: true,
+      deleteUndoVisible: true,
+      deleteRedoVisible: true,
+      exportVisible: true,
+    });
 
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
@@ -2872,6 +2891,81 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(previousCard).toContainText('登录模块');
     await expect(previousCard).toContainText('支付模块');
     await expect(previousCard).toContainText('0 条用例');
+  });
+
+  test('工具栏在生成前置准备和生成记录之间展示总体状态与当前模块用例总数，并随新增删除实时刷新', async ({ page }) => {
+    const token = 'token-xmind-toolbar-overview';
+    const user = { id: 211, username: 'demo_user_toolbar_overview', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 260);
+    await seedDocumentRequirement(page, {
+      text: '需求：工具栏需要展示当前总体生成状态，以及当前画布的模块和用例总数。',
+      requirementLabel: 'XMind工具栏总览需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await expect.poll(async () => {
+      return await readXmindToolbarOverview(page);
+    }).toEqual({
+      state: 'idle',
+      label: '当前没有生成任务',
+      modules: 0,
+      cases: 0,
+    });
+
+    await openNodeContextMenu(page, 'XMind工具栏总览需求');
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect.poll(async () => {
+      return (await readXmindToolbarOverview(page)).state;
+    }).toBe('running');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+    await expect.poll(async () => {
+      return await readXmindToolbarOverview(page);
+    }).toEqual({
+      state: 'idle',
+      label: '当前没有生成任务',
+      modules: 2,
+      cases: 0,
+    });
+
+    await openNodeContextMenu(page, '登录模块');
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(async () => {
+      return (await readXmindToolbarOverview(page)).state;
+    }).toBe('running');
+    await waitForNodeText(page, '登录模块-完整-1');
+    await expect.poll(async () => {
+      return await readXmindToolbarOverview(page);
+    }).toEqual({
+      state: 'idle',
+      label: '当前没有生成任务',
+      modules: 2,
+      cases: 2,
+    });
+
+    await autoAcceptXmindConfirm(page);
+    await openNodeContextMenu(page, '支付模块');
+    await clickContextMenuAction(page, '删除');
+    await page.waitForFunction(() => Boolean(window.__xmindConfirmPayload), {}, { timeout: 5000 });
+    await waitForNodeTextAbsent(page, '支付模块');
+    await expect.poll(async () => {
+      return await readXmindToolbarOverview(page);
+    }).toEqual({
+      state: 'idle',
+      label: '当前没有生成任务',
+      modules: 1,
+      cases: 2,
+    });
   });
 
   test('右侧导出XMind按钮替换为模型选择框，并支持直接切换 XMind 模型', async ({ page }) => {

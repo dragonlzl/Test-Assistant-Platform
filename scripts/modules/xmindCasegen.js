@@ -86,6 +86,7 @@
     var pendingCasesGenPageRender = false;
     var mindApiReadyPromise = null;
     var inlinePrimaryHost = null;
+    var inlineOverviewHost = null;
     var inlineControlsHost = null;
     var inlineStatusHost = null;
     var inlineModelHost = null;
@@ -439,6 +440,9 @@
       if (inlineStatusHost && inlineStatusHost.parentNode) {
         inlineStatusHost.parentNode.removeChild(inlineStatusHost);
       }
+      if (inlineOverviewHost && inlineOverviewHost.parentNode) {
+        inlineOverviewHost.parentNode.removeChild(inlineOverviewHost);
+      }
       Object.keys(inlineGroupHosts).forEach(function(key) {
         var host = inlineGroupHosts[key];
         if (host && host.parentNode) {
@@ -449,6 +453,7 @@
         inlineModelHost.parentNode.removeChild(inlineModelHost);
       }
       inlinePrimaryHost = null;
+      inlineOverviewHost = null;
       inlineControlsHost = null;
       inlineStatusHost = null;
       inlineModelHost = null;
@@ -491,6 +496,25 @@
         searchGroup.parentNode.insertBefore(host, searchGroup);
       }
       inlineControlsHost = host;
+      return host;
+    }
+
+    function getInlineOverviewHost() {
+      if (inlineOverviewHost && inlineOverviewHost.parentNode) {
+        return inlineOverviewHost;
+      }
+      var primaryHost = getInlinePrimaryHost();
+      if (!primaryHost) return null;
+      var host = primaryHost.querySelector('[data-xmind-casegen-inline-overview]');
+      if (!host) {
+        host = document.createElement('div');
+        host.className = 'xmind-casegen-inline-overview';
+        host.setAttribute('data-xmind-casegen-inline-overview', '1');
+      }
+      if (host.parentNode !== primaryHost && primaryHost.appendChild) {
+        primaryHost.appendChild(host);
+      }
+      inlineOverviewHost = host;
       return host;
     }
 
@@ -621,6 +645,51 @@
       }
     }
 
+    function getInlineToolbarOverviewSummary() {
+      var context = buildVisibleModuleContext();
+      var moduleCount = Array.isArray(context && context.list) ? context.list.length : 0;
+      var caseCount = 0;
+      (context && Array.isArray(context.list) ? context.list : []).forEach(function(entry) {
+        caseCount += getVisibleCasesForModuleEntry(entry).length;
+      });
+      var runningCount = collectRunningGenerationOperations().length;
+      return {
+        runningCount: runningCount,
+        runningState: runningCount > 0 ? 'running' : 'idle',
+        runningLabel: runningCount > 0 ? '正在执行生成任务' : '当前没有生成任务',
+        runningHint: runningCount > 0
+          ? ('当前共有 ' + String(runningCount) + ' 个生成任务在执行')
+          : '当前可继续发起生成、补全或删除操作',
+        moduleCount: moduleCount,
+        caseCount: caseCount,
+      };
+    }
+
+    function syncInlineToolbarOverview() {
+      var host = getInlineOverviewHost();
+      if (!host) return false;
+      var summary = getInlineToolbarOverviewSummary();
+      var taskClassName = 'xmind-casegen-inline-task-indicator is-' + summary.runningState;
+      var taskBadgeHtml = summary.runningCount > 0
+        ? ('<span class="xmind-casegen-inline-task-badge" data-xmind-casegen-task-count>' + escapeHtml(String(summary.runningCount)) + '</span>')
+        : '';
+      host.innerHTML = ''
+        + '<div class="' + taskClassName + '" data-xmind-casegen-task-state="' + escapeHtml(summary.runningState) + '" title="' + escapeHtml(summary.runningHint) + '">'
+        + '<span class="xmind-casegen-inline-task-dot" aria-hidden="true"></span>'
+        + '<span class="xmind-casegen-inline-task-label">' + escapeHtml(summary.runningLabel) + '</span>'
+        + taskBadgeHtml
+        + '</div>'
+        + '<div class="xmind-casegen-inline-counts" data-xmind-casegen-counts title="当前画布展示的模块和用例总数会随生成、补全、删除实时刷新">'
+        + '<span class="xmind-casegen-inline-count-pill" data-xmind-casegen-count-modules>'
+        + '<strong>' + escapeHtml(String(summary.moduleCount)) + '</strong><span>模块</span>'
+        + '</span>'
+        + '<span class="xmind-casegen-inline-count-pill" data-xmind-casegen-count-cases>'
+        + '<strong>' + escapeHtml(String(summary.caseCount)) + '</strong><span>用例</span>'
+        + '</span>'
+        + '</div>';
+      return true;
+    }
+
     function mountInlineControls() {
       var controlsRoot = getMindControlsRoot();
       var primaryHost = getInlinePrimaryHost();
@@ -633,12 +702,13 @@
         return false;
       }
       controlsRoot.classList.add('xmind-casegen-inline-controls-ready');
-      syncDeleteHistoryButtons();
-      syncInterruptButton();
       if (summaryBtn && primaryHost.appendChild) {
         applyInlineButtonStyle(summaryBtn, 'xmind-casegen-inline-btn-primary');
         primaryHost.appendChild(summaryBtn);
       }
+      var overviewHost = getInlineOverviewHost();
+      if (!overviewHost) return false;
+      syncInlineToolbarOverview();
       if (historyBtn && historyGroup.appendChild) {
         applyInlineButtonStyle(historyBtn);
         historyGroup.appendChild(historyBtn);
@@ -667,6 +737,8 @@
         applyInlineButtonStyle(interruptBtn, 'xmind-casegen-inline-btn-danger');
         taskGroup.appendChild(interruptBtn);
       }
+      syncDeleteHistoryButtons();
+      syncInterruptButton();
       syncInlineModelPicker();
       return true;
     }
@@ -678,6 +750,7 @@
       interruptBtn.title = runningCount > 0
         ? ('中断当前 XMind 生成中的 ' + String(runningCount) + ' 个任务')
         : '当前没有进行中的 XMind 生成任务';
+      syncInlineToolbarOverview();
     }
 
     function cleanupViewStateBindings() {
