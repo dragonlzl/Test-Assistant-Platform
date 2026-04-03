@@ -1892,6 +1892,85 @@
       }, 0);
     }
 
+    function centerRootNodeView(options) {
+      var opts = options || {};
+      var retryLimit = Number(opts.retryLimit);
+      var retryDelayMs = Number(opts.retryDelayMs);
+      if (!Number.isFinite(retryLimit) || retryLimit < 1) retryLimit = 6;
+      if (!Number.isFinite(retryDelayMs) || retryDelayMs < 0) retryDelayMs = 80;
+      var shouldPersist = opts.persist !== false;
+
+      function centerRootNodeElementFallback() {
+        if (!mindContainer || !mindContainer.querySelector) return false;
+        var viewerEl = mindContainer.querySelector('.xmind-structure-viewer') || mindContainer;
+        var mapEl = mindContainer.querySelector('.map-canvas');
+        var rootTextEl = mindContainer.querySelector('me-tpc.xmind-casegen-node-root .text');
+        if (
+          !viewerEl || !viewerEl.getBoundingClientRect
+          || !mapEl || !mapEl.style
+          || !rootTextEl || !rootTextEl.getBoundingClientRect
+        ) {
+          return false;
+        }
+        var viewerRect = viewerEl.getBoundingClientRect();
+        var nodeRect = rootTextEl.getBoundingClientRect();
+        var currentCenterX = Number(nodeRect.left + (nodeRect.width / 2));
+        var currentCenterY = Number(nodeRect.top + (nodeRect.height / 2));
+        var desiredCenterX = Number(viewerRect.left + (viewerRect.width / 2));
+        var desiredCenterY = Number(viewerRect.top + (viewerRect.height / 2));
+        if (!isFinite(currentCenterX) || !isFinite(currentCenterY) || !isFinite(desiredCenterX) || !isFinite(desiredCenterY)) {
+          return false;
+        }
+        var deltaX = desiredCenterX - currentCenterX;
+        var deltaY = desiredCenterY - currentCenterY;
+        if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return true;
+        var currentTransform = String(mapEl.style.transform || '');
+        var translateMatch = currentTransform.match(/translate3d\(\s*(-?\d+(?:\.\d+)?)px\s*,\s*(-?\d+(?:\.\d+)?)px\s*,\s*[^)]*\)/i);
+        if (!translateMatch) {
+          translateMatch = currentTransform.match(/translate\(\s*(-?\d+(?:\.\d+)?)px\s*,\s*(-?\d+(?:\.\d+)?)px\s*\)/i);
+        }
+        var scaleMatch = currentTransform.match(/scale\(\s*(-?\d+(?:\.\d+)?)\s*\)/i);
+        var nextX = translateMatch ? Number(translateMatch[1] || 0) : 0;
+        var nextY = translateMatch ? Number(translateMatch[2] || 0) : 0;
+        var nextScale = scaleMatch ? Number(scaleMatch[1] || 1) : 1;
+        if (!isFinite(nextX)) nextX = 0;
+        if (!isFinite(nextY)) nextY = 0;
+        if (!isFinite(nextScale) || nextScale <= 0) nextScale = 1;
+        mapEl.style.transform = 'translate3d(' + (nextX + deltaX) + 'px, ' + (nextY + deltaY) + 'px, 0px) scale(' + nextScale + ')';
+        return true;
+      }
+
+      function attempt() {
+        var mindElixirCoreApi = getMindElixirCoreApi();
+        var centered = false;
+        if (mindInstance && mindElixirCoreApi && typeof mindElixirCoreApi.centerMindNode === 'function') {
+          try {
+            centered = mindElixirCoreApi.centerMindNode(mindInstance, getRootNodeId()) === true;
+          } catch (err) {
+            centered = false;
+          }
+        }
+        if (!centered) centered = centerRootNodeElementFallback();
+        if (centered) {
+          if (shouldPersist) persistViewportActionViewState();
+        }
+      }
+
+      var delayMs = 0;
+      for (var i = 0; i < retryLimit; i += 1) {
+        (function(runDelay) {
+          setTimeout(function() {
+            attempt();
+          }, runDelay);
+        }(delayMs));
+        if (i === 0) {
+          delayMs += retryDelayMs;
+        } else {
+          delayMs += Math.max(retryDelayMs, Math.round(retryDelayMs * Math.pow(1.35, i)));
+        }
+      }
+    }
+
     function bindViewStatePersistenceLifecycle() {
       if (viewStateBeforeUnloadBound) return;
       viewStateBeforeUnloadBound = true;
@@ -3493,12 +3572,14 @@
       }
       if (actionId === 'confirm') {
         if (!hasRequirementReady() || !hasCaseStepReady()) return false;
+        var shouldCenterRoot = prep.completed !== true && String(prep.caseImportMode || '') === 'import';
         prep.baseLocked = true;
         prep.completed = true;
         prep.step = STEP_OPTIONS;
         persistXmindState(true);
         notifySuccessToast('已保存生成前置准备', 3000);
         closeSummaryDialog({ skipPersist: true });
+        if (shouldCenterRoot) centerRootNodeView({ persist: true });
         return true;
       }
       return false;

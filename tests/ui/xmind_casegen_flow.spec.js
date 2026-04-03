@@ -2113,6 +2113,129 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
   });
 
+  test('step2 导入已有用例并确认后，视图会重新定位到根节点', async ({ page }) => {
+    const token = 'token-xmind-prep-import-centers-root';
+    const user = { id: 13, username: 'demo_user_13', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    await page.evaluate((payload) => {
+      var zone = document.getElementById('xmindCaseGenPrepRequirementDropzone');
+      if (!zone || typeof DataTransfer === 'undefined' || typeof File === 'undefined') return;
+      var dt = new DataTransfer();
+      dt.items.add(new File([payload.text], payload.name, { type: 'text/plain' }));
+      function dispatch(type) {
+        var evt = null;
+        if (typeof Event === 'function') {
+          evt = new Event(type, { bubbles: true, cancelable: true });
+        } else if (document && document.createEvent) {
+          evt = document.createEvent('Event');
+          evt.initEvent(type, true, true);
+        }
+        if (!evt) return;
+        try {
+          Object.defineProperty(evt, 'dataTransfer', { value: dt });
+        } catch (_) {
+          evt.dataTransfer = dt;
+        }
+        zone.dispatchEvent(evt);
+      }
+      dispatch('dragover');
+      dispatch('drop');
+    }, {
+      name: 'xmind-prep-center-root-requirement.txt',
+      text: '需求正文：完成导入已有用例并确认后，画布需要回到根节点。',
+    });
+    await page.waitForFunction(() => {
+      var rawText = document.getElementById('rawText');
+      return Boolean(rawText && String(rawText.value || '').indexOf('画布需要回到根节点') !== -1);
+    }, {}, { timeout: 20000 });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.check('input[name="xmindCaseImportMode"][value="import"]', { force: true });
+    await page.evaluate((payload) => {
+      var zone = document.getElementById('xmindCaseGenPrepCasesDropzone');
+      if (!zone || typeof DataTransfer === 'undefined' || typeof File === 'undefined') return;
+      var dt = new DataTransfer();
+      dt.items.add(new File([payload.text], payload.name, { type: 'application/json' }));
+      function dispatch(type) {
+        var evt = null;
+        if (typeof Event === 'function') {
+          evt = new Event(type, { bubbles: true, cancelable: true });
+        } else if (document && document.createEvent) {
+          evt = document.createEvent('Event');
+          evt.initEvent(type, true, true);
+        }
+        if (!evt) return;
+        try {
+          Object.defineProperty(evt, 'dataTransfer', { value: dt });
+        } catch (_) {
+          evt.dataTransfer = dt;
+        }
+        zone.dispatchEvent(evt);
+      }
+      dispatch('dragover');
+      dispatch('drop');
+    }, {
+      name: 'xmind-prep-center-root-cases.json',
+      text: JSON.stringify([{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }]),
+    });
+    await page.waitForFunction(() => {
+      var st = window.app && window.app.state ? window.app.state : null;
+      return Boolean(st && Array.isArray(st.importedCases) && st.importedCases.length > 0);
+    }, {}, { timeout: 20000 });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step3');
+
+    const panResult = await panXmindCasegenCanvas(page, 260, 180);
+    expect(panResult.dispatched).toBeTruthy();
+    await page.waitForFunction((beforeTransform) => {
+      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+      return Boolean(map && map.style && String(map.style.transform || '') !== String(beforeTransform || ''));
+    }, panResult.before || '', { timeout: 10000 });
+
+    const centerBeforeConfirm = await page.evaluate(() => {
+      var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+        || document.getElementById('xmindCaseGenMindContainer');
+      var textEl = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text');
+      if (!viewer || !viewer.getBoundingClientRect || !textEl || !textEl.getBoundingClientRect) return null;
+      var viewerRect = viewer.getBoundingClientRect();
+      var nodeRect = textEl.getBoundingClientRect();
+      return {
+        dx: Math.abs((nodeRect.left + (nodeRect.width / 2)) - (viewerRect.left + (viewerRect.width / 2))),
+        dy: Math.abs((nodeRect.top + (nodeRect.height / 2)) - (viewerRect.top + (viewerRect.height / 2))),
+      };
+    });
+    expect(centerBeforeConfirm).not.toBeNull();
+    expect(Math.max(centerBeforeConfirm.dx, centerBeforeConfirm.dy)).toBeGreaterThan(30);
+
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+    await page.waitForFunction(() => {
+      var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+        || document.getElementById('xmindCaseGenMindContainer');
+      var textEl = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text');
+      if (!viewer || !viewer.getBoundingClientRect || !textEl || !textEl.getBoundingClientRect) return false;
+      var viewerRect = viewer.getBoundingClientRect();
+      var nodeRect = textEl.getBoundingClientRect();
+      var dx = Math.abs((nodeRect.left + (nodeRect.width / 2)) - (viewerRect.left + (viewerRect.width / 2)));
+      var dy = Math.abs((nodeRect.top + (nodeRect.height / 2)) - (viewerRect.top + (viewerRect.height / 2)));
+      return dx <= 10 && dy <= 10;
+    }, {}, { timeout: 10000 });
+  });
+
   test('前置准备改为单步 3 步流程，并在确认后锁定前两步', async ({ page }) => {
     const token = 'token-xmind-prep';
     const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
