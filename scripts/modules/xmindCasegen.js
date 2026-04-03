@@ -833,6 +833,7 @@
         onOpen: function() {
           getViewState().drawerOpen = true;
           getViewState().updatedAt = Date.now();
+          clearOpenButtonCompletionNotice({ persist: true });
           if (drawerEl && drawerEl.classList) {
             drawerEl.classList.toggle('xmind-drawer-fullscreen', getViewState().fullscreen === true);
           }
@@ -886,6 +887,7 @@
           getViewState().drawerOpen = false;
           getViewState().fullscreen = false;
           getViewState().updatedAt = Date.now();
+          syncOpenButtonState();
           if (drawerEl && drawerEl.classList) {
             drawerEl.classList.remove('xmind-drawer-fullscreen');
           }
@@ -905,6 +907,7 @@
           treeSourceSignature: '',
           hasModuleSkeleton: false,
           hasImportedBaseline: false,
+          openButtonDotVisible: false,
           viewState: createDefaultViewState(),
           history: [],
           operationSnapshots: [],
@@ -953,6 +956,7 @@
       state.xmindCaseGen.treeSourceSignature = String(state.xmindCaseGen.treeSourceSignature || '');
       state.xmindCaseGen.hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
       state.xmindCaseGen.hasImportedBaseline = hasImportedBaselineCases();
+      state.xmindCaseGen.openButtonDotVisible = state.xmindCaseGen.openButtonDotVisible === true;
       state.xmindCaseGen.viewState.drawerOpen = state.xmindCaseGen.viewState.drawerOpen === true;
       state.xmindCaseGen.viewState.fullscreen = state.xmindCaseGen.viewState.fullscreen === true;
       state.xmindCaseGen.viewState.transform = String(state.xmindCaseGen.viewState.transform || '');
@@ -1060,6 +1064,55 @@
         moduleState.taskId = String(moduleState.taskId || '');
       });
       return state.xmindCaseGen;
+    }
+
+    function hasOpenButtonCompletionNotice() {
+      return ensureState().openButtonDotVisible === true;
+    }
+
+    function syncOpenButtonState() {
+      if (!openBtn || !openBtn.classList) return;
+      var drawerOpen = isDrawerOpen();
+      openBtn.classList.add('casegen-tab', 'casegen-tab-launcher');
+      openBtn.classList.toggle('is-active', drawerOpen);
+      openBtn.classList.toggle('has-notice-dot', hasOpenButtonCompletionNotice());
+      if (openBtn.setAttribute) {
+        openBtn.setAttribute('aria-expanded', drawerOpen ? 'true' : 'false');
+        openBtn.setAttribute(
+          'aria-label',
+          hasOpenButtonCompletionNotice()
+            ? 'XMind用例生成（有新的后台完成结果）'
+            : 'XMind用例生成'
+        );
+      }
+    }
+
+    function clearOpenButtonCompletionNotice(options) {
+      var opts = options || {};
+      var xmindState = ensureState();
+      var changed = xmindState.openButtonDotVisible === true;
+      xmindState.openButtonDotVisible = false;
+      syncOpenButtonState();
+      if (changed && opts.persist !== false) {
+        persistXmindState(true);
+      }
+      return changed;
+    }
+
+    function markOpenButtonCompletionNotice(options) {
+      var opts = options || {};
+      if (isDrawerOpen()) {
+        syncOpenButtonState();
+        return false;
+      }
+      var xmindState = ensureState();
+      var changed = xmindState.openButtonDotVisible !== true;
+      xmindState.openButtonDotVisible = true;
+      syncOpenButtonState();
+      if (changed && opts.persist !== false) {
+        persistXmindState(true);
+      }
+      return changed;
     }
 
     function ensureRootUiState() {
@@ -1499,6 +1552,7 @@
         treeSourceSignature: '',
         hasModuleSkeleton: false,
         hasImportedBaseline: false,
+        openButtonDotVisible: false,
         viewState: nextViewState,
         history: [],
         operationSnapshots: [],
@@ -3609,6 +3663,7 @@
     function updateSummary() {
       ensureState().hasImportedBaseline = hasImportedBaselineCases();
       ensureState().hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
+      syncOpenButtonState();
       renderOpenedSummaryDialog();
     }
 
@@ -8029,6 +8084,9 @@
       if (pipeline.hadAiCasesBeforeAction === true) {
         setAllModuleResultsVisibility(true);
       }
+      if (pipeline.cancelled !== true) {
+        markOpenButtonCompletionNotice({ persist: false });
+      }
 
       if (!changed) {
         if (pipeline.cancelled === true) {
@@ -8483,6 +8541,7 @@
       rootState.error = '';
       rootState.updatedAt = Date.now();
       clearRootPendingModules(actionId);
+      markOpenButtonCompletionNotice({ persist: false });
       if (!applied.changed) {
         var rootNoChangeInfo = buildRootNoChangeInfo(actionId, filtered.diagnostics, applied.diagnostics, normalizedOutput.diagnostics);
         recordGenerationHistory({
@@ -8640,6 +8699,7 @@
         appended = merged.appended;
         mergeDiagnostics = merged.diagnostics || mergeDiagnostics;
         if (!appended.length) {
+          markOpenButtonCompletionNotice({ persist: false });
           var appendNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
           if (task && task.createdModuleBeforeAction === true && task.snapshotId) {
             rollbackCaseGenOperationSnapshotEntry(task.snapshotId);
@@ -8677,6 +8737,7 @@
       } else {
         nextList = Array.isArray(targetOutput.cases) ? targetOutput.cases.slice() : [];
         if (!nextList.length) {
+          markOpenButtonCompletionNotice({ persist: false });
           var fullNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
           if (task && task.createdModuleBeforeAction === true && task.snapshotId) {
             rollbackCaseGenOperationSnapshotEntry(task.snapshotId);
@@ -8712,6 +8773,7 @@
         commitCaseList(moduleId, nextList, Number(task && task.durationMs || 0), '', '');
         if (moduleState) clearModuleTopupHighlight(moduleState);
       }
+      markOpenButtonCompletionNotice({ persist: false });
 
       if (moduleState) {
         moduleState.running = false;
@@ -9468,6 +9530,7 @@
 
     function open(options) {
       var opts = options || {};
+      clearOpenButtonCompletionNotice({ persist: false });
       switchTab('casesgen');
       setCasesGenModulesView();
       var drawer = ensureDrawer();
@@ -9479,7 +9542,9 @@
       }
       getViewState().drawerOpen = true;
       getViewState().updatedAt = Date.now();
+      syncOpenButtonState();
       render({ reason: 'open-fallback' });
+      persistXmindState(true);
       return false;
     }
 
@@ -9494,6 +9559,7 @@
       getViewState().drawerOpen = false;
       getViewState().fullscreen = false;
       getViewState().updatedAt = Date.now();
+      syncOpenButtonState();
       if (drawerEl && drawerEl.classList) {
         drawerEl.classList.remove('xmind-drawer-fullscreen');
       }

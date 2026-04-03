@@ -19,6 +19,29 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 用例生成入口并入页签栏并增加后台完成红点提示
+- 功能描述：将 `XMind 用例生成` 入口从原先独立操作按钮改为和 `用例生成设置`、`生成模块` 并排的同样式页签按钮；当 XMind 生成在后台完成且用户当前未打开 XMind 抽屉时，入口按钮会显示一个小红点提示，用户重新点开入口后红点自动消失。
+- 操作方式：
+  - 进入 `用例生成` 页面后，在页签栏直接点击 `XMind用例生成` 按钮打开抽屉；
+  - 关闭抽屉后触发根节点或模块节点生成，若任务在后台成功完成，入口按钮右上角会出现小红点；
+  - 再次点击 `XMind用例生成` 打开抽屉后，小红点立即清除。
+- 使用效果：
+  - XMind 入口与 `用例生成设置`、`生成模块` 视觉层级一致，用户不需要再到右侧单独动作区寻找入口；
+  - 后台生成完成后，即使用户停留在普通用例生成页或切到其他页签，也能通过入口按钮直接感知“有新的 XMind 结果可看”；
+  - 打开 XMind 抽屉即视为已读，小红点会同步从 UI 和持久化状态中清除，不会反复残留。
+- 新增内容/接口/组件：
+  - `index.html`、`ai-workflow.html`：将 `XMind用例生成` 入口改为与用例生成页签并排的 tab 按钮结构，并补齐 `aria-controls`/`aria-expanded`；
+  - `style.css`：新增入口按钮红点样式及暗色主题适配；
+  - `scripts/base/state.js`、`scripts/core/appRuntime.js`、`scripts/core/casesGenCore.js`、`scripts/modules/xmindCasegen.js`：扩展 `state.xmindCaseGen.openButtonDotVisible` 轻量状态，并在抽屉打开、关闭、后台任务成功完成时统一同步入口按钮态与持久化；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增“入口与页签并排显示，后台完成后按钮显示小红点，点开后消失”UI 回归。
+- 复用说明：严格复用现有 `casesgen` 页签栏结构、`xmindCaseGen` 抽屉开关与持久化真源、后台任务完成回调链路；未新增后端接口、未新增第二套通知存储，也未改动原有模型调用协议。
+- 测试与验证：
+  - 自查 code review：确认红点仅表示“后台生成已完成但用户尚未重新打开 XMind 入口查看”，不会在取消任务时误提示，也不会改变现有生成结果真源；
+  - `node --check scripts/modules/xmindCasegen.js scripts/core/appRuntime.js scripts/core/casesGenCore.js scripts/base/state.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js --grep "XMind 入口与页签并排显示，后台完成后按钮显示小红点，点开后消失|XMind 生成切换到其他页签后仍会在后台继续，返回后可看到完成结果"`，2/2 通过。
+- 更新记录：
+  - 2026-04-03 11:24 CST，将 XMind 入口并入用例生成页签栏，并新增后台完成红点提示与 UI 回归；同时同步修正 `index.html` 与 `ai-workflow.html` 两份页面模板，避免测试页和主入口页结构不一致。
+
 - 功能名称：XMind 前置准备确认后自动回到根节点
 - 功能描述：当用户在 `XMind 用例生成` 的前置准备中于 step2 选择并成功导入已有用例，随后在 step3 点击 `确认并保存` 后，画布会自动重新定位到根节点，避免继续停留在导入前或手动拖移后的偏移位置。
 - 操作方式：

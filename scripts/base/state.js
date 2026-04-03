@@ -144,6 +144,7 @@
         treeSourceSignature: '',
         hasModuleSkeleton: false,
         hasImportedBaseline: false,
+        openButtonDotVisible: false,
         viewState: {
           drawerOpen: false,
           fullscreen: false,

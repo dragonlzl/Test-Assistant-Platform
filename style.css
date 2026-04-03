@@ -3478,6 +3478,21 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   border-color: rgba(37,99,235,0.35);
   box-shadow: 0 12px 20px rgba(37,99,235,0.12);
 }
+.casegen-tab-launcher {
+  position: relative;
+}
+.casegen-tab-launcher.has-notice-dot::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.92);
+  pointer-events: none;
+}
 .casegen-tab.is-active {
   background: linear-gradient(135deg, #2563eb, #0ea5e9);
   border-color: rgba(37,99,235,0.55);
@@ -12793,6 +12808,9 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .casegen-tab:hover {
   border-color: rgba(125,180,255,0.46);
   box-shadow: 0 12px 22px rgba(0,0,0,0.34);
+}
+:root[data-theme="dark"] .casegen-tab-launcher.has-notice-dot::after {
+  box-shadow: 0 0 0 2px rgba(15,23,42,0.9);
 }
 :root[data-theme="dark"] .casegen-tab.is-active {
   background: linear-gradient(135deg, #1d4ed8, #0ea5e9);

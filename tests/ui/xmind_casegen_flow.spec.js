@@ -2113,6 +2113,80 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
   });
 
+  test('XMind 入口与页签并排显示，后台完成后按钮显示小红点，点开后消失', async ({ page }) => {
+    const token = 'token-xmind-open-entry-dot';
+    const user = { id: 14, username: 'demo_user_14', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 260);
+
+    const tabbarInfo = await page.evaluate(() => {
+      var tabbar = document.querySelector('.casegen-tabbar');
+      var children = tabbar ? Array.prototype.map.call(tabbar.children || [], function(node) {
+        return node && node.id ? String(node.id) : '';
+      }).filter(Boolean) : [];
+      var btn = document.getElementById('xmindCaseGenOpenBtn');
+      return {
+        childIds: children,
+        className: btn ? String(btn.className || '') : '',
+        insideTabbar: Boolean(tabbar && btn && tabbar.contains(btn)),
+        insideLegacyActions: Boolean(btn && btn.closest && btn.closest('.casegen-tabbar-actions')),
+      };
+    });
+    expect(tabbarInfo.insideTabbar).toBeTruthy();
+    expect(tabbarInfo.insideLegacyActions).toBeFalsy();
+    expect(tabbarInfo.className).toContain('casegen-tab');
+    expect(tabbarInfo.className).toContain('casegen-tab-launcher');
+
+    await seedDocumentRequirement(page, {
+      text: '需求：后台完成后，XMind 入口按钮需要出现未读提示。',
+      requirementLabel: 'XMind入口红点需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect(page.locator('#xmindCaseGenInterruptBtn')).toBeEnabled();
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
+
+    await page.waitForFunction(() => {
+      var btn = document.getElementById('xmindCaseGenOpenBtn');
+      var xmind = window.app && window.app.state ? window.app.state.xmindCaseGen : null;
+      return Boolean(
+        btn &&
+        btn.classList &&
+        btn.classList.contains('has-notice-dot') &&
+        xmind &&
+        xmind.openButtonDotVisible === true
+      );
+    }, {}, { timeout: 10000 });
+
+    await page.click('#xmindCaseGenOpenBtn');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await page.waitForFunction(() => {
+      var btn = document.getElementById('xmindCaseGenOpenBtn');
+      var xmind = window.app && window.app.state ? window.app.state.xmindCaseGen : null;
+      return Boolean(
+        btn &&
+        btn.classList &&
+        !btn.classList.contains('has-notice-dot') &&
+        xmind &&
+        xmind.openButtonDotVisible === false
+      );
+    }, {}, { timeout: 10000 });
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+  });
+
   test('step2 导入已有用例并确认后，视图会重新定位到根节点', async ({ page }) => {
     const token = 'token-xmind-prep-import-centers-root';
     const user = { id: 13, username: 'demo_user_13', role: 'user', level: 'member' };
