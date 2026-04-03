@@ -140,6 +140,10 @@
       caseGenProgress: {},
       caseGenRunning: new Set(),
       xmindCaseGen: {
+        activeWorkspaceId: '',
+        workspaceOrder: [],
+        workspaces: {},
+        nextWorkspaceSeq: 1,
         mode: 'modules',
         treeSourceSignature: '',
         hasModuleSkeleton: false,

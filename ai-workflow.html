@@ -1007,6 +1007,10 @@
     </div>
     <div class="drawer-body is-mind-viewer" id="xmindCaseGenDrawerBody">
       <div class="xmind-casegen-shell xmind-casegen-drawer-shell">
+        <div class="memo-tabs xmind-casegen-tabs" id="xmindCaseGenWorkspaceLayer">
+          <div class="memo-tab-list xmind-casegen-tab-list" id="xmindCaseGenWorkspaceList"></div>
+          <button class="memo-tab-add xmind-casegen-tab-add" id="xmindCaseGenWorkspaceAddBtn" type="button" aria-label="新建 XMind 生成页签">新建生成</button>
+        </div>
         <div class="xmind-casegen-toolbar xmind-casegen-toolbar-bank" id="xmindCaseGenToolbar" hidden aria-hidden="true">
           <div class="xmind-casegen-actions">
             <button class="secondary" id="xmindCaseGenSummaryBtn" type="button" aria-expanded="false" title="打开生成前置准备">生成前置准备</button>
@@ -1015,13 +1019,7 @@
             <button class="secondary" id="xmindCaseGenInterruptBtn" type="button" title="中断当前 XMind 生成任务" disabled>中断生成</button>
             <button class="secondary" id="xmindCaseGenDeleteUndoBtn" type="button" title="撤回最近一次删除" disabled>撤回删除</button>
             <button class="secondary" id="xmindCaseGenDeleteRedoBtn" type="button" title="恢复最近一次撤回的删除" disabled>恢复删除</button>
-            <button class="secondary" id="xmindCaseGenImportRequirementBtn" type="button" title="导入需求">导入需求</button>
-            <button class="secondary" id="xmindCaseGenImportCasesBtn" type="button" title="导入参考用例">导入用例</button>
-            <button class="secondary case-library-import-btn" id="xmindCaseGenSelectCasesBtn" type="button" title="从用例库选择参考用例">从用例库选择</button>
-            <button class="secondary" id="xmindCaseGenGenerateModulesBtn" type="button" title="生成全量模块">生成全量模块</button>
-            <button class="secondary" id="xmindCaseGenGenerateFullBtn" type="button" title="生成全量用例">生成全量用例</button>
             <button class="secondary" id="xmindCaseGenExportBtn" type="button" title="导出当前XMind">导出当前XMind</button>
-            <button class="secondary" id="xmindCaseGenPromptBtn" type="button" title="打开生成选项">生成选项</button>
           </div>
           <p class="status" id="xmindCaseGenStatus"></p>
         </div>

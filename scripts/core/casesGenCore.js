@@ -364,6 +364,10 @@
     function ensureXmindCaseGenState() {
       if (!state.xmindCaseGen || typeof state.xmindCaseGen !== 'object') {
         state.xmindCaseGen = {
+          activeWorkspaceId: '',
+          workspaceOrder: [],
+          workspaces: {},
+          nextWorkspaceSeq: 1,
           mode: 'modules',
           treeSourceSignature: '',
           hasModuleSkeleton: false,
@@ -422,6 +426,16 @@
       }
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) {
         state.xmindCaseGen.rootSnapshots = [];
+      }
+      if (!Array.isArray(state.xmindCaseGen.workspaceOrder)) {
+        state.xmindCaseGen.workspaceOrder = [];
+      }
+      if (!state.xmindCaseGen.workspaces || typeof state.xmindCaseGen.workspaces !== 'object') {
+        state.xmindCaseGen.workspaces = {};
+      }
+      state.xmindCaseGen.activeWorkspaceId = String(state.xmindCaseGen.activeWorkspaceId || '');
+      if (!Number.isFinite(Number(state.xmindCaseGen.nextWorkspaceSeq))) {
+        state.xmindCaseGen.nextWorkspaceSeq = 1;
       }
       if (!state.xmindCaseGen.viewState || typeof state.xmindCaseGen.viewState !== 'object') {
         state.xmindCaseGen.viewState = {
@@ -482,6 +496,9 @@
       state.xmindCaseGen.hasModuleSkeleton = state.xmindCaseGen.hasModuleSkeleton === true;
       state.xmindCaseGen.hasImportedBaseline = state.xmindCaseGen.hasImportedBaseline === true;
       state.xmindCaseGen.openButtonDotVisible = state.xmindCaseGen.openButtonDotVisible === true;
+      state.xmindCaseGen.workspaceOrder = state.xmindCaseGen.workspaceOrder.map(function(item) {
+        return String(item || '').trim();
+      }).filter(Boolean);
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
       state.xmindCaseGen.deletedBaselineModuleKeys = state.xmindCaseGen.deletedBaselineModuleKeys.map(function(item) {

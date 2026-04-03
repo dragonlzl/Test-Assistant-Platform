@@ -1113,12 +1113,37 @@ async function openXmindCaseGenDrawer(page) {
   await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
   await page.waitForFunction(() => {
     var controls = document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]');
+    var addBtn = document.getElementById('xmindCaseGenWorkspaceAddBtn');
     var debug = window.app && window.app.__xmindCasegenDebug ? window.app.__xmindCasegenDebug : null;
     if (controls && controls.getBoundingClientRect) {
       var rect = controls.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) return true;
     }
+    if (addBtn && addBtn.getBoundingClientRect) {
+      var addRect = addBtn.getBoundingClientRect();
+      if (addRect.width > 0 && addRect.height > 0) return true;
+    }
     return Boolean(debug && (debug.phase === 'render-success' || /error/.test(String(debug.phase || ''))));
+  }, {}, { timeout: 15000 });
+  const hasWorkspace = await page.evaluate(() => {
+    return document.querySelectorAll('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]').length > 0;
+  });
+  if (!hasWorkspace) {
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
+    const summaryOpen = await page.locator('#xmindCaseGenSummaryOverlay').evaluate((el) => {
+      return Boolean(el && el.classList && el.classList.contains('is-open'));
+    }).catch(() => false);
+    if (summaryOpen) {
+      await page.click('#xmindCaseGenSummaryCloseBtn');
+      await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+    }
+  }
+  await page.waitForFunction(() => {
+    var controls = document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]');
+    if (!controls || !controls.getBoundingClientRect) return false;
+    var rect = controls.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
   }, {}, { timeout: 15000 });
   const renderInfo = await page.evaluate(() => {
     var controls = document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]');
@@ -1959,6 +1984,67 @@ test.describe('XMind 用例生成抽屉', () => {
     });
   });
 
+  test('首次进入 XMind 页签抽屉时仅展示新建生成，创建后会自动打开前置准备', async ({ page }) => {
+    const token = 'xmind-tabs-first-token';
+    const user = { id: 801, username: 'tabs-first' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+
+    await page.click('#caseGenModulesTabBtn');
+    await page.click('#xmindCaseGenOpenBtn');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(0);
+    await expect(page.locator('#xmindCaseGenWorkspaceAddBtn')).toHaveText('新建生成');
+    await expect(page.locator('#xmindCaseGenMindContainer')).toContainText('暂无生成页签');
+
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await expect(page.locator('#xmindCaseGenSummaryDialogTitle')).toHaveText('生成前置准备');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
+  });
+
+  test('不同 XMind 生成页签的前置准备配置彼此独立，切换后会回到各自状态', async ({ page }) => {
+    const token = 'xmind-tabs-isolation-token';
+    const user = { id: 802, username: 'tabs-isolation' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+
+    await page.click('#caseGenModulesTabBtn');
+    await page.click('#xmindCaseGenOpenBtn');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
+    await page.click('label:has(input[name="xmindRequirementMode"][value="manual"])');
+    await page.fill('#xmindCaseGenManualRequirementText', '这是页签A的需求描述');
+    await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签A的需求描述');
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
+    await expect(page.locator('input[name="xmindRequirementMode"][value="manual"]')).not.toBeChecked();
+    await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveCount(0);
+    await page.click('label:has(input[name="xmindRequirementMode"][value="manual"])');
+    await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('');
+    await page.fill('#xmindCaseGenManualRequirementText', '这是页签B的需求描述');
+    await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签B的需求描述');
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+
+    await page.click('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]:first-child');
+    await page.click('#xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签A的需求描述');
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+
+    await page.click('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]:nth-child(2)');
+    await page.click('#xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签B的需求描述');
+  });
+
   test('前置准备 step1 的需求文档模式复用拖拽上传样式，并在导入后允许下一步', async ({ page }) => {
     const token = 'token-xmind-prep-document-zone';
     const user = { id: 11, username: 'demo_user_11', role: 'user', level: 'member' };
@@ -2411,6 +2497,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenPrepResetBtn')).toBeVisible();
     await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-step')).toHaveCount(3);
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-step').nth(1)).not.toHaveClass(/is-done/);
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
     const footerStyle = await page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-footer').evaluate((el) => {
       var style = window.getComputedStyle(el);
@@ -2437,8 +2524,10 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step2');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('导入已有用例');
-    await page.check('input[name="xmindCaseImportMode"][value="skip"]', { force: true });
-    await expect(page.locator('label.xmind-casegen-prep-choice.is-success').filter({ has: page.locator('input[name="xmindCaseImportMode"][value="skip"]') })).toHaveClass(/is-active/);
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+    await page.locator('label.xmind-casegen-prep-choice').filter({ has: page.locator('input[name="xmindCaseImportMode"][value="skip"]') }).click();
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step2');
+    await expect(page.locator('label.xmind-casegen-prep-choice').filter({ has: page.locator('input[name="xmindCaseImportMode"][value="skip"]') })).toHaveClass(/is-active/);
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
 
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step3');

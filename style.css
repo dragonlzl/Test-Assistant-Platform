@@ -3923,6 +3923,178 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .xmind-casegen-drawer-shell {
   min-height: 0;
 }
+.xmind-casegen-tabs {
+  align-items: stretch;
+  gap: 10px;
+  padding: 0 2px;
+  margin-bottom: 0;
+  flex-wrap: wrap;
+}
+.xmind-casegen-tab-list {
+  min-width: 0;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.xmind-casegen-tab {
+  position: relative;
+  align-items: flex-start;
+  flex: 0 1 248px;
+  min-width: 220px;
+  max-width: 320px;
+  min-height: 64px;
+  padding: 10px 38px 10px 14px;
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 8px 18px rgba(15,23,42,0.06);
+  border-bottom-color: rgba(209,213,219,0.9);
+}
+.xmind-casegen-tab-label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  min-width: 0;
+  width: 100%;
+}
+.xmind-casegen-tab-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.xmind-casegen-tab-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xmind-casegen-tab-state-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.2;
+  border: 1px solid rgba(148,163,184,0.28);
+  background: rgba(148,163,184,0.12);
+  color: #475569;
+}
+.xmind-casegen-tab-state-pill.is-running {
+  border-color: rgba(37,99,235,0.26);
+  background: rgba(37,99,235,0.12);
+  color: #1d4ed8;
+}
+.xmind-casegen-tab-state-pill.is-dirty {
+  border-color: rgba(245,158,11,0.32);
+  background: rgba(245,158,11,0.16);
+  color: #b45309;
+}
+.xmind-casegen-tab-state-pill.is-ready {
+  border-color: rgba(34,197,94,0.28);
+  background: rgba(34,197,94,0.12);
+  color: #15803d;
+}
+.xmind-casegen-tab-state-pill.is-draft {
+  border-color: rgba(168,85,247,0.26);
+  background: rgba(168,85,247,0.12);
+  color: #7c3aed;
+}
+.xmind-casegen-tab-state-pill.is-idle {
+  border-color: rgba(148,163,184,0.26);
+  background: rgba(148,163,184,0.1);
+  color: #475569;
+}
+.xmind-casegen-tab-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.xmind-casegen-tab-metric {
+  white-space: nowrap;
+}
+.xmind-casegen-tab-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148,163,184,0.9);
+  flex: 0 0 auto;
+}
+.xmind-casegen-tab-close {
+  position: absolute;
+  right: 10px;
+  top: 11px;
+  transform: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(148,163,184,0.12);
+}
+.xmind-casegen-tab-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.xmind-casegen-tab-add {
+  width: auto;
+  min-width: 124px;
+  height: 42px;
+  padding: 0 16px;
+  font-size: 14px;
+  border-radius: 12px;
+  align-self: flex-start;
+}
+.xmind-casegen-tab.active {
+  background: linear-gradient(180deg, #fff8ee 0%, rgba(255,255,255,0.98) 70%);
+  box-shadow: 0 12px 26px rgba(217,119,6,0.12);
+}
+.xmind-casegen-tab:not(.active) {
+  background: rgba(255,255,255,0.96);
+}
+.xmind-casegen-tab:hover {
+  transform: translateY(-1px);
+}
+.xmind-casegen-empty {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+  color: var(--muted);
+  text-align: center;
+}
+.xmind-casegen-empty-card {
+  max-width: 420px;
+  border: 1px dashed rgba(148,163,184,0.42);
+  border-radius: 18px;
+  padding: 26px 22px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.86), rgba(248,250,252,0.92));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
+}
+.xmind-casegen-empty-title {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 800;
+}
+.xmind-casegen-empty-desc {
+  margin: 0;
+  line-height: 1.7;
+}
 .xmind-casegen-toolbar,
 .xmind-casegen-canvas-shell {
   border: 1px solid rgba(148,163,184,0.26);
@@ -13091,6 +13263,68 @@ button.exec-overview-file-chip,
   background: rgba(26,34,49,0.9);
   border-color: rgba(245,158,11,0.4);
   color: #f59e0b;
+}
+:root[data-theme="dark"] .xmind-casegen-tab-state {
+  box-shadow: 0 0 0 2px rgba(15,23,42,0.92);
+}
+:root[data-theme="dark"] .xmind-casegen-tab {
+  background: linear-gradient(180deg, rgba(26,34,49,0.94) 0%, rgba(23,31,45,0.98) 100%);
+  border-color: rgba(71,85,105,0.82);
+  border-bottom-color: rgba(71,85,105,0.92);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.24);
+}
+:root[data-theme="dark"] .xmind-casegen-tab.active {
+  background: linear-gradient(180deg, rgba(56,44,20,0.94) 0%, rgba(26,34,49,0.98) 78%);
+  border-color: rgba(245,158,11,0.32);
+  box-shadow: 0 14px 28px rgba(0,0,0,0.28);
+}
+:root[data-theme="dark"] .xmind-casegen-tab-title {
+  color: var(--text);
+}
+:root[data-theme="dark"] .xmind-casegen-tab-meta {
+  color: rgba(203,213,225,0.88);
+}
+:root[data-theme="dark"] .xmind-casegen-tab-dot {
+  background: rgba(148,163,184,0.7);
+}
+:root[data-theme="dark"] .xmind-casegen-tab-close {
+  background: rgba(148,163,184,0.14);
+  color: rgba(226,232,240,0.88);
+}
+:root[data-theme="dark"] .xmind-casegen-tab-state-pill.is-idle {
+  border-color: rgba(148,163,184,0.3);
+  background: rgba(148,163,184,0.12);
+  color: rgba(226,232,240,0.88);
+}
+:root[data-theme="dark"] .xmind-casegen-tab-state-pill.is-ready {
+  border-color: rgba(34,197,94,0.34);
+  background: rgba(34,197,94,0.14);
+  color: #86efac;
+}
+:root[data-theme="dark"] .xmind-casegen-tab-state-pill.is-running {
+  border-color: rgba(96,165,250,0.34);
+  background: rgba(37,99,235,0.18);
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .xmind-casegen-tab-state-pill.is-dirty {
+  border-color: rgba(245,158,11,0.36);
+  background: rgba(245,158,11,0.18);
+  color: #fcd34d;
+}
+:root[data-theme="dark"] .xmind-casegen-tab-state-pill.is-draft {
+  border-color: rgba(192,132,252,0.36);
+  background: rgba(168,85,247,0.18);
+  color: #d8b4fe;
+}
+:root[data-theme="dark"] .xmind-casegen-tab-add {
+  background: rgba(26,34,49,0.92);
+  border-color: rgba(245,158,11,0.42);
+  color: #fbbf24;
+}
+:root[data-theme="dark"] .xmind-casegen-empty-card {
+  border-color: rgba(71,85,105,0.55);
+  background: linear-gradient(135deg, rgba(30,41,59,0.92), rgba(15,23,42,0.96));
+  box-shadow: inset 0 1px 0 rgba(148,163,184,0.08);
 }
 :root[data-theme="dark"] .memo-pad-body {
   background: rgba(26,34,49,0.92);

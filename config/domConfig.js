@@ -22,6 +22,7 @@
       'importSplitDebugBtn', 'saveCaseDebugBtn', 'importCaseDebugBtn', 'scrollTopBtn', 'scrollBottomBtn', 'currentPath', 'currentPathText', 'xmindStructureToggle',
       'xmindStructureCard', 'caseFileInput', 'caseDropZone', 'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint',
       'xmindCaseGenOpenBtn', 'xmindCaseGenDrawer', 'xmindCaseGenDrawerTitle', 'xmindCaseGenDrawerBody', 'closeXmindCaseGenDrawerBtn',
+      'xmindCaseGenWorkspaceLayer', 'xmindCaseGenWorkspaceList', 'xmindCaseGenWorkspaceAddBtn',
       'xmindCaseGenToolbar', 'xmindCaseGenSummaryBtn', 'xmindCaseGenSummaryOverlay', 'xmindCaseGenSummaryDialog', 'xmindCaseGenSummaryDialogBody', 'xmindCaseGenSummaryCloseBtn',
       'xmindCaseGenRequirementBadge', 'xmindCaseGenRequirementSummary', 'xmindCaseGenRequirementMeta',
       'xmindCaseGenCasesBadge', 'xmindCaseGenCasesSummary', 'xmindCaseGenCasesMeta',

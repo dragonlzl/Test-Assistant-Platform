@@ -397,6 +397,10 @@
       state.caseGenProgress = (data.caseGenProgress && typeof data.caseGenProgress === 'object') ? data.caseGenProgress : {};
       state.caseGenProgressNotice = (data.caseGenProgressNotice && typeof data.caseGenProgressNotice === 'object') ? data.caseGenProgressNotice : {};
       state.xmindCaseGen = (data.xmindCaseGen && typeof data.xmindCaseGen === 'object') ? data.xmindCaseGen : {
+        activeWorkspaceId: '',
+        workspaceOrder: [],
+        workspaces: {},
+        nextWorkspaceSeq: 1,
         mode: 'modules',
         treeSourceSignature: '',
         hasModuleSkeleton: false,
@@ -452,6 +456,10 @@
       if (!Array.isArray(state.xmindCaseGen.operationSnapshots)) state.xmindCaseGen.operationSnapshots = [];
       if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
       if (!Array.isArray(state.xmindCaseGen.rootSnapshots)) state.xmindCaseGen.rootSnapshots = [];
+      if (!Array.isArray(state.xmindCaseGen.workspaceOrder)) state.xmindCaseGen.workspaceOrder = [];
+      if (!state.xmindCaseGen.workspaces || typeof state.xmindCaseGen.workspaces !== 'object') state.xmindCaseGen.workspaces = {};
+      state.xmindCaseGen.activeWorkspaceId = String(state.xmindCaseGen.activeWorkspaceId || '');
+      if (!Number.isFinite(Number(state.xmindCaseGen.nextWorkspaceSeq))) state.xmindCaseGen.nextWorkspaceSeq = 1;
       if (!state.xmindCaseGen.viewState || typeof state.xmindCaseGen.viewState !== 'object') {
         state.xmindCaseGen.viewState = {
           drawerOpen: false,
@@ -488,6 +496,9 @@
       state.xmindCaseGen.hasModuleSkeleton = state.xmindCaseGen.hasModuleSkeleton === true;
       state.xmindCaseGen.hasImportedBaseline = state.xmindCaseGen.hasImportedBaseline === true;
       state.xmindCaseGen.openButtonDotVisible = state.xmindCaseGen.openButtonDotVisible === true;
+      state.xmindCaseGen.workspaceOrder = state.xmindCaseGen.workspaceOrder.map(function(item) {
+        return String(item || '').trim();
+      }).filter(Boolean);
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
       state.xmindCaseGen.root.taskId = String(state.xmindCaseGen.root.taskId || '');
@@ -537,7 +548,9 @@
       state.xmindCaseGen.prep.requirementMode = state.xmindCaseGen.prep.requirementMode === 'manual' ? 'manual' : (state.xmindCaseGen.prep.requirementMode === 'document' ? 'document' : '');
       state.xmindCaseGen.prep.requirementSupplement = String(state.xmindCaseGen.prep.requirementSupplement || '');
       if (!Array.isArray(state.xmindCaseGen.prep.manualRequirementBlocks)) state.xmindCaseGen.prep.manualRequirementBlocks = [];
-      state.xmindCaseGen.prep.caseImportMode = state.xmindCaseGen.prep.caseImportMode === 'import' ? 'import' : (state.xmindCaseGen.prep.caseImportMode === 'skip' ? 'skip' : '');
+      state.xmindCaseGen.prep.caseImportMode = state.xmindCaseGen.prep.caseImportMode === 'import'
+        ? 'import'
+        : (state.xmindCaseGen.prep.caseImportMode === 'skip' ? 'skip' : '');
       state.xmindCaseGen.prep.completed = state.xmindCaseGen.prep.completed === true;
       state.caseSelections = restoreCaseSelections(data.caseSelections);
       state.missingSelections = restoreNumberSet(data.missingSelections);

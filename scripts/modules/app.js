@@ -3883,10 +3883,15 @@
       state.caseGenTiming = {};
       state.caseGenRunning = new Set();
       state.xmindCaseGen = {
+        activeWorkspaceId: '',
+        workspaceOrder: [],
+        workspaces: {},
+        nextWorkspaceSeq: 1,
         mode: 'modules',
         treeSourceSignature: '',
         hasModuleSkeleton: false,
         hasImportedBaseline: false,
+        openButtonDotVisible: false,
         viewState: {
           drawerOpen: false,
           fullscreen: false,
@@ -3958,6 +3963,17 @@
     api.interruptActiveExecutions = interruptActiveExecutions;
 
     function guardRequirementImport() {
+      try {
+        var scopedUntil = window.app && window.app.__xmindCasegenScopedRequirementImportUntil
+          ? Number(window.app.__xmindCasegenScopedRequirementImportUntil || 0)
+          : 0;
+        if (scopedUntil > Date.now()) {
+          if (window.app) window.app.__xmindCasegenScopedRequirementImportUntil = 0;
+          return Promise.resolve(true);
+        }
+      } catch (err) {
+        // ignore
+      }
       var hasRunningTask = false;
       if (autoWorkflowManager && typeof autoWorkflowManager.getTask === 'function') {
         var task = autoWorkflowManager.getTask();
