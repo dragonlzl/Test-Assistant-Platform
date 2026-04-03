@@ -1035,6 +1035,7 @@ async function seedPrepState(page, options) {
       step: Number(payload.step) || 3,
       requirementMode: payload.requirementMode || 'document',
       requirementSupplement: payload.requirementSupplement || '',
+      manualRequirementLabel: payload.manualRequirementLabel || '',
       manualRequirementBlocks: Array.isArray(payload.manualRequirementBlocks) ? payload.manualRequirementBlocks.slice() : [],
       caseImportMode: payload.caseImportMode || 'skip',
       completed: payload.completed === true,
@@ -1043,6 +1044,7 @@ async function seedPrepState(page, options) {
     step: input.step === undefined ? 3 : input.step,
     requirementMode: input.requirementMode || 'document',
     requirementSupplement: input.requirementSupplement || '',
+    manualRequirementLabel: input.manualRequirementLabel || '',
     manualRequirementBlocks: input.manualRequirementBlocks || [],
     caseImportMode: input.caseImportMode || 'skip',
     completed: input.completed !== false,
@@ -2029,9 +2031,18 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
 
     await page.fill('#xmindCaseGenManualRequirementText', '手填需求：支持用户填写需求描述后立即进入下一步。');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+
+    await page.fill('#xmindCaseGenManualRequirementLabel', '手填需求根节点');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
 
     await page.fill('#xmindCaseGenManualRequirementText', '');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+
+    await page.fill('#xmindCaseGenManualRequirementText', '重新填写需求描述后恢复可下一步。');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+
+    await page.fill('#xmindCaseGenManualRequirementLabel', '');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
   });
 
@@ -2445,6 +2456,7 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await page.check('input[name="xmindRequirementMode"][value="manual"]', { force: true });
     await expect(page.locator('label.xmind-casegen-prep-choice.is-success').filter({ has: page.locator('input[name="xmindRequirementMode"][value="manual"]') })).toHaveClass(/is-active/);
+    await page.fill('#xmindCaseGenManualRequirementLabel', '移动端订单确认需求');
     await page.fill('#xmindCaseGenManualRequirementText', '手填需求：支持用户在移动端完成订单确认。');
     await page.click('[data-prep-action="upload-manual-images"]');
     await page.locator('input[type="file"][accept="image/*"]').last().setInputFiles({
@@ -2472,6 +2484,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.locator('input[data-casegen-setting="specialWeakNetwork"]').check({ force: true });
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+    await waitForNodeText(page, '移动端订单确认需求');
 
     await clickElementById(page, 'xmindCaseGenSummaryBtn');
     await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
@@ -2484,6 +2497,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="prev"]');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
     await expect(page.locator('input[name="xmindRequirementMode"][value="manual"]')).toBeDisabled();
+    await expect(page.locator('#xmindCaseGenManualRequirementLabel')).toBeDisabled();
     await expect(page.locator('#xmindCaseGenManualRequirementText')).toBeDisabled();
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-action="upload-manual-images"]')).toBeDisabled();
     await clickElementById(page, 'xmindCaseGenSummaryCloseBtn');
@@ -2501,6 +2515,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(state.xmindCaseGen.prep.caseImportMode).toBe('skip');
     expect(state.xmindCaseGen.prep.baseLocked).toBe(true);
     expect(state.xmindCaseGen.prep.completed).toBe(true);
+    expect(state.xmindCaseGen.prep.manualRequirementLabel).toBe('移动端订单确认需求');
     expect(Array.isArray(state.xmindCaseGen.prep.manualRequirementBlocks)).toBeTruthy();
     expect(state.xmindCaseGen.prep.manualRequirementBlocks.length).toBe(2);
     expect(state.caseGenSettings.customRequirement).toBe('标题保持简洁');
@@ -2705,7 +2720,7 @@ test.describe('XMind 用例生成抽屉', () => {
     const token = 'token-xmind-prep-source-selection';
     const user = { id: 1002, username: 'demo_user_1002', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
-    async function runWithSelectedRequirementMode(mode, requirementLabel) {
+    async function runWithSelectedRequirementMode(mode, requirementLabel, manualRequirementLabel) {
       await gotoCasesgenWorkflow(page);
       await waitXmindModelAssigned(page, mockInfo.modelId);
       await installXmindModelStub(page, 180);
@@ -2736,18 +2751,19 @@ test.describe('XMind 用例生成抽屉', () => {
       await seedPrepState(page, {
         step: 3,
         requirementMode: mode,
+        manualRequirementLabel: manualRequirementLabel,
         manualRequirementBlocks: [{ type: 'text', text: '手填需求：手填上下文只应在选中手填模式时提交。' }],
         caseImportMode: 'skip',
         completed: true,
       });
       await openXmindCaseGenDrawer(page);
-      await waitForNodeText(page, requirementLabel);
+      await waitForNodeText(page, mode === 'manual' ? manualRequirementLabel : requirementLabel);
       await openRootContextMenu(page);
       const items = await getContextMenuItems(page);
       const fullCasesAction = items.some((item) => item.label === '生成全量用例') ? '生成全量用例' : '重新生成全量用例';
       await clickContextMenuAction(page, fullCasesAction);
-      await waitForNodeStatus(page, requirementLabel, '生成中');
-      await waitForNodeStatusAbsent(page, requirementLabel);
+      await waitForNodeStatus(page, mode === 'manual' ? manualRequirementLabel : requirementLabel, '生成中');
+      await waitForNodeStatusAbsent(page, mode === 'manual' ? manualRequirementLabel : requirementLabel);
       return page.evaluate(() => {
         var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
         for (var i = calls.length - 1; i >= 0; i -= 1) {
@@ -2763,13 +2779,15 @@ test.describe('XMind 用例生成抽屉', () => {
       });
     }
 
-    const manualCall = await runWithSelectedRequirementMode('manual', 'XMind双来源切换需求-手填');
+    const manualCall = await runWithSelectedRequirementMode('manual', 'XMind双来源切换需求-文档', 'XMind双来源切换需求-手填');
     expect(manualCall).toBeTruthy();
+    expect(manualCall.user).toContain('【需求标识】\nXMind双来源切换需求-手填');
     expect(manualCall.user).toContain('【手填需求描述】\n手填需求：手填上下文只应在选中手填模式时提交。');
     expect(manualCall.user).not.toContain('需求正文：文档上下文只应在选中文档模式时提交。');
 
-    const documentCall = await runWithSelectedRequirementMode('document', 'XMind双来源切换需求-文档');
+    const documentCall = await runWithSelectedRequirementMode('document', 'XMind双来源切换需求-文档', 'XMind双来源切换需求-手填');
     expect(documentCall).toBeTruthy();
+    expect(documentCall.user).toContain('【需求标识】\nXMind双来源切换需求-文档');
     expect(documentCall.user).toContain('【需求正文】\n需求正文：文档上下文只应在选中文档模式时提交。');
     expect(documentCall.user).not.toContain('手填需求：手填上下文只应在选中手填模式时提交。');
   });

@@ -157,6 +157,7 @@
         step: STEP_REQUIREMENT,
         requirementMode: '',
         requirementSupplement: '',
+        manualRequirementLabel: '',
         manualRequirementBlocks: [],
         caseImportMode: '',
         baseLocked: false,
@@ -1057,6 +1058,7 @@
         ? 'manual'
         : (state.xmindCaseGen.prep.requirementMode === 'document' ? 'document' : '');
       state.xmindCaseGen.prep.requirementSupplement = String(state.xmindCaseGen.prep.requirementSupplement || '');
+      state.xmindCaseGen.prep.manualRequirementLabel = String(state.xmindCaseGen.prep.manualRequirementLabel || '').trim();
       if (!Array.isArray(state.xmindCaseGen.prep.manualRequirementBlocks)) {
         state.xmindCaseGen.prep.manualRequirementBlocks = [];
       }
@@ -2202,6 +2204,7 @@
     function isPrepBaseField(key) {
       return key === 'requirementMode'
         || key === 'requirementSupplement'
+        || key === 'manualRequirementLabel'
         || key === 'manualRequirementBlocks'
         || key === 'caseImportMode';
     }
@@ -2284,11 +2287,23 @@
       return moduleKey && signature ? (moduleKey + '::' + signature) : '';
     }
 
-    function getRequirementLabelText() {
+    function getDocumentRequirementLabelText() {
       var label = state.requirementLabel ? String(state.requirementLabel).trim() : '';
       if (!label) {
         label = normalizeRequirementLabelFromFileName(state.lastRawImportName || '');
       }
+      return label;
+    }
+
+    function getManualRequirementLabelText() {
+      return String(getPrepState().manualRequirementLabel || '').trim();
+    }
+
+    function getRequirementLabelText() {
+      var prep = getPrepState();
+      var label = prep.requirementMode === 'manual'
+        ? getManualRequirementLabelText()
+        : getDocumentRequirementLabelText();
       return label || '当前需求';
     }
 
@@ -2518,39 +2533,51 @@
         : (prep.requirementMode === 'document' ? 'document' : '');
       var rawTextEl = document.getElementById('rawText');
       var documentText = rawTextEl && rawTextEl.value ? String(rawTextEl.value).trim() : '';
+      var documentLabel = getDocumentRequirementLabelText();
+      var manualLabel = getManualRequirementLabelText();
       var manualText = getManualRequirementText();
       var manualImages = getManualRequirementImages();
       if (mode === 'manual') {
+        var manualHasBodyContent = Boolean(manualText) || manualImages.length > 0;
         return {
           mode: 'manual',
+          label: manualLabel,
           text: manualText,
           supplement: '',
           importName: '',
           images: manualImages,
           imageCount: manualImages.length,
-          hasContent: Boolean(manualText) || manualImages.length > 0,
+          hasLabel: Boolean(manualLabel),
+          hasBodyContent: manualHasBodyContent,
+          isReady: Boolean(manualLabel) && manualHasBodyContent,
         };
       }
       if (mode === 'document') {
         var documentImages = collectDocumentRequirementImages();
         return {
           mode: 'document',
+          label: documentLabel,
           text: documentText,
           supplement: String(prep.requirementSupplement || '').trim(),
           importName: state.lastRawImportName ? String(state.lastRawImportName).trim() : '',
           images: documentImages,
           imageCount: documentImages.length,
-          hasContent: Boolean(documentText),
+          hasLabel: Boolean(documentLabel),
+          hasBodyContent: Boolean(documentText),
+          isReady: Boolean(documentText),
         };
       }
       return {
         mode: '',
+        label: '',
         text: '',
         supplement: '',
         importName: '',
         images: [],
         imageCount: 0,
-        hasContent: false,
+        hasLabel: false,
+        hasBodyContent: false,
+        isReady: false,
       };
     }
 
@@ -2658,7 +2685,7 @@
     }
 
     function hasRequirementReady() {
-      return getSelectedRequirementSource().hasContent === true;
+      return getSelectedRequirementSource().isReady === true;
     }
 
     function hasCaseStepReady() {
@@ -2676,19 +2703,28 @@
     function buildRequirementSummaryInfo() {
       var requirementSource = getSelectedRequirementSource();
       if (requirementSource.mode === 'manual') {
+        var manualMeta = '';
+        if (!requirementSource.hasLabel && !requirementSource.hasBodyContent) {
+          manualMeta = '请先填写需求名称，并填写文本或上传图片。';
+        } else if (!requirementSource.hasLabel) {
+          manualMeta = '请先填写需求名称，用作根节点标题。';
+        } else if (!requirementSource.hasBodyContent) {
+          manualMeta = '请先填写文本或上传图片。';
+        } else {
+          manualMeta = '需求名：' + requirementSource.label + '，文本 ' + String(requirementSource.text.length) + ' 字'
+            + (requirementSource.imageCount ? '，图片 ' + String(requirementSource.imageCount) + ' 张' : '');
+        }
         return {
-          done: requirementSource.hasContent === true,
-          title: requirementSource.hasContent === true ? '已填写需求描述' : '未填写需求描述',
-          meta: requirementSource.hasContent === true
-            ? ('文本 ' + String(requirementSource.text.length) + ' 字' + (requirementSource.imageCount ? '，图片 ' + String(requirementSource.imageCount) + ' 张' : ''))
-            : '请先填写文本或上传图片。',
+          done: requirementSource.isReady === true,
+          title: requirementSource.label || '未填写需求名称',
+          meta: manualMeta,
         };
       }
       var importName = requirementSource.importName || '当前文档';
       return {
-        done: requirementSource.hasContent === true,
-        title: requirementSource.hasContent === true ? '已导入需求文档' : '未导入需求文档',
-        meta: requirementSource.hasContent === true
+        done: requirementSource.isReady === true,
+        title: requirementSource.label || (requirementSource.isReady === true ? '已导入需求文档' : '未导入需求文档'),
+        meta: requirementSource.isReady === true
           ? ('来源：' + importName + '，正文 ' + String(requirementSource.text.length) + ' 字' + (requirementSource.supplement ? '，补充已填写' : ''))
           : '请先导入需求文档。',
       };
@@ -3185,6 +3221,7 @@
       var docStatusText = docValue
         ? ('已导入' + (docImportName ? '：' + docImportName + '，' : '，') + '正文 ' + String(docValue.length) + ' 字')
         : '导入后内容会同步到当前需求上下文';
+      var manualLabel = getManualRequirementLabelText();
       var manualText = getManualRequirementText();
       var manualImages = getManualRequirementImages();
       var manualImagesHtml = manualImages.map(function(item, index) {
@@ -3243,6 +3280,10 @@
           : '')
         +   (mode === 'manual'
           ? ''
+            + '<div class="xmind-casegen-prep-field">'
+            +   '<label for="xmindCaseGenManualRequirementLabel">需求名称</label>'
+            +   '<input id="xmindCaseGenManualRequirementLabel" data-prep-input="manualRequirementLabel" type="text" maxlength="80" placeholder="必填，将作为根节点标题。"' + readonlyAttr + disabledAttr + ' value="' + escapeHtml(manualLabel) + '" />'
+            + '</div>'
             + '<div class="xmind-casegen-prep-field">'
             +   '<label for="xmindCaseGenManualRequirementText">需求描述</label>'
             +   '<textarea id="xmindCaseGenManualRequirementText" data-manual-requirement-text="1" placeholder="请输入需求描述；也可直接粘贴图片到此区域。"' + readonlyAttr + disabledAttr + '>' + escapeHtml(manualText) + '</textarea>'
@@ -7637,13 +7678,17 @@
       var caseTextEl = document.getElementById('caseText');
       var prep = cloneJson(getPrepState(), createDefaultPrepState());
       var viewState = cloneJson(getViewState(), createDefaultViewState());
-      var requirementLabel = state.requirementLabel ? String(state.requirementLabel || '').trim() : '';
-      if (!requirementLabel) {
-        requirementLabel = normalizeRequirementLabelFromFileName(state.lastRawImportName || '');
+      var requirementSource = getSelectedRequirementSource();
+      var requirementLabel = getRequirementLabelText();
+      var requirementLabelSource = state.requirementLabelSource ? String(state.requirementLabelSource || '') : '';
+      if (requirementSource.mode === 'manual') {
+        requirementLabelSource = 'manual';
+      } else if (!requirementLabelSource && requirementSource.mode === 'document' && requirementLabel) {
+        requirementLabelSource = state.lastRawImportName ? 'import' : 'document';
       }
       return {
         requirementLabel: requirementLabel,
-        requirementLabelSource: state.requirementLabelSource ? String(state.requirementLabelSource || '') : '',
+        requirementLabelSource: requirementLabelSource,
         lastRawImportName: state.lastRawImportName ? String(state.lastRawImportName || '') : '',
         rawText: rawTextEl && rawTextEl.value ? String(rawTextEl.value || '') : '',
         caseText: caseTextEl && caseTextEl.value ? String(caseTextEl.value || '') : '',
@@ -7797,6 +7842,7 @@
       basePrep.step = Math.max(Number(basePrep.step || STEP_REQUIREMENT), Number(incomingPrep.step || STEP_REQUIREMENT));
       if (incomingPrep.requirementMode) basePrep.requirementMode = String(incomingPrep.requirementMode || '');
       if (incomingPrep.requirementSupplement) basePrep.requirementSupplement = String(incomingPrep.requirementSupplement || '');
+      if (incomingPrep.manualRequirementLabel) basePrep.manualRequirementLabel = String(incomingPrep.manualRequirementLabel || '');
       if (Array.isArray(incomingPrep.manualRequirementBlocks) && incomingPrep.manualRequirementBlocks.length) {
         basePrep.manualRequirementBlocks = cloneJson(incomingPrep.manualRequirementBlocks, []);
       }
@@ -7907,13 +7953,14 @@
       var currentLabel = state.requirementLabel ? String(state.requirementLabel).trim() : '';
       var currentLabelSource = state.requirementLabelSource ? String(state.requirementLabelSource).trim() : '';
       var restoreLabel = restoreContext.requirementLabel ? String(restoreContext.requirementLabel || '').trim() : '';
+      var restoreLabelSource = restoreContext.requirementLabelSource ? String(restoreContext.requirementLabelSource || '').trim() : '';
       if (!restoreLabel) {
         restoreLabel = normalizeRequirementLabelFromFileName(restoreContext.lastRawImportName || '');
       }
-      if ((!currentLabel || currentLabel === '当前需求' || currentLabelSource === 'default') && restoreLabel) {
+      if (restoreLabelSource !== 'manual' && (!currentLabel || currentLabel === '当前需求' || currentLabelSource === 'default') && restoreLabel) {
         state.requirementLabel = restoreLabel;
-        state.requirementLabelSource = restoreContext.requirementLabelSource
-          ? String(restoreContext.requirementLabelSource || '')
+        state.requirementLabelSource = restoreLabelSource
+          ? restoreLabelSource
           : (restoreContext.lastRawImportName ? 'import' : (currentLabelSource || 'task-restore'));
         changed = true;
       }
@@ -8004,6 +8051,10 @@
         }
         if (!prep.requirementSupplement && prepSnapshot.requirementSupplement) {
           prep.requirementSupplement = String(prepSnapshot.requirementSupplement || '');
+          changed = true;
+        }
+        if (!prep.manualRequirementLabel && prepSnapshot.manualRequirementLabel) {
+          prep.manualRequirementLabel = String(prepSnapshot.manualRequirementLabel || '');
           changed = true;
         }
         if ((!Array.isArray(prep.manualRequirementBlocks) || !prep.manualRequirementBlocks.length) && Array.isArray(prepSnapshot.manualRequirementBlocks) && prepSnapshot.manualRequirementBlocks.length) {
@@ -9801,6 +9852,10 @@
           var target = event && event.target ? event.target : null;
           if (!target) return;
           var prepInputKey = target.getAttribute ? target.getAttribute('data-prep-input') : '';
+          if (prepInputKey === 'manualRequirementLabel') {
+            setPrepField('manualRequirementLabel', target.value || '');
+            return;
+          }
           if (prepInputKey === 'requirementSupplement') {
             setPrepField('requirementSupplement', target.value || '');
             return;

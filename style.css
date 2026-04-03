@@ -4775,11 +4775,44 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   font-weight: 700;
   color: var(--text);
 }
+.xmind-casegen-prep-field input[type="text"],
 .xmind-casegen-prep-field textarea {
   width: 100%;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.26);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  box-shadow: inset 0 1px 2px rgba(15,23,42,0.04);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.xmind-casegen-prep-field input[type="text"] {
+  min-height: 44px;
+}
+.xmind-casegen-prep-field textarea {
   min-height: 108px;
   resize: vertical;
-  box-sizing: border-box;
+}
+.xmind-casegen-prep-field input[type="text"]::placeholder,
+.xmind-casegen-prep-field textarea::placeholder {
+  color: #94a3b8;
+}
+.xmind-casegen-prep-field input[type="text"]:hover:not(:disabled),
+.xmind-casegen-prep-field textarea:hover:not(:disabled) {
+  border-color: rgba(148,163,184,0.42);
+  background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(248,250,252,0.98));
+}
+.xmind-casegen-prep-field input[type="text"]:focus,
+.xmind-casegen-prep-field textarea:focus {
+  outline: none;
+  border-color: rgba(37,99,235,0.42);
+  background: rgba(255,255,255,0.99);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.12), inset 0 1px 2px rgba(15,23,42,0.04);
 }
 .xmind-casegen-prep-warning {
   padding: 10px 12px;
@@ -4790,9 +4823,17 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   font-size: 12px;
   line-height: 1.7;
 }
+.xmind-casegen-prep-card.is-readonly input[type="text"]:disabled,
 .xmind-casegen-prep-card.is-readonly textarea,
 .xmind-casegen-prep-card.is-readonly button:disabled {
   cursor: not-allowed;
+}
+.xmind-casegen-prep-field input[type="text"]:disabled,
+.xmind-casegen-prep-field textarea:disabled {
+  border-color: rgba(226,232,240,0.92);
+  background: rgba(248,250,252,0.88);
+  color: #94a3b8;
+  box-shadow: none;
 }
 .xmind-casegen-prep-upload-row {
   display: flex;
@@ -4809,6 +4850,35 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   width: 100%;
   margin: 0;
   white-space: normal;
+}
+:root[data-theme="dark"] .xmind-casegen-prep-field input[type="text"],
+:root[data-theme="dark"] .xmind-casegen-prep-field textarea {
+  border-color: rgba(71,85,105,0.85);
+  background: linear-gradient(180deg, rgba(30,41,59,0.96), rgba(15,23,42,0.94));
+  color: var(--text);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
+}
+:root[data-theme="dark"] .xmind-casegen-prep-field input[type="text"]::placeholder,
+:root[data-theme="dark"] .xmind-casegen-prep-field textarea::placeholder {
+  color: rgba(203,213,225,0.54);
+}
+:root[data-theme="dark"] .xmind-casegen-prep-field input[type="text"]:hover:not(:disabled),
+:root[data-theme="dark"] .xmind-casegen-prep-field textarea:hover:not(:disabled) {
+  border-color: rgba(96,165,250,0.42);
+  background: linear-gradient(180deg, rgba(30,41,59,0.98), rgba(15,23,42,0.96));
+}
+:root[data-theme="dark"] .xmind-casegen-prep-field input[type="text"]:focus,
+:root[data-theme="dark"] .xmind-casegen-prep-field textarea:focus {
+  border-color: rgba(96,165,250,0.72);
+  background: rgba(15,23,42,0.96);
+  box-shadow: 0 0 0 3px rgba(96,165,250,0.18), inset 0 1px 2px rgba(0,0,0,0.42);
+}
+:root[data-theme="dark"] .xmind-casegen-prep-field input[type="text"]:disabled,
+:root[data-theme="dark"] .xmind-casegen-prep-field textarea:disabled {
+  border-color: rgba(51,65,85,0.9);
+  background: rgba(15,23,42,0.72);
+  color: rgba(148,163,184,0.82);
+  box-shadow: none;
 }
 .xmind-casegen-prep-dropzone.is-disabled {
   cursor: not-allowed;
