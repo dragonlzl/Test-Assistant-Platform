@@ -1671,23 +1671,26 @@ async function getContextMenuItems(page) {
 
 async function clickContextMenuAction(page, label) {
   const actionLabel = String(label || '').trim();
-  await page.waitForFunction((text) => {
-    var buttons = document.querySelectorAll('.xmind-node-context-menu-btn');
-    return Array.prototype.some.call(buttons, function(btn) {
-      return String(btn.textContent || '').trim() === String(text || '').trim();
-    });
-  }, actionLabel, { timeout: 10000 });
-  const clicked = await page.evaluate((text) => {
-    var buttons = document.querySelectorAll('.xmind-node-context-menu-btn');
-    for (var i = 0; i < buttons.length; i += 1) {
-      var btn = buttons[i];
-      if (String(btn.textContent || '').trim() !== String(text || '').trim()) continue;
-      btn.click();
-      return true;
-    }
-    return false;
-  }, actionLabel);
-  expect(clicked).toBeTruthy();
+  const button = page.locator('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn', {
+    hasText: actionLabel,
+  }).first();
+  await expect(button).toBeVisible();
+  try {
+    await button.click({ force: true, timeout: 2500 });
+    return;
+  } catch (err) {
+    const clicked = await page.evaluate((text) => {
+      var buttons = document.querySelectorAll('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn');
+      for (var i = 0; i < buttons.length; i += 1) {
+        var btn = buttons[i];
+        if (String(btn.textContent || '').trim() !== String(text || '').trim()) continue;
+        btn.click();
+        return true;
+      }
+      return false;
+    }, actionLabel);
+    expect(clicked).toBeTruthy();
+  }
 }
 
 async function clickVisibleContextMenuAction(page, label) {
@@ -1871,6 +1874,39 @@ async function readXmindRootCenter(page) {
       y: Number(rect.top + (rect.height / 2)),
     };
   });
+}
+
+async function readXmindRootOffsetFromViewer(page) {
+  return page.evaluate(() => {
+    var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+      || document.getElementById('xmindCaseGenMindContainer');
+    var textEl = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text');
+    if (!viewer || !viewer.getBoundingClientRect || !textEl || !textEl.getBoundingClientRect) return null;
+    var viewerRect = viewer.getBoundingClientRect();
+    var rect = textEl.getBoundingClientRect();
+    return {
+      dx: Number((rect.left + (rect.width / 2)) - (viewerRect.left + (viewerRect.width / 2))),
+      dy: Number((rect.top + (rect.height / 2)) - (viewerRect.top + (viewerRect.height / 2))),
+    };
+  });
+}
+
+async function waitForPaintFrames(page, count) {
+  const frameCount = Number(count) > 0 ? Number(count) : 1;
+  await page.evaluate((nextCount) => {
+    return new Promise((resolve) => {
+      var remaining = nextCount;
+      function step() {
+        remaining -= 1;
+        if (remaining <= 0) {
+          resolve(true);
+          return;
+        }
+        window.requestAnimationFrame(step);
+      }
+      window.requestAnimationFrame(step);
+    });
+  }, frameCount);
 }
 
 function parseMindTransformText(text) {
@@ -2601,6 +2637,208 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(rootCenterAfter).not.toBeNull();
     expect(Math.abs(rootCenterAfter.x - rootCenterBefore.x)).toBeLessThanOrEqual(6);
     expect(Math.abs(rootCenterAfter.y - rootCenterBefore.y)).toBeLessThanOrEqual(6);
+  });
+
+  test('一个页签生成中时，另一个已完成页签入库关闭后切回前者，不会让画布抖动', async ({ page }) => {
+    const token = 'xmind-tabs-store-close-running-stable-token';
+    const user = { id: 8025, username: 'tabs-store-close-running-stable' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      projects: [{ id: 1, name: '项目A' }],
+      versionsByProject: {
+        '1': [{ id: 11, name: 'v1.0.0' }],
+      },
+    });
+    const responseText = JSON.stringify({
+      modules: [{
+        module: '登录模块',
+        key_scenarios: ['登录主场景'],
+        test_points: ['账号密码校验'],
+        coupled_modules: ['用户中心'],
+        cases: [{
+          module: '登录模块',
+          title: '登录成功校验',
+          priority: 'P1',
+          preconditions: '账号已存在',
+          steps: ['1、进入登录页', '2、输入账号密码并提交'],
+          expected: '登录成功',
+        }],
+      }, {
+        module: '支付模块',
+        key_scenarios: ['支付主场景'],
+        test_points: ['支付结果校验'],
+        coupled_modules: ['订单中心'],
+        cases: [{
+          module: '支付模块',
+          title: '支付成功校验',
+          priority: 'P1',
+          preconditions: '订单待支付',
+          steps: ['1、进入支付页', '2、完成支付'],
+          expected: '支付成功',
+        }],
+      }],
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRoute(page, {
+      delaysMs: [3200, 120],
+      responseTexts: [responseText, responseText],
+    });
+    await openXmindCaseGenDrawer(page);
+
+    await createXmindWorkspaceByManualPrep(page, '生成中切回页签-A', '需求A：用于验证入库关闭后切回生成中页签不抖动。', {
+      completePrep: true,
+      useExistingWorkspace: true,
+    });
+    await createXmindWorkspaceByManualPrep(page, '已完成入库页签-B', '需求B：用于验证入库关闭后切回生成中页签不抖动。', {
+      completePrep: true,
+    });
+
+    const tabA = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
+      hasText: '生成中切回页签-A',
+    }).first();
+    const tabB = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
+      hasText: '已完成入库页签-B',
+    }).first();
+
+    await tabA.click();
+    await waitForNodeText(page, '生成中切回页签-A');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await page.waitForFunction(() => {
+      var root = window.app && window.app.state && window.app.state.xmindCaseGen
+        ? window.app.state.xmindCaseGen.root
+        : null;
+      return Boolean(root && root.running === true);
+    }, {}, { timeout: 15000 });
+    const panResultBeforeStore = await panXmindCasegenCanvas(page, 240, 130);
+    expect(panResultBeforeStore.dispatched).toBeTruthy();
+    await page.waitForFunction((beforeTransform) => {
+      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+      return Boolean(map && map.style && String(map.style.transform || '') !== String(beforeTransform || ''));
+    }, panResultBeforeStore.before || '', { timeout: 10000 });
+    await waitForPaintFrames(page, 2);
+    const rootCenterBeforeStore = await readXmindRootCenter(page);
+    expect(rootCenterBeforeStore).not.toBeNull();
+    const rootOffsetBeforeStore = await readXmindRootOffsetFromViewer(page);
+    expect(rootOffsetBeforeStore).not.toBeNull();
+
+    await tabB.click();
+    await waitForNodeText(page, '已完成入库页签-B');
+    const workspaceASnapshotView = await page.evaluate(() => {
+      var host = window.app && window.app.state ? window.app.state.xmindCaseGen : null;
+      if (!host || !host.workspaces) return null;
+      var targetId = '';
+      Object.keys(host.workspaces).forEach(function(id) {
+        var record = host.workspaces[id];
+        if (!record || targetId) return;
+        if (String(record.name || '').trim() === '生成中切回页签-A') {
+          targetId = id;
+        }
+      });
+      var record = targetId ? host.workspaces[targetId] : null;
+      var snapshot = record && record.snapshot ? record.snapshot : null;
+      var xmind = snapshot && snapshot.xmind ? snapshot.xmind : null;
+      var view = xmind && xmind.viewState ? xmind.viewState : null;
+      return {
+        transform: view ? String(view.transform || '') : '',
+        drawerOpen: Boolean(view && view.drawerOpen === true),
+        viewTreeSignature: view ? String(view.treeSourceSignature || '') : '',
+        treeSignature: xmind ? String(xmind.treeSourceSignature || '') : '',
+      };
+    });
+    expect(workspaceASnapshotView).not.toBeNull();
+    expect(String(workspaceASnapshotView.transform || '')).toContain('translate3d(');
+    await seedAiSkeleton(page, [{
+      id: 'xmind-store-stable-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }, {
+      id: 'xmind-store-stable-pay',
+      title: '支付模块',
+      scenarios: ['支付主场景'],
+      points: ['支付结果校验'],
+      coupled: ['订单中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-store-stable-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码并提交'],
+        expected: '登录成功',
+      }],
+      'xmind-store-stable-pay': [{
+        module: '支付模块',
+        title: '支付成功校验',
+        priority: 'P1',
+        preconditions: '订单待支付',
+        steps: ['1、进入支付页', '2、完成支付'],
+        expected: '支付成功',
+      }],
+    });
+    await page.evaluate(() => {
+      if (window.app && window.app.xmindCasegenApi && typeof window.app.xmindCasegenApi.render === 'function') {
+        window.app.xmindCasegenApi.render({ reason: 'ui-test-store-close-seed', persist: false });
+      }
+    });
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+
+    await clickElementById(page, 'xmindCaseGenStoreBtn');
+    await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
+    await page.fill('#caseGenDbStoreEntryNameInput', '已完成入库页签-B-确认名');
+    await page.selectOption('#caseGenDbStoreProjectSelect', '1');
+    await page.selectOption('#caseGenDbStoreVersionSelect', '11');
+    const importRequestPromise = page.waitForRequest((request) => {
+      return request.url().indexOf('/api/case-files/import') !== -1 && request.method() === 'POST';
+    });
+    await page.click('#caseGenDbStoreConfirmBtn');
+    await importRequestPromise;
+
+    await expect(page.locator('.temp-center-toast').last()).toContainText('入库并关闭页签成功');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('生成中切回页签-A');
+    await waitForNodeText(page, '生成中切回页签-A');
+    await waitForPaintFrames(page, 2);
+    await page.waitForFunction(({ beforeDx, beforeDy }) => {
+      var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+        || document.getElementById('xmindCaseGenMindContainer');
+      var rootText = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text');
+      if (!viewer || !viewer.getBoundingClientRect || !rootText || !rootText.getBoundingClientRect) return false;
+      var viewerRect = viewer.getBoundingClientRect();
+      var rect = rootText.getBoundingClientRect();
+      var dx = Number((rect.left + (rect.width / 2)) - (viewerRect.left + (viewerRect.width / 2)));
+      var dy = Number((rect.top + (rect.height / 2)) - (viewerRect.top + (viewerRect.height / 2)));
+      return Math.abs(dx - Number(beforeDx || 0)) <= 8 && Math.abs(dy - Number(beforeDy || 0)) <= 8;
+    }, {
+      beforeDx: rootOffsetBeforeStore.dx,
+      beforeDy: rootOffsetBeforeStore.dy,
+    }, { timeout: 10000 });
+
+    const rootCenterAfterStore = await readXmindRootCenter(page);
+    expect(rootCenterAfterStore).not.toBeNull();
+    const rootOffsetAfterStore = await readXmindRootOffsetFromViewer(page);
+    expect(rootOffsetAfterStore).not.toBeNull();
+    expect(Math.abs(rootOffsetAfterStore.dx - rootOffsetBeforeStore.dx)).toBeLessThanOrEqual(8);
+    expect(Math.abs(rootOffsetAfterStore.dy - rootOffsetBeforeStore.dy)).toBeLessThanOrEqual(8);
+
+    await page.waitForTimeout(900);
+    await page.waitForFunction(() => {
+      var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+        || document.getElementById('xmindCaseGenMindContainer');
+      var rootText = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text');
+      return Boolean(viewer && rootText && rootText.getBoundingClientRect && viewer.getBoundingClientRect);
+    }, {}, { timeout: 5000 });
+    const rootCenterStable = await readXmindRootCenter(page);
+    expect(rootCenterStable).not.toBeNull();
+    const rootOffsetStable = await readXmindRootOffsetFromViewer(page);
+    expect(rootOffsetStable).not.toBeNull();
+    expect(Math.abs(rootOffsetStable.dx - rootOffsetAfterStore.dx)).toBeLessThanOrEqual(6);
+    expect(Math.abs(rootOffsetStable.dy - rootOffsetAfterStore.dy)).toBeLessThanOrEqual(6);
   });
 
   test('XMind 生成页签创建后刷新页面，仍会保留页签列表与当前活动页签', async ({ page }) => {
@@ -3412,6 +3650,38 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
 
     await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录成功校验');
+    const reopenFrameOffsets = await page.evaluate(() => {
+      return new Promise((resolve) => {
+        var samples = [];
+        function takeSample() {
+          var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+            || document.getElementById('xmindCaseGenMindContainer');
+          var textEl = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text');
+          if (!viewer || !viewer.getBoundingClientRect || !textEl || !textEl.getBoundingClientRect) {
+            window.requestAnimationFrame(takeSample);
+            return;
+          }
+          var viewerRect = viewer.getBoundingClientRect();
+          var nodeRect = textEl.getBoundingClientRect();
+          samples.push({
+            dx: Number((nodeRect.left + (nodeRect.width / 2)) - (viewerRect.left + (viewerRect.width / 2))),
+            dy: Number((nodeRect.top + (nodeRect.height / 2)) - (viewerRect.top + (viewerRect.height / 2))),
+          });
+          if (samples.length >= 6) {
+            resolve(samples);
+            return;
+          }
+          window.requestAnimationFrame(takeSample);
+        }
+        window.requestAnimationFrame(takeSample);
+      });
+    });
+    expect(reopenFrameOffsets.length).toBeGreaterThanOrEqual(6);
+    reopenFrameOffsets.forEach((offset) => {
+      expect(Math.abs(Number(offset.dx || 0))).toBeLessThanOrEqual(12);
+      expect(Math.abs(Number(offset.dy || 0))).toBeLessThanOrEqual(12);
+    });
     await page.waitForFunction(() => {
       var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
         || document.getElementById('xmindCaseGenMindContainer');
@@ -3423,6 +3693,14 @@ test.describe('XMind 用例生成抽屉', () => {
       var dy = Math.abs((nodeRect.top + (nodeRect.height / 2)) - (viewerRect.top + (viewerRect.height / 2)));
       return dx <= 10 && dy <= 10;
     }, {}, { timeout: 10000 });
+    await waitForPaintFrames(page, 2);
+    const centerAfterReopen = await readXmindRootCenter(page);
+    expect(centerAfterReopen).not.toBeNull();
+    await page.waitForTimeout(900);
+    const centerStableAfterReopen = await readXmindRootCenter(page);
+    expect(centerStableAfterReopen).not.toBeNull();
+    expect(Math.abs(centerStableAfterReopen.x - centerAfterReopen.x)).toBeLessThanOrEqual(6);
+    expect(Math.abs(centerStableAfterReopen.y - centerAfterReopen.y)).toBeLessThanOrEqual(6);
   });
 
   test('前置准备改为单步 3 步流程，并在确认后锁定前两步', async ({ page }) => {

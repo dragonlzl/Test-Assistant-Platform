@@ -4548,6 +4548,9 @@
         instance.__tapCaptureViewState = function() {
           return captureMindViewState(getInstance());
         };
+        instance.__tapCaptureViewportAnchorState = function() {
+          return captureViewportCenterAnchorState(getInstance());
+        };
         instance.__tapCaptureDrawerState = function() {
           return captureMindDrawerState(getInstance());
         };
@@ -4960,7 +4963,7 @@
       if (!instance || !viewState) return;
       [0, 16, 48, 96, 180, 320, 520].forEach(function(delayMs) {
         setTimeout(function() {
-          if (!instance || !instance.map || !instance.el || !instance.el.isConnected) return;
+          if (!isActiveMindRenderInstance(instance)) return;
           if (delayMs > 0 && instance.__tapViewportInteracted === true) return;
           restoreMindViewState(instance, viewState);
           if (anchorState) {
@@ -4974,11 +4977,22 @@
       if (!instance || !anchorState) return;
       [0, 16, 48, 96, 180, 320, 520, 760, 1080].forEach(function(delayMs) {
         setTimeout(function() {
-          if (!instance || !instance.map || !instance.el || !instance.el.isConnected) return;
+          if (!isActiveMindRenderInstance(instance)) return;
           if (delayMs > 0 && instance.__tapViewportInteracted === true) return;
           restoreMindAnchorState(instance, anchorState);
         }, delayMs);
       });
+    }
+
+    function isActiveMindRenderInstance(instance) {
+      if (!instance || !instance.map || !instance.el || !instance.el.isConnected) return false;
+      var host = instance.__tapHostContainer || null;
+      var token = instance.__tapRenderSessionToken ? String(instance.__tapRenderSessionToken || '') : '';
+      if (host && token) {
+        var activeToken = host.__tapActiveMindRenderToken ? String(host.__tapActiveMindRenderToken || '') : '';
+        if (activeToken && activeToken !== token) return false;
+      }
+      return true;
     }
 
     function centerMindNode(instance, nodeId) {
@@ -5033,6 +5047,11 @@
       var explicitInitialViewState = opts && opts.initialViewState && typeof opts.initialViewState === 'object'
         ? opts.initialViewState
         : null;
+      var explicitInitialAnchorState = explicitInitialViewState && explicitInitialViewState.anchorState
+        ? explicitInitialViewState.anchorState
+        : (opts && opts.initialAnchorState && typeof opts.initialAnchorState === 'object'
+          ? opts.initialAnchorState
+          : null);
       var explicitInitialDrawerState = opts && opts.initialDrawerState && typeof opts.initialDrawerState === 'object'
         ? opts.initialDrawerState
         : null;
@@ -5114,6 +5133,9 @@
         ? cloneMindDataObject(restoredSession.baseData)
         : cloneMindDataObject(mindData);
       var initialCenterNodeId = opts && opts.initialCenterNodeId ? String(opts.initialCenterNodeId) : '';
+      var eagerInitialCenter = Boolean(opts && opts.eagerInitialCenter === true && initialCenterNodeId);
+      var disableDeferredInitialCenterRetry = Boolean(opts && opts.disableDeferredInitialCenterRetry === true && initialCenterNodeId);
+      var renderSessionToken = 'mind-render-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 
       var darkMode = typeof opts.darkMode === 'boolean' ? opts.darkMode : resolveDarkMode();
       var theme = buildTheme(darkMode);
@@ -5132,6 +5154,9 @@
         alignment: 'nodes',
         theme: theme || undefined,
       });
+      container.__tapActiveMindRenderToken = renderSessionToken;
+      instance.__tapRenderSessionToken = renderSessionToken;
+      instance.__tapHostContainer = container;
       instance.newTopicName = '';
       instance.init({
         nodeData: initialMindData.nodeData,
@@ -5193,7 +5218,13 @@
         }
       } else if (explicitInitialViewState && !initialEditing) {
         restoredViewState = restoreMindViewState(instance, explicitInitialViewState);
-        scheduleMindViewRestore(instance, explicitInitialViewState, null);
+        if (explicitInitialAnchorState) {
+          restoreMindAnchorState(instance, explicitInitialAnchorState);
+        }
+        scheduleMindViewRestore(instance, explicitInitialViewState, explicitInitialAnchorState);
+        if (explicitInitialAnchorState) {
+          scheduleMindAnchorRestore(instance, explicitInitialAnchorState);
+        }
       }
       if (
         explicitInitialDrawerState
@@ -5222,7 +5253,7 @@
 
       var initialAutoFitScale = 0;
       function runAutoScaleFitIfStable(forceRun) {
-        if (!instance || typeof instance.scaleFit !== 'function') return false;
+        if (!isActiveMindRenderInstance(instance) || typeof instance.scaleFit !== 'function') return false;
         if (!forceRun) {
           var current = resolveScale(instance);
           if (initialAutoFitScale > 0 && Math.abs(current - initialAutoFitScale) > 0.03) {
@@ -5246,7 +5277,13 @@
         return false;
       }
 
+      if (eagerInitialCenter && !initialEditing && !restoredViewState && isActiveMindRenderInstance(instance)) {
+        runAutoScaleFitIfStable(true);
+        centerMindNode(instance, initialCenterNodeId);
+      }
+
       setTimeout(function() {
+        if (!isActiveMindRenderInstance(instance)) return;
         if (initialEditing) {
           updateViewerDragState(container, instance, false);
           return;
@@ -5266,8 +5303,10 @@
       }, 0);
 
       setTimeout(function() {
+        if (!isActiveMindRenderInstance(instance)) return;
         if (initialEditing || restoredViewState) return;
         if (instance && instance.__tapViewportInteracted === true) return;
+        if (disableDeferredInitialCenterRetry) return;
         runAutoScaleFitIfStable(false);
         if (initialCenterNodeId) {
           centerMindNode(instance, initialCenterNodeId);
