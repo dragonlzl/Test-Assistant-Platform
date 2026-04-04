@@ -11282,7 +11282,7 @@
           if (!tabId || tabId === getActiveWorkspaceId()) return;
           switchWorkspace(tabId, {
             reason: 'workspace-manual-switch',
-            centerRootAfterRender: true,
+            centerRootAfterRender: false,
           });
         });
       }

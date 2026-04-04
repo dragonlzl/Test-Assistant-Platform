@@ -2432,6 +2432,58 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(workspaceAState.moduleCount).toBe(2);
   });
 
+  test('全屏或复原后手动切换 XMind 页签，不会让画布连续左右抖动', async ({ page }) => {
+    const token = 'xmind-tabs-switch-after-fullscreen-stable-token';
+    const user = { id: 8024, username: 'tabs-fullscreen-stable' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 900);
+    await openXmindCaseGenDrawer(page);
+
+    await createXmindWorkspaceByManualPrep(page, '切页稳定-A', '需求A：用于验证全屏切页稳定性。', {
+      completePrep: true,
+      useExistingWorkspace: true,
+    });
+    await createXmindWorkspaceByManualPrep(page, '切页稳定-B', '需求B：用于验证全屏切页稳定性。', {
+      completePrep: true,
+    });
+
+    const tabA = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
+      hasText: '切页稳定-A',
+    }).first();
+    const tabB = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
+      hasText: '切页稳定-B',
+    }).first();
+
+    await tabA.click();
+    await waitForNodeText(page, '切页稳定-A');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await waitForNodeStatusAbsent(page, '切页稳定-A');
+    await waitForNodeText(page, '登录模块');
+    await panXmindCasegenCanvas(page, 220, 120);
+    await page.click('#xmindCaseGenMindContainer [data-mind-action="drawer-fullscreen"]');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    await page.click('#xmindCaseGenMindContainer [data-mind-action="drawer-fullscreen"]');
+    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
+
+    await tabB.click();
+    await waitForNodeText(page, '切页稳定-B');
+    await tabA.click();
+    await waitForNodeText(page, '切页稳定-A');
+    await waitForNodeText(page, '登录模块');
+
+    const rootCenterBefore = await readXmindRootCenter(page);
+    expect(rootCenterBefore).not.toBeNull();
+    await page.waitForTimeout(900);
+    const rootCenterAfter = await readXmindRootCenter(page);
+    expect(rootCenterAfter).not.toBeNull();
+    expect(Math.abs(rootCenterAfter.x - rootCenterBefore.x)).toBeLessThanOrEqual(6);
+    expect(Math.abs(rootCenterAfter.y - rootCenterBefore.y)).toBeLessThanOrEqual(6);
+  });
+
   test('XMind 生成页签创建后刷新页面，仍会保留页签列表与当前活动页签', async ({ page }) => {
     const token = 'xmind-tabs-refresh-persist-token';
     const user = { id: 8021, username: 'tabs-refresh-persist' };
