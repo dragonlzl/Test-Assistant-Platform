@@ -1925,11 +1925,46 @@
       return false;
     }
 
+    function caseGenSettingsDifferFromDefault(settings) {
+      var next = cloneCaseGenSettingsValue(settings);
+      var defaults = createDefaultCaseGenSettings();
+      return SHARED_WORKSPACE_CASEGEN_SETTING_KEYS.some(function(key) {
+        return JSON.stringify(next[key]) !== JSON.stringify(defaults[key]);
+      });
+    }
+
+    function workspaceSnapshotHasPrepDraft(snapshot) {
+      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      var xmindPart = source.xmind && typeof source.xmind === 'object' ? source.xmind : {};
+      var sharedPart = source.shared && typeof source.shared === 'object' ? source.shared : {};
+      var prep = xmindPart.prep && typeof xmindPart.prep === 'object' ? xmindPart.prep : {};
+      if (String(prep.requirementMode || '').trim()) return true;
+      if (String(prep.requirementSupplement || '').trim()) return true;
+      if (String(prep.manualRequirementLabel || '').trim()) return true;
+      if (Array.isArray(prep.manualRequirementBlocks) && prep.manualRequirementBlocks.length) return true;
+      if (String(prep.caseImportMode || '').trim()) return true;
+      if (prep.completed === true || prep.baseLocked === true) return true;
+      if (caseGenSettingsDifferFromDefault(sharedPart.caseGenSettings)) return true;
+      return false;
+    }
+
     function currentActiveWorkspaceHasContent() {
       return workspaceSnapshotHasContent({
         xmind: extractActiveXmindStateSnapshot(),
         shared: buildCurrentSharedWorkspaceSnapshot(),
       });
+    }
+
+    function captureWorkspaceSnapshot(workspaceId) {
+      var host = ensureWorkspaceHostState();
+      var stableId = String(workspaceId || '');
+      if (!stableId || !host.workspaces[stableId]) return null;
+      if (stableId === String(host.activeWorkspaceId || '')) {
+        syncSummaryDraftIntoState();
+        host.workspaces[stableId].snapshot = createWorkspaceSnapshotFromCurrent();
+        host.workspaces[stableId].updatedAt = Date.now();
+      }
+      return host.workspaces[stableId].snapshot || null;
     }
 
     function ensureWorkspaceHostState() {
@@ -2006,10 +2041,20 @@
     }
 
     function buildWorkspaceDisplayName(record) {
-      var snapshot = record && record.snapshot && record.snapshot.shared ? record.snapshot.shared : {};
-      var label = snapshot.requirementLabel ? String(snapshot.requirementLabel || '').trim() : '';
-      if (!label && snapshot.lastRawImportName) {
-        label = normalizeRequirementLabelFromFileName(snapshot.lastRawImportName || '');
+      var snapshot = record && record.snapshot ? record.snapshot : {};
+      var shared = snapshot && snapshot.shared && typeof snapshot.shared === 'object' ? snapshot.shared : {};
+      var xmind = snapshot && snapshot.xmind && typeof snapshot.xmind === 'object' ? snapshot.xmind : {};
+      var prep = xmind && xmind.prep && typeof xmind.prep === 'object' ? xmind.prep : {};
+      var label = '';
+      if (prep.requirementMode === 'manual') {
+        label = prep.manualRequirementLabel ? String(prep.manualRequirementLabel || '').trim() : '';
+      }
+      if (!label) {
+        label = shared.requirementLabel ? String(shared.requirementLabel || '').trim() : '';
+        if (label === '当前需求') label = '';
+      }
+      if (!label && shared.lastRawImportName) {
+        label = normalizeRequirementLabelFromFileName(shared.lastRawImportName || '');
       }
       if (!label) label = record && record.name ? String(record.name || '').trim() : '';
       if (!label) {
@@ -3566,6 +3611,9 @@
         closeSummaryDialog({ skipPersist: true });
         return;
       }
+      if (summaryDialogMode === 'prep') {
+        syncSummaryDraftIntoState();
+      }
       if (summaryDialogMode === 'history') renderHistoryDialog();
       else renderPrepDialog();
     }
@@ -4291,6 +4339,7 @@
       summaryDialogOpen = false;
       if (!(options && options.skipPersist === true)) persistXmindState(true);
       applySummaryDialogState();
+      renderWorkspaceTabs();
     }
 
     function applySummaryDialogState() {
@@ -4416,6 +4465,48 @@
       return workspaceSnapshotHasGeneratedContent(record.snapshot);
     }
 
+    function workspaceNeedsCloseConfirm(workspaceId) {
+      var stableId = String(workspaceId || '');
+      var snapshot = captureWorkspaceSnapshot(stableId);
+      if (workspaceSnapshotHasContent(snapshot) || workspaceSnapshotHasPrepDraft(snapshot)) {
+        setDebugState({
+          closeWorkspaceCheck: {
+            workspaceId: stableId,
+            source: 'snapshot',
+            result: true,
+          },
+        });
+        return true;
+      }
+      if (stableId && stableId === getActiveWorkspaceId()) {
+        var liveSnapshot = {
+          xmind: extractActiveXmindStateSnapshot(),
+          shared: buildCurrentSharedWorkspaceSnapshot(),
+        };
+        var fromActive = workspaceSnapshotHasGeneratedContent(liveSnapshot)
+          || workspaceSnapshotHasContent(liveSnapshot)
+          || workspaceSnapshotHasPrepDraft(liveSnapshot);
+        setDebugState({
+          closeWorkspaceCheck: {
+            workspaceId: stableId,
+            source: 'active',
+            result: fromActive === true,
+            prepCompleted: getPrepState().completed === true,
+            prepBaseLocked: getPrepState().baseLocked === true,
+          },
+        });
+        return fromActive;
+      }
+      setDebugState({
+        closeWorkspaceCheck: {
+          workspaceId: stableId,
+          source: 'none',
+          result: false,
+        },
+      });
+      return false;
+    }
+
     function getWorkspaceTaskList(workspaceId) {
       var stableId = String(workspaceId || '');
       return listManagedXmindTasks().filter(function(task) {
@@ -4513,9 +4604,10 @@
           +   '<span class="memo-tab-label xmind-casegen-tab-label">'
           +     '<span class="xmind-casegen-tab-title-row">'
           +       '<span class="xmind-casegen-tab-title">' + escapeHtml(buildWorkspaceDisplayName(record)) + '</span>'
-          +       '<span class="xmind-casegen-tab-state-pill ' + escapeHtml(summary.statusCls) + '" aria-hidden="true">' + escapeHtml(summary.statusText) + '</span>'
           +     '</span>'
           +     '<span class="xmind-casegen-tab-meta">'
+          +       '<span class="xmind-casegen-tab-state-pill ' + escapeHtml(summary.statusCls) + '" aria-hidden="true">' + escapeHtml(summary.statusText) + '</span>'
+          +       '<span class="xmind-casegen-tab-dot" aria-hidden="true"></span>'
           +       '<span class="xmind-casegen-tab-metric">' + String(summary.moduleCount) + ' 模块</span>'
           +       '<span class="xmind-casegen-tab-dot" aria-hidden="true"></span>'
           +       '<span class="xmind-casegen-tab-metric">' + String(summary.caseCount) + ' 用例</span>'
@@ -10689,7 +10781,7 @@
       var targetId = String(workspaceId || '');
       if (!targetId || !host.workspaces[targetId]) return false;
       var currentId = String(host.activeWorkspaceId || '');
-      if (currentId && host.workspaces[currentId]) {
+      if (opts.skipCurrentSnapshotSave !== true && currentId && host.workspaces[currentId]) {
         host.workspaces[currentId].snapshot = createWorkspaceSnapshotFromCurrent();
         host.workspaces[currentId].updatedAt = Date.now();
       }
@@ -10766,24 +10858,60 @@
 
     function getWorkspaceDeleteConfirmMessage(record) {
       var label = buildWorkspaceDisplayName(record);
-      return '确认直接关闭页签【' + String(label || '当前生成') + '】？该页签已有生成内容但尚未保存入库，关闭后内容不会保留。';
+      return '确认直接关闭页签【' + String(label || '当前生成') + '】？该页签的前置准备或生成内容尚未保存入库，关闭后不会保留。';
     }
 
     function deleteWorkspace(workspaceId) {
-      var host = ensureWorkspaceHostState();
       var targetId = String(workspaceId || '');
-      var targetIndex = host.workspaceOrder.indexOf(targetId);
-      if (targetIndex === -1) return false;
       if (hasWorkspaceRunningTasks(targetId)) {
+        setDebugState({
+          closeWorkspaceAction: {
+            workspaceId: targetId,
+            phase: 'blocked-running',
+          },
+        });
         notifyFloatingStatus('当前页签仍有生成任务进行中，暂不可关闭', 'warn', 3000);
         return false;
       }
       var proceed = function() {
-        var wasActive = targetId === String(host.activeWorkspaceId || '');
-        delete host.workspaces[targetId];
-        host.workspaceOrder.splice(targetIndex, 1);
-        if (!host.workspaceOrder.length) {
-          host.activeWorkspaceId = '';
+        var currentHost = ensureWorkspaceHostState();
+        var currentRecord = currentHost.workspaces[targetId];
+        var currentIndex = currentHost.workspaceOrder.indexOf(targetId);
+        if (!currentRecord || currentIndex === -1) {
+          setDebugState({
+            closeWorkspaceAction: {
+              workspaceId: targetId,
+              phase: 'missing-target',
+              currentIndex: currentIndex,
+              hasRecord: Boolean(currentRecord),
+            },
+          });
+          return false;
+        }
+        if (hasWorkspaceRunningTasks(targetId)) {
+          setDebugState({
+            closeWorkspaceAction: {
+              workspaceId: targetId,
+              phase: 'blocked-running-late',
+              currentIndex: currentIndex,
+            },
+          });
+          return false;
+        }
+        var wasActive = targetId === String(currentHost.activeWorkspaceId || '');
+        setDebugState({
+          closeWorkspaceAction: {
+            workspaceId: targetId,
+            phase: 'proceed',
+            currentIndex: currentIndex,
+            wasActive: wasActive === true,
+            orderBefore: currentHost.workspaceOrder.slice(),
+          },
+        });
+        delete currentHost.workspaces[targetId];
+        currentHost.workspaceOrder.splice(currentIndex, 1);
+        if (!currentHost.workspaceOrder.length) {
+          currentHost.activeWorkspaceId = '';
           clearCurrentWorkspaceUiBeforeSwitch();
           closeSummaryDialog({ skipPersist: true });
           resetWorkflowStateForXmind(isDrawerOpen(), drawerEl && drawerEl.classList
@@ -10799,17 +10927,26 @@
           return true;
         }
         if (wasActive) {
-          var nextId = host.workspaceOrder[Math.max(0, targetIndex - 1)] || host.workspaceOrder[0];
+          var nextId = currentHost.workspaceOrder[Math.max(0, currentIndex - 1)] || currentHost.workspaceOrder[0];
           return switchWorkspace(nextId, {
             reason: 'workspace-delete-switch',
             centerRootAfterRender: true,
+            skipCurrentSnapshotSave: true,
           });
         }
         renderWorkspaceTabs();
         persistXmindState(true);
         return true;
       };
-      if (!isWorkspaceDirty(targetId)) {
+      var needsConfirm = workspaceNeedsCloseConfirm(targetId);
+      setDebugState({
+        closeWorkspaceAction: {
+          workspaceId: targetId,
+          phase: 'before-confirm',
+          needsConfirm: needsConfirm === true,
+        },
+      });
+      if (!needsConfirm) {
         return proceed();
       }
       openStoreConfirmDialog({
@@ -10896,6 +11033,8 @@
             ? event.target.closest('[data-xmind-workspace-close]')
             : null;
           if (closeTarget) {
+            if (event && typeof event.preventDefault === 'function') event.preventDefault();
+            if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
             var closeId = String(closeTarget.getAttribute('data-xmind-workspace-close') || '');
             if (closeId) deleteWorkspace(closeId);
             return;
@@ -11269,6 +11408,7 @@
     var api = {
       open: open,
       close: close,
+      closeWorkspace: deleteWorkspace,
       render: render,
       exportCurrentXmind: exportCurrentXmind,
       switchTab: switchTab,

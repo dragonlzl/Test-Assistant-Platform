@@ -1162,6 +1162,113 @@ async function openXmindCaseGenDrawer(page) {
   expect(renderInfo.hasControls, JSON.stringify(renderInfo)).toBeTruthy();
 }
 
+async function createXmindWorkspaceByManualPrep(page, name, description, options) {
+  const opts = options || {};
+  if (opts.useExistingWorkspace === true) {
+    const summaryOpen = await page.locator('#xmindCaseGenSummaryOverlay').evaluate((el) => {
+      return Boolean(el && el.classList && el.classList.contains('is-open'));
+    }).catch(() => false);
+    if (!summaryOpen) {
+      await page.click('#xmindCaseGenSummaryBtn');
+    }
+  } else {
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+  }
+  await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+  await page.check('input[name="xmindRequirementMode"][value="manual"]', { force: true });
+  await page.fill('#xmindCaseGenManualRequirementLabel', String(name || '未命名需求'));
+  await page.fill('#xmindCaseGenManualRequirementText', String(description || '需求描述'));
+  if (opts.completePrep === true) {
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.check('input[name="xmindCaseImportMode"][value="skip"]', { force: true });
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+    await page.waitForFunction((expected) => {
+      var st = window.app && window.app.state ? window.app.state : null;
+      var host = st && st.xmindCaseGen ? st.xmindCaseGen : null;
+      var activeId = host ? String(host.activeWorkspaceId || '') : '';
+      var record = activeId && host && host.workspaces ? host.workspaces[activeId] : null;
+      var snap = record && record.snapshot ? record.snapshot : null;
+      var prep = snap && snap.xmind ? snap.xmind.prep : null;
+      return Boolean(prep && prep.completed === true && String(prep.manualRequirementLabel || '') === String(expected || ''));
+    }, String(name || '未命名需求'), { timeout: 20000 });
+    return;
+  }
+  await page.click('#xmindCaseGenSummaryCloseBtn');
+  await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+}
+
+async function createXmindWorkspaceByDocumentDraft(page, fileName, fileText, options) {
+  const opts = options || {};
+  if (opts.useExistingWorkspace === true) {
+    const summaryOpen = await page.locator('#xmindCaseGenSummaryOverlay').evaluate((el) => {
+      return Boolean(el && el.classList && el.classList.contains('is-open'));
+    }).catch(() => false);
+    if (!summaryOpen) {
+      await page.click('#xmindCaseGenSummaryBtn');
+    }
+  } else {
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+  }
+  await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+  await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+  await dispatchFileDropToZone(page, 'xmindCaseGenPrepRequirementDropzone', {
+    files: [{
+      name: String(fileName || 'draft.txt'),
+      text: String(fileText || '需求正文'),
+      mimeType: 'text/plain',
+    }],
+  });
+  await page.waitForFunction((expectedName, expectedText) => {
+    var rawText = document.getElementById('rawText');
+    var fileNameEl = document.getElementById('fileName');
+    var textReady = Boolean(rawText && String(rawText.value || '').indexOf(String(expectedText || '')) !== -1);
+    var fileReady = Boolean(fileNameEl && String(fileNameEl.textContent || '').indexOf(String(expectedName || '')) !== -1);
+    return textReady && fileReady;
+  }, String(fileName || 'draft.txt'), String(fileText || '需求正文'), { timeout: 20000 });
+  await page.click('#xmindCaseGenSummaryCloseBtn');
+  await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+}
+
+async function clickXmindWorkspaceClose(page, label) {
+  const targetLabel = label === undefined || label === null ? '' : String(label || '');
+  const clicked = await page.evaluate((expectedLabel) => {
+    var scope = document.getElementById('xmindCaseGenWorkspaceList');
+    if (!scope) return false;
+    var tabs = scope.querySelectorAll('[data-xmind-workspace-tab]');
+    var targetId = '';
+    Array.prototype.some.call(tabs, function(node) {
+      if (!node) return false;
+      if (!expectedLabel) {
+        targetId = String(node.getAttribute('data-xmind-workspace-tab') || '');
+        return true;
+      }
+      var text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+      if (text.indexOf(expectedLabel) === -1) return false;
+      targetId = String(node.getAttribute('data-xmind-workspace-tab') || '');
+      return true;
+    });
+    var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+    if (!targetId || !api || typeof api.closeWorkspace !== 'function') return false;
+    return api.closeWorkspace(targetId) === true;
+  }, targetLabel);
+  expect(clicked).toBe(true);
+}
+
+async function clickXmindWorkspaceCloseUi(page, label) {
+  const targetLabel = String(label || '').trim();
+  const tab = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
+    hasText: targetLabel,
+  }).first();
+  await expect(tab).toBeVisible();
+  const closeButton = tab.locator('[data-xmind-workspace-close]').first();
+  await expect(closeButton).toBeVisible();
+  await closeButton.click();
+}
+
 async function waitForNodeText(page, text) {
   await page.waitForFunction((expected) => {
     var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
@@ -2023,28 +2130,389 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.click('#xmindCaseGenWorkspaceAddBtn');
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
     await page.click('label:has(input[name="xmindRequirementMode"][value="manual"])');
+    await page.fill('#xmindCaseGenManualRequirementLabel', '页签A需求');
     await page.fill('#xmindCaseGenManualRequirementText', '这是页签A的需求描述');
     await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签A的需求描述');
     await page.click('#xmindCaseGenSummaryCloseBtn');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]:first-child')).toContainText('页签A需求');
 
     await page.click('#xmindCaseGenWorkspaceAddBtn');
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
     await expect(page.locator('input[name="xmindRequirementMode"][value="manual"]')).not.toBeChecked();
     await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveCount(0);
     await page.click('label:has(input[name="xmindRequirementMode"][value="manual"])');
+    await page.fill('#xmindCaseGenManualRequirementLabel', '页签B需求');
     await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('');
     await page.fill('#xmindCaseGenManualRequirementText', '这是页签B的需求描述');
     await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签B的需求描述');
     await page.click('#xmindCaseGenSummaryCloseBtn');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]:nth-child(2)')).toContainText('页签B需求');
 
     await page.click('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]:first-child');
     await page.click('#xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenManualRequirementLabel')).toHaveValue('页签A需求');
     await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签A的需求描述');
     await page.click('#xmindCaseGenSummaryCloseBtn');
 
     await page.click('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]:nth-child(2)');
     await page.click('#xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenManualRequirementLabel')).toHaveValue('页签B需求');
     await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签B的需求描述');
+  });
+
+  test('XMind 生成页签创建后刷新页面，仍会保留页签列表与当前活动页签', async ({ page }) => {
+    const token = 'xmind-tabs-refresh-persist-token';
+    const user = { id: 8021, username: 'tabs-refresh-persist' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await createXmindWorkspaceByManualPrep(page, '刷新保留-A', '这是刷新保留 A 的需求描述', {
+      useExistingWorkspace: true,
+    });
+    await createXmindWorkspaceByManualPrep(page, '刷新保留-B', '这是刷新保留 B 的需求描述', {});
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('刷新保留-B');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+
+    let drawerOpen = await page.evaluate(() => {
+      var drawer = document.getElementById('xmindCaseGenDrawer');
+      return Boolean(drawer && drawer.classList && drawer.classList.contains('open'));
+    });
+    if (!drawerOpen) {
+      await page.click('#caseGenModulesTabBtn');
+      await page.click('#xmindCaseGenOpenBtn');
+    }
+
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]').nth(0)).toContainText('刷新保留-A');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]').nth(1)).toContainText('刷新保留-B');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('刷新保留-B');
+
+    const hostState = await page.evaluate(() => {
+      var st = window.app && window.app.state ? window.app.state : null;
+      var host = st && st.xmindCaseGen ? st.xmindCaseGen : null;
+      return host ? {
+        activeWorkspaceId: String(host.activeWorkspaceId || ''),
+        workspaceOrder: Array.isArray(host.workspaceOrder) ? host.workspaceOrder.slice() : [],
+      } : null;
+    });
+    expect(hostState).toBeTruthy();
+    expect(Array.isArray(hostState.workspaceOrder) ? hostState.workspaceOrder.length : 0).toBe(2);
+    expect(String(hostState.activeWorkspaceId || '')).toBe(String(hostState.workspaceOrder[1] || ''));
+  });
+
+  test('XMind 页签栏中，新建生成按钮应紧跟在已有页签后方，不应额外右偏', async ({ page }) => {
+    const token = 'xmind-tabs-layout-token';
+    const user = { id: 803, username: 'tabs-layout' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    for (const name of ['页签一', '页签二', '页签三']) {
+      await page.click('#xmindCaseGenWorkspaceAddBtn');
+      await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+      await page.click('label:has(input[name="xmindRequirementMode"][value="manual"])');
+      await page.fill('#xmindCaseGenManualRequirementLabel', name);
+      await page.fill('#xmindCaseGenManualRequirementText', name + ' 的描述');
+      await page.click('#xmindCaseGenSummaryCloseBtn');
+    }
+
+    const tabs = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]');
+    const addButton = page.locator('#xmindCaseGenWorkspaceAddBtn');
+    const addBox = await addButton.boundingBox();
+    expect(addBox).toBeTruthy();
+    const visibleTabs = await tabs.evaluateAll((nodes) => nodes.map((node) => {
+      var rect = node.getBoundingClientRect();
+      return {
+        text: (node.textContent || '').trim(),
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      };
+    }).filter((item) => item.width > 5 && item.height > 5));
+
+    expect(visibleTabs.length).toBeGreaterThanOrEqual(3);
+    const prevTab = visibleTabs[visibleTabs.length - 2];
+    const lastTab = visibleTabs[visibleTabs.length - 1];
+    const gapTabs = Math.round(lastTab.x - (prevTab.x + prevTab.width));
+    const gapAdd = Math.round(addBox.x - (lastTab.x + lastTab.width));
+
+    expect(Math.abs(gapAdd - gapTabs)).toBeLessThanOrEqual(10);
+    expect(Math.abs(Math.round(addBox.width) - Math.round(lastTab.width))).toBeLessThanOrEqual(16);
+  });
+
+  test('XMind 页签关闭按钮在 hover 时不应发生位置位移', async ({ page }) => {
+    const token = 'xmind-tab-close-stable-token';
+    const user = { id: 804, username: 'tabs-close-stable' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.click('label:has(input[name="xmindRequirementMode"][value="manual"])');
+    await page.fill('#xmindCaseGenManualRequirementLabel', '关闭按钮稳定');
+    await page.fill('#xmindCaseGenManualRequirementText', '关闭按钮 hover 不应推动位置');
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+
+    const closeButton = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-close]').first();
+    const before = await closeButton.boundingBox();
+    expect(before).toBeTruthy();
+    await closeButton.hover();
+    const after = await closeButton.boundingBox();
+    expect(after).toBeTruthy();
+
+    expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+  });
+
+  test('已完成前置准备但尚未生成的页签，关闭前仍会弹出二次确认', async ({ page }) => {
+    const token = 'xmind-tab-close-confirm-prep-token';
+    const user = { id: 805, username: 'tabs-close-confirm-prep' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await createXmindWorkspaceByManualPrep(page, '仅完成准备页签', '完成前置准备但还未开始生成', {
+      completePrep: true,
+      useExistingWorkspace: true,
+    });
+
+    await page.evaluate(() => {
+      window.__xmindCloseConfirmCalls = [];
+      window.__xmindNativeConfirmCalls = [];
+      window.confirm = function(message) {
+        window.__xmindNativeConfirmCalls.push({
+          message: String(message || ''),
+        });
+        return false;
+      };
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindCloseConfirmCalls.push(payload || null);
+          return Promise.resolve({ ok: false });
+        };
+      }
+    });
+
+    await clickXmindWorkspaceClose(page);
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var drawerCount = Array.isArray(window.__xmindCloseConfirmCalls) ? window.__xmindCloseConfirmCalls.length : 0;
+        var nativeCount = Array.isArray(window.__xmindNativeConfirmCalls) ? window.__xmindNativeConfirmCalls.length : 0;
+        return drawerCount + nativeCount;
+      });
+    }).toBe(1);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
+    const payload = await page.evaluate(() => {
+      if (Array.isArray(window.__xmindCloseConfirmCalls) && window.__xmindCloseConfirmCalls.length) {
+        return window.__xmindCloseConfirmCalls[0];
+      }
+      if (Array.isArray(window.__xmindNativeConfirmCalls) && window.__xmindNativeConfirmCalls.length) {
+        return window.__xmindNativeConfirmCalls[0];
+      }
+      return null;
+    });
+    expect(payload).toBeTruthy();
+    expect(String(payload.title || '关闭生成页签')).toContain('关闭生成页签');
+    expect(String(payload.message || '')).toContain('前置准备');
+  });
+
+  test('多个 XMind 页签时，关闭按钮会准确关闭当前点击的目标页签', async ({ page }) => {
+    const token = 'xmind-tab-close-target-token';
+    const user = { id: 806, username: 'tabs-close-target' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await createXmindWorkspaceByManualPrep(page, '页签一', '第一页签需求', {
+      completePrep: true,
+      useExistingWorkspace: true,
+    });
+    await createXmindWorkspaceByManualPrep(page, '页签二', '第二页签需求', { completePrep: true });
+    await createXmindWorkspaceByManualPrep(page, '页签三', '第三页签需求', { completePrep: true });
+
+    await page.evaluate(() => {
+      window.__xmindCloseConfirmCalls = [];
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindCloseConfirmCalls.push(payload || null);
+          var st = window.app && window.app.state ? window.app.state : null;
+          var host = st && st.xmindCaseGen ? st.xmindCaseGen : null;
+          if (host && Array.isArray(host.workspaceOrder) && host.workspaceOrder.length >= 3) {
+            host.workspaceOrder = [host.workspaceOrder[0], host.workspaceOrder[2], host.workspaceOrder[1]];
+          }
+          return Promise.resolve({ ok: true });
+        };
+      }
+    });
+
+    await clickXmindWorkspaceClose(page, '页签二');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindCloseConfirmCalls) ? window.__xmindCloseConfirmCalls.length : 0);
+    }).toBe(1);
+
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
+    const tabTexts = await page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]').evaluateAll((nodes) => {
+      return nodes.map((node) => String(node.textContent || '').replace(/\s+/g, ' ').trim());
+    });
+    expect(tabTexts.some((text) => text.indexOf('页签二') !== -1)).toBe(false);
+    expect(tabTexts.some((text) => text.indexOf('页签一') !== -1)).toBe(true);
+    expect(tabTexts.some((text) => text.indexOf('页签三') !== -1)).toBe(true);
+  });
+
+  test('未完成前置准备但已填写手填需求的页签，关闭前也会弹出二次确认', async ({ page }) => {
+    const token = 'xmind-tab-close-confirm-manual-draft-token';
+    const user = { id: 807, username: 'tabs-close-confirm-manual-draft' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await createXmindWorkspaceByManualPrep(page, '手填草稿需求', '这里只填写了 step1 草稿，还没有完成整个前置准备。', {
+      useExistingWorkspace: true,
+    });
+
+    await page.evaluate(() => {
+      window.__xmindCloseConfirmCalls = [];
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindCloseConfirmCalls.push(payload || null);
+          return Promise.resolve({ ok: false });
+        };
+      }
+    });
+
+    await clickXmindWorkspaceCloseUi(page, '手填草稿需求');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindCloseConfirmCalls) ? window.__xmindCloseConfirmCalls.length : 0);
+    }).toBe(1);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toContainText('手填草稿需求');
+    const payload = await page.evaluate(() => {
+      return Array.isArray(window.__xmindCloseConfirmCalls) && window.__xmindCloseConfirmCalls.length
+        ? window.__xmindCloseConfirmCalls[0]
+        : null;
+    });
+    expect(payload).toBeTruthy();
+    expect(String(payload.message || '')).toContain('关闭后不会保留');
+  });
+
+  test('混合文档与手填草稿的多个 XMind 页签，真实点击关闭按钮时只会关闭目标页签', async ({ page }) => {
+    const token = 'xmind-tab-close-ui-mixed-draft-token';
+    const user = { id: 808, username: 'tabs-close-ui-mixed-draft' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await createXmindWorkspaceByDocumentDraft(page, '需求A.txt', '这是需求 A 的文档草稿。', {
+      useExistingWorkspace: true,
+    });
+    await createXmindWorkspaceByDocumentDraft(page, '需求B.txt', '这是需求 B 的文档草稿。');
+    await createXmindWorkspaceByManualPrep(page, '需求C', '这是需求 C 的手填草稿。', {});
+
+    await page.evaluate(() => {
+      window.__xmindCloseConfirmCalls = [];
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindCloseConfirmCalls.push(payload || null);
+          return Promise.resolve({ ok: true });
+        };
+      }
+    });
+
+    const beforeMap = await page.evaluate(() => {
+      var st = window.app && window.app.state ? window.app.state : null;
+      var host = st && st.xmindCaseGen ? st.xmindCaseGen : null;
+      var order = host && Array.isArray(host.workspaceOrder) ? host.workspaceOrder.slice() : [];
+      return order.map(function(id) {
+        var node = document.querySelector('[data-xmind-workspace-tab="' + String(id || '') + '"]');
+        var closeBtn = node ? node.querySelector('[data-xmind-workspace-close]') : null;
+        var rect = closeBtn && closeBtn.getBoundingClientRect ? closeBtn.getBoundingClientRect() : null;
+        var hit = null;
+        if (rect && rect.width > 0 && rect.height > 0 && document.elementFromPoint) {
+          hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        }
+        var hitClose = hit && hit.closest ? hit.closest('[data-xmind-workspace-close]') : null;
+        return {
+          id: String(id || ''),
+          title: node ? String(node.textContent || '').replace(/\s+/g, ' ').trim() : '',
+          closeId: closeBtn ? String(closeBtn.getAttribute('data-xmind-workspace-close') || '') : '',
+          hitCloseId: hitClose ? String(hitClose.getAttribute('data-xmind-workspace-close') || '') : '',
+        };
+      });
+    });
+    expect(beforeMap.length).toBe(3);
+    expect(beforeMap.some((item) => item.title.indexOf('需求A') !== -1)).toBe(true);
+    expect(beforeMap.some((item) => item.title.indexOf('需求B') !== -1)).toBe(true);
+    expect(beforeMap.some((item) => item.title.indexOf('需求C') !== -1)).toBe(true);
+    const targetBefore = beforeMap.find((item) => item.title.indexOf('需求C') !== -1);
+    expect(targetBefore).toBeTruthy();
+    expect(targetBefore.closeId).toBe(targetBefore.id);
+    expect(targetBefore.hitCloseId).toBe(targetBefore.id);
+
+    await clickXmindWorkspaceCloseUi(page, '需求C');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindCloseConfirmCalls) ? window.__xmindCloseConfirmCalls.length : 0);
+    }).toBe(1);
+
+    const closeDebug = await page.evaluate(() => {
+      var debug = window.app && window.app.__xmindCasegenDebug ? window.app.__xmindCasegenDebug : null;
+      return debug && debug.closeWorkspaceAction ? JSON.parse(JSON.stringify(debug.closeWorkspaceAction)) : null;
+    });
+    expect(closeDebug).toBeTruthy();
+    expect(String(closeDebug.workspaceId || '')).toBe(String(targetBefore.id || ''));
+
+    const payload = await page.evaluate(() => {
+      return Array.isArray(window.__xmindCloseConfirmCalls) && window.__xmindCloseConfirmCalls.length
+        ? window.__xmindCloseConfirmCalls[0]
+        : null;
+    });
+    expect(payload).toBeTruthy();
+    expect(String(payload.message || '')).toContain('需求C');
+
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
+    const afterMap = await page.evaluate(() => {
+      var st = window.app && window.app.state ? window.app.state : null;
+      var host = st && st.xmindCaseGen ? st.xmindCaseGen : null;
+      var order = host && Array.isArray(host.workspaceOrder) ? host.workspaceOrder.slice() : [];
+      return order.map(function(id) {
+        var node = document.querySelector('[data-xmind-workspace-tab="' + String(id || '') + '"]');
+        return {
+          id: String(id || ''),
+          title: node ? String(node.textContent || '').replace(/\s+/g, ' ').trim() : '',
+        };
+      });
+    });
+    const tabTexts = await page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]').evaluateAll((nodes) => {
+      return nodes.map((node) => String(node.textContent || '').replace(/\s+/g, ' ').trim());
+    });
+    const afterState = {
+      afterMap: afterMap,
+      tabTexts: tabTexts,
+      closeDebug: closeDebug,
+      targetBefore: targetBefore,
+    };
+    expect(tabTexts.some((text) => text.indexOf('需求A') !== -1), JSON.stringify(afterState)).toBe(true);
+    expect(tabTexts.some((text) => text.indexOf('需求B') !== -1), JSON.stringify(afterState)).toBe(true);
+    expect(tabTexts.some((text) => text.indexOf('需求C') !== -1), JSON.stringify(afterState)).toBe(false);
+    expect(afterMap.some((item) => item.id === String(targetBefore.id || '')), JSON.stringify(afterState)).toBe(false);
   });
 
   test('前置准备 step1 的需求文档模式复用拖拽上传样式，并在导入后允许下一步', async ({ page }) => {

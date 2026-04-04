@@ -254,6 +254,36 @@
       return label !== '当前需求';
     }
 
+    function hasXmindCaseGenContent(xmindCaseGen) {
+      var data = xmindCaseGen && typeof xmindCaseGen === 'object' ? xmindCaseGen : null;
+      if (!data) return false;
+      var workspaceOrder = Array.isArray(data.workspaceOrder) ? data.workspaceOrder : [];
+      var workspaces = data.workspaces && typeof data.workspaces === 'object' ? data.workspaces : {};
+      if (workspaceOrder.length > 0) return true;
+      if (Object.keys(workspaces).length > 0) return true;
+      if (String(data.activeWorkspaceId || '').trim()) return true;
+      if (Array.isArray(data.history) && data.history.length > 0) return true;
+      if (Array.isArray(data.snapshots) && data.snapshots.length > 0) return true;
+      if (Array.isArray(data.rootSnapshots) && data.rootSnapshots.length > 0) return true;
+      if (Array.isArray(data.operationSnapshots) && data.operationSnapshots.length > 0) return true;
+      if (data.modules && typeof data.modules === 'object' && Object.keys(data.modules).length > 0) return true;
+      if (data.root && typeof data.root === 'object') {
+        if (data.root.running === true) return true;
+        if (String(data.root.taskId || '').trim()) return true;
+        if (String(data.root.status || '').trim()) return true;
+        if (String(data.root.error || '').trim()) return true;
+      }
+      if (data.prep && typeof data.prep === 'object') {
+        if (data.prep.completed === true) return true;
+        if (String(data.prep.requirementMode || '').trim()) return true;
+        if (String(data.prep.requirementSupplement || '').trim()) return true;
+        if (String(data.prep.caseImportMode || '').trim()) return true;
+        if (String(data.prep.manualRequirementLabel || '').trim()) return true;
+        if (Array.isArray(data.prep.manualRequirementBlocks) && data.prep.manualRequirementBlocks.length > 0) return true;
+      }
+      return false;
+    }
+
     function snapshotHasContent(snapshot) {
       var data = snapshot && snapshot.data ? snapshot.data : {};
       function hasText(value) {
@@ -312,6 +342,7 @@
         });
         if (hasRes) return true;
       }
+      if (hasXmindCaseGenContent(data.xmindCaseGen)) return true;
       return false;
     }
 
