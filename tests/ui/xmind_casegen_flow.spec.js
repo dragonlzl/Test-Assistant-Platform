@@ -1938,42 +1938,39 @@ async function autoAcceptXmindConfirm(page) {
 }
 
 async function ctrlClickXmindNodes(page, topics) {
-  for (const topic of topics || []) {
-    const clicked = await page.evaluate((expected) => {
-      var needle = String(expected || '').trim();
-      var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
-      var target = null;
-      Array.prototype.some.call(nodes, function(node) {
-        var textEl = node && node.querySelector ? node.querySelector('.text') : null;
-        var label = textEl
-          ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
-          : '';
-        var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
-        if (!(stableLabel === needle || label === needle)) return false;
-        target = node;
-        return true;
-      });
-      if (!target || !target.getBoundingClientRect) return false;
-      var rect = target.getBoundingClientRect();
-      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-      var centerX = rect.left + (rect.width / 2);
-      var centerY = rect.top + (rect.height / 2);
-      ['mousemove', 'mousedown', 'mouseup', 'click'].forEach(function(type) {
-        target.dispatchEvent(new MouseEvent(type, {
-          bubbles: true,
-          cancelable: true,
-          clientX: centerX,
-          clientY: centerY,
-          ctrlKey: true,
-          metaKey: false,
-          button: 0,
-          buttons: type === 'mousedown' ? 1 : 0,
-        }));
-      });
-      return true;
-    }, topic);
-    expect(clicked).toBeTruthy();
-    await page.waitForTimeout(240);
+  await page.keyboard.down('Control');
+  try {
+    for (const topic of topics || []) {
+      const point = await page.evaluate((expected) => {
+        var needle = String(expected || '').trim();
+        var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+        var target = null;
+        Array.prototype.some.call(nodes, function(node) {
+          var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+          var label = textEl
+            ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+            : '';
+          var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+          if (!(stableLabel === needle || label === needle)) return false;
+          target = textEl && textEl.getBoundingClientRect ? textEl : node;
+          return true;
+        });
+        if (!target || !target.getBoundingClientRect) return null;
+        var rect = target.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+        return {
+          x: rect.left + (rect.width / 2),
+          y: rect.top + (rect.height / 2),
+        };
+      }, topic);
+      expect(point).toBeTruthy();
+      await page.mouse.move(point.x, point.y);
+      await page.mouse.down();
+      await page.mouse.up();
+      await page.waitForTimeout(240);
+    }
+  } finally {
+    await page.keyboard.up('Control');
   }
 }
 
@@ -2118,6 +2115,90 @@ async function dragBoxSelectXmindNodes(page, topics) {
   }
 }
 
+async function beginHeldDragBoxSelectXmindNodes(page, topics) {
+  async function readLayout() {
+    return page.evaluate((inputTopics) => {
+      var expected = Array.isArray(inputTopics) ? inputTopics.map(function(item) {
+        return String(item || '').trim();
+      }).filter(Boolean) : [];
+      var canvas = document.querySelector('#xmindCaseGenMindContainer [data-mind-canvas]');
+      var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
+        || document.getElementById('xmindCaseGenMindContainer');
+      var boundsTarget = canvas && canvas.getBoundingClientRect ? canvas : viewer;
+      if (!boundsTarget || !boundsTarget.getBoundingClientRect) return null;
+      var boundsRect = boundsTarget.getBoundingClientRect();
+      var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+      var minLeft = Infinity;
+      var minTop = Infinity;
+      var maxRight = -Infinity;
+      var maxBottom = -Infinity;
+      var matchedCount = 0;
+      expected.forEach(function(topic) {
+        Array.prototype.some.call(nodes, function(node) {
+          if (!node || !node.getBoundingClientRect) return false;
+          var textEl = node.querySelector ? node.querySelector('.text') : null;
+          var label = textEl
+            ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+            : '';
+          var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+          if (!(stableLabel === topic || label === topic)) return false;
+          var targetRect = textEl && textEl.getBoundingClientRect ? textEl.getBoundingClientRect() : node.getBoundingClientRect();
+          minLeft = Math.min(minLeft, targetRect.left);
+          minTop = Math.min(minTop, targetRect.top);
+          maxRight = Math.max(maxRight, targetRect.right);
+          maxBottom = Math.max(maxBottom, targetRect.bottom);
+          matchedCount += 1;
+          return true;
+        });
+      });
+      if (!matchedCount || !isFinite(minLeft) || !isFinite(minTop) || !isFinite(maxRight) || !isFinite(maxBottom)) return null;
+      return {
+        bounds: {
+          left: boundsRect.left,
+          top: boundsRect.top,
+          right: boundsRect.right,
+          bottom: boundsRect.bottom,
+        },
+        target: {
+          left: minLeft,
+          top: minTop,
+          right: maxRight,
+          bottom: maxBottom,
+        },
+        matchedCount: matchedCount,
+      };
+    }, topics);
+  }
+
+  var layout = await readLayout();
+  for (var attempt = 0; attempt < 3; attempt += 1) {
+    await page.waitForTimeout(160);
+    var nextLayout = await readLayout();
+    if (!layout || !nextLayout) {
+      layout = nextLayout;
+      continue;
+    }
+    var stableX = Math.abs(Number(layout.target.left || 0) - Number(nextLayout.target.left || 0)) < 2;
+    var stableY = Math.abs(Number(layout.target.top || 0) - Number(nextLayout.target.top || 0)) < 2;
+    layout = nextLayout;
+    if (stableX && stableY) break;
+  }
+
+  expect(layout && layout.matchedCount).toBe((topics || []).length);
+
+  var padding = { x: 18, y: 12 };
+  var rect = {
+    startX: Math.max(layout.bounds.left + 8, layout.target.left - padding.x),
+    startY: Math.max(layout.bounds.top + 8, layout.target.top - padding.y),
+    endX: Math.min(layout.bounds.right - 8, layout.target.right + padding.x),
+    endY: Math.min(layout.bounds.bottom - 8, layout.target.bottom + padding.y),
+  };
+  await page.mouse.move(rect.startX, rect.startY);
+  await page.mouse.down();
+  await page.mouse.move(rect.endX, rect.endY, { steps: 18 });
+  return rect;
+}
+
 async function pressDeleteInXmind(page) {
   const hasViewer = await page.evaluate(() => {
     var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer')
@@ -2193,6 +2274,44 @@ async function readSelectedXmindNodeLabels(page) {
     });
     return labels;
   });
+}
+
+async function readSelectedXmindVisualState(page, topics) {
+  return page.evaluate((expectedTopics) => {
+    var targets = Array.isArray(expectedTopics) ? expectedTopics.map(function(item) {
+      return String(item || '').trim();
+    }).filter(Boolean) : [];
+    var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+    var result = {};
+    Array.prototype.forEach.call(nodes || [], function(node) {
+      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+      var label = textEl
+        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+        : '';
+      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      if (!stableLabel || targets.indexOf(stableLabel) === -1 || result[stableLabel]) return;
+      var selectedCarrier = node.classList && node.classList.contains('xmind-box-selected')
+        ? node
+        : (textEl && textEl.classList && textEl.classList.contains('selected') ? textEl : null);
+      if (!selectedCarrier && node.classList && node.classList.contains('selected')) selectedCarrier = node;
+      if (!selectedCarrier && node.querySelector) selectedCarrier = node.querySelector('.selected');
+      var computedTarget = textEl || selectedCarrier || node;
+      var style = computedTarget && typeof window !== 'undefined' && window.getComputedStyle
+        ? window.getComputedStyle(computedTarget)
+        : null;
+      result[stableLabel] = {
+        hostBoxSelected: Boolean(node.classList && node.classList.contains('xmind-box-selected')),
+        hostSelected: Boolean(node.classList && node.classList.contains('selected')),
+        selectedCarrierTag: selectedCarrier && selectedCarrier.tagName ? String(selectedCarrier.tagName).toLowerCase() : '',
+        selectedCarrierClass: selectedCarrier && selectedCarrier.className ? String(selectedCarrier.className) : '',
+        boxShadow: style ? String(style.boxShadow || '') : '',
+        outlineStyle: style ? String(style.outlineStyle || '') : '',
+        outlineWidth: style ? String(style.outlineWidth || '') : '',
+        backgroundColor: style ? String(style.backgroundColor || '') : '',
+      };
+    });
+    return result;
+  }, Array.isArray(topics) ? topics : []);
 }
 
 test.describe('XMind 用例生成抽屉', () => {
@@ -3537,7 +3656,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, 'xmind-reset-first');
 
     await openRootContextMenu(page);
-    await clickContextMenuAction(page, '生成全量用例');
+    await clickVisibleContextMenuAction(page, '生成全量用例');
     await waitForNodeText(page, '登录模块');
     await waitForNodeText(page, '支付模块');
     await waitForNodeText(page, '登录成功校验');
@@ -3570,7 +3689,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await openRootContextMenu(page);
     const resetItems = await getContextMenuItems(page);
     expect(resetItems.map((item) => item.label)).toEqual(['生成全量用例', '生成全量模块']);
-    await clickContextMenuAction(page, '生成全量用例');
+    await clickVisibleContextMenuAction(page, '生成全量用例');
 
     await waitForNodeStatus(page, 'xmind-reset-second', '生成中');
     await waitForNodeText(page, '登录模块');
@@ -5825,11 +5944,13 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '登录模块前置条件');
     await autoAcceptXmindConfirm(page);
 
+    await selectXmindNode(page, '登录模块前置条件');
     await openNodeContextMenu(page, '登录模块前置条件');
     const caseChildItems = await getContextMenuItems(page);
     expect(caseChildItems.map((item) => item.label)).toEqual(['删除']);
     expect(caseChildItems[0].disabled).toBe(false);
-    await clickContextMenuAction(page, '删除');
+    await clickVisibleContextMenuAction(page, '删除');
+    await expect(page.locator('.xmind-node-context-menu.is-open')).toHaveCount(0);
     await page.waitForFunction(() => Boolean(window.__xmindConfirmPayload), {}, { timeout: 5000 });
 
     await waitForNodeTextAbsent(page, '登录模块-完整-1');
@@ -5840,7 +5961,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(stateAfterDelete.xmindCaseGen.rootSnapshotId).toBe('');
 
     await openNodeContextMenu(page, '登录模块');
-    await clickContextMenuAction(page, '生成全量用例');
+    await clickVisibleContextMenuAction(page, '生成全量用例');
     await waitForNodeText(page, '登录模块-完整-1');
 
     const calls = await page.evaluate(() => window.__xmindCasegenCalls || []);
@@ -5928,6 +6049,20 @@ test.describe('XMind 用例生成抽屉', () => {
     const loginCases = JSON.parse(String(stateAfterDelete.caseGenResults['xmind-mod-login'] || '[]'));
     expect(loginCases.map((item) => item.title)).toEqual(['登录失败提示']);
     expect(stateAfterDelete.caseGenResults['xmind-mod-pay']).toBeUndefined();
+
+    await beginHeldDragBoxSelectXmindNodes(page, ['登录失败提示']);
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var rect = document.querySelector('#xmindCaseGenMindContainer .xmind-box-select-rect');
+        if (!rect || typeof window === 'undefined' || !window.getComputedStyle) return '';
+        return String(window.getComputedStyle(rect).display || '');
+      });
+    }).toBe('block');
+    await page.mouse.up();
+    await page.waitForTimeout(360);
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeLabels(page);
+    }).toEqual(['登录失败提示']);
 
     await openNodeContextMenu(page, '登录模块');
     await clickContextMenuAction(page, '重新生成全量用例');
@@ -6229,10 +6364,50 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '登录成功校验');
     await waitForNodeText(page, '登录失败提示');
     await waitForNodeText(page, '登录态保持校验');
-    await autoAcceptXmindConfirm(page);
     await dragBoxSelectXmindNodes(page, ['登录成功校验', '登录失败提示']);
+    await page.waitForTimeout(360);
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeCount(page);
+    }).toBeGreaterThanOrEqual(2);
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeLabels(page);
+    }).toEqual(['登录成功校验', '登录失败提示']);
+    const selectedVisualBeforeDelete = await readSelectedXmindVisualState(page, ['登录成功校验', '登录失败提示']);
+    expect(Object.keys(selectedVisualBeforeDelete).sort()).toEqual(['登录失败提示', '登录成功校验']);
+    Object.keys(selectedVisualBeforeDelete).forEach((key) => {
+      const item = selectedVisualBeforeDelete[key] || {};
+      const hasVisibleSelection = Boolean(
+        item.hostBoxSelected
+        || item.hostSelected
+        || item.selectedCarrierClass
+        || (item.boxShadow && item.boxShadow !== 'none')
+        || (item.outlineStyle && item.outlineStyle !== 'none' && item.outlineWidth && item.outlineWidth !== '0px')
+      );
+      expect(hasVisibleSelection, JSON.stringify({ key, item })).toBeTruthy();
+    });
+    await page.evaluate(() => {
+      window.__xmindConfirmPayload = null;
+      window.__xmindConfirmResolve = null;
+      if (window.app && window.app.confirmDrawer) {
+        window.app.confirmDrawer.open = function(payload) {
+          window.__xmindConfirmPayload = payload || null;
+          return new Promise(function(resolve) {
+            window.__xmindConfirmResolve = resolve;
+          });
+        };
+      }
+    });
     await pressDeleteInXmind(page);
     await page.waitForFunction(() => Boolean(window.__xmindConfirmPayload), {}, { timeout: 5000 });
+    await expect.poll(async () => {
+      return await readSelectedXmindNodeLabels(page);
+    }).toEqual(['登录成功校验', '登录失败提示']);
+    await page.evaluate(() => {
+      if (typeof window.__xmindConfirmResolve === 'function') {
+        window.__xmindConfirmResolve({ ok: true });
+        window.__xmindConfirmResolve = null;
+      }
+    });
 
     await waitForNodeTextAbsent(page, '登录成功校验');
     await waitForNodeTextAbsent(page, '登录失败提示');
@@ -6446,7 +6621,7 @@ test.describe('XMind 用例生成抽屉', () => {
     }).toBe('401');
   });
 
-  test('XMind 保存入库确认时不再提示未选择用例，成功后会自动清空当前结果并重置前置准备', async ({ page }) => {
+  test('XMind 保存入库确认时会自动关闭当前生成页签，并清空当前结果与前置准备', async ({ page }) => {
     const token = 'token-xmind-store-no-selection-confirm';
     const user = { id: 48, username: 'demo_user_48', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
@@ -6497,6 +6672,7 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await openXmindCaseGenDrawer(page);
     await clickElementById(page, 'xmindCaseGenStoreBtn');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
     await expect(page.locator('#caseGenDbStoreEntryNameRow')).not.toHaveClass(/hidden/);
     await expect(page.locator('#caseGenDbStoreEntryNameInput')).toHaveValue('XMind默认全量入库需求');
@@ -6516,7 +6692,9 @@ test.describe('XMind 用例生成抽屉', () => {
       });
     }).toBe(0);
     expect(String(importPayload && importPayload.file_name)).toBe('XMind默认全量入库需求-确认名.xmind');
-    await expect(page.locator('.temp-center-toast').last()).toContainText('用例入库成功');
+    await expect(page.locator('.temp-center-toast').last()).toContainText('入库并关闭页签成功');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(0);
+    await expect(page.locator('#xmindCaseGenWorkspaceAddBtn')).toHaveText('新建生成');
     await expect.poll(async () => {
       return await page.evaluate(() => {
         return window.app && window.app.state && Array.isArray(window.app.state.caseGenModules)
@@ -6531,6 +6709,10 @@ test.describe('XMind 用例生成抽屉', () => {
         rawText: document.getElementById('rawText') ? String(document.getElementById('rawText').value || '') : '',
         moduleCount: Array.isArray(st.caseGenModules) ? st.caseGenModules.length : -1,
         resultCount: st.caseGenResults && typeof st.caseGenResults === 'object' ? Object.keys(st.caseGenResults).length : -1,
+        activeWorkspaceId: st.xmindCaseGen ? String(st.xmindCaseGen.activeWorkspaceId || '') : '',
+        workspaceCount: st.xmindCaseGen && st.xmindCaseGen.workspaces && typeof st.xmindCaseGen.workspaces === 'object'
+          ? Object.keys(st.xmindCaseGen.workspaces).length
+          : -1,
         prep: st.xmindCaseGen && st.xmindCaseGen.prep ? {
           step: Number(st.xmindCaseGen.prep.step || 0),
           completed: st.xmindCaseGen.prep.completed === true,
@@ -6541,14 +6723,13 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(resetState.rawText).toBe('');
     expect(resetState.moduleCount).toBe(0);
     expect(resetState.resultCount).toBe(0);
+    expect(resetState.activeWorkspaceId).toBe('');
+    expect(resetState.workspaceCount).toBe(0);
     expect(resetState.prep).not.toBeNull();
     expect(resetState.prep.step).toBe(1);
     expect(resetState.prep.completed).toBe(false);
     expect(resetState.prep.baseLocked).toBe(false);
-
-    await clickElementById(page, 'xmindCaseGenSummaryBtn');
-    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('step1');
-    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+    await expect(page.locator('#xmindCaseGenMindContainer')).toContainText('暂无生成页签');
   });
 
   test('XMind 生成在刷新后会自动恢复并继续完成，不再卡死在生成中', async ({ page }) => {

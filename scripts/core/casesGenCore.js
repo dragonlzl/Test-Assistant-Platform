@@ -253,6 +253,7 @@
           explicitItems: [],
           explicitMissingModules: [],
           explicitSource: '',
+          explicitWorkspaceId: '',
           preferredProjectId: '',
           preferredVersionId: '',
           preferredCaseFileId: '',
@@ -275,6 +276,7 @@
       storeState.explicitItems = [];
       storeState.explicitMissingModules = [];
       storeState.explicitSource = '';
+      storeState.explicitWorkspaceId = '';
       storeState.preferredProjectId = '';
       storeState.preferredVersionId = '';
       storeState.preferredCaseFileId = '';
@@ -295,6 +297,7 @@
         ? opts.missingModules.map(function(item) { return String(item || '').trim(); }).filter(Boolean)
         : [];
       storeState.explicitSource = opts.source ? String(opts.source || '') : '';
+      storeState.explicitWorkspaceId = opts.workspaceId ? String(opts.workspaceId || '') : '';
       storeState.preferredProjectId = opts.projectId === null || opts.projectId === undefined ? '' : String(opts.projectId || '');
       storeState.preferredVersionId = opts.versionId === null || opts.versionId === undefined ? '' : String(opts.versionId || '');
       storeState.preferredCaseFileId = opts.caseFileId === null || opts.caseFileId === undefined ? '' : String(opts.caseFileId || '');
@@ -3136,16 +3139,24 @@
       openCaseGenDbStoreDrawer('append');
     }
 
-    function maybeResetXmindCasegenAfterStoreSuccess(source) {
-      if (String(source || '') !== 'xmind_casegen') return;
+    function maybeResetXmindCasegenAfterStoreSuccess(source, options) {
+      if (String(source || '') !== 'xmind_casegen') return false;
+      var opts = options || {};
       try {
         var xmindCasegenApi = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
         if (xmindCasegenApi && typeof xmindCasegenApi.resetAfterStoreSuccess === 'function') {
-          xmindCasegenApi.resetAfterStoreSuccess();
+          return xmindCasegenApi.resetAfterStoreSuccess({
+            workspaceId: opts.workspaceId ? String(opts.workspaceId || '') : '',
+            closeWorkspace: true,
+            showToast: true,
+            toastText: '入库并关闭页签成功',
+            toastDurationMs: 5000,
+          }) === true;
         }
       } catch (err) {
         // ignore
       }
+      return false;
     }
 
     function confirmCaseGenDbNewImport() {
@@ -3205,14 +3216,18 @@
           .then(function(caseFile) {
             if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '入库成功：' + entryName, 'ok');
             setStatus(caseGenStatus, '入库成功：' + entryName, 'ok');
-            try {
-              if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
-                window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
-              }
-            } catch (_) {}
             var drawer = ensureCaseGenDbStoreDrawer();
             if (drawer) drawer.close();
-            maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource);
+            var handledXmindStore = maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource, {
+              workspaceId: st.explicitWorkspaceId || '',
+            });
+            if (!handledXmindStore) {
+              try {
+                if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+                  window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
+                }
+              } catch (_) {}
+            }
             triggerTempExecCaseLibrarySync('casegen-new');
             if (action === 'store_to_exec' && caseFile && caseFile.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
               var execVersionDrawerApi = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
@@ -3271,12 +3286,16 @@
                     return null;
                   }
                   var caseFile2 = res.caseFile || null;
-                  try {
-                    if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
-                      window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
-                    }
-                  } catch (_) {}
-                  maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource);
+                  var handledXmindStore = maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource, {
+                    workspaceId: st.explicitWorkspaceId || '',
+                  });
+                  if (!handledXmindStore) {
+                    try {
+                      if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+                        window.app.utils.showCenterToast('用例入库成功', 'ok', 3000);
+                      }
+                    } catch (_) {}
+                  }
                   triggerTempExecCaseLibrarySync('casegen-new-overwrite');
                   if (action === 'store_to_exec' && caseFile2 && caseFile2.id && typeof apiClient.upsertExecSetFromCaseFile === 'function') {
                     var execVersionDrawerApi2 = window.app && window.app.execVersionDrawer ? window.app.execVersionDrawer : null;
@@ -3370,11 +3389,6 @@
         if (!overwrite && !skippedExisting && skipped) msg += '，重复已跳过 ' + skipped + ' 条';
         if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, msg, 'ok');
         setStatus(caseGenStatus, msg, 'ok');
-        try {
-          if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
-            window.app.utils.showCenterToast('追加入库成功', 'ok', 3000);
-          }
-        } catch (_) {}
         triggerTempExecCaseLibrarySync(overwrite ? 'casegen-append-overwrite' : 'casegen-append');
       }
 
@@ -3417,7 +3431,16 @@
                   applyAppendResult(res || null, false);
                   var drawer0 = ensureCaseGenDbStoreDrawer();
                   if (drawer0) drawer0.close();
-                  maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource);
+                  var handledXmindStore = maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource, {
+                    workspaceId: st.explicitWorkspaceId || '',
+                  });
+                  if (!handledXmindStore) {
+                    try {
+                      if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+                        window.app.utils.showCenterToast('追加入库成功', 'ok', 3000);
+                      }
+                    } catch (_) {}
+                  }
                   return null;
                 }).finally(function() {
                   st.loading = false;
@@ -3443,7 +3466,16 @@
                 .then(function(res) {
                   if (res && res.ok === true) {
                     applyAppendResult(res.result || null, true);
-                    maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource);
+                    var handledXmindStore = maybeResetXmindCasegenAfterStoreSuccess(explicitStoreSource, {
+                      workspaceId: st.explicitWorkspaceId || '',
+                    });
+                    if (!handledXmindStore) {
+                      try {
+                        if (window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function') {
+                          window.app.utils.showCenterToast('追加入库成功', 'ok', 3000);
+                        }
+                      } catch (_) {}
+                    }
                     return null;
                   }
                   setStatus(caseGenStatus, '已取消追加入库', 'warn');

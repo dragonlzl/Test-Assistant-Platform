@@ -2273,13 +2273,33 @@
       return true;
     }
 
-    function resetAfterStoreSuccess() {
-      return resetXmindCasegenState({
-        reason: 'store-success-reset',
-        reopenPrepDialog: false,
-        toastText: '',
-        silentBlocked: true,
-      });
+    function resetAfterStoreSuccess(options) {
+      var opts = options || {};
+      var activeWorkspaceId = getActiveWorkspaceId();
+      var targetWorkspaceId = String(opts.workspaceId || activeWorkspaceId || '');
+      var shouldCloseWorkspace = opts.closeWorkspace === true;
+      var didReset = false;
+      var didClose = false;
+      if (!targetWorkspaceId || targetWorkspaceId === activeWorkspaceId) {
+        didReset = resetXmindCasegenState({
+          reason: 'store-success-reset',
+          reopenPrepDialog: false,
+          toastText: '',
+          silentBlocked: true,
+        }) === true;
+      }
+      if (shouldCloseWorkspace && targetWorkspaceId) {
+        didClose = deleteWorkspace(targetWorkspaceId, {
+          skipConfirm: true,
+        }) === true;
+      }
+      if (opts.showToast === true) {
+        notifySuccessToast(
+          String(opts.toastText || (didClose ? '入库并关闭页签成功' : '用例入库成功')),
+          opts.toastDurationMs || (didClose ? 5000 : 3000)
+        );
+      }
+      return didReset || didClose;
     }
 
     function getViewState() {
@@ -4411,16 +4431,18 @@
       if (mindElixirCoreApi && typeof mindElixirCoreApi.hideOpenContextMenu === 'function') {
         try {
           mindElixirCoreApi.hideOpenContextMenu();
-          return;
         } catch (err) {
           // ignore
         }
       }
-      if (typeof document === 'undefined' || !document.querySelector) return;
-      var menu = document.querySelector('.xmind-node-context-menu.is-open');
-      if (!menu || !menu.classList) return;
-      menu.classList.remove('is-open');
-      if (menu.setAttribute) menu.setAttribute('aria-hidden', 'true');
+      if (typeof document === 'undefined' || !document.querySelectorAll) return;
+      var menus = document.querySelectorAll('.xmind-node-context-menu');
+      if (!menus || !menus.length) return;
+      Array.prototype.forEach.call(menus, function(menu) {
+        if (!menu || !menu.classList) return;
+        menu.classList.remove('is-open');
+        if (menu.setAttribute) menu.setAttribute('aria-hidden', 'true');
+      });
     }
 
     function openSummaryDialog(step) {
@@ -7410,6 +7432,7 @@
     }
 
     function confirmDeleteSelection(plan) {
+      hideOpenMindContextMenu();
       var confirmDrawer = window.app && window.app.confirmDrawer ? window.app.confirmDrawer : null;
       var summary = buildDeleteSummaryText(plan);
       var message = '确认删除选中的 ' + summary + '？删除后会以当前树为新的基线，之前的“放弃本次生成”回退记录将失效。';
@@ -7483,6 +7506,7 @@
     }
 
     async function handleDeleteSelection(nodeMeta) {
+      hideOpenMindContextMenu();
       if (hasAnyRunningGenerationOperation()) {
         notifyStatus('当前有生成任务进行中，请等待完成后再删除', 'warn', { forceInline: true });
         return false;
@@ -10917,6 +10941,7 @@
         casesGenApi.openCaseGenDbStoreNewDrawerWithItems(validation.items, {
           newAction: resolveDefaultStoreNewAction(),
           source: 'xmind_casegen',
+          workspaceId: getActiveWorkspaceId(),
         });
         return true;
       }
@@ -10933,6 +10958,7 @@
         casesGenApi.openCaseGenDbStoreNewDrawerWithItems(fallbackValidation.items, {
           newAction: resolveDefaultStoreNewAction(),
           source: 'xmind_casegen',
+          workspaceId: getActiveWorkspaceId(),
         });
         return true;
       }
@@ -10953,6 +10979,7 @@
       }
       casesGenApi.openCaseGenDbStoreAppendDrawerWithItems(validation.items, {
         source: 'xmind_casegen',
+        workspaceId: getActiveWorkspaceId(),
         projectId: target.projectId,
         versionId: target.versionId,
         caseFileId: target.caseFileId,
@@ -11096,7 +11123,8 @@
       return '确认直接关闭页签【' + String(label || '当前生成') + '】？该页签的前置准备或生成内容尚未保存入库，关闭后不会保留。';
     }
 
-    function deleteWorkspace(workspaceId) {
+    function deleteWorkspace(workspaceId, options) {
+      var opts = options || {};
       var targetId = String(workspaceId || '');
       if (hasWorkspaceRunningTasks(targetId)) {
         setDebugState({
@@ -11173,7 +11201,7 @@
         persistXmindState(true);
         return true;
       };
-      var needsConfirm = workspaceNeedsCloseConfirm(targetId);
+      var needsConfirm = opts.skipConfirm === true ? false : workspaceNeedsCloseConfirm(targetId);
       setDebugState({
         closeWorkspaceAction: {
           workspaceId: targetId,

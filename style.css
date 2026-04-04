@@ -10521,10 +10521,18 @@ tr.import-invalid-locate-active td {
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.38);
 }
 
-.xmind-structure-viewer me-tpc.xmind-box-selected .text {
+.xmind-structure-viewer me-tpc.xmind-box-selected .text,
+.xmind-structure-viewer me-tpc.selected .text,
+.xmind-structure-viewer me-tpc .text.selected,
+.xmind-structure-viewer me-tpc .selected {
   border-radius: 6px;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.5);
   background: rgba(219, 234, 254, 0.9);
+}
+
+.xmind-structure-viewer me-tpc.xmind-box-selected,
+.xmind-structure-viewer me-tpc.selected {
+  filter: drop-shadow(0 0 0.35rem rgba(37, 99, 235, 0.22));
 }
 
 .xmind-structure-viewer .xmind-box-select-rect {
@@ -12812,9 +12820,17 @@ button.exec-overview-file-chip,
   background: #1d4ed8;
   box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.56);
 }
-:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-box-selected .text {
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-box-selected .text,
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.selected .text,
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc .text.selected,
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc .selected {
   background: rgba(30, 64, 175, 0.88);
   box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.75);
+}
+
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-box-selected,
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.selected {
+  filter: drop-shadow(0 0 0.42rem rgba(96, 165, 250, 0.26));
 }
 :root[data-theme="dark"] .xmind-node-context-menu {
   border-color: #475569;

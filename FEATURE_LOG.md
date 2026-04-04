@@ -19,6 +19,98 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 多选框选高亮补强
+- 功能描述：补强 `XMind 用例生成` 中模块/用例多选与框选的可视反馈，统一自定义框选态与 MindElixir 原生选中态的高亮样式，避免真实交互里已选中节点因为类名落点不同而看起来像“没有选中”；同时补充回归，确保按 `Delete` 打开删除确认时，多选高亮不会先丢失。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 中单击、按住 `Ctrl/Cmd` 多选，或直接鼠标框选多个模块/用例；
+  - 选中后可继续右键删除或直接按 `Delete` 删除；
+  - 删除确认弹出前后，当前选中高亮会保持可见。
+- 使用效果：
+  - 单选、多选、框选后的高亮更稳定、更明显；
+  - 真实鼠标框选后，不再出现“已经框中了，但视觉上像没选中”的情况；
+  - 多选后按 `Delete` 进入确认时，选中高亮不会先消失。
+- 新增内容/接口/组件：
+  - `style.css`：统一 `xmind-box-selected` 与原生 `.selected` 的高亮样式，并补充暗色主题表现；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充框选后的可见高亮断言，以及删除确认弹出期间高亮保持的回归。
+- 复用说明：继续复用现有 `mindElixirCore` 选择状态与删除链路，仅补前端样式映射和 UI 回归，未新增接口。
+- 测试与验证：
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "普通单击节点会保持单选高亮，并能从多选收敛为当前节点|支持按住 Ctrl 点击多个模块或用例后批量删除，后续生成上下文与当前可见树保持一致|支持鼠标框选多条用例后批量删除" --reporter=line`，3/3 通过。
+- 更新记录：
+  - 2026-04-04 补强 XMind 多选/框选高亮样式，并新增“删除确认前高亮保持”回归。
+  - 2026-04-04 18:42 CST，补上框选结束后的选中态延迟提交与框选矩形重挂载校验，修复“松开鼠标后框选结果不保留”以及“删除后再次左键框选时矩形框不显示”的回归。
+
+- 功能名称：XMind 入库成功自动关闭生成页签
+- 功能描述：调整 `XMind 用例生成` 的保存入库收口链路。入库成功后不再只停留在“清空当前结果”，而是会自动关闭对应的生成页签，并用 5 秒居中悬浮提示明确反馈“入库并关闭页签成功”；同时保持非 XMind 的普通用例生成入库提示不变。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 中完成生成；
+  - 点击工具栏 `保存入库`，完成新用例入库或追加入库确认；
+  - 成功后当前 XMind 生成页签会自动关闭。
+- 使用效果：
+  - 入库成功后，当前 XMind 页签会立即收口，不再残留一份已入库但仍停留在画布上的生成页签；
+  - 若这是最后一个 XMind 页签，抽屉会回到“暂无生成页签 / 新建生成”的初始状态；
+  - 成功反馈改为统一的悬浮提示 `入库并关闭页签成功`，5 秒后自动消失。
+- 新增内容/接口/组件：
+  - XMind 入库打开共享入库抽屉时，会额外携带发起入库的 workspace id；
+  - 共享入库成功回调会识别 `xmind_casegen` 来源，并定向回调 XMind 页签收口逻辑；
+  - XMind 页签关闭逻辑新增无确认关闭分支，仅供入库成功后的自动收口复用。
+- 复用说明：继续复用现有 XMind 状态重置、共享入库抽屉、页签删除与悬浮提示能力；未新增后端接口，仅补充前端来源上下文与成功回调编排。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`，通过；
+  - `node --check scripts/core/casesGenCore.js`，通过；
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "XMind 保存入库确认时会自动关闭当前生成页签，并清空当前结果与前置准备" --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "已完成前置准备但尚未生成的页签，关闭前仍会弹出二次确认|多个 XMind 页签时，关闭按钮会准确关闭当前点击的目标页签|XMind 保存入库确认时会自动关闭当前生成页签，并清空当前结果与前置准备" --reporter=line`，3/3 通过；
+  - `API_BASE_URL=http://127.0.0.1:8082 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`，1/1 通过。
+- 更新记录：
+  - 2026-04-04 新增本轮自动关闭页签与 5 秒悬浮提示收口；同时验证未影响原有手动关闭页签确认逻辑。
+
+- 功能名称：XMind 生成页真实多选交互修正
+- 功能描述：修正 `XMind 用例生成` 中真实手动按住 `Ctrl/Cmd` 点击节点时，多选会失效的问题。根因是只读多选链路同时监听了 `pointerdown` 和 `mousedown`，真实浏览器交互下会连续触发两次，导致同一节点刚被加入选中集合又被立即移除；此前自动化使用 synthetic `mousedown`，没有覆盖到这个双触发场景。
+- 操作方式：
+  - 进入 `用例生成 -> XMind 用例生成`；
+  - 用鼠标单击某个节点选中；
+  - 按住 `Ctrl/Cmd` 再逐个点击其他模块或用例节点；
+  - 或继续框选多个用例后执行批量删除。
+- 使用效果：
+  - `Ctrl/Cmd + 点击` 会稳定累加选中节点，不会再出现“点了但马上丢失选中”的情况；
+  - 单击收敛当前节点、框选多选、批量删除与右键菜单链路保持兼容；
+  - 真实鼠标和键盘交互与页面展示结果一致。
+- 新增内容/接口/组件：
+  - `scripts/core/mindElixirCore.js`：为只读多选增加 `pointerdown -> mousedown` 去重保护，避免同一真实点击触发两次选中切换；
+  - `tests/ui/xmind_casegen_flow.spec.js`：将 `Ctrl/Cmd` 多选辅助改为真实 `keyboard + mouse` 交互，覆盖浏览器真实事件时序。
+- 复用说明：复用现有 `mindElixirCore` 自定义选择集合、框选和删除链路；未新增后端接口、未新增状态机，也未改动 XMind 数据结构。
+- 测试与验证：
+  - 自查 code review：确认改动只收口于只读多选事件去重，不影响框选、单击选中、右键菜单关闭和删除确认抽屉；
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --grep "普通单击节点会保持单选高亮，并能从多选收敛为当前节点|支持鼠标框选多条用例后批量删除|支持按住 Ctrl 点击多个模块或用例后批量删除，后续生成上下文与当前可见树保持一致|根节点右键触发生成前置准备时，会先收起右键菜单|前置准备已完成后，点击右键生成动作也会立即收起右键菜单|先选中节点再右键并真实点击生成动作时，也会立即收起右键菜单|节点文字被选中后再右键并真实点击生成动作时，也会立即收起右键菜单|用例子节点右键菜单支持删除，删除后会清空回退快照并以当前树为新的生成上下文"`，8/8 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-04 18:16 CST，修正真实 `Ctrl/Cmd` 多选双触发回归，并将对应 UI 回归切换为真实鼠标键盘事件。
+
+- 功能名称：XMind 右键删除操作菜单收起修正
+- 功能描述：修正 `XMind 用例生成` 中“节点已选中后，通过右键菜单触发删除并打开确认抽屉”场景下，右键菜单仍残留在页面上的问题。根因是原有关闭逻辑主要依赖当前活动实例句柄，删除确认这类二次弹窗链路里如果存在残留菜单实例，菜单状态不会被全局同步清空。
+- 操作方式：
+  - 进入 `用例生成 -> XMind 用例生成`；
+  - 选中模块或用例节点；
+  - 右键点击 `删除`，触发确认抽屉。
+- 使用效果：
+  - 点击右键菜单动作后，会先关闭当前菜单，并全局清理页面上残留的 XMind 菜单浮层；
+  - 删除确认抽屉打开时，不会再残留右键菜单按钮；
+  - 该修正同时兼容已有生成动作的菜单收起时序。
+- 新增内容/接口/组件：
+  - `scripts/core/mindElixirCore.js`：新增全局菜单清理兜底，并纳入 `hideOpenContextMenu` / `hideNodeContextMenu`；
+  - `scripts/modules/xmindCasegen.js`：删除确认链路开始前追加菜单全局关闭，避免抽屉打开时保留旧菜单；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充“选中节点后真实点击删除动作，菜单会先消失再打开确认抽屉”回归断言。
+- 复用说明：复用现有 `mindElixirCore` 右键菜单生命周期、`xmindCasegen` 删除确认抽屉和已有 UI 回归；未新增后端接口、未新增状态机。
+- 测试与验证：
+  - 自查 code review：确认改动只收口于菜单关闭与删除确认入口，不改动生成流程、数据真源和任务状态；
+  - `node --check scripts/core/mindElixirCore.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js --grep "根节点右键触发生成前置准备时，会先收起右键菜单|前置准备已完成后，点击右键生成动作也会立即收起右键菜单|先选中节点再右键并真实点击生成动作时，也会立即收起右键菜单|节点文字被选中后再右键并真实点击生成动作时，也会立即收起右键菜单|用例子节点右键菜单支持删除，删除后会清空回退快照并以当前树为新的生成上下文"`，5/5 通过；
+  - 本次未改动后端接口，未执行 API 自动化。
+- 更新记录：
+  - 2026-04-04 18:05 CST，补强 XMind 菜单全局关闭兜底，修复删除确认抽屉打开时菜单残留问题，并补充删除场景回归覆盖。
+
 - 功能名称：XMind 全屏切页抖动修正
 - 功能描述：修正 `XMind 用例生成` 中在全屏或复原之后手动切换页签时，画布会左右连续抖动的问题。根因是页签切换原本会无条件再做一次根节点居中，而目标页签本身又已经带有自己的视图恢复信息，导致“恢复旧视图”和“切页后二次居中”互相打架，形成连续横向位移。
 - 操作方式：

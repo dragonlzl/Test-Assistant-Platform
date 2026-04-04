@@ -8,12 +8,24 @@
     var maxScale = 2.5;
     var activeContextMenuHider = function() {};
 
+    function forceHideAllNodeContextMenus() {
+      if (typeof document === 'undefined' || !document || typeof document.querySelectorAll !== 'function') return;
+      var menus = document.querySelectorAll('.xmind-node-context-menu');
+      if (!menus || !menus.length) return;
+      Array.prototype.forEach.call(menus, function(menu) {
+        if (!menu || !menu.classList) return;
+        menu.classList.remove('is-open');
+        if (menu.setAttribute) menu.setAttribute('aria-hidden', 'true');
+      });
+    }
+
     function hideOpenContextMenu() {
       try {
         activeContextMenuHider();
       } catch (err) {
         activeContextMenuHider = function() {};
       }
+      forceHideAllNodeContextMenus();
     }
 
     function getMindCtor() {
@@ -906,10 +918,15 @@
       var boxStartX = 0;
       var boxStartY = 0;
       var boxRectEl = null;
+      var boxSelectionCommitTimer = 0;
       var boxMinDragDistance = 4;
       var boxSuppressClickUntil = 0;
       var customSelectionNodes = [];
       var modifierSelectionSuppressClickUntil = 0;
+      var modifierSelectionPointerGuard = {
+        until: 0,
+        nodeKey: '',
+      };
 
       var rightDragGestureBlock = {
         active: false,
@@ -1616,8 +1633,26 @@
         notifyViewportStateChange('zoom-fit');
       }
 
+      function clearBoxSelectionCommitTimer() {
+        if (!boxSelectionCommitTimer) return;
+        clearTimeout(boxSelectionCommitTimer);
+        boxSelectionCommitTimer = 0;
+      }
+
       function ensureBoxRectEl() {
-        if (boxRectEl || !viewerEl || !viewerEl.appendChild) return boxRectEl;
+        if (boxRectEl) {
+          var sameParent = boxRectEl.parentNode === viewerEl;
+          if (boxRectEl.isConnected && sameParent) return boxRectEl;
+          if (boxRectEl.parentNode && boxRectEl.parentNode.removeChild) {
+            try {
+              boxRectEl.parentNode.removeChild(boxRectEl);
+            } catch (err0) {
+              // ignore
+            }
+          }
+          boxRectEl = null;
+        }
+        if (!viewerEl || !viewerEl.appendChild) return null;
         if (typeof document === 'undefined' || !document.createElement) return null;
         boxRectEl = document.createElement('div');
         boxRectEl.className = 'xmind-box-select-rect';
@@ -1712,6 +1747,36 @@
           if (nodeId || locatePath) key = nodeId + '::' + locatePath;
         }
         return key;
+      }
+
+      function resetModifierSelectionPointerGuard() {
+        modifierSelectionPointerGuard.until = 0;
+        modifierSelectionPointerGuard.nodeKey = '';
+      }
+
+      function markModifierSelectionPointerGuard(node) {
+        var anchorNode = resolveSelectionAnchorNode(node) || node;
+        var key = getSelectionIdentityKey(anchorNode);
+        if (!key) {
+          resetModifierSelectionPointerGuard();
+          return;
+        }
+        modifierSelectionPointerGuard.until = Date.now() + 320;
+        modifierSelectionPointerGuard.nodeKey = key;
+      }
+
+      function shouldSkipModifierSelectionMouseEvent(e, node) {
+        if (!e || e.type !== 'mousedown') return false;
+        if (!modifierSelectionPointerGuard.nodeKey) return false;
+        if (Date.now() > Number(modifierSelectionPointerGuard.until || 0)) {
+          resetModifierSelectionPointerGuard();
+          return false;
+        }
+        var anchorNode = resolveSelectionAnchorNode(node) || node;
+        var key = getSelectionIdentityKey(anchorNode);
+        if (!key || key !== modifierSelectionPointerGuard.nodeKey) return false;
+        resetModifierSelectionPointerGuard();
+        return true;
       }
 
       function normalizeSelectionNodeList(nodes) {
@@ -1969,6 +2034,18 @@
         applyCustomSelectionNodes(getBoxSelectedNodes());
       }
 
+      function scheduleCommitBoxSelection(nodes) {
+        var selected = normalizeSelectionNodeList(Array.isArray(nodes) ? nodes : []);
+        clearBoxSelectionCommitTimer();
+        if (!selected.length) return;
+        boxSelectionCommitTimer = setTimeout(function() {
+          boxSelectionCommitTimer = 0;
+          if (!enableCustomBoxSelection || editing || pendingSave) return;
+          applyCustomSelectionNodes(selected);
+          updateEditButtons();
+        }, 0);
+      }
+
       function toggleNodeInCustomSelection(nodeEl) {
         if (!enableCustomBoxSelection || !nodeEl) return [];
         var targetNode = resolveSelectionAnchorNode(nodeEl) || nodeEl;
@@ -1997,6 +2074,7 @@
       }
 
       function clearCustomSelection(syncMindSelection) {
+        clearBoxSelectionCommitTimer();
         setCustomSelectionNodes([]);
         clearBoxSelectionClasses();
         if (syncMindSelection === true) {
@@ -2080,10 +2158,11 @@
 
       function hideNodeContextMenu() {
         clearViewerNativeTextSelection();
+        nodeContextMenuMeta = null;
+        forceHideAllNodeContextMenus();
         if (!nodeContextMenuEl || !nodeContextMenuEl.classList) return;
         nodeContextMenuEl.classList.remove('is-open');
         nodeContextMenuEl.setAttribute('aria-hidden', 'true');
-        nodeContextMenuMeta = null;
       }
       activeContextMenuHider = hideNodeContextMenu;
 
@@ -2617,9 +2696,17 @@
         if (isEventInsideMindControls(e.target)) return false;
         var nodeEl = resolveViewerEventNode(e);
         if (!nodeEl) return false;
+        if (shouldSkipModifierSelectionMouseEvent(e, nodeEl)) {
+          if (e.preventDefault) e.preventDefault();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          else if (e.stopPropagation) e.stopPropagation();
+          return true;
+        }
         hideNodeContextMenu();
         clearClickNodeEditTimer();
         toggleNodeInCustomSelection(nodeEl);
+        if (e.type === 'pointerdown') markModifierSelectionPointerGuard(nodeEl);
+        else resetModifierSelectionPointerGuard();
         focusViewerForKeyboard();
         modifierSelectionSuppressClickUntil = Date.now() + 220;
         updateEditButtons();
@@ -2694,6 +2781,7 @@
         var key = e && e.key ? String(e.key) : '';
         if (key === 'Control') {
           ctrlModifierPressed = false;
+          resetModifierSelectionPointerGuard();
         }
         if (ctrlLeftCanvasDrag.active && key === 'Control') {
           resetCtrlLeftCanvasDrag();
@@ -2797,8 +2885,10 @@
           clearBoxSelectionClasses();
           return;
         }
+        var boxedNodes = normalizeSelectionNodeList(getBoxSelectedNodes());
         syncMindSelectionFromBox();
-        boxSuppressClickUntil = Date.now() + 220;
+        scheduleCommitBoxSelection(boxedNodes);
+        boxSuppressClickUntil = Date.now() + 360;
         updateEditButtons();
         if (e && e.preventDefault) e.preventDefault();
         if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
@@ -3417,6 +3507,7 @@
 
       function beginNodeEditBySingleClick(e) {
         clearClickNodeEditTimer();
+        resetModifierSelectionPointerGuard();
         if (!editing || pendingSave || !e) return;
         if (e.button !== undefined && e.button !== 0) return;
         if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
@@ -3450,15 +3541,18 @@
       }
 
       function onViewerClick(e) {
+        resetModifierSelectionPointerGuard();
         if (enableCustomBoxSelection && modifierSelectionSuppressClickUntil && Date.now() <= modifierSelectionSuppressClickUntil) {
           if (e && e.preventDefault) e.preventDefault();
-          if (e && e.stopPropagation) e.stopPropagation();
+          if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
+          else if (e && e.stopPropagation) e.stopPropagation();
           updateEditButtons();
           return;
         }
         if (enableCustomBoxSelection && boxSuppressClickUntil && Date.now() <= boxSuppressClickUntil) {
           if (e && e.preventDefault) e.preventDefault();
-          if (e && e.stopPropagation) e.stopPropagation();
+          if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
+          else if (e && e.stopPropagation) e.stopPropagation();
           boxSuppressClickUntil = 0;
           updateEditButtons();
           return;
@@ -4664,6 +4758,7 @@
         }
         resetRightDragGestureBlock();
         resetCtrlLeftCanvasDrag();
+        resetModifierSelectionPointerGuard();
         releaseCustomDragGhost();
       };
     }
