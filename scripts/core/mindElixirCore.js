@@ -2041,13 +2041,45 @@
         var el = document.createElement('div');
         el.className = 'xmind-node-context-menu';
         el.setAttribute('aria-hidden', 'true');
+        el.addEventListener('mousedown', onNodeContextMenuMouseDown, true);
         el.addEventListener('click', onNodeContextMenuClick);
         document.body.appendChild(el);
         nodeContextMenuEl = el;
         return nodeContextMenuEl;
       }
 
+      function isNodeWithinViewerSelection(selectionNode) {
+        if (!selectionNode) return false;
+        var current = selectionNode.nodeType === 1 ? selectionNode : selectionNode.parentNode;
+        while (current) {
+          if (current === viewerEl) return true;
+          current = current.parentNode;
+        }
+        return false;
+      }
+
+      function clearViewerNativeTextSelection() {
+        if (typeof window === 'undefined' || !window || typeof window.getSelection !== 'function') return false;
+        var selection = null;
+        try {
+          selection = window.getSelection();
+        } catch (err) {
+          selection = null;
+        }
+        if (!selection || selection.rangeCount <= 0 || selection.isCollapsed) return false;
+        var anchorNode = selection.anchorNode || null;
+        var focusNode = selection.focusNode || null;
+        if (!isNodeWithinViewerSelection(anchorNode) && !isNodeWithinViewerSelection(focusNode)) return false;
+        try {
+          selection.removeAllRanges();
+          return true;
+        } catch (err2) {
+          return false;
+        }
+      }
+
       function hideNodeContextMenu() {
+        clearViewerNativeTextSelection();
         if (!nodeContextMenuEl || !nodeContextMenuEl.classList) return;
         nodeContextMenuEl.classList.remove('is-open');
         nodeContextMenuEl.setAttribute('aria-hidden', 'true');
@@ -2058,6 +2090,7 @@
       function showNodeContextMenu(clientX, clientY, payload) {
         var menu = ensureNodeContextMenuEl();
         if (!menu || !menu.style) return;
+        clearViewerNativeTextSelection();
         var items = payload && Array.isArray(payload.items) ? payload.items : [];
         if (!items.length) {
           hideNodeContextMenu();
@@ -2193,17 +2226,36 @@
           : null;
         if (!target || !target.dataset) return;
         var action = String(target.dataset.mindNodeMenu || '');
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        else if (e.stopPropagation) e.stopPropagation();
         if (action === 'node-add') {
           hideNodeContextMenu();
-          runAddNode();
+          setTimeout(function() {
+            runAddNode();
+          }, 0);
         } else if (action === 'node-delete') {
           hideNodeContextMenu();
-          runDeleteNodes();
+          setTimeout(function() {
+            runDeleteNodes();
+          }, 0);
         } else if (action) {
           var meta = nodeContextMenuMeta;
           hideNodeContextMenu();
-          requestNodeAction(action, meta);
+          setTimeout(function() {
+            requestNodeAction(action, meta);
+          }, 0);
         }
+      }
+
+      function onNodeContextMenuMouseDown(e) {
+        var target = e && e.target && e.target.closest
+          ? e.target.closest('[data-mind-node-menu]')
+          : null;
+        if (!target) return;
+        clearViewerNativeTextSelection();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        else if (e.stopPropagation) e.stopPropagation();
       }
 
       function isCtrlModifierActive(e) {
@@ -4599,6 +4651,7 @@
         boxRectEl = null;
         if (nodeContextMenuEl) {
           if (typeof nodeContextMenuEl.removeEventListener === 'function') {
+            nodeContextMenuEl.removeEventListener('mousedown', onNodeContextMenuMouseDown, true);
             nodeContextMenuEl.removeEventListener('click', onNodeContextMenuClick);
           }
           if (nodeContextMenuEl.parentNode) {

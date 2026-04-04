@@ -122,6 +122,8 @@
     var xmindTaskListenerBound = false;
     var xmindTaskProcessingMap = {};
     var rootPipelinePumpMap = {};
+    var pendingManagedTaskReconcileTimer = 0;
+    var workspaceContextQueue = Promise.resolve();
     var workspaceShadowDepth = 0;
     var workspaceUiMutedDepth = 0;
     var shadowWorkspaceSharedState = null;
@@ -1714,7 +1716,7 @@
     function normalizeWorkspaceSharedState(snapshot) {
       var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
       return {
-        requirementLabel: String(source.requirementLabel || ''),
+        requirementLabel: normalizePersistedRequirementLabel(source.requirementLabel),
         requirementLabelSource: String(source.requirementLabelSource || ''),
         lastRawImportName: String(source.lastRawImportName || ''),
         rawText: String(source.rawText || ''),
@@ -1771,10 +1773,28 @@
       var shadowBase = workspaceShadowDepth > 0 && shadowWorkspaceSharedState
         ? normalizeWorkspaceSharedState(shadowWorkspaceSharedState)
         : null;
+      var activeRecord = getWorkspaceRecord(getActiveWorkspaceId());
+      var recordShared = activeRecord && activeRecord.snapshot && activeRecord.snapshot.shared
+        ? normalizeWorkspaceSharedState(activeRecord.snapshot.shared)
+        : null;
+      var requirementLabel = normalizePersistedRequirementLabel(state.requirementLabel);
+      var requirementLabelSource = state.requirementLabelSource ? String(state.requirementLabelSource || '') : '';
+      var lastRawImportName = state.lastRawImportName ? String(state.lastRawImportName || '') : '';
+      if (!requirementLabel && recordShared) {
+        requirementLabel = normalizePersistedRequirementLabel(recordShared.requirementLabel);
+        if (!requirementLabelSource && requirementLabel) {
+          requirementLabelSource = recordShared.requirementLabelSource
+            ? String(recordShared.requirementLabelSource || '')
+            : '';
+        }
+      }
+      if (!lastRawImportName && recordShared && recordShared.lastRawImportName) {
+        lastRawImportName = String(recordShared.lastRawImportName || '');
+      }
       return normalizeWorkspaceSharedState({
-        requirementLabel: state.requirementLabel,
-        requirementLabelSource: state.requirementLabelSource,
-        lastRawImportName: state.lastRawImportName,
+        requirementLabel: requirementLabel,
+        requirementLabelSource: requirementLabelSource,
+        lastRawImportName: lastRawImportName,
         rawText: shadowBase ? shadowBase.rawText : (rawTextEl && rawTextEl.value ? rawTextEl.value : ''),
         caseText: shadowBase ? shadowBase.caseText : (caseTextEl && caseTextEl.value ? caseTextEl.value : ''),
         importedCases: state.importedCases,
@@ -1795,6 +1815,23 @@
     function applySharedWorkspaceSnapshot(snapshot, options) {
       var opts = options || {};
       var next = normalizeWorkspaceSharedState(snapshot);
+      var previousRequirementLabel = normalizePersistedRequirementLabel(state.requirementLabel);
+      var previousRequirementLabelSource = state.requirementLabelSource ? String(state.requirementLabelSource || '') : '';
+      var previousImportName = state.lastRawImportName ? String(state.lastRawImportName || '') : '';
+      if (
+        !next.requirementLabel
+        && previousRequirementLabel
+        && previousRequirementLabelSource
+        && previousRequirementLabelSource !== 'default'
+        && next.lastRawImportName
+        && previousImportName
+        && String(next.lastRawImportName || '') === previousImportName
+      ) {
+        next.requirementLabel = previousRequirementLabel;
+        if (!next.requirementLabelSource) {
+          next.requirementLabelSource = previousRequirementLabelSource;
+        }
+      }
       var rawTextEl = document.getElementById('rawText');
       var fileNameEl = document.getElementById('fileName');
       var caseTextEl = document.getElementById('caseText');
@@ -1948,11 +1985,56 @@
       return false;
     }
 
+    function getWorkspaceSnapshotRequirementIdentity(snapshot) {
+      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      var xmindPart = source.xmind && typeof source.xmind === 'object' ? source.xmind : {};
+      var sharedPart = source.shared && typeof source.shared === 'object' ? source.shared : {};
+      var prep = xmindPart.prep && typeof xmindPart.prep === 'object' ? xmindPart.prep : {};
+      if (prep.requirementMode === 'manual') {
+        return prep.manualRequirementLabel ? String(prep.manualRequirementLabel || '').trim() : '';
+      }
+      var label = sharedPart.requirementLabel ? String(sharedPart.requirementLabel || '').trim() : '';
+      if (label) return label;
+      return sharedPart.lastRawImportName ? normalizeRequirementLabelFromFileName(sharedPart.lastRawImportName || '') : '';
+    }
+
+    function getCurrentWorkspaceRequirementIdentity() {
+      var prep = getPrepState();
+      if (prep.requirementMode === 'manual') {
+        return getManualRequirementLabelText();
+      }
+      return getDocumentRequirementLabelText();
+    }
+
     function currentActiveWorkspaceHasContent() {
       return workspaceSnapshotHasContent({
         xmind: extractActiveXmindStateSnapshot(),
         shared: buildCurrentSharedWorkspaceSnapshot(),
       });
+    }
+
+    function isDefaultWorkspaceRecordName(value) {
+      var text = value === null || value === undefined ? '' : String(value || '').trim();
+      if (!text) return true;
+      return /^生成\d+$/u.test(text);
+    }
+
+    function deriveLiveWorkspaceRecordName(fallback) {
+      var prep = getPrepState();
+      if (prep.requirementMode === 'manual') {
+        var manualLabel = normalizePersistedRequirementLabel(getManualRequirementLabelText());
+        if (manualLabel) return manualLabel;
+      } else {
+        var explicitDocumentLabel = normalizePersistedRequirementLabel(state.requirementLabel);
+        if (explicitDocumentLabel) return explicitDocumentLabel;
+      }
+      var fallbackText = fallback === null || fallback === undefined ? '' : String(fallback || '').trim();
+      if (!isDefaultWorkspaceRecordName(fallbackText)) return fallbackText;
+      if (prep.requirementMode !== 'manual') {
+        var importLabel = normalizeRequirementLabelFromFileName(state.lastRawImportName || '');
+        if (importLabel) return importLabel;
+      }
+      return fallbackText;
     }
 
     function captureWorkspaceSnapshot(workspaceId) {
@@ -2012,7 +2094,9 @@
       var activeId = String(host.activeWorkspaceId || '');
       if (!activeId || !host.workspaces[activeId]) return false;
       syncSummaryDraftIntoState();
-      host.workspaces[activeId].snapshot = createWorkspaceSnapshotFromCurrent();
+      var computedSnapshot = createWorkspaceSnapshotFromCurrent();
+      host.workspaces[activeId].snapshot = computedSnapshot;
+      host.workspaces[activeId].name = deriveLiveWorkspaceRecordName(host.workspaces[activeId].name);
       host.workspaces[activeId].updatedAt = Date.now();
       return true;
     }
@@ -2023,8 +2107,15 @@
       var stableId = String(workspaceId || '');
       var record = stableId && host.workspaces[stableId] ? host.workspaces[stableId] : null;
       if (!record) return false;
+      var sharedSnapshot = normalizeWorkspaceSharedState(record.snapshot && record.snapshot.shared ? record.snapshot.shared : null);
+      if (!sharedSnapshot.requirementLabel && !isDefaultWorkspaceRecordName(record.name)) {
+        sharedSnapshot.requirementLabel = String(record.name || '').trim();
+        if (!sharedSnapshot.requirementLabelSource) {
+          sharedSnapshot.requirementLabelSource = 'workspace';
+        }
+      }
       host.activeWorkspaceId = stableId;
-      applySharedWorkspaceSnapshot(record.snapshot && record.snapshot.shared ? record.snapshot.shared : null);
+      applySharedWorkspaceSnapshot(sharedSnapshot);
       applyActiveXmindStateSnapshot(record.snapshot && record.snapshot.xmind ? record.snapshot.xmind : null);
       getWorkspaceHostState().activeWorkspaceId = stableId;
       getWorkspaceHostState().workspaceOrder = host.workspaceOrder.slice();
@@ -2045,6 +2136,7 @@
       var shared = snapshot && snapshot.shared && typeof snapshot.shared === 'object' ? snapshot.shared : {};
       var xmind = snapshot && snapshot.xmind && typeof snapshot.xmind === 'object' ? snapshot.xmind : {};
       var prep = xmind && xmind.prep && typeof xmind.prep === 'object' ? xmind.prep : {};
+      var recordName = record && record.name ? String(record.name || '').trim() : '';
       var label = '';
       if (prep.requirementMode === 'manual') {
         label = prep.manualRequirementLabel ? String(prep.manualRequirementLabel || '').trim() : '';
@@ -2053,10 +2145,13 @@
         label = shared.requirementLabel ? String(shared.requirementLabel || '').trim() : '';
         if (label === '当前需求') label = '';
       }
+      if (!label && !isDefaultWorkspaceRecordName(recordName)) {
+        label = recordName;
+      }
       if (!label && shared.lastRawImportName) {
         label = normalizeRequirementLabelFromFileName(shared.lastRawImportName || '');
       }
-      if (!label) label = record && record.name ? String(record.name || '').trim() : '';
+      if (!label) label = recordName;
       if (!label) {
         var seq = Number(record && record.seq || 0);
         label = '生成' + String(seq > 0 ? seq : 1);
@@ -2767,7 +2862,16 @@
     }
 
     function getDocumentRequirementLabelText() {
-      var label = state.requirementLabel ? String(state.requirementLabel).trim() : '';
+      var label = normalizePersistedRequirementLabel(state.requirementLabel);
+      if (!label) {
+        var activeRecord = getWorkspaceRecord(getActiveWorkspaceId());
+        var recordShared = activeRecord && activeRecord.snapshot && activeRecord.snapshot.shared
+          ? normalizeWorkspaceSharedState(activeRecord.snapshot.shared)
+          : null;
+        if (recordShared) {
+          label = normalizePersistedRequirementLabel(recordShared.requirementLabel);
+        }
+      }
       if (!label) {
         label = normalizeRequirementLabelFromFileName(state.lastRawImportName || '');
       }
@@ -2776,6 +2880,12 @@
 
     function getManualRequirementLabelText() {
       return String(getPrepState().manualRequirementLabel || '').trim();
+    }
+
+    function normalizePersistedRequirementLabel(value) {
+      var text = value === null || value === undefined ? '' : String(value || '').trim();
+      if (!text || text === '当前需求') return '';
+      return text;
     }
 
     function getRequirementLabelText() {
@@ -3005,15 +3115,17 @@
       });
     }
 
-    function syncSummaryDraftIntoState() {
+    function syncSummaryDraftIntoState(options) {
+      var opts = options || {};
       if (summaryDialogOpen !== true || summaryDialogMode !== 'prep' || !summaryDialogBodyEl) return false;
       var changed = false;
       var prep = getPrepState();
       var settings = getCaseGenSettingsSnapshot() || {};
+      var preserveCompleted = opts.preserveCompleted === true;
 
       function markPrepChanged() {
         changed = true;
-        prep.completed = false;
+        if (preserveCompleted !== true) prep.completed = false;
       }
 
       if (isPrepBaseLocked() !== true) {
@@ -3033,6 +3145,15 @@
           var nextSupplement = String(supplementEl.value || '');
           if (String(prep.requirementSupplement || '') !== nextSupplement) {
             prep.requirementSupplement = nextSupplement;
+            markPrepChanged();
+          }
+        }
+
+        var manualLabelEl = summaryDialogBodyEl.querySelector('#xmindCaseGenManualRequirementLabel');
+        if (manualLabelEl) {
+          var nextManualLabel = String(manualLabelEl.value || '');
+          if (String(prep.manualRequirementLabel || '') !== nextManualLabel) {
+            prep.manualRequirementLabel = nextManualLabel;
             markPrepChanged();
           }
         }
@@ -3069,8 +3190,7 @@
         var nextCustomRequirement = String(customRequirementEl.value || '');
         if (String(settings.customRequirement || '') !== nextCustomRequirement) {
           settings.customRequirement = nextCustomRequirement;
-          changed = true;
-          prep.completed = false;
+          markPrepChanged();
         }
       }
 
@@ -3083,8 +3203,7 @@
         var nextValue = inputEl.type === 'checkbox' ? inputEl.checked === true : String(inputEl.value || '');
         if (settings[settingKey] !== nextValue) {
           settings[settingKey] = nextValue;
-          changed = true;
-          prep.completed = false;
+          markPrepChanged();
         }
       }
       return changed;
@@ -4394,6 +4513,7 @@
         return true;
       }
       if (actionId === 'confirm') {
+        syncSummaryDraftIntoState({ preserveCompleted: true });
         if (!hasRequirementReady() || !hasCaseStepReady()) return false;
         var shouldCenterRoot = prep.completed !== true && String(prep.caseImportMode || '') === 'import';
         prep.baseLocked = true;
@@ -4448,7 +4568,12 @@
       var activeId = String(host.activeWorkspaceId || '');
       var record = activeId && host.workspaces[activeId] ? host.workspaces[activeId] : null;
       if (!record) return false;
-      if (workspaceSnapshotHasContent(record.snapshot) && !currentActiveWorkspaceHasContent()) {
+      var snapshotRequirementIdentity = getWorkspaceSnapshotRequirementIdentity(record.snapshot);
+      var currentRequirementIdentity = getCurrentWorkspaceRequirementIdentity();
+      if (
+        (workspaceSnapshotHasContent(record.snapshot) && !currentActiveWorkspaceHasContent())
+        || (snapshotRequirementIdentity && !currentRequirementIdentity)
+      ) {
         hydrateWorkspaceSnapshot(activeId, { keepDrawerOpen: isDrawerOpen() });
         return true;
       }
@@ -7011,6 +7136,34 @@
     }
 
     function collectRunningGenerationOperations() {
+      var activeWorkspaceId = getActiveWorkspaceId();
+      var runningTasks = filterTasksByWorkspace(listManagedXmindTasks(), activeWorkspaceId).filter(function(task) {
+        return task && task.status === 'running';
+      });
+      if (runningTasks.length) {
+        return runningTasks.map(function(task) {
+          if (!task) return null;
+          if (task.scope === 'root') {
+            return {
+              scope: 'root',
+              actionId: String(task.actionId || task.rootPipelineActionId || ''),
+              label: '根节点',
+            };
+          }
+          if (task.scope === 'module') {
+            return {
+              scope: 'module',
+              actionId: String(task.actionId || ''),
+              moduleId: String(task.moduleId || ''),
+              moduleKey: String(task.moduleKey || ''),
+              label: task.moduleTitle
+                ? String(task.moduleTitle || '')
+                : '模块',
+            };
+          }
+          return null;
+        }).filter(Boolean);
+      }
       var operations = [];
       var rootState = ensureRootUiState();
       if (rootState && rootState.running && rootState.lastAction) {
@@ -8387,8 +8540,33 @@
       });
     }
 
+    function scheduleManagedTaskReconcile(reason) {
+      var nextReason = String(reason || 'task-reconcile-deferred');
+      if (pendingManagedTaskReconcileTimer) {
+        clearTimeout(pendingManagedTaskReconcileTimer);
+        pendingManagedTaskReconcileTimer = 0;
+      }
+      pendingManagedTaskReconcileTimer = setTimeout(function() {
+        pendingManagedTaskReconcileTimer = 0;
+        if (workspaceShadowDepth > 0) {
+          scheduleManagedTaskReconcile(nextReason);
+          return;
+        }
+        reconcileManagedXmindTasks({
+          resume: false,
+          render: isDrawerOpen(),
+          reason: nextReason,
+          persist: true,
+        });
+      }, 40);
+    }
+
     function syncManagedRunningUiState(options) {
       var opts = options || {};
+      if (workspaceShadowDepth > 0) {
+        scheduleManagedTaskReconcile(opts.reason || 'task-sync-shadow');
+        return [];
+      }
       var tasks = Array.isArray(opts.tasks) ? opts.tasks : listManagedXmindTasks();
       var scopedTasks = filterTasksByWorkspace(tasks, getActiveWorkspaceId());
       var runningTasks = scopedTasks.filter(function(task) {
@@ -8561,7 +8739,9 @@
       var prep = cloneJson(getPrepState(), createDefaultPrepState());
       var viewState = cloneJson(getViewState(), createDefaultViewState());
       var requirementSource = getSelectedRequirementSource();
-      var requirementLabel = getRequirementLabelText();
+      var requirementLabel = requirementSource.mode === 'manual'
+        ? getManualRequirementLabelText()
+        : getDocumentRequirementLabelText();
       var requirementLabelSource = state.requirementLabelSource ? String(state.requirementLabelSource || '') : '';
       if (requirementSource.mode === 'manual') {
         requirementLabelSource = 'manual';
@@ -8684,7 +8864,7 @@
       }
 
       base.workspaceId = pickString(base.workspaceId, incoming.workspaceId);
-      base.requirementLabel = pickString(base.requirementLabel, incoming.requirementLabel);
+      base.requirementLabel = normalizePersistedRequirementLabel(pickString(base.requirementLabel, incoming.requirementLabel));
       base.requirementLabelSource = pickString(base.requirementLabelSource, incoming.requirementLabelSource);
       base.lastRawImportName = pickString(base.lastRawImportName, incoming.lastRawImportName);
       base.rawText = pickString(base.rawText, incoming.rawText);
@@ -8744,9 +8924,17 @@
       return base;
     }
 
-    function syncRunningTaskRestoreContexts() {
+    function syncRunningTaskRestoreContexts(workspaceId) {
       var manager = getXmindTaskManager();
       if (!manager || typeof manager.updateTasksContext !== 'function') return 0;
+      var targetWorkspaceId = String(workspaceId || getActiveWorkspaceId() || '');
+      if (!targetWorkspaceId) return 0;
+      var taskIds = filterTasksByWorkspace(listManagedXmindTasks(), targetWorkspaceId).filter(function(task) {
+        return task && task.status === 'running' && task.id;
+      }).map(function(task) {
+        return String(task.id || '');
+      }).filter(Boolean);
+      if (!taskIds.length) return 0;
       var restoreContext = buildManagedTaskRestoreContext();
       return Number(manager.updateTasksContext(function(nextContext) {
         var merged = mergeTaskRestoreContext(nextContext, restoreContext);
@@ -8757,6 +8945,7 @@
           nextContext[key] = cloneJson(merged[key], merged[key]);
         });
       }, {
+        taskIds: taskIds,
         onlyRunning: true,
         action: 'context',
       }) || 0);
@@ -10005,7 +10194,7 @@
       return false;
     }
 
-    function runInWorkspaceContext(workspaceId, handler) {
+    function runInWorkspaceContextNow(workspaceId, handler) {
       var targetId = String(workspaceId || '');
       if (!targetId || targetId === getActiveWorkspaceId()) {
         return Promise.resolve().then(function() {
@@ -10051,22 +10240,28 @@
         })
         .finally(function() {
           saveActiveWorkspaceSnapshot();
-          if (previousId && sharedWorkspaces[previousId] && previousSnapshot) {
-            sharedWorkspaces[previousId].snapshot = previousSnapshot;
-            sharedWorkspaces[previousId].updatedAt = Date.now();
+          var restoreHost = ensureWorkspaceHostState();
+          var restoreWorkspaces = restoreHost.workspaces;
+          var restoreSeq = Number(restoreHost.nextWorkspaceSeq || 1);
+          if (!Number.isFinite(restoreSeq) || restoreSeq < nextWorkspaceSeq) restoreSeq = nextWorkspaceSeq;
+          if (previousId && restoreWorkspaces[previousId] && previousSnapshot) {
+            restoreWorkspaces[previousId].snapshot = previousSnapshot;
+            restoreWorkspaces[previousId].updatedAt = Date.now();
             applySharedWorkspaceSnapshot(previousSnapshot.shared, { silentDom: true });
             applyActiveXmindStateSnapshot(previousSnapshot.xmind);
-            getWorkspaceHostState().activeWorkspaceId = previousId;
-            getWorkspaceHostState().workspaceOrder = orderSnapshot.slice();
-            getWorkspaceHostState().workspaces = sharedWorkspaces;
-            getWorkspaceHostState().nextWorkspaceSeq = nextWorkspaceSeq;
-            getWorkspaceHostState().openButtonDotVisible = state.xmindCaseGen && state.xmindCaseGen.openButtonDotVisible === true;
+            var restoredHost = getWorkspaceHostState();
+            restoredHost.activeWorkspaceId = previousId;
+            restoredHost.workspaceOrder = orderSnapshot.slice();
+            restoredHost.workspaces = restoreWorkspaces;
+            restoredHost.nextWorkspaceSeq = restoreSeq;
+            restoredHost.openButtonDotVisible = state.xmindCaseGen && state.xmindCaseGen.openButtonDotVisible === true;
           } else {
-            getWorkspaceHostState().activeWorkspaceId = '';
-            getWorkspaceHostState().workspaceOrder = orderSnapshot.slice();
-            getWorkspaceHostState().workspaces = sharedWorkspaces;
-            getWorkspaceHostState().nextWorkspaceSeq = nextWorkspaceSeq;
-            getWorkspaceHostState().openButtonDotVisible = state.xmindCaseGen && state.xmindCaseGen.openButtonDotVisible === true;
+            var emptyRestoreHost = getWorkspaceHostState();
+            emptyRestoreHost.activeWorkspaceId = '';
+            emptyRestoreHost.workspaceOrder = orderSnapshot.slice();
+            emptyRestoreHost.workspaces = restoreWorkspaces;
+            emptyRestoreHost.nextWorkspaceSeq = restoreSeq;
+            emptyRestoreHost.openButtonDotVisible = state.xmindCaseGen && state.xmindCaseGen.openButtonDotVisible === true;
             shadowWorkspaceSharedState = null;
           }
           workspaceUiMutedDepth -= 1;
@@ -10075,7 +10270,25 @@
           renderWorkspaceTabs();
           updateSummary();
           persistXmindState(true);
+          if (workspaceShadowDepth <= 0) {
+            scheduleManagedTaskReconcile('workspace-context-finished');
+          }
         });
+    }
+
+    function runInWorkspaceContext(workspaceId, handler) {
+      var targetId = String(workspaceId || '');
+      var queued = workspaceContextQueue.catch(function() {
+        return null;
+      }).then(function() {
+        return runInWorkspaceContextNow(targetId, handler);
+      });
+      workspaceContextQueue = queued.then(function() {
+        return null;
+      }, function() {
+        return null;
+      });
+      return queued;
     }
 
     function consumeManagedXmindTask(task) {
@@ -10164,6 +10377,10 @@
         var task = detail && detail.task ? detail.task : null;
         var action = detail && detail.action ? String(detail.action || '') : '';
         var tasks = detail && Array.isArray(detail.tasks) ? detail.tasks : listManagedXmindTasks();
+        if (workspaceShadowDepth > 0) {
+          scheduleManagedTaskReconcile('task-event-' + (action || 'update'));
+          return;
+        }
         var isTerminalEventTask = Boolean(task && isManagedTaskTerminal(task));
         var shouldSkipRender = isTerminalEventTask || action === 'handled' || action === 'clear' || action === 'context';
         if (action !== 'heartbeat') {
@@ -10220,6 +10437,12 @@
         });
       }
       if (interruptedCount <= 0) {
+        syncManagedRunningUiState({
+          tasks: listManagedXmindTasks(),
+          render: isDrawerOpen(),
+          reason: 'task-cancel-none',
+          persist: true,
+        });
         if (pipeline && Array.isArray(pipeline.pendingQueue) && pipeline.pendingQueue.length > 0) {
           finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: getRootNodeId() });
           notifyFloatingStatus('已中断当前 XMind 生成任务', 'warn', 3000);
@@ -10616,6 +10839,7 @@
 
     function handleNodeAction(actionId, nodeMeta) {
       if (!actionId) return false;
+      hideOpenMindContextMenu();
       if (isDeleteActionId(actionId)) {
         handleDeleteSelection(nodeMeta);
         return true;
@@ -10789,6 +11013,17 @@
       clearCurrentWorkspaceUiBeforeSwitch();
       hydrateWorkspaceSnapshot(targetId, {
         keepDrawerOpen: isDrawerOpen(),
+      });
+      syncManagedRunningUiState({
+        tasks: listManagedXmindTasks(),
+        render: false,
+        reason: 'workspace-switch-sync',
+        persist: true,
+      });
+      filterTasksByWorkspace(listManagedXmindTasks(), targetId).filter(function(task) {
+        return isManagedTaskTerminal(task);
+      }).forEach(function(task) {
+        consumeManagedXmindTask(task);
       });
       renderWorkspaceTabs();
       updateSummary();
@@ -11403,7 +11638,6 @@
     bindManagedXmindTasks();
     bindRenderListeners();
     updateSummary();
-    restoreDrawerAfterRefreshIfNeeded();
 
     var api = {
       open: open,

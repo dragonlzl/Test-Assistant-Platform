@@ -2008,9 +2008,6 @@
       abortRequestsByOwner: abortModelRequestsByOwner,
     });
     window.app.xmindCaseGenTaskManager = xmindCaseGenTaskManager;
-    if (xmindCaseGenTaskManager && typeof xmindCaseGenTaskManager.resumeTasks === 'function') {
-      xmindCaseGenTaskManager.resumeTasks({ force: true });
-    }
 
     function shouldResumeMissingReminderAi() {
       return Boolean(state && state.settings && state.settings.missingCaseReminderAiEnabled === 'on');
