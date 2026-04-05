@@ -4568,6 +4568,53 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(afterReload.viewState.collapsedNodeKeys).toContain('module::登录模块');
   });
 
+  test('刷新前未打开 XMind 用例生成抽屉时，刷新后不会自动打开', async ({ page }) => {
+    const token = 'token-xmind-refresh-closed-stays-closed';
+    const user = { id: 8026, username: 'xmind-refresh-closed-stays-closed', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await createXmindWorkspaceByManualPrep(page, '刷新关闭保持关闭需求', '需求：刷新前关闭 XMind 抽屉，刷新后不应自动重开。', {
+      completePrep: true,
+      useExistingWorkspace: true,
+    });
+    await waitForNodeText(page, '刷新关闭保持关闭需求');
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
+
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.persistWorkflowStateNow === 'function') {
+        window.app.persistWorkflowStateNow();
+      }
+    });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
+    await page.waitForTimeout(1200);
+
+    const afterReload = await page.evaluate(() => {
+      var drawer = document.getElementById('xmindCaseGenDrawer');
+      var state = window.app && window.app.state ? window.app.state : null;
+      var xmind = state && state.xmindCaseGen ? state.xmindCaseGen : null;
+      return {
+        drawerOpen: Boolean(drawer && drawer.classList && drawer.classList.contains('open')),
+        activeTab: state ? String(state.activeTab || '') : '',
+        viewDrawerOpen: Boolean(xmind && xmind.viewState && xmind.viewState.drawerOpen === true),
+        workspaceCount: xmind && Array.isArray(xmind.workspaceOrder) ? xmind.workspaceOrder.length : 0,
+        activeWorkspaceId: xmind ? String(xmind.activeWorkspaceId || '') : '',
+      };
+    });
+
+    expect(afterReload.activeTab).toBe('casesgen');
+    expect(afterReload.drawerOpen).toBe(false);
+    expect(afterReload.viewDrawerOpen).toBe(false);
+    expect(afterReload.workspaceCount).toBe(1);
+    expect(afterReload.activeWorkspaceId).not.toBe('');
+  });
+
   test('工具栏支持查看生成记录，并展示根节点与模块节点的生成摘要', async ({ page }) => {
     const token = 'token-xmind-history';
     const user = { id: 21, username: 'demo_user_history', role: 'user', level: 'member' };

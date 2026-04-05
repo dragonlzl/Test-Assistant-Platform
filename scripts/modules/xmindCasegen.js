@@ -113,6 +113,7 @@
     var viewStateClickHandler = null;
     var viewStateWheelHandler = null;
     var viewStateBeforeUnloadBound = false;
+    var drawerCloseIntentBound = false;
     var workspaceViewRestoreToken = 0;
     var rootCenterRequestToken = 0;
     var drawerRestoreRetryTimer = 0;
@@ -1015,10 +1016,7 @@
         onClose: function() {
           clearDrawerRestoreRetry();
           clearStoreValidationState(true);
-          captureCurrentViewState();
-          getViewState().drawerOpen = false;
-          getViewState().fullscreen = false;
-          getViewState().updatedAt = Date.now();
+          persistDrawerClosedIntentState(false);
           syncOpenButtonState();
           if (drawerEl && drawerEl.classList) {
             drawerEl.classList.remove('xmind-drawer-fullscreen');
@@ -1029,6 +1027,7 @@
           persistWorkflowStateNow();
         },
       });
+      bindDrawerCloseIntentPersistence();
       return drawerInstance;
     }
 
@@ -2407,9 +2406,20 @@
         viewState.updatedAt = Date.now();
         return cloneJson(viewState, createDefaultViewState());
       }
-      viewState.drawerOpen = isDrawerOpen();
-      if (!viewState.drawerOpen || !mindInstance) {
-        viewState.fullscreen = drawerEl && drawerEl.classList ? drawerEl.classList.contains('xmind-drawer-fullscreen') : false;
+      var actualDrawerOpen = isDrawerOpen();
+      var shouldPreserveRestoreIntent = actualDrawerOpen !== true
+        && viewState.drawerOpen === true
+        && hasWorkspaceSnapshotDrawerRestoreIntent(getActiveWorkspaceId())
+        && String(state.activeTab || '') === 'casesgen';
+      if (!shouldPreserveRestoreIntent) {
+        viewState.drawerOpen = actualDrawerOpen;
+      }
+      if (!actualDrawerOpen || !mindInstance) {
+        if (!shouldPreserveRestoreIntent) {
+          viewState.fullscreen = drawerEl && drawerEl.classList
+            ? drawerEl.classList.contains('xmind-drawer-fullscreen')
+            : false;
+        }
         viewState.updatedAt = Date.now();
         return cloneJson(viewState, createDefaultViewState());
       }
@@ -2419,9 +2429,7 @@
       var drawerState = mindInstance && typeof mindInstance.__tapCaptureDrawerState === 'function'
         ? mindInstance.__tapCaptureDrawerState()
         : null;
-      var anchorState = mindInstance && typeof mindInstance.__tapCaptureViewportAnchorState === 'function'
-        ? mindInstance.__tapCaptureViewportAnchorState()
-        : null;
+      var anchorState = captureVisibleMindAnchorStateFromDom();
       var mindData = buildCurrentMindDataSnapshot();
       viewState.fullscreen = drawerEl && drawerEl.classList
         ? drawerEl.classList.contains('xmind-drawer-fullscreen')
@@ -2457,9 +2465,7 @@
       if (!mapEl || !mapEl.style || !canvasEl) return null;
       var transformText = String(mapEl.style.transform || '');
       if (!transformText) return null;
-      var anchorState = mindInstance && typeof mindInstance.__tapCaptureViewportAnchorState === 'function'
-        ? mindInstance.__tapCaptureViewportAnchorState()
-        : null;
+      var anchorState = captureVisibleMindAnchorStateFromDom();
       var next = cloneJson(getViewState(), createDefaultViewState()) || createDefaultViewState();
       next.drawerOpen = true;
       next.fullscreen = drawerEl && drawerEl.classList ? drawerEl.classList.contains('xmind-drawer-fullscreen') : false;
@@ -2477,6 +2483,47 @@
       next.treeSourceSignature = String(ensureState().treeSourceSignature || '');
       next.updatedAt = Date.now();
       return next;
+    }
+
+    function persistDrawerClosedIntentState(useImmediate) {
+      var nextView = captureVisibleMindViewStateFromDom()
+        || cloneJson(getViewState(), createDefaultViewState())
+        || createDefaultViewState();
+      var now = Date.now();
+      nextView.drawerOpen = false;
+      nextView.fullscreen = false;
+      nextView.updatedAt = now;
+      state.xmindCaseGen.viewState = cloneJson(nextView, createDefaultViewState());
+      var record = getWorkspaceRecord(getActiveWorkspaceId());
+      if (record) {
+        if (!record.snapshot || typeof record.snapshot !== 'object') {
+          record.snapshot = createWorkspaceSnapshot();
+        }
+        if (!record.snapshot.xmind || typeof record.snapshot.xmind !== 'object') {
+          record.snapshot.xmind = createInitialXmindState();
+        }
+        record.snapshot.xmind.viewState = cloneJson(nextView, createDefaultViewState());
+        record.updatedAt = now;
+      }
+      if (useImmediate === true) persistWorkflowStateNow();
+      else persistWorkflowState();
+    }
+
+    function bindDrawerCloseIntentPersistence() {
+      if (drawerCloseIntentBound) return;
+      if (!drawerEl || !drawerEl.querySelector) return;
+      drawerCloseIntentBound = true;
+      var closeBtn = document.getElementById('closeXmindCaseGenDrawerBtn');
+      var maskEl = drawerEl.querySelector('.drawer-mask');
+      function markClosingState() {
+        persistDrawerClosedIntentState(true);
+      }
+      if (closeBtn && closeBtn.addEventListener) {
+        closeBtn.addEventListener('click', markClosingState, true);
+      }
+      if (maskEl && maskEl.addEventListener) {
+        maskEl.addEventListener('click', markClosingState, true);
+      }
     }
 
     function scheduleCaptureCurrentViewState(useImmediate) {
@@ -2550,6 +2597,64 @@
       return nodeEl && nodeEl.getBoundingClientRect ? nodeEl : null;
     }
 
+    function getMindAnchorStableNodeId(nodeEl) {
+      if (!nodeEl) return '';
+      if (nodeEl.getAttribute) {
+        var attrNodeId = String(nodeEl.getAttribute('data-xmind-node-id') || '');
+        if (attrNodeId) return attrNodeId;
+      }
+      if (!nodeEl.nodeObj) return '';
+      var meta = nodeEl.nodeObj.xmindMeta && typeof nodeEl.nodeObj.xmindMeta === 'object'
+        ? nodeEl.nodeObj.xmindMeta
+        : null;
+      if (meta && meta.nodeId) return String(meta.nodeId || '');
+      if (nodeEl.nodeObj.id === undefined || nodeEl.nodeObj.id === null) return '';
+      return String(nodeEl.nodeObj.id || '');
+    }
+
+    function captureVisibleMindAnchorStateFromDom() {
+      if (!mindContainer || !isDrawerOpen()) return null;
+      var viewerEl = mindContainer.querySelector
+        ? (mindContainer.querySelector('.xmind-structure-viewer') || mindContainer)
+        : mindContainer;
+      if (!viewerEl || !viewerEl.getBoundingClientRect || !viewerEl.querySelectorAll) return null;
+      var viewerRect = viewerEl.getBoundingClientRect();
+      var viewerCenterX = Number(viewerRect.left + (viewerRect.width / 2));
+      var viewerCenterY = Number(viewerRect.top + (viewerRect.height / 2));
+      if (!isFinite(viewerCenterX) || !isFinite(viewerCenterY)) return null;
+      var nodeEls = viewerEl.querySelectorAll('me-tpc');
+      if (!nodeEls || !nodeEls.length) return null;
+      var best = null;
+      Array.prototype.forEach.call(nodeEls, function(nodeEl) {
+        var stableNodeId = getMindAnchorStableNodeId(nodeEl);
+        if (!stableNodeId) return;
+        var anchorEl = resolveMindAnchorElement(nodeEl);
+        if (!anchorEl || !anchorEl.getBoundingClientRect) return;
+        var rect = anchorEl.getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) return;
+        var centerX = Number(rect.left + (rect.width / 2));
+        var centerY = Number(rect.top + (rect.height / 2));
+        if (!isFinite(centerX) || !isFinite(centerY)) return;
+        var dx = centerX - viewerCenterX;
+        var dy = centerY - viewerCenterY;
+        var distance = Math.sqrt((dx * dx) + (dy * dy));
+        if (!best || distance < best.distance) {
+          best = {
+            nodeId: stableNodeId,
+            centerX: centerX,
+            centerY: centerY,
+            distance: distance,
+          };
+        }
+      });
+      if (!best || !best.nodeId) return null;
+      return {
+        nodeId: String(best.nodeId || ''),
+        centerX: Number(best.centerX || 0),
+        centerY: Number(best.centerY || 0),
+      };
+    }
+
     function applyCurrentMindAnchorState(anchorState) {
       var anchor = anchorState && typeof anchorState === 'object' ? anchorState : null;
       if (!anchor || !anchor.nodeId || !mindContainer) return false;
@@ -2559,8 +2664,8 @@
       if (!nodeEls || !nodeEls.length) return false;
       var targetNode = null;
       Array.prototype.some.call(nodeEls, function(nodeEl) {
-        if (!nodeEl || !nodeEl.nodeObj || nodeEl.nodeObj.id === undefined || nodeEl.nodeObj.id === null) return false;
-        if (String(nodeEl.nodeObj.id) !== String(anchor.nodeId || '')) return false;
+        if (!nodeEl || !nodeEl.nodeObj) return false;
+        if (getMindAnchorStableNodeId(nodeEl) !== String(anchor.nodeId || '')) return false;
         targetNode = nodeEl;
         return true;
       });
@@ -2596,6 +2701,7 @@
         scaleVal: Number(viewState.scaleVal || 1),
         scrollLeft: Number(viewState.scrollLeft || 0),
         scrollTop: Number(viewState.scrollTop || 0),
+        skipAnchorAlign: viewState.skipAnchorAlign === true,
         anchorState: viewState.anchorState && viewState.anchorState.nodeId ? {
           nodeId: String(viewState.anchorState.nodeId || ''),
           centerX: Number(viewState.anchorState.centerX || 0),
@@ -2611,7 +2717,7 @@
         if (!isDrawerOpen()) return;
         if (stableWorkspaceId !== String(getActiveWorkspaceId() || '')) return;
         applyCurrentMindViewState(restoreView);
-        if (restoreView.anchorState) {
+        if (restoreView.skipAnchorAlign !== true && restoreView.anchorState) {
           applyCurrentMindAnchorState(restoreView.anchorState);
         }
       };
@@ -2630,8 +2736,9 @@
       });
     }
 
-    function normalizeWorkspaceRenderViewState(viewState) {
+    function normalizeWorkspaceRenderViewState(viewState, options) {
       var source = viewState && typeof viewState === 'object' ? viewState : null;
+      var opts = options || {};
       if (!source) return null;
       var transform = String(source.transform || '');
       if (!transform) return null;
@@ -2640,6 +2747,7 @@
         scaleVal: Number(source.scaleVal || 1),
         scrollLeft: Number(source.scrollLeft || 0),
         scrollTop: Number(source.scrollTop || 0),
+        skipAnchorAlign: source.skipAnchorAlign === true || opts.skipAnchorAlign === true,
         anchorState: source.anchorState && source.anchorState.nodeId ? {
           nodeId: String(source.anchorState.nodeId || ''),
           centerX: Number(source.anchorState.centerX || 0),
@@ -2687,6 +2795,7 @@
         scaleVal: Number(viewState.scaleVal || 1),
         scrollLeft: Number(viewState.scrollLeft || 0),
         scrollTop: Number(viewState.scrollTop || 0),
+        skipAnchorAlign: true,
         anchorState: viewState.anchorState && viewState.anchorState.nodeId ? {
           nodeId: String(viewState.anchorState.nodeId || ''),
           centerX: Number(viewState.anchorState.centerX || 0),
@@ -4843,9 +4952,30 @@
       if (!record) return false;
       var snapshotRequirementIdentity = getWorkspaceSnapshotRequirementIdentity(record.snapshot);
       var currentRequirementIdentity = getCurrentWorkspaceRequirementIdentity();
+      var snapshotViewState = record.snapshot
+        && record.snapshot.xmind
+        && record.snapshot.xmind.viewState
+        && typeof record.snapshot.xmind.viewState === 'object'
+          ? record.snapshot.xmind.viewState
+          : null;
+      var currentViewState = getViewState();
+      var shouldRestoreDrawerState = Boolean(
+        snapshotViewState
+        && (
+          (snapshotViewState.drawerOpen === true && currentViewState.drawerOpen !== true)
+          || (snapshotViewState.fullscreen === true && currentViewState.fullscreen !== true)
+        )
+      );
+      var shouldRestoreViewportState = Boolean(
+        snapshotViewState
+        && snapshotViewState.transform
+        && !currentViewState.transform
+      );
       if (
         (workspaceSnapshotHasContent(record.snapshot) && !currentActiveWorkspaceHasContent())
         || (snapshotRequirementIdentity && !currentRequirementIdentity)
+        || shouldRestoreDrawerState
+        || shouldRestoreViewportState
       ) {
         hydrateWorkspaceSnapshot(activeId, { keepDrawerOpen: isDrawerOpen() });
         return true;
@@ -8356,6 +8486,7 @@
         'xmind-casegen-node-flow-right'
       );
       if (nodeEl.removeAttribute) {
+        nodeEl.removeAttribute('data-xmind-node-id');
         nodeEl.removeAttribute('data-xmind-topup-highlight-token');
         nodeEl.removeAttribute('data-xmind-topup-highlight-label');
         nodeEl.removeAttribute('data-xmind-topup-highlight-scope');
@@ -8373,6 +8504,9 @@
       if (selectGroupKey && nodeEl.setAttribute) {
         nodeEl.setAttribute('data-xmind-select-group', String(selectGroupKey));
         nodeEl.setAttribute('data-xmind-select-preferred', meta.type === 'module' || meta.type === 'case' ? '1' : '0');
+      }
+      if (meta.nodeId && nodeEl.setAttribute) {
+        nodeEl.setAttribute('data-xmind-node-id', String(meta.nodeId || ''));
       }
       if (meta.type === 'root' || meta.type === 'module') {
         nodeEl.classList.add(meta.type === 'root' ? 'xmind-casegen-node-root' : 'xmind-casegen-node-module');
@@ -8587,7 +8721,7 @@
           }
         } else if (restorableViewState) {
           applyCurrentMindViewState(restorableViewState);
-          if (restorableViewState.anchorState) {
+          if (restorableViewState.skipAnchorAlign !== true && restorableViewState.anchorState) {
             applyCurrentMindAnchorState(restorableViewState.anchorState);
           }
         }
@@ -11330,7 +11464,8 @@
         && targetRecord.snapshot.xmind
         && targetRecord.snapshot.xmind.viewState
           ? targetRecord.snapshot.xmind.viewState
-          : null
+          : null,
+        { skipAnchorAlign: true }
       );
       var currentId = String(host.activeWorkspaceId || '');
       if (currentId && currentId !== targetId) {
@@ -11594,13 +11729,11 @@
       clearDrawerRestoreRetry();
       var drawer = ensureDrawer();
       if (drawer && typeof drawer.close === 'function') {
+        persistDrawerClosedIntentState(true);
         drawer.close();
         return true;
       }
-      captureCurrentViewState();
-      getViewState().drawerOpen = false;
-      getViewState().fullscreen = false;
-      getViewState().updatedAt = Date.now();
+      persistDrawerClosedIntentState(false);
       syncOpenButtonState();
       if (drawerEl && drawerEl.classList) {
         drawerEl.classList.remove('xmind-drawer-fullscreen');
@@ -11930,7 +12063,26 @@
     function hasDrawerRestoreIntent() {
       var viewState = getViewState();
       if (viewState.drawerOpen === true) return true;
+      if (hasWorkspaceSnapshotDrawerRestoreIntent(getActiveWorkspaceId())) return true;
       return hasManagedTaskDrawerRestoreIntent();
+    }
+
+    function getWorkspaceSnapshotViewState(workspaceId) {
+      var record = getWorkspaceRecord(workspaceId);
+      if (!record || !record.snapshot || !record.snapshot.xmind) return null;
+      var viewState = record.snapshot.xmind.viewState;
+      return viewState && typeof viewState === 'object' ? viewState : null;
+    }
+
+    function hasWorkspaceSnapshotDrawerRestoreIntent(workspaceId) {
+      var viewState = getWorkspaceSnapshotViewState(workspaceId);
+      return Boolean(viewState && viewState.drawerOpen === true);
+    }
+
+    function hasAnyWorkspaceSnapshotDrawerRestoreIntent() {
+      return getWorkspaceOrder().some(function(workspaceId) {
+        return hasWorkspaceSnapshotDrawerRestoreIntent(workspaceId);
+      });
     }
 
     function hasManagedTaskDrawerRestoreIntent() {
@@ -11995,7 +12147,9 @@
 
     function restoreDrawerAfterRefreshIfNeeded() {
       clearDrawerRestoreRetry();
+      ensureActiveWorkspaceHydrated();
       reconcileManagedXmindTasks({ resume: true, render: isDrawerOpen(), persist: false, reason: 'workflow-ready' });
+      ensureActiveWorkspaceHydrated();
       if (!hasDrawerRestoreIntent()) return;
       scheduleDrawerRestoreRetry(80);
     }

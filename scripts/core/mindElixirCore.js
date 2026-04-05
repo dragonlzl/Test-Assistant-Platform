@@ -4961,12 +4961,13 @@
 
     function scheduleMindViewRestore(instance, viewState, anchorState) {
       if (!instance || !viewState) return;
+      var shouldRestoreAnchor = !(viewState && viewState.skipAnchorAlign === true) && Boolean(anchorState);
       [0, 16, 48, 96, 180, 320, 520].forEach(function(delayMs) {
         setTimeout(function() {
           if (!isActiveMindRenderInstance(instance)) return;
           if (delayMs > 0 && instance.__tapViewportInteracted === true) return;
           restoreMindViewState(instance, viewState);
-          if (anchorState) {
+          if (shouldRestoreAnchor) {
             restoreMindAnchorState(instance, anchorState);
           }
         }, delayMs);
@@ -5047,11 +5048,13 @@
       var explicitInitialViewState = opts && opts.initialViewState && typeof opts.initialViewState === 'object'
         ? opts.initialViewState
         : null;
-      var explicitInitialAnchorState = explicitInitialViewState && explicitInitialViewState.anchorState
+      var explicitInitialAnchorState = explicitInitialViewState && explicitInitialViewState.skipAnchorAlign === true
+        ? null
+        : (explicitInitialViewState && explicitInitialViewState.anchorState
         ? explicitInitialViewState.anchorState
         : (opts && opts.initialAnchorState && typeof opts.initialAnchorState === 'object'
           ? opts.initialAnchorState
-          : null);
+          : null));
       var explicitInitialDrawerState = opts && opts.initialDrawerState && typeof opts.initialDrawerState === 'object'
         ? opts.initialDrawerState
         : null;
