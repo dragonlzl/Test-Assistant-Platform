@@ -19,6 +19,31 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 用例生成进度侧栏改版
+- 功能描述：将左下角原“用例生成进度”侧栏改为 `xmind用例生成进度`，不再展示旧版普通用例生成的模块级进度，而是直接展示 `XMind 用例生成` 当前工作区页签摘要；每个页签一行，显示内容与 XMind 生成抽屉顶部页签的标题、状态、模块数、用例数保持同源。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 中创建或切换多个生成页签；
+  - 左下角 `xmind用例生成进度` 会同步展示这些页签摘要；
+  - 点击侧栏中的某个摘要项，会直接打开 XMind 生成抽屉并切到对应页签。
+- 使用效果：
+  - 左下角侧栏与 XMind 页签展示保持一致，不再出现“侧栏看的是旧模块进度、抽屉看的是 XMind 页签”的语义错位；
+  - 完成提醒红点继续复用 XMind 页自身的后台完成提醒状态；
+  - 在 `ai-workflow`、`case-library`、`case-exec`、`ai-tools`、`settings`、`admin` 等页面中，侧栏标题与空态提示保持统一。
+- 新增内容/接口/组件：
+  - `xmindCasegenApi` 新增页签摘要读取与按页签打开能力，供侧栏复用；
+  - 左下角侧栏改为消费 XMind 工作区摘要，不再自行拼装第二套状态来源；
+  - 新增 XMind 侧栏摘要回归测试，覆盖标题、摘要一致性与点击切换页签。
+- 复用说明：复用现有 `xmindCasegen` 工作区状态、页签摘要规则、页签切换逻辑与完成提醒状态；未新增后端接口，未新增第二套生成状态机。
+- 测试与验证：
+  - `node --check scripts/core/appRuntime.js`，通过；
+  - `node --check scripts/handlers/casegenHandlers.js`，通过；
+  - `node --check scripts/modules/casegenProgress.js`，通过；
+  - `node --check scripts/modules/xmindCasegen.js`，通过；
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "左下角 xmind 用例生成进度面板复用 XMind 页签摘要，并支持点击切换对应页签" --reporter=line`，1/1 通过。
+- 更新记录：
+  - 2026-04-05 20:40 CST，左下角进度侧栏切换为 XMind 页签摘要视图，并补齐对应标题、空态、点击切页与 UI 回归。
+
 - 功能名称：XMind 入库回切页签首帧抖动修正
 - 功能描述：修复 `XMind 用例生成` 在多页签场景下，“A 页签仍在生成、B 页签已完成并保存入库后自动关闭，界面切回 A 页签”时画布首帧会跳到错误位置的问题。此次补强在现有工作区快照中追加视口锚点信息，并在页签切换恢复时同步恢复 `transform + 视口锚点`，同时让对应 UI 回归以浏览器实际绘制后的画布状态为准，避免把首帧前的过渡态误判为用户可见抖动。
 - 操作方式：

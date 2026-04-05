@@ -1461,6 +1461,7 @@
       updateReasoningVisibility: updateReasoningVisibility,
       testModel: testModel,
       renderCaseGeneration: renderCaseGeneration,
+      renderCaseGenProgressBoard: renderCaseGenProgressBoard,
       persistWorkflowState: persistWorkflowState,
       persistWorkflowStateNow: persistWorkflowStateNow,
     }, Object.keys({
@@ -1468,7 +1469,7 @@
       getCombinedCaseText: 1, deriveCaseListFromText: 1, parseCaseList: 1, renderCaseTable: 1, formatCompactTimestamp: 1, escapeHtml: 1,
       escapeHtmlPreserve: 1, updateFlowStatus: 1, updateCurrentPath: 1, setCurrentPathSub: 1, callModelWithConfig: 1, getAssignedModel: 1, updateModelTiming: 1, setCaseViewHint: 1,
       downloadBlob: 1, parseXmindFile: 1, scrollElementIntoView: 1, updateAssignmentStatuses: 1, updateReasoningVisibility: 1, testModel: 1,
-      renderCaseGeneration: 1, persistWorkflowState: 1, persistWorkflowStateNow: 1,
+      renderCaseGeneration: 1, renderCaseGenProgressBoard: 1, persistWorkflowState: 1, persistWorkflowStateNow: 1,
     }));
     assignIfPresent(core, api, [
       'waitForAutoClarification',
@@ -1748,6 +1749,9 @@
       'setCaseProgressStep',
       'markAllCaseProgressGroups',
     ]);
+    if (api && typeof api.renderCaseGenProgressBoard === 'function') {
+      core.renderCaseGenProgressBoard = api.renderCaseGenProgressBoard;
+    }
     if (casesGenApi && api && typeof api.renderCaseGenProgressBoard === 'function') {
       casesGenApi.renderCaseGenProgressBoard = api.renderCaseGenProgressBoard;
     }

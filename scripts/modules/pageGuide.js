@@ -331,7 +331,7 @@
         + '</ul>';
       var notes = ''
         + '<ul class="page-guide-notes">'
-        + '<li><span class="page-guide-button">【生成模块】</span> 页签下每行展示两个模块；左侧用例生成进度点击后会自动切到该页签并定位到目标模块。</li>'
+        + '<li><span class="page-guide-button">【生成模块】</span> 页签下每行展示两个模块；左侧 xmind 用例生成进度会展示 XMind 生成页签摘要，点击后可直接打开对应页签。</li>'
         + '<li><span class="page-guide-button">【全模块用例视图】</span>：入库前的必做步骤，用于汇总当前用例并完成勾选。</li>'
         + '<li><span class="page-guide-button">【新用例入库】</span> / <span class="page-guide-button">【追加到已有旧用例】</span>：用于切换入库方式，只展示当前选择对应的操作区。</li>'
         + '<li><span class="page-guide-button">【旧用例追加入库】</span>：将勾选用例追加到已存在的用例文件。</li>'

@@ -69,6 +69,29 @@
       caseGenProgressTabDot.classList.toggle('is-visible', visible === true);
     }
 
+    function getXmindCasegenApi() {
+      return window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+    }
+
+    function hasXmindCompletionNotice() {
+      return Boolean(state && state.xmindCaseGen && state.xmindCaseGen.openButtonDotVisible === true);
+    }
+
+    function getXmindWorkspaceProgressItems() {
+      var api = getXmindCasegenApi();
+      if (!api || typeof api.getWorkspaceProgressItems !== 'function') return [];
+      var items = api.getWorkspaceProgressItems();
+      return Array.isArray(items) ? items : [];
+    }
+
+    function resolveWorkspaceProgressState(item) {
+      var statusCls = item && item.statusCls ? String(item.statusCls || '') : '';
+      if (statusCls === 'is-running') return 'running';
+      if (statusCls === 'is-ready') return 'done';
+      if (statusCls === 'is-dirty' || statusCls === 'is-draft') return 'warn';
+      return 'pending';
+    }
+
     function persistProgressNotice() {
       if (typeof persistWorkflowState === 'function') {
         persistWorkflowState();
@@ -76,35 +99,11 @@
     }
 
     function markCasegenTabViewed() {
-      var notice = ensureProgressNotice();
-      var wasVisible = notice.dotVisible === true;
-      notice.dotVisible = false;
-      syncTabDotVisible(false);
-      if (wasVisible) persistProgressNotice();
+      syncTabDotVisible(hasXmindCompletionNotice());
     }
 
     function syncCasegenProgressDot(doneIds, hasNewDoneEvent) {
-      var notice = ensureProgressNotice();
-      var ids = doneIds || {};
-      var hasDone = false;
-      Object.keys(ids).forEach(function(key) {
-        if (key) hasDone = true;
-      });
-      if (!hasDone) {
-        notice.dotVisible = false;
-        syncTabDotVisible(false);
-        return;
-      }
-      if (isCasegenTabActive()) {
-        if (notice.dotVisible === true) {
-          syncTabDotVisible(true);
-        } else {
-          syncTabDotVisible(false);
-        }
-        return;
-      }
-      if (hasNewDoneEvent) notice.dotVisible = true;
-      syncTabDotVisible(notice.dotVisible === true);
+      syncTabDotVisible(hasXmindCompletionNotice());
     }
 
     function ensureCaseGenRunningSet() {
@@ -157,53 +156,37 @@
 
     function renderCaseGenProgressBoard() {
       if (!caseGenProgressPanel || !caseGenProgressList) return;
-      var modules = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
-      var notice = ensureProgressNotice();
-      var doneIds = {};
-      var nextStates = {};
-      var hasNewDoneEvent = false;
-      if (!modules.length) {
+      var items = getXmindWorkspaceProgressItems();
+      if (!items.length) {
         caseGenProgressPanel.classList.remove('hidden');
-        caseGenProgressList.innerHTML = '<p class="hint">暂无用例生成任务，请先完成“测试模块拆分”并生成用例</p>';
-        notice.lastStates = {};
-        syncCasegenProgressDot({});
+        caseGenProgressList.innerHTML = '<p class="hint">暂无 xmind 生成页签，点击打开 XMind 用例生成</p>';
+        syncCasegenProgressDot();
         requestLayoutSync();
         return;
       }
-      var html = modules.map(function(mod, idx) {
-        var status = resolveCaseGenBoardState(mod.id);
-        nextStates[mod.id] = status.state;
-        if (status.state === 'done') doneIds[mod.id] = true;
-        if (status.state === 'done' && notice.lastStates[mod.id] !== 'done') {
-          hasNewDoneEvent = true;
-        }
-        var label = status.state === 'running'
-          ? '生成中'
-          : status.state === 'done'
-          ? '完成'
-          : status.state === 'warn'
-          ? '注意'
-          : status.state === 'error'
-          ? '失败'
-          : '未生成';
-        var name = escapeHtml(mod.title || ('模块' + (idx + 1)));
-        var suggestionClass = hasCaseGenSuggestion(mod.id) ? ' has-suggestion' : '';
+      var html = items.map(function(item) {
+        var stateCls = resolveWorkspaceProgressState(item);
+        var activeCls = item && item.active === true ? ' is-active' : '';
         return '' +
-          '<div class="casegen-progress-item state-' + (status.state || 'pending') + suggestionClass + '" data-casegen-module="' + mod.id + '">' +
+          '<div class="casegen-progress-item xmind-casegen-progress-item state-' + stateCls + activeCls + '" data-casegen-workspace="' + escapeHtml(item && item.id ? item.id : '') + '" title="' + escapeHtml(item && item.title ? item.title : '') + '">' +
             '<div class="info">' +
               '<span class="status-dot"></span>' +
               '<div class="titles">' +
-                '<div class="name">' + name + '</div>' +
+                '<div class="name">' + escapeHtml(item && item.title ? item.title : '未命名生成') + '</div>' +
+                '<div class="xmind-casegen-tab-meta">' +
+                  '<span class="xmind-casegen-tab-state-pill ' + escapeHtml(item && item.statusCls ? item.statusCls : 'is-idle') + '" aria-hidden="true">' + escapeHtml(item && item.statusText ? item.statusText : '待准备') + '</span>' +
+                  '<span class="xmind-casegen-tab-dot" aria-hidden="true"></span>' +
+                  '<span class="xmind-casegen-tab-metric">' + String(item && item.moduleCount !== undefined ? item.moduleCount : 0) + ' 模块</span>' +
+                  '<span class="xmind-casegen-tab-dot" aria-hidden="true"></span>' +
+                  '<span class="xmind-casegen-tab-metric">' + String(item && item.caseCount !== undefined ? item.caseCount : 0) + ' 用例</span>' +
+                '</div>' +
               '</div>' +
             '</div>' +
-            '<span class="badge">' + label + '</span>' +
           '</div>';
       }).join('');
       caseGenProgressList.innerHTML = html;
       caseGenProgressPanel.classList.remove('hidden');
-      notice.lastStates = nextStates;
-      syncCasegenProgressDot(doneIds, hasNewDoneEvent);
-      persistProgressNotice();
+      syncCasegenProgressDot();
       requestLayoutSync();
     }
 

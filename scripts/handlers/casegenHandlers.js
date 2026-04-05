@@ -80,8 +80,30 @@
       }
     }
 
-    if (caseGenProgressList && typeof goCasesGenAndScroll === 'function') {
+    function openXmindWorkspaceFromProgress(workspaceId) {
+      try {
+        var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+        if (api && typeof api.openWorkspace === 'function') {
+          return api.openWorkspace(workspaceId || '') === true;
+        }
+        if (api && typeof api.open === 'function') {
+          return api.open() === true;
+        }
+      } catch (err) {
+        // ignore
+      }
+      return false;
+    }
+
+    if (caseGenProgressList) {
       caseGenProgressList.addEventListener('click', function(e) {
+        var workspaceItem = e.target && e.target.closest ? e.target.closest('[data-casegen-workspace]') : null;
+        var workspaceId = workspaceItem && workspaceItem.dataset ? workspaceItem.dataset.casegenWorkspace : '';
+        if (workspaceItem) {
+          openXmindWorkspaceFromProgress(workspaceId || '');
+          return;
+        }
+        if (typeof goCasesGenAndScroll !== 'function') return;
         var item = e.target && e.target.closest ? e.target.closest('[data-casegen-module]') : null;
         var moduleId = item && item.dataset ? item.dataset.casegenModule : '';
         ensureCasegenModulesView();
@@ -105,12 +127,16 @@
       // ignore
     }
 
-    if (caseGenProgressPanel && typeof goCasesGenAndScroll === 'function') {
+    if (caseGenProgressPanel) {
       caseGenProgressPanel.addEventListener('click', function(e) {
         var toggleBtn = e.target && e.target.closest ? e.target.closest('#caseGenProgressToggle') : null;
         if (toggleBtn) return;
+        var workspaceItem = e.target && e.target.closest ? e.target.closest('[data-casegen-workspace]') : null;
+        if (workspaceItem) return;
         var item = e.target && e.target.closest ? e.target.closest('[data-casegen-module]') : null;
         if (item) return;
+        if (openXmindWorkspaceFromProgress('')) return;
+        if (typeof goCasesGenAndScroll !== 'function') return;
         ensureCasegenModulesView();
         goCasesGenAndScroll('');
       });

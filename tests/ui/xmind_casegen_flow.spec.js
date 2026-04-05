@@ -2428,6 +2428,59 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签B的需求描述');
   });
 
+  test('左下角 xmind 用例生成进度面板复用 XMind 页签摘要，并支持点击切换对应页签', async ({ page }) => {
+    const token = 'xmind-progress-panel-token';
+    const user = { id: 8022, username: 'xmind-progress-panel' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await createXmindWorkspaceByManualPrep(page, '侧栏摘要-A', '这是侧栏摘要 A 的需求描述', {
+      useExistingWorkspace: true,
+      completePrep: true,
+    });
+    await createXmindWorkspaceByManualPrep(page, '侧栏摘要-B', '这是侧栏摘要 B 的需求描述', {
+      completePrep: true,
+    });
+
+    await expect(page.locator('#sidebarTabCasegen')).toContainText('xmind用例生成进度');
+    await expect(page.locator('#caseGenProgressPanel .title')).toHaveText('xmind用例生成进度');
+    await expect(page.locator('#caseGenProgressList [data-casegen-workspace]')).toHaveCount(2);
+
+    const summaries = await page.evaluate(() => {
+      function normalizeText(text) {
+        return String(text || '').replace(/\s+/g, ' ').trim();
+      }
+      var tabs = Array.prototype.map.call(
+        document.querySelectorAll('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab] .xmind-casegen-tab-label'),
+        function(node) {
+          return normalizeText(node ? node.textContent : '');
+        }
+      );
+      var panel = Array.prototype.map.call(
+        document.querySelectorAll('#caseGenProgressList [data-casegen-workspace] .titles'),
+        function(node) {
+          return normalizeText(node ? node.textContent : '');
+        }
+      );
+      return { tabs: tabs, panel: panel };
+    });
+    expect(summaries.panel).toEqual(summaries.tabs);
+
+    await page.evaluate(() => {
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.close === 'function') api.close();
+    });
+    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
+    await page.waitForTimeout(400);
+
+    await page.locator('#caseGenProgressList [data-casegen-workspace]').first().dispatchEvent('click');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('侧栏摘要-A');
+  });
+
   test('新建页签后若直接关闭前置准备，仍保留新页签的空白初始态，不会继承上一个页签名称', async ({ page }) => {
     const token = 'xmind-tabs-blank-create-token';
     const user = { id: 8023, username: 'tabs-blank-create' };

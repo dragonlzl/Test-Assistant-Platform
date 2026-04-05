@@ -24,6 +24,7 @@
     var setStatus = core.setStatus || function() {};
     var persistWorkflowState = core.persistWorkflowState || function() {};
     var persistWorkflowStateNow = core.persistWorkflowStateNow || persistWorkflowState;
+    var renderCaseGenProgressBoard = core.renderCaseGenProgressBoard || function() {};
     var switchTab = core.switchTab || function() {};
     var runConcurrentTasks = typeof utils.runConcurrent === 'function'
       ? utils.runConcurrent
@@ -1217,6 +1218,18 @@
       return ensureState().openButtonDotVisible === true;
     }
 
+    function syncCasegenProgressSidebar() {
+      try {
+        if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGenProgressBoard === 'function') {
+          window.app.casesGenApi.renderCaseGenProgressBoard();
+          return;
+        }
+        if (typeof renderCaseGenProgressBoard === 'function') renderCaseGenProgressBoard();
+      } catch (err) {
+        // ignore
+      }
+    }
+
     function syncOpenButtonState() {
       if (!openBtn || !openBtn.classList) return;
       var drawerOpen = isDrawerOpen();
@@ -1232,6 +1245,7 @@
             : 'XMind用例生成'
         );
       }
+      syncCasegenProgressSidebar();
     }
 
     function clearOpenButtonCompletionNotice(options) {
@@ -5075,6 +5089,34 @@
       return total;
     }
 
+    function listWorkspaceProgressItems() {
+      var host = ensureWorkspaceHostState();
+      var activeId = String(host.activeWorkspaceId || '');
+      return host.workspaceOrder.slice(0, WORKSPACE_MAX).map(function(id) {
+        var record = host.workspaces[id];
+        if (!record) return null;
+        var running = hasWorkspaceRunningTasks(id);
+        var dirty = !running && isWorkspaceDirty(id);
+        var summary = buildWorkspaceTabSummary(record, {
+          running: running,
+          dirty: dirty,
+        });
+        return {
+          id: id,
+          active: id === activeId,
+          title: buildWorkspaceDisplayName(record),
+          statusText: summary.statusText,
+          statusCls: summary.statusCls,
+          moduleCount: summary.moduleCount,
+          caseCount: summary.caseCount,
+          running: running,
+          dirty: dirty,
+        };
+      }).filter(function(item) {
+        return Boolean(item);
+      });
+    }
+
     function buildWorkspaceTabSummary(record, options) {
       var opts = options || {};
       var snapshot = record && record.snapshot ? record.snapshot : null;
@@ -5112,45 +5154,35 @@
 
     function renderWorkspaceTabs() {
       if (!workspaceListEl || !workspaceAddBtn) return false;
-      var host = ensureWorkspaceHostState();
-      var activeId = String(host.activeWorkspaceId || '');
-      var order = host.workspaceOrder.slice(0, WORKSPACE_MAX);
-      workspaceListEl.innerHTML = order.map(function(id) {
-        var record = host.workspaces[id];
-        if (!record) return '';
-        var isActive = id === activeId;
-        var running = hasWorkspaceRunningTasks(id);
-        var dirty = !running && isWorkspaceDirty(id);
-        var closeDisabled = running;
-        var summary = buildWorkspaceTabSummary(record, {
-          running: running,
-          dirty: dirty,
-        });
-        var tabCls = 'memo-tab xmind-casegen-tab' + (isActive ? ' active' : '');
+      var items = listWorkspaceProgressItems();
+      workspaceListEl.innerHTML = items.map(function(item) {
+        var closeDisabled = item.running === true;
+        var tabCls = 'memo-tab xmind-casegen-tab' + (item.active ? ' active' : '');
         return ''
-          + '<div class="' + tabCls + '" data-xmind-workspace-tab="' + escapeHtml(id) + '" title="' + escapeHtml(buildWorkspaceDisplayName(record)) + '">'
+          + '<div class="' + tabCls + '" data-xmind-workspace-tab="' + escapeHtml(item.id) + '" title="' + escapeHtml(item.title) + '">'
           +   '<span class="memo-tab-label xmind-casegen-tab-label">'
           +     '<span class="xmind-casegen-tab-title-row">'
-          +       '<span class="xmind-casegen-tab-title">' + escapeHtml(buildWorkspaceDisplayName(record)) + '</span>'
+          +       '<span class="xmind-casegen-tab-title">' + escapeHtml(item.title) + '</span>'
           +     '</span>'
           +     '<span class="xmind-casegen-tab-meta">'
-          +       '<span class="xmind-casegen-tab-state-pill ' + escapeHtml(summary.statusCls) + '" aria-hidden="true">' + escapeHtml(summary.statusText) + '</span>'
+          +       '<span class="xmind-casegen-tab-state-pill ' + escapeHtml(item.statusCls) + '" aria-hidden="true">' + escapeHtml(item.statusText) + '</span>'
           +       '<span class="xmind-casegen-tab-dot" aria-hidden="true"></span>'
-          +       '<span class="xmind-casegen-tab-metric">' + String(summary.moduleCount) + ' 模块</span>'
+          +       '<span class="xmind-casegen-tab-metric">' + String(item.moduleCount) + ' 模块</span>'
           +       '<span class="xmind-casegen-tab-dot" aria-hidden="true"></span>'
-          +       '<span class="xmind-casegen-tab-metric">' + String(summary.caseCount) + ' 用例</span>'
+          +       '<span class="xmind-casegen-tab-metric">' + String(item.caseCount) + ' 用例</span>'
           +     '</span>'
           +   '</span>'
-          +   '<button class="memo-tab-close xmind-casegen-tab-close" type="button" data-xmind-workspace-close="' + escapeHtml(id) + '"'
+          +   '<button class="memo-tab-close xmind-casegen-tab-close" type="button" data-xmind-workspace-close="' + escapeHtml(item.id) + '"'
           +     (closeDisabled ? ' disabled' : '')
           +     ' title="' + escapeHtml(closeDisabled ? '当前页签仍有生成任务进行中，暂不可关闭' : '关闭页签') + '">×</button>'
           + '</div>';
       }).join('');
-      var isFull = order.length >= WORKSPACE_MAX;
+      var isFull = items.length >= WORKSPACE_MAX;
       workspaceAddBtn.classList.toggle('is-disabled', isFull);
       workspaceAddBtn.disabled = isFull;
       workspaceAddBtn.textContent = '新建生成';
       workspaceAddBtn.title = isFull ? '最多仅支持 5 个生成页签' : '新建一个独立的 XMind 用例生成页签';
+      syncCasegenProgressSidebar();
       return true;
     }
 
@@ -11590,6 +11622,21 @@
       return true;
     }
 
+    function openWorkspaceFromProgressPanel(workspaceId) {
+      var targetId = String(workspaceId || '');
+      clearOpenButtonCompletionNotice({ persist: true });
+      if (targetId && targetId !== getActiveWorkspaceId()) {
+        switchWorkspace(targetId, {
+          reason: 'workspace-progress-panel-switch',
+          centerRootAfterRender: false,
+        });
+      }
+      if (!isDrawerOpen()) {
+        open({ restoreOpening: true });
+      }
+      return true;
+    }
+
     function getWorkspaceDeleteConfirmMessage(record) {
       var label = buildWorkspaceDisplayName(record);
       return '确认直接关闭页签【' + String(label || '当前生成') + '】？该页签的前置准备或生成内容尚未保存入库，关闭后不会保留。';
@@ -12165,6 +12212,8 @@
       open: open,
       close: close,
       closeWorkspace: deleteWorkspace,
+      openWorkspace: openWorkspaceFromProgressPanel,
+      getWorkspaceProgressItems: listWorkspaceProgressItems,
       render: render,
       exportCurrentXmind: exportCurrentXmind,
       switchTab: switchTab,
