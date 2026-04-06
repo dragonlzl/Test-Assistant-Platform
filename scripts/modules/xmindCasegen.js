@@ -2040,6 +2040,12 @@
       return /^生成\d+$/u.test(text);
     }
 
+    function buildDefaultWorkspaceRecordName(seq) {
+      var value = Number(seq || 0);
+      if (!Number.isFinite(value) || value <= 0) value = 1;
+      return '生成' + String(value);
+    }
+
     function deriveLiveWorkspaceRecordName(fallback) {
       var prep = getPrepState();
       if (prep.requirementMode === 'manual') {
@@ -2056,6 +2062,27 @@
         if (importLabel) return importLabel;
       }
       return fallbackText;
+    }
+
+    function resetActiveWorkspaceRecordNameToDefault() {
+      var host = ensureWorkspaceHostState();
+      var activeId = String(host.activeWorkspaceId || '');
+      if (!activeId || !host.workspaces[activeId]) return false;
+      host.workspaces[activeId].name = buildDefaultWorkspaceRecordName(host.workspaces[activeId].seq);
+      host.workspaces[activeId].updatedAt = Date.now();
+      return true;
+    }
+
+    function resetActiveWorkspaceRecordSnapshotToInitial(drawerOpen, fullscreen) {
+      var host = ensureWorkspaceHostState();
+      var activeId = String(host.activeWorkspaceId || '');
+      if (!activeId || !host.workspaces[activeId]) return false;
+      host.workspaces[activeId].snapshot = createWorkspaceSnapshot({
+        drawerOpen: drawerOpen === true,
+        fullscreen: fullscreen === true,
+      });
+      host.workspaces[activeId].updatedAt = Date.now();
+      return true;
     }
 
     function captureWorkspaceSnapshot(workspaceId) {
@@ -2110,11 +2137,14 @@
       return host.workspaces && host.workspaces[stableId] ? host.workspaces[stableId] : null;
     }
 
-    function saveActiveWorkspaceSnapshot() {
+    function saveActiveWorkspaceSnapshot(options) {
+      var opts = options || {};
       var host = ensureWorkspaceHostState();
       var activeId = String(host.activeWorkspaceId || '');
       if (!activeId || !host.workspaces[activeId]) return false;
-      syncSummaryDraftIntoState();
+      if (opts.skipSummaryDraftSync !== true) {
+        syncSummaryDraftIntoState();
+      }
       var computedSnapshot = createWorkspaceSnapshotFromCurrent();
       host.workspaces[activeId].snapshot = computedSnapshot;
       host.workspaces[activeId].name = deriveLiveWorkspaceRecordName(host.workspaces[activeId].name);
@@ -2173,10 +2203,7 @@
         label = normalizeRequirementLabelFromFileName(shared.lastRawImportName || '');
       }
       if (!label) label = recordName;
-      if (!label) {
-        var seq = Number(record && record.seq || 0);
-        label = '生成' + String(seq > 0 ? seq : 1);
-      }
+      if (!label) label = buildDefaultWorkspaceRecordName(record && record.seq);
       return label;
     }
 
@@ -2246,7 +2273,9 @@
         drawerOpen: drawerOpen === true,
         fullscreen: fullscreen === true,
       }));
-      saveActiveWorkspaceSnapshot();
+      resetActiveWorkspaceRecordNameToDefault();
+      resetActiveWorkspaceRecordSnapshotToInitial(drawerOpen, fullscreen);
+      saveActiveWorkspaceSnapshot({ skipSummaryDraftSync: true });
       return false;
     }
 
@@ -9525,7 +9554,7 @@
         host.nextWorkspaceSeq = seq + 1;
         host.workspaces[stableId] = createWorkspaceRecord(stableId, {
           seq: seq,
-          name: '生成' + String(seq),
+          name: buildDefaultWorkspaceRecordName(seq),
           snapshot: createWorkspaceSnapshot(),
         });
         if (host.workspaceOrder.indexOf(stableId) === -1) {
@@ -11601,7 +11630,7 @@
       host.nextWorkspaceSeq = seq + 1;
       host.workspaces[workspaceId] = createWorkspaceRecord(workspaceId, {
         seq: seq,
-        name: '生成' + String(seq),
+        name: buildDefaultWorkspaceRecordName(seq),
         pendingOpenPrep: true,
         snapshot: initialSnapshot,
       });
