@@ -1653,6 +1653,7 @@
           + '<button type="button" class="' + tabCls + '"'
           +   ' data-casegen-module-workspace="' + escapeHtml(item && item.id ? item.id : '') + '"'
           +   ' aria-selected="' + (item && item.active ? 'true' : 'false') + '"'
+          +   ' aria-current="' + (item && item.active ? 'page' : 'false') + '"'
           +   ' title="' + escapeHtml(item && item.title ? item.title : '') + '">'
           +   '<span class="memo-tab-label xmind-casegen-tab-label">'
           +     '<span class="xmind-casegen-tab-title-row">'

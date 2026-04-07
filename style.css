@@ -8473,6 +8473,11 @@ tr.import-invalid-locate-active td {
       min-width: 260px;
       min-height: 60px;
     }
+    .casegen-xmind-workspace-tab.xmind-casegen-tab.active {
+      border-color: rgba(217,119,6,0.45);
+      background: linear-gradient(180deg, #fff8ee 0%, rgba(255,255,255,0.98) 72%);
+      box-shadow: 0 0 0 1px rgba(217,119,6,0.12), 0 14px 28px rgba(217,119,6,0.14);
+    }
     .casegen-xmind-workspace-tab.xmind-casegen-tab:hover {
       border-color: rgba(37,99,235,0.28);
       box-shadow: 0 10px 20px rgba(15,23,42,0.1);
@@ -13753,6 +13758,11 @@ button.exec-overview-file-chip,
   border-color: var(--border);
   background: rgba(15,23,42,0.86);
   box-shadow: 0 10px 24px rgba(2,6,23,0.28);
+}
+:root[data-theme="dark"] .casegen-xmind-workspace-tab.xmind-casegen-tab.active {
+  border-color: rgba(245,158,11,0.46);
+  background: linear-gradient(180deg, rgba(56,44,20,0.92) 0%, rgba(15,23,42,0.94) 78%);
+  box-shadow: 0 0 0 1px rgba(245,158,11,0.26), 0 14px 30px rgba(0,0,0,0.34);
 }
 :root[data-theme="dark"] .caseview {
   background: var(--panel);

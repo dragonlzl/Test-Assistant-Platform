@@ -113,6 +113,13 @@
     var viewStateInteractionTarget = null;
     var viewStateClickHandler = null;
     var viewStateWheelHandler = null;
+    var viewStatePointerDownHandler = null;
+    var viewStatePointerUpHandler = null;
+    var viewStatePointerCancelHandler = null;
+    var viewStateManualGestureActive = false;
+    var viewStateManualGestureRecentUntil = 0;
+    var viewStateManualGestureDetected = false;
+    var viewStateLastObservedTransform = '';
     var viewStateBeforeUnloadBound = false;
     var drawerCloseIntentBound = false;
     var workspaceViewRestoreToken = 0;
@@ -222,11 +229,117 @@
         scaleVal: 1,
         scrollLeft: 0,
         scrollTop: 0,
+        hasManualViewport: false,
         anchorState: null,
         collapsedNodeKeys: [],
         treeSourceSignature: '',
         updatedAt: 0,
       };
+    }
+
+    function normalizeStoredViewState(source, options) {
+      var input = source && typeof source === 'object' ? source : {};
+      var opts = options || {};
+      var next = createDefaultViewState();
+      next.drawerOpen = opts.drawerOpen === true || input.drawerOpen === true;
+      next.fullscreen = opts.fullscreen === true || input.fullscreen === true;
+      next.transform = String(input.transform || '');
+      next.scaleVal = Number(input.scaleVal || 1);
+      if (!isFinite(next.scaleVal) || next.scaleVal <= 0) next.scaleVal = 1;
+      next.scrollLeft = Number(input.scrollLeft || 0);
+      if (!isFinite(next.scrollLeft) || next.scrollLeft < 0) next.scrollLeft = 0;
+      next.scrollTop = Number(input.scrollTop || 0);
+      if (!isFinite(next.scrollTop) || next.scrollTop < 0) next.scrollTop = 0;
+      next.hasManualViewport = input.hasManualViewport === true && Boolean(next.transform);
+      next.anchorState = input.anchorState && input.anchorState.nodeId
+        ? {
+          nodeId: String(input.anchorState.nodeId || ''),
+          centerX: Number(input.anchorState.centerX || 0),
+          centerY: Number(input.anchorState.centerY || 0),
+        }
+        : null;
+      next.collapsedNodeKeys = normalizeUniqueStringList(input.collapsedNodeKeys);
+      next.treeSourceSignature = String(input.treeSourceSignature || '');
+      next.updatedAt = Number(input.updatedAt || 0);
+      if (!isFinite(next.updatedAt) || next.updatedAt < 0) next.updatedAt = 0;
+      return next;
+    }
+
+    function shouldPreferIncomingViewState(baseViewState, incomingViewState) {
+      var base = normalizeStoredViewState(baseViewState);
+      var incoming = normalizeStoredViewState(incomingViewState);
+      if (!incoming.transform && incoming.updatedAt <= 0) return false;
+      if (!base.transform && incoming.transform) return true;
+      if (base.hasManualViewport !== true && incoming.hasManualViewport === true) return true;
+      if (incoming.updatedAt > base.updatedAt) return true;
+      if (incoming.updatedAt === base.updatedAt && incoming.transform && incoming.transform !== base.transform) {
+        return true;
+      }
+      return false;
+    }
+
+    function mergeStoredViewState(baseViewState, incomingViewState) {
+      var base = normalizeStoredViewState(baseViewState);
+      var incoming = normalizeStoredViewState(incomingViewState);
+      var merged = shouldPreferIncomingViewState(base, incoming)
+        ? cloneJson(incoming, createDefaultViewState())
+        : cloneJson(base, createDefaultViewState());
+      merged.drawerOpen = base.drawerOpen === true || incoming.drawerOpen === true;
+      merged.fullscreen = base.fullscreen === true || incoming.fullscreen === true;
+      if (!merged.transform && incoming.transform) {
+        merged = cloneJson(incoming, createDefaultViewState());
+        merged.drawerOpen = base.drawerOpen === true || incoming.drawerOpen === true;
+        merged.fullscreen = base.fullscreen === true || incoming.fullscreen === true;
+      }
+      return normalizeStoredViewState(merged);
+    }
+
+    function shouldRestoreViewportForViewState(viewState) {
+      var normalized = normalizeStoredViewState(viewState);
+      return normalized.hasManualViewport === true && Boolean(normalized.transform);
+    }
+
+    function isMindCanvasInteractionTarget(target) {
+      if (!target || !target.closest) return false;
+      return Boolean(target.closest('[data-mind-canvas]') || target.closest('.map-canvas'));
+    }
+
+    function beginManualViewportGestureTracking(event) {
+      var target = event && event.target ? event.target : null;
+      var button = event && typeof event.button === 'number' ? event.button : 0;
+      if (!isMindCanvasInteractionTarget(target)) return false;
+      if (button !== 0 && button !== 1 && button !== 2) return false;
+      viewStateManualGestureActive = true;
+      viewStateManualGestureRecentUntil = Date.now() + 220;
+      return true;
+    }
+
+    function finishManualViewportGestureTracking() {
+      if (!viewStateManualGestureActive) return false;
+      viewStateManualGestureActive = false;
+      viewStateManualGestureRecentUntil = Date.now() + 220;
+      return true;
+    }
+
+    function cancelManualViewportGestureTracking() {
+      viewStateManualGestureActive = false;
+      viewStateManualGestureRecentUntil = 0;
+      return true;
+    }
+
+    function hasPendingManualViewportGesture() {
+      return viewStateManualGestureActive === true || Date.now() <= Number(viewStateManualGestureRecentUntil || 0);
+    }
+
+    function resolveCapturedManualViewportFlag(transformText, sourceViewState) {
+      var transform = String(transformText || '');
+      var existingViewState = sourceViewState && typeof sourceViewState === 'object'
+        ? sourceViewState
+        : getViewState();
+      var normalized = normalizeStoredViewState(existingViewState);
+      var mindMarked = Boolean(mindInstance && mindInstance.__tapViewportInteracted === true);
+      var detectedByGesture = viewStateManualGestureDetected === true;
+      return Boolean(transform && (normalized.hasManualViewport === true || mindMarked || detectedByGesture));
     }
 
     function cloneJson(value, fallback) {
@@ -895,11 +1008,32 @@
       if (viewStateInteractionTarget && viewStateWheelHandler) {
         viewStateInteractionTarget.removeEventListener('wheel', viewStateWheelHandler, true);
       }
+      if (viewStateInteractionTarget && viewStatePointerDownHandler) {
+        viewStateInteractionTarget.removeEventListener('pointerdown', viewStatePointerDownHandler, true);
+        viewStateInteractionTarget.removeEventListener('mousedown', viewStatePointerDownHandler, true);
+      }
+      if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
+        if (viewStatePointerUpHandler) {
+          window.removeEventListener('pointerup', viewStatePointerUpHandler, true);
+          window.removeEventListener('mouseup', viewStatePointerUpHandler, true);
+        }
+        if (viewStatePointerCancelHandler) {
+          window.removeEventListener('pointercancel', viewStatePointerCancelHandler, true);
+          window.removeEventListener('blur', viewStatePointerCancelHandler, true);
+        }
+      }
       viewStateScrollTarget = null;
       viewStateScrollHandler = null;
       viewStateInteractionTarget = null;
       viewStateClickHandler = null;
       viewStateWheelHandler = null;
+      viewStatePointerDownHandler = null;
+      viewStatePointerUpHandler = null;
+      viewStatePointerCancelHandler = null;
+      viewStateManualGestureActive = false;
+      viewStateManualGestureRecentUntil = 0;
+      viewStateManualGestureDetected = false;
+      viewStateLastObservedTransform = '';
     }
 
     function clearDrawerRestoreRetry() {
@@ -1072,9 +1206,10 @@
       if (!state.xmindCaseGen.viewState || typeof state.xmindCaseGen.viewState !== 'object') {
         state.xmindCaseGen.viewState = createDefaultViewState();
       }
-      if (!Array.isArray(state.xmindCaseGen.viewState.collapsedNodeKeys)) {
-        state.xmindCaseGen.viewState.collapsedNodeKeys = [];
-      }
+      state.xmindCaseGen.viewState = normalizeStoredViewState(state.xmindCaseGen.viewState, {
+        drawerOpen: state.xmindCaseGen.viewState.drawerOpen === true,
+        fullscreen: state.xmindCaseGen.viewState.fullscreen === true,
+      });
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineModuleKeys)) state.xmindCaseGen.deletedBaselineModuleKeys = [];
       if (!Array.isArray(state.xmindCaseGen.deletedBaselineCaseKeys)) state.xmindCaseGen.deletedBaselineCaseKeys = [];
       if (!Array.isArray(state.xmindCaseGen.deleteUndoStack)) state.xmindCaseGen.deleteUndoStack = [];
@@ -1104,27 +1239,6 @@
       state.xmindCaseGen.workspaceOrder = state.xmindCaseGen.workspaceOrder.map(function(item) {
         return String(item || '').trim();
       }).filter(Boolean);
-      state.xmindCaseGen.viewState.drawerOpen = state.xmindCaseGen.viewState.drawerOpen === true;
-      state.xmindCaseGen.viewState.fullscreen = state.xmindCaseGen.viewState.fullscreen === true;
-      state.xmindCaseGen.viewState.transform = String(state.xmindCaseGen.viewState.transform || '');
-      state.xmindCaseGen.viewState.scaleVal = Number(state.xmindCaseGen.viewState.scaleVal || 1);
-      if (!isFinite(state.xmindCaseGen.viewState.scaleVal) || state.xmindCaseGen.viewState.scaleVal <= 0) {
-        state.xmindCaseGen.viewState.scaleVal = 1;
-      }
-      state.xmindCaseGen.viewState.scrollLeft = Number(state.xmindCaseGen.viewState.scrollLeft || 0);
-      if (!isFinite(state.xmindCaseGen.viewState.scrollLeft) || state.xmindCaseGen.viewState.scrollLeft < 0) {
-        state.xmindCaseGen.viewState.scrollLeft = 0;
-      }
-      state.xmindCaseGen.viewState.scrollTop = Number(state.xmindCaseGen.viewState.scrollTop || 0);
-      if (!isFinite(state.xmindCaseGen.viewState.scrollTop) || state.xmindCaseGen.viewState.scrollTop < 0) {
-        state.xmindCaseGen.viewState.scrollTop = 0;
-      }
-      state.xmindCaseGen.viewState.collapsedNodeKeys = normalizeUniqueStringList(state.xmindCaseGen.viewState.collapsedNodeKeys);
-      state.xmindCaseGen.viewState.treeSourceSignature = String(state.xmindCaseGen.viewState.treeSourceSignature || '');
-      state.xmindCaseGen.viewState.updatedAt = Number(state.xmindCaseGen.viewState.updatedAt || 0);
-      if (!isFinite(state.xmindCaseGen.viewState.updatedAt) || state.xmindCaseGen.viewState.updatedAt < 0) {
-        state.xmindCaseGen.viewState.updatedAt = 0;
-      }
       state.xmindCaseGen.lastOperationSnapshotId = String(state.xmindCaseGen.lastOperationSnapshotId || '');
       state.xmindCaseGen.rootSnapshotId = String(state.xmindCaseGen.rootSnapshotId || '');
       state.xmindCaseGen.root.taskId = String(state.xmindCaseGen.root.taskId || '');
@@ -1909,10 +2023,18 @@
 
     function normalizeWorkspaceSnapshot(snapshot) {
       var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      var xmindSnapshot = source.xmind && typeof source.xmind === 'object'
+        ? cloneJson(source.xmind, createInitialXmindState())
+        : createInitialXmindState();
+      if (!xmindSnapshot.viewState || typeof xmindSnapshot.viewState !== 'object') {
+        xmindSnapshot.viewState = createDefaultViewState();
+      }
+      xmindSnapshot.viewState = normalizeStoredViewState(xmindSnapshot.viewState, {
+        drawerOpen: xmindSnapshot.viewState.drawerOpen === true,
+        fullscreen: xmindSnapshot.viewState.fullscreen === true,
+      });
       return {
-        xmind: source.xmind && typeof source.xmind === 'object'
-          ? cloneJson(source.xmind, createInitialXmindState())
-          : createInitialXmindState(),
+        xmind: xmindSnapshot,
         shared: normalizeWorkspaceSharedState(source.shared),
       };
     }
@@ -2173,11 +2295,12 @@
       getWorkspaceHostState().workspaces = host.workspaces;
       getWorkspaceHostState().nextWorkspaceSeq = host.nextWorkspaceSeq;
       getWorkspaceHostState().openButtonDotVisible = host.openButtonDotVisible === true;
-      if (opts.keepDrawerOpen === true) {
-        getViewState().drawerOpen = isDrawerOpen();
-        getViewState().fullscreen = drawerEl && drawerEl.classList
+      if (Object.prototype.hasOwnProperty.call(opts, 'keepDrawerOpen')) {
+        var keepDrawerOpen = opts.keepDrawerOpen === true;
+        getViewState().drawerOpen = keepDrawerOpen;
+        getViewState().fullscreen = keepDrawerOpen && drawerEl && drawerEl.classList
           ? drawerEl.classList.contains('xmind-drawer-fullscreen')
-          : (getViewState().fullscreen === true);
+          : false;
       }
       return true;
     }
@@ -2487,6 +2610,7 @@
       viewState.scrollTop = captured && isFinite(Number(captured.scrollTop)) && Number(captured.scrollTop) >= 0
         ? Number(captured.scrollTop)
         : 0;
+      viewState.hasManualViewport = resolveCapturedManualViewportFlag(viewState.transform, viewState);
       viewState.anchorState = anchorState && anchorState.nodeId ? {
         nodeId: String(anchorState.nodeId || ''),
         centerX: Number(anchorState.centerX || 0),
@@ -2517,6 +2641,7 @@
       if (!Number.isFinite(next.scaleVal) || next.scaleVal <= 0) next.scaleVal = 1;
       next.scrollLeft = Number(canvasEl.scrollLeft || 0);
       next.scrollTop = Number(canvasEl.scrollTop || 0);
+      next.hasManualViewport = resolveCapturedManualViewportFlag(transformText, next);
       next.anchorState = anchorState && anchorState.nodeId ? {
         nodeId: String(anchorState.nodeId || ''),
         centerX: Number(anchorState.centerX || 0),
@@ -2548,8 +2673,13 @@
         record.snapshot.xmind.viewState = cloneJson(nextView, createDefaultViewState());
         record.updatedAt = now;
       }
-      if (useImmediate === true) persistWorkflowStateNow();
-      else persistWorkflowState();
+      if (useImmediate === true) {
+        persistWorkflowStateNow();
+        syncRunningTaskRestoreContexts(getActiveWorkspaceId(), {
+          viewState: nextView,
+          replaceViewState: true,
+        });
+      } else persistWorkflowState();
     }
 
     function bindDrawerCloseIntentPersistence() {
@@ -2799,6 +2929,32 @@
       };
     }
 
+    function getWorkspaceStoredViewState(workspaceId) {
+      var stableId = String(workspaceId || getActiveWorkspaceId() || '');
+      if (!stableId) return normalizeStoredViewState(getViewState());
+      var record = getWorkspaceRecord(stableId);
+      if (
+        record
+        && record.snapshot
+        && record.snapshot.xmind
+        && record.snapshot.xmind.viewState
+        && typeof record.snapshot.xmind.viewState === 'object'
+      ) {
+        return normalizeStoredViewState(record.snapshot.xmind.viewState);
+      }
+      if (stableId === String(getActiveWorkspaceId() || '')) {
+        return normalizeStoredViewState(getViewState());
+      }
+      return createDefaultViewState();
+    }
+
+    function shouldRestoreWorkspaceViewport(workspaceId, viewState) {
+      var source = viewState && typeof viewState === 'object'
+        ? viewState
+        : getWorkspaceStoredViewState(workspaceId);
+      return shouldRestoreViewportForViewState(source);
+    }
+
     function captureRenderCarryoverViewState() {
       var currentViewState = null;
       if (workspaceShadowDepth > 0) {
@@ -2829,9 +2985,9 @@
     }
 
     function getRestorableViewState(treeSignature) {
-      var viewState = getViewState();
+      var viewState = normalizeStoredViewState(getViewState());
       if (viewState.drawerOpen !== true) return null;
-      if (!viewState.transform) return null;
+      if (!viewState.transform || viewState.hasManualViewport !== true) return null;
       if (String(viewState.treeSourceSignature || '') !== String(treeSignature || '')) return null;
       return {
         transform: String(viewState.transform || ''),
@@ -2871,16 +3027,37 @@
       cleanupViewStateBindings();
       if (!mindContainer || !mindInstance || !isDrawerOpen()) return;
       viewStateInteractionTarget = mindContainer;
+      viewStateLastObservedTransform = '';
       viewStateClickHandler = function() {
         scheduleCaptureCurrentViewState(false);
       };
       viewStateWheelHandler = function() {
         scheduleCaptureCurrentViewState(false);
       };
+      viewStatePointerDownHandler = function(event) {
+        beginManualViewportGestureTracking(event);
+      };
+      viewStatePointerUpHandler = function() {
+        finishManualViewportGestureTracking();
+      };
+      viewStatePointerCancelHandler = function() {
+        cancelManualViewportGestureTracking();
+      };
       mindContainer.addEventListener('click', viewStateClickHandler, true);
       mindContainer.addEventListener('wheel', viewStateWheelHandler, true);
+      mindContainer.addEventListener('pointerdown', viewStatePointerDownHandler, true);
+      mindContainer.addEventListener('mousedown', viewStatePointerDownHandler, true);
+      if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
+        window.addEventListener('pointerup', viewStatePointerUpHandler, true);
+        window.addEventListener('mouseup', viewStatePointerUpHandler, true);
+        window.addEventListener('pointercancel', viewStatePointerCancelHandler, true);
+        window.addEventListener('blur', viewStatePointerCancelHandler, true);
+      }
       var mapEl = mindContainer.querySelector ? mindContainer.querySelector('.map-canvas') : null;
       var canvasEl = mindContainer.querySelector ? mindContainer.querySelector('[data-mind-canvas]') : null;
+      if (mapEl && mapEl.style) {
+        viewStateLastObservedTransform = String(mapEl.style.transform || '');
+      }
       if (canvasEl) {
         viewStateScrollTarget = canvasEl;
         viewStateScrollHandler = function() {
@@ -2891,6 +3068,7 @@
       if (typeof MutationObserver !== 'undefined' && (mapEl || drawerEl)) {
         viewStateMutationObserver = new MutationObserver(function(mutations) {
           var shouldPersist = false;
+          var nextTransform = mapEl && mapEl.style ? String(mapEl.style.transform || '') : '';
           (mutations || []).some(function(mutation) {
             var target = mutation && mutation.target ? mutation.target : null;
             if (!target) return false;
@@ -2904,6 +3082,12 @@
             }
             return false;
           });
+          if (mapEl && nextTransform !== viewStateLastObservedTransform) {
+            if (hasPendingManualViewportGesture()) {
+              viewStateManualGestureDetected = true;
+            }
+            viewStateLastObservedTransform = nextTransform;
+          }
           if (shouldPersist) scheduleCaptureCurrentViewState(false);
         });
         try {
@@ -9236,14 +9420,31 @@
       };
     }
 
-    function buildManagedTaskRestoreContext() {
+    function buildManagedTaskRestoreContext(options) {
+      var opts = options || {};
+      var targetWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
+      var activeWorkspaceId = String(getActiveWorkspaceId() || '');
+      if (targetWorkspaceId && targetWorkspaceId !== activeWorkspaceId) {
+        var targetRecord = getWorkspaceRecord(targetWorkspaceId);
+        if (targetRecord && targetRecord.snapshot) {
+          return buildRestoreContextFromWorkspaceSnapshot(targetRecord.snapshot, targetWorkspaceId);
+        }
+      }
       var rawTextEl = document.getElementById('rawText');
       var caseTextEl = document.getElementById('caseText');
       var shadowBase = workspaceShadowDepth > 0 && shadowWorkspaceSharedState
         ? normalizeWorkspaceSharedState(shadowWorkspaceSharedState)
         : null;
       var prep = cloneJson(getPrepState(), createDefaultPrepState());
-      var viewState = cloneJson(getViewState(), createDefaultViewState());
+      var overrideViewState = opts.viewState && typeof opts.viewState === 'object'
+        ? normalizeStoredViewState(opts.viewState, {
+          drawerOpen: opts.viewState.drawerOpen === true,
+          fullscreen: opts.viewState.fullscreen === true,
+        })
+        : null;
+      var viewState = overrideViewState
+        ? cloneJson(overrideViewState, createDefaultViewState())
+        : cloneJson(captureCurrentViewState(), createDefaultViewState());
       var requirementSource = getSelectedRequirementSource();
       var requirementLabel = requirementSource.mode === 'manual'
         ? getManualRequirementLabelText()
@@ -9273,10 +9474,12 @@
         history: cloneJson(ensureState().history, []),
         rootPipeline: cloneRootPipelineSnapshot(getRootPipelineState()),
         prep: prep,
-        viewState: {
-          drawerOpen: viewState.drawerOpen === true || isDrawerOpen(),
-          fullscreen: viewState.fullscreen === true || Boolean(drawerEl && drawerEl.classList && drawerEl.classList.contains('xmind-drawer-fullscreen')),
-        },
+        viewState: overrideViewState
+          ? cloneJson(overrideViewState, createDefaultViewState())
+          : normalizeStoredViewState(viewState, {
+            drawerOpen: viewState.drawerOpen === true || isDrawerOpen(),
+            fullscreen: viewState.fullscreen === true || Boolean(drawerEl && drawerEl.classList && drawerEl.classList.contains('xmind-drawer-fullscreen')),
+          }),
       };
     }
 
@@ -9425,18 +9628,15 @@
       basePrep.completed = basePrep.completed === true || incomingPrep.completed === true;
       base.prep = basePrep;
 
-      var baseView = base.viewState && typeof base.viewState === 'object' ? base.viewState : {};
-      var incomingView = incoming.viewState && typeof incoming.viewState === 'object' ? incoming.viewState : {};
-      baseView.drawerOpen = baseView.drawerOpen === true || incomingView.drawerOpen === true;
-      baseView.fullscreen = baseView.fullscreen === true || incomingView.fullscreen === true;
-      base.viewState = baseView;
+      base.viewState = mergeStoredViewState(base.viewState, incoming.viewState);
 
       return base;
     }
 
-    function syncRunningTaskRestoreContexts(workspaceId) {
+    function syncRunningTaskRestoreContexts(workspaceId, options) {
       var manager = getXmindTaskManager();
       if (!manager || typeof manager.updateTasksContext !== 'function') return 0;
+      var opts = options || {};
       var targetWorkspaceId = String(workspaceId || getActiveWorkspaceId() || '');
       if (!targetWorkspaceId) return 0;
       var taskIds = filterTasksByWorkspace(listManagedXmindTasks(), targetWorkspaceId).filter(function(task) {
@@ -9445,9 +9645,15 @@
         return String(task.id || '');
       }).filter(Boolean);
       if (!taskIds.length) return 0;
-      var restoreContext = buildManagedTaskRestoreContext();
+      var restoreContext = buildManagedTaskRestoreContext({
+        workspaceId: targetWorkspaceId,
+        viewState: opts.viewState && typeof opts.viewState === 'object' ? opts.viewState : null,
+      });
       return Number(manager.updateTasksContext(function(nextContext) {
         var merged = mergeTaskRestoreContext(nextContext, restoreContext);
+        if (opts.replaceViewState === true && restoreContext.viewState) {
+          merged.viewState = cloneJson(restoreContext.viewState, createDefaultViewState());
+        }
         Object.keys(nextContext || {}).forEach(function(key) {
           delete nextContext[key];
         });
@@ -9469,7 +9675,9 @@
       }).filter(Boolean) : [];
       if (!ids.length) return 0;
       var opts = options || {};
-      var restoreContext = buildManagedTaskRestoreContext();
+      var restoreContext = buildManagedTaskRestoreContext({
+        workspaceId: opts.workspaceId ? opts.workspaceId : '',
+      });
       return Number(manager.updateTasksContext(function(nextContext) {
         var merged = mergeTaskRestoreContext(nextContext, restoreContext);
         Object.keys(nextContext || {}).forEach(function(key) {
@@ -9491,6 +9699,7 @@
       return syncManagedTaskRestoreContexts([taskId], {
         onlyRunning: false,
         action: 'context',
+        workspaceId: getTaskWorkspaceId(task),
       });
     }
 
@@ -9543,10 +9752,7 @@
         history: cloneJson(xmindSnapshot.history, []),
         rootPipeline: cloneRootPipelineSnapshot(xmindSnapshot.root && xmindSnapshot.root.pipeline ? xmindSnapshot.root.pipeline : null),
         prep: cloneJson(xmindSnapshot.prep, createDefaultPrepState()),
-        viewState: {
-          drawerOpen: xmindSnapshot.viewState && xmindSnapshot.viewState.drawerOpen === true,
-          fullscreen: xmindSnapshot.viewState && xmindSnapshot.viewState.fullscreen === true,
-        },
+        viewState: cloneJson(normalizeStoredViewState(xmindSnapshot.viewState), createDefaultViewState()),
       };
     }
 
@@ -9583,13 +9789,10 @@
           xmindSnapshot.operationSnapshots = cloneJson(merged.operationSnapshots, []);
           xmindSnapshot.nextSnapshotId = Number(merged.nextSnapshotId || xmindSnapshot.nextSnapshotId || 1);
           xmindSnapshot.prep = cloneJson(merged.prep, createDefaultPrepState());
-          xmindSnapshot.viewState = xmindSnapshot.viewState && typeof xmindSnapshot.viewState === 'object'
-            ? xmindSnapshot.viewState
-            : createDefaultViewState();
-          if (merged.viewState && typeof merged.viewState === 'object') {
-            xmindSnapshot.viewState.drawerOpen = merged.viewState.drawerOpen === true;
-            xmindSnapshot.viewState.fullscreen = merged.viewState.fullscreen === true;
-          }
+          xmindSnapshot.viewState = mergeStoredViewState(
+            xmindSnapshot.viewState,
+            merged.viewState
+          );
           xmindSnapshot.root = xmindSnapshot.root && typeof xmindSnapshot.root === 'object'
             ? xmindSnapshot.root
             : createDefaultRootState();
@@ -9775,17 +9978,16 @@
           changed = true;
         }
       }
-      var viewState = getViewState();
+      var viewState = normalizeStoredViewState(getViewState());
       var restoreView = restoreContext.viewState && typeof restoreContext.viewState === 'object'
-        ? restoreContext.viewState
+        ? normalizeStoredViewState(restoreContext.viewState)
         : null;
-      if (restoreView && viewState.drawerOpen !== true && restoreView.drawerOpen === true) {
-        viewState.drawerOpen = true;
-        changed = true;
-      }
-      if (restoreView && viewState.fullscreen !== true && restoreView.fullscreen === true) {
-        viewState.fullscreen = true;
-        changed = true;
+      if (restoreView) {
+        var mergedViewState = mergeStoredViewState(viewState, restoreView);
+        if (JSON.stringify(mergedViewState) !== JSON.stringify(viewState)) {
+          ensureState().viewState = cloneJson(mergedViewState, createDefaultViewState());
+          changed = true;
+        }
       }
       if (changed) {
         ensureState().hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
@@ -11522,17 +11724,14 @@
       var targetId = String(workspaceId || '');
       if (!targetId || !host.workspaces[targetId]) return false;
       var targetRecord = host.workspaces[targetId];
+      var targetStoredViewState = getWorkspaceStoredViewState(targetId);
       var previousWorkspaceViewState = null;
       var currentVisibleViewState = null;
-      var targetRenderViewState = normalizeWorkspaceRenderViewState(
-        targetRecord
-        && targetRecord.snapshot
-        && targetRecord.snapshot.xmind
-        && targetRecord.snapshot.xmind.viewState
-          ? targetRecord.snapshot.xmind.viewState
-          : null,
-        { skipAnchorAlign: true }
-      );
+      var shouldRestoreTargetViewport = shouldRestoreWorkspaceViewport(targetId, targetStoredViewState);
+      var targetRenderViewState = shouldRestoreTargetViewport
+        ? normalizeWorkspaceRenderViewState(targetStoredViewState, { skipAnchorAlign: true })
+        : null;
+      var shouldCenterTargetAfterRender = opts.centerRootAfterRender === true || !shouldRestoreTargetViewport;
       var currentId = String(host.activeWorkspaceId || '');
       if (currentId && currentId !== targetId) {
         currentVisibleViewState = captureVisibleMindViewStateFromDom();
@@ -11581,8 +11780,9 @@
         render({
           reason: opts.reason || 'workspace-switch',
           persist: false,
-          centerRootAfterRender: opts.centerRootAfterRender === true,
-          restoreViewStateAfterRender: opts.centerRootAfterRender !== true,
+          centerRootAfterRender: shouldCenterTargetAfterRender,
+          skipRestorableViewState: shouldCenterTargetAfterRender,
+          restoreViewStateAfterRender: shouldCenterTargetAfterRender !== true && shouldRestoreTargetViewport,
           restoreViewState: targetRenderViewState,
         });
       } else {
@@ -11796,7 +11996,7 @@
     function open(options) {
       var opts = options || {};
       var wasOpen = isDrawerOpen();
-      pendingOpenCenterRoot = opts.restoreOpening === true ? false : !wasOpen;
+      pendingOpenCenterRoot = !wasOpen && !shouldRestoreWorkspaceViewport(getActiveWorkspaceId());
       pendingOpenInstant = opts.instant === true;
       clearOpenButtonCompletionNotice({ persist: false });
       switchTab('casesgen');
