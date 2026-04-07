@@ -114,6 +114,8 @@
     var caseGenModulesTabBtn = document.getElementById('caseGenModulesTabBtn');
     var casegenSettingsPanel = document.getElementById('casegenSettingsPanel');
     var casegenModulesPanel = document.getElementById('casegenModulesPanel');
+    var caseGenWorkspaceMirrorSection = document.getElementById('caseGenWorkspaceMirrorSection');
+    var caseGenWorkspaceMirrorList = document.getElementById('caseGenWorkspaceMirrorTabs');
     var caseGenCustomRequirementEl = document.getElementById('caseGenCustomRequirement');
     var caseGenNeedFunctionConditionEl = document.getElementById('caseGenNeedFunctionCondition');
     var caseGenNeedNumericValidationEl = document.getElementById('caseGenNeedNumericValidation');
@@ -1599,6 +1601,9 @@
       if (casegenModulesPanel && casegenModulesPanel.classList) {
         casegenModulesPanel.classList.toggle('is-active', next === 'modules');
       }
+      if (next === 'modules') {
+        renderCaseGeneration();
+      }
       if (changed && (!options || options.persist !== false)) {
         persistWorkflowState();
       }
@@ -1626,6 +1631,44 @@
       if (changed && (!options || options.persist !== false)) {
         persistWorkflowState();
       }
+    }
+
+    function renderCaseGenWorkspaceMirrorTabs() {
+      if (!caseGenWorkspaceMirrorSection || !caseGenWorkspaceMirrorList) return false;
+      var xmindCasegenApi = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      var items = xmindCasegenApi && typeof xmindCasegenApi.getWorkspaceProgressItems === 'function'
+        ? xmindCasegenApi.getWorkspaceProgressItems()
+        : [];
+      if (!Array.isArray(items) || !items.length) {
+        caseGenWorkspaceMirrorSection.classList.add('hidden');
+        caseGenWorkspaceMirrorSection.setAttribute('aria-hidden', 'true');
+        caseGenWorkspaceMirrorList.innerHTML = '';
+        return false;
+      }
+      caseGenWorkspaceMirrorSection.classList.remove('hidden');
+      caseGenWorkspaceMirrorSection.setAttribute('aria-hidden', 'false');
+      caseGenWorkspaceMirrorList.innerHTML = items.map(function(item) {
+        var tabCls = 'xmind-casegen-tab casegen-xmind-workspace-tab' + (item && item.active ? ' active' : '');
+        return ''
+          + '<button type="button" class="' + tabCls + '"'
+          +   ' data-casegen-module-workspace="' + escapeHtml(item && item.id ? item.id : '') + '"'
+          +   ' aria-selected="' + (item && item.active ? 'true' : 'false') + '"'
+          +   ' title="' + escapeHtml(item && item.title ? item.title : '') + '">'
+          +   '<span class="memo-tab-label xmind-casegen-tab-label">'
+          +     '<span class="xmind-casegen-tab-title-row">'
+          +       '<span class="xmind-casegen-tab-title">' + escapeHtml(item && item.title ? item.title : '未命名页签') + '</span>'
+          +     '</span>'
+          +     '<span class="xmind-casegen-tab-meta">'
+          +       '<span class="xmind-casegen-tab-state-pill ' + escapeHtml(item && item.statusCls ? item.statusCls : 'is-idle') + '">' + escapeHtml(item && item.statusText ? item.statusText : '待准备') + '</span>'
+          +       '<span class="xmind-casegen-tab-dot" aria-hidden="true"></span>'
+          +       '<span class="xmind-casegen-tab-metric">' + String(item && Number.isFinite(Number(item.moduleCount)) ? Number(item.moduleCount) : 0) + ' 模块</span>'
+          +       '<span class="xmind-casegen-tab-dot" aria-hidden="true"></span>'
+          +       '<span class="xmind-casegen-tab-metric">' + String(item && Number.isFinite(Number(item.caseCount)) ? Number(item.caseCount) : 0) + ' 用例</span>'
+          +     '</span>'
+          +   '</span>'
+          + '</button>';
+      }).join('');
+      return true;
     }
 
     function getCaseGenPromptComponents(settingsOverride) {
@@ -4151,6 +4194,7 @@
 
     function renderCaseGeneration() {
       if (!casesGenerationContainer) return;
+      renderCaseGenWorkspaceMirrorTabs();
       if (!state.caseGenModules.length) {
         casesGenerationContainer.innerHTML = '<p class="hint">请先在“测试模块拆分”中生成模块（JSON），然后点击“生成用例”进入本页。</p>';
         refreshExportCaseGenButton();

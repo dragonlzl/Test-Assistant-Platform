@@ -18,6 +18,7 @@
     var casesGenerationContainer = document.getElementById('casesGenerationContainer');
     var caseGenStatus = document.getElementById('caseGenStatus');
     var caseGenViewDrawerBody = document.getElementById('caseGenViewDrawerBody');
+    var caseGenWorkspaceMirrorList = document.getElementById('caseGenWorkspaceMirrorTabs');
     var caseGenModelSelect = document.getElementById('caseGenModelSelect');
   var caseGenAssignStatus = document.getElementById('caseGenAssignStatus');
   var caseGenPromptEl = document.getElementById('caseGenPrompt');
@@ -154,6 +155,21 @@
       casesGenerationContainer.addEventListener('click', handleCaseGenClick);
       casesGenerationContainer.addEventListener('change', handleCaseGenChange);
       casesGenerationContainer.addEventListener('input', handleCaseGenInput);
+      if (caseGenWorkspaceMirrorList) {
+        caseGenWorkspaceMirrorList.addEventListener('click', function(e) {
+          var workspaceTarget = e && e.target && e.target.closest
+            ? e.target.closest('[data-casegen-module-workspace]')
+            : null;
+          if (!workspaceTarget) return;
+          var workspaceId = workspaceTarget.dataset ? workspaceTarget.dataset.casegenModuleWorkspace : '';
+          var xmindApi = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+          if (!workspaceId || !xmindApi || typeof xmindApi.activateWorkspace !== 'function') return;
+          xmindApi.activateWorkspace(workspaceId || '', {
+            reason: 'casesgen-module-workspace-switch',
+            centerRootAfterRender: false,
+          });
+        });
+      }
       if (caseGenViewDrawerBody) {
         caseGenViewDrawerBody.addEventListener('click', handleCaseGenClick);
         caseGenViewDrawerBody.addEventListener('change', handleCaseGenChange);

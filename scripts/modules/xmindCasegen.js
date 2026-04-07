@@ -3190,6 +3190,9 @@
       if (key !== 'completed' && key !== 'step' && key !== 'baseLocked') prep.completed = false;
       persistXmindState(immediate === true);
       syncPrepDialogState();
+      if (isPrepBaseField(key) || key === 'completed' || key === 'step' || key === 'baseLocked') {
+        renderWorkspaceTabs();
+      }
       return true;
     }
 
@@ -3224,6 +3227,7 @@
       if (prep.completed !== true) return false;
       prep.completed = false;
       persistXmindState(immediate === true);
+      renderWorkspaceTabs();
       return true;
     }
 
@@ -5212,6 +5216,7 @@
       workspaceAddBtn.textContent = '新建生成';
       workspaceAddBtn.title = isFull ? '最多仅支持 5 个生成页签' : '新建一个独立的 XMind 用例生成页签';
       syncCasegenProgressSidebar();
+      syncCasesGenPageRender();
       return true;
     }
 
@@ -11603,7 +11608,22 @@
           createDefaultViewState()
         );
       }
+      syncCasesGenPageRender();
       return true;
+    }
+
+    function activateWorkspace(workspaceId, options) {
+      var targetId = String(workspaceId || '');
+      if (!targetId) return false;
+      if (targetId === getActiveWorkspaceId()) {
+        syncCasesGenPageRender({ force: !isDrawerOpen() });
+        return true;
+      }
+      return switchWorkspace(targetId, {
+        reason: options && options.reason ? String(options.reason || '') : 'workspace-external-switch',
+        centerRootAfterRender: options && options.centerRootAfterRender === true,
+        skipCurrentSnapshotSave: options && options.skipCurrentSnapshotSave === true,
+      });
     }
 
     function createWorkspaceAndOpenPrep() {
@@ -12241,6 +12261,7 @@
       open: open,
       close: close,
       closeWorkspace: deleteWorkspace,
+      activateWorkspace: activateWorkspace,
       openWorkspace: openWorkspaceFromProgressPanel,
       getWorkspaceProgressItems: listWorkspaceProgressItems,
       render: render,
@@ -12252,6 +12273,7 @@
       resetAfterStoreSuccess: resetAfterStoreSuccess,
     };
     window.app.xmindCasegenApi = api;
+    syncCasesGenPageRender({ force: true });
     return api;
   }
 
