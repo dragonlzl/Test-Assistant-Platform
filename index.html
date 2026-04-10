@@ -1572,7 +1572,8 @@ xmind用例生成进度
   <div class="casegen-zones">
     <div class="casegen-tabbar" role="tablist" aria-label="用例生成功能页签">
       <button class="casegen-tab is-active" id="caseGenSettingsTabBtn" type="button" data-casegen-view-tab="settings" aria-selected="true" aria-controls="casegenSettingsPanel">用例生成设置</button>
-      <button class="casegen-tab" id="caseGenModulesTabBtn" type="button" data-casegen-view-tab="modules" aria-selected="false" aria-controls="casegenModulesPanel">生成模块</button>
+      <button class="casegen-tab" id="caseGenLegacyModulesTabBtn" type="button" data-casegen-view-tab="legacy-modules" aria-selected="false" aria-controls="casegenLegacyModulesPanel">一键执行生成模块</button>
+      <button class="casegen-tab" id="caseGenModulesTabBtn" type="button" data-casegen-view-tab="xmind-modules" aria-selected="false" aria-controls="casegenModulesPanel">xmind生成模块</button>
       <button class="casegen-tab casegen-tab-launcher" id="xmindCaseGenOpenBtn" type="button" aria-controls="xmindCaseGenDrawer" aria-expanded="false">XMind用例生成</button>
     </div>
 
@@ -1671,21 +1672,31 @@ xmind用例生成进度
       <p class="status" id="caseGenStatus"></p>
     </div>
 
-    <div class="casegen-tabpanel" id="casegenModulesPanel" data-casegen-view-panel="modules" role="tabpanel" aria-labelledby="caseGenModulesTabBtn">
+    <div class="casegen-tabpanel" id="casegenLegacyModulesPanel" data-casegen-view-panel="legacy-modules" role="tabpanel" aria-labelledby="caseGenLegacyModulesTabBtn">
       <div class="casegen-zone casegen-modules-zone" data-casegen-zone="modules">
         <div class="casegen-zone-head">
-          <div class="casegen-zone-title">模块区</div>
-          <div class="hint" style="margin:0;">按模块生成/勾选/导出用例，当前布局为每行两个模块</div>
+          <div class="casegen-zone-title">一键执行模块区</div>
+          <div class="hint" style="margin:0;">仅展示旧流程生成的模块与用例，按模块生成/勾选/导出用例</div>
+        </div>
+        <div class="usecase-modules" id="casesGenerationContainer"></div>
+        <p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
+      </div>
+    </div>
+
+    <div class="casegen-tabpanel" id="casegenModulesPanel" data-casegen-view-panel="xmind-modules" role="tabpanel" aria-labelledby="caseGenModulesTabBtn">
+      <div class="casegen-zone casegen-modules-zone" data-casegen-zone="xmind-modules">
+        <div class="casegen-zone-head">
+          <div class="casegen-zone-title">XMind 模块区</div>
+          <div class="hint" style="margin:0;">仅镜像展示 XMind 页签中的模块与用例结果，生成操作请在 XMind 用例生成页执行</div>
         </div>
         <div class="casegen-xmind-workspace-strip hidden" id="caseGenWorkspaceMirrorSection" aria-hidden="true">
           <div class="casegen-xmind-workspace-strip-head">
             <div class="casegen-xmind-workspace-strip-title">XMind生成页签</div>
-            <div class="hint" style="margin:0;">点击页签后，模块区会同步展示对应 XMind 页签的数据</div>
+            <div class="hint" style="margin:0;">点击页签后，这里只展示对应 XMind 页签的数据，不再覆盖旧流程模块区</div>
           </div>
           <div class="xmind-casegen-tab-list casegen-xmind-workspace-list" id="caseGenWorkspaceMirrorTabs" role="tablist" aria-label="模块区XMind生成页签"></div>
         </div>
-        <div class="usecase-modules" id="casesGenerationContainer"></div>
-        <p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
+        <div class="usecase-modules casegen-xmind-modules" id="caseGenXmindModulesContainer"></div>
       </div>
     </div>
   </div>

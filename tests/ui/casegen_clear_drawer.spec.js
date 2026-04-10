@@ -67,12 +67,23 @@ async function seedCaseGenModule(page) {
     }];
     state.caseGenResults[moduleId] = JSON.stringify(cases, null, 2);
     state.caseSelections[moduleId] = new Set();
+    state.caseGenLegacy = {
+      modules: JSON.parse(JSON.stringify(state.caseGenModules || [])),
+      source: String(state.caseGenSource || ''),
+      results: JSON.parse(JSON.stringify(state.caseGenResults || {})),
+      selections: {},
+      suggestions: {},
+      moduleStatus: {},
+      progress: {},
+      timing: {},
+      progressNotice: {},
+    };
 
     if (window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
       window.app.casesGenApi.renderCaseGeneration();
     }
     if (window.app.casesGenApi && typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
-      window.app.casesGenApi.setCaseGenViewTab('modules', { persist: false });
+      window.app.casesGenApi.setCaseGenViewTab('legacy-modules', { persist: false });
     }
   });
 

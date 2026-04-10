@@ -73,7 +73,7 @@
       }
       try {
         if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
-          window.app.casesGenApi.setCaseGenViewTab('modules', { persist: false });
+          window.app.casesGenApi.setCaseGenViewTab('xmind-modules', { persist: false });
         }
       } catch (errView) {
         // ignore

@@ -105,8 +105,13 @@
       switchTab('casesgen');
       if (typeof handlers.updateMissingView === 'function') handlers.updateMissingView();
       try {
-        if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
-          window.app.casesGenApi.setCaseGenViewTab('settings', { persist: false });
+        if (window.app && window.app.casesGenApi) {
+          if (typeof window.app.casesGenApi.syncLegacyCaseGenState === 'function') {
+            window.app.casesGenApi.syncLegacyCaseGenState({ persist: false });
+          }
+          if (typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
+            window.app.casesGenApi.setCaseGenViewTab('settings', { persist: false });
+          }
         }
       } catch (errTab) {
         // ignore
@@ -116,8 +121,13 @@
     function goCasesGenAndScroll(moduleId) {
       switchTab('casesgen');
       try {
-        if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
-          window.app.casesGenApi.setCaseGenViewTab('modules', { persist: false });
+        if (window.app && window.app.casesGenApi) {
+          if (typeof window.app.casesGenApi.restoreLegacyCaseGenState === 'function') {
+            window.app.casesGenApi.restoreLegacyCaseGenState({ render: false, persist: false });
+          }
+          if (typeof window.app.casesGenApi.setCaseGenViewTab === 'function') {
+            window.app.casesGenApi.setCaseGenViewTab('legacy-modules', { persist: false });
+          }
         }
       } catch (errTab) {
         // ignore
@@ -161,6 +171,13 @@
         if (filled && typeof handlers.renderCaseGeneration === 'function') {
           setStatus(caseGenStatus, '', '');
           handlers.renderCaseGeneration();
+          try {
+            if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.syncLegacyCaseGenState === 'function') {
+              window.app.casesGenApi.syncLegacyCaseGenState({ persist: false });
+            }
+          } catch (errSync) {
+            // ignore
+          }
           persistWorkflowState();
         }
       }

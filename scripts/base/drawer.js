@@ -197,8 +197,8 @@
       applyBodyLock();
       if (typeof options.onOpen === 'function') options.onOpen();
     }
-    function finalizeClose(token) {
-      if (token !== closeToken) return;
+    function finalizeClose(token, force) {
+      if (force !== true && token !== closeToken) return;
       if (closeFinalizeTimer) {
         clearTimeout(closeFinalizeTimer);
         closeFinalizeTimer = 0;
@@ -208,7 +208,8 @@
       if (typeof options.onClose === 'function') options.onClose();
     }
     function close() {
-      if (!drawer.classList.contains('open') && !drawer.classList.contains('closing')) return;
+      if (drawer.classList.contains('closing')) return;
+      if (!drawer.classList.contains('open')) return;
       if (shouldSkipClose(drawer)) return;
       clearInstantOpen();
       closeToken += 1;
@@ -240,6 +241,11 @@
       track(panel, 'transform');
       closeFinalizeTimer = setTimeout(function() {
         pending = 0;
+        if (drawer.classList.contains('closing') && !drawer.classList.contains('open')) {
+          resolved = true;
+          finalizeClose(token, true);
+          return;
+        }
         tryFinalize();
       }, 450);
       setTimeout(tryFinalize, 0);

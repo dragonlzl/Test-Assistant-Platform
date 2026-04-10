@@ -130,9 +130,19 @@
       || (window.app && window.app.config && window.app.config.workflowStorageKey)
       || 'usecase-workflow-state-v1';
     var storage = window.app && window.app.services && window.app.services.storage ? window.app.services.storage : null;
+    var workflowSnapshotMaxChars = 1500000;
     var workflowPersistBound = false;
     var workflowRestoring = false;
+    var deferredXmindRestoreTimer = 0;
+    var deferredXmindRestoreFallbackTimer = 0;
     var autoCompareSuggestionInput = typeof document !== 'undefined' ? document.getElementById('autoCompareSuggestion') : null;
+    var xmindWorkspaceHostKeys = {
+      activeWorkspaceId: 1,
+      workspaceOrder: 1,
+      workspaces: 1,
+      nextWorkspaceSeq: 1,
+      openButtonDotVisible: 1,
+    };
 
     function getPersistUserId() {
       if (state.currentUser && (state.currentUser.id || state.currentUser.id === 0)) {
@@ -194,7 +204,180 @@
       return list;
     }
 
+    function createEmptyLegacyCaseGenSnapshot() {
+      return {
+        requirementLabel: '',
+        requirementLabelSource: '',
+        lastRawImportName: '',
+        rawText: '',
+        caseText: '',
+        importedCases: [],
+        requirementMedia: {
+          docxImages: [],
+          pastedImages: [],
+          lastDocxImageCount: 0,
+          updatedAt: 0,
+        },
+        modules: [],
+        source: '',
+        results: {},
+        selections: {},
+        suggestions: {},
+        moduleStatus: {},
+        progress: {},
+        timing: {},
+        progressNotice: {},
+      };
+    }
+
+    function createEmptyRequirementMediaSnapshot() {
+      return {
+        docxImages: [],
+        pastedImages: [],
+        lastDocxImageCount: 0,
+        updatedAt: 0,
+      };
+    }
+
+    function buildWorkflowSharedXmindSnapshot() {
+      return {
+        requirementLabel: state.requirementLabel || '',
+        requirementLabelSource: state.requirementLabelSource || '',
+        lastRawImportName: state.lastRawImportName || '',
+        rawText: dom.rawText && dom.rawText.value ? dom.rawText.value : '',
+        caseText: dom.caseTextEl && dom.caseTextEl.value ? dom.caseTextEl.value : '',
+        importedCases: normalizeImportedCases(state.importedCases),
+        caseGenModules: cloneJson(state.caseGenModules, []),
+        caseGenSource: state.caseGenSource || '',
+        caseGenResults: cloneJson(state.caseGenResults, {}),
+        caseSelections: serializeCaseSelections(state.caseSelections),
+        caseGenSuggestions: cloneJson(state.caseGenSuggestions, {}),
+        caseGenModuleStatus: cloneJson(state.caseGenModuleStatus, {}),
+        caseGenProgress: cloneJson(state.caseGenProgress, {}),
+        caseGenTiming: cloneJson(state.caseGenTiming, {}),
+        caseGenProgressNotice: cloneJson(state.caseGenProgressNotice, {}),
+        caseGenSettings: cloneJson(state.caseGenSettings, {}),
+        requirementMedia: cloneJson(state.requirementMedia, createEmptyRequirementMediaSnapshot()),
+      };
+    }
+
+    function buildWorkflowSharedXmindSnapshotFromData(data) {
+      var source = data && typeof data === 'object' ? data : {};
+      return {
+        requirementLabel: source.requirementLabel || '',
+        requirementLabelSource: source.requirementLabelSource || '',
+        lastRawImportName: source.lastRawImportName || '',
+        rawText: source.rawText || '',
+        caseText: source.caseText || '',
+        importedCases: normalizeImportedCases(source.importedCases),
+        caseGenModules: cloneJson(source.caseGenModules, []),
+        caseGenSource: source.caseGenSource || '',
+        caseGenResults: cloneJson(source.caseGenResults, {}),
+        caseSelections: cloneJson(source.caseSelections, {}),
+        caseGenSuggestions: cloneJson(source.caseGenSuggestions, {}),
+        caseGenModuleStatus: cloneJson(source.caseGenModuleStatus, {}),
+        caseGenProgress: cloneJson(source.caseGenProgress, {}),
+        caseGenTiming: cloneJson(source.caseGenTiming, {}),
+        caseGenProgressNotice: cloneJson(source.caseGenProgressNotice, {}),
+        caseGenSettings: cloneJson(source.caseGenSettings, {}),
+        requirementMedia: cloneJson(source.requirementMedia, createEmptyRequirementMediaSnapshot()),
+      };
+    }
+
+    function extractTopLevelXmindSnapshot(source) {
+      var current = source && typeof source === 'object' ? source : {};
+      var next = {};
+      Object.keys(current).forEach(function(key) {
+        if (xmindWorkspaceHostKeys[key]) return;
+        next[key] = cloneJson(current[key], current[key]);
+      });
+      return next;
+    }
+
+    function shouldCompactActiveXmindWorkspaceSnapshot(hostState, activeWorkspaceId, activeXmindSnapshot, activeSharedSnapshot) {
+      var host = hostState && typeof hostState === 'object' ? hostState : null;
+      if (!host || !host.workspaces || typeof host.workspaces !== 'object') return false;
+      var stableId = activeWorkspaceId ? String(activeWorkspaceId || '') : '';
+      if (!stableId) return false;
+      var record = host.workspaces[stableId];
+      if (!record || typeof record !== 'object') return false;
+      var snapshot = record.snapshot && typeof record.snapshot === 'object' ? record.snapshot : null;
+      if (!snapshot) return false;
+      var recordXmind = snapshot.xmind && typeof snapshot.xmind === 'object' ? snapshot.xmind : null;
+      var recordShared = snapshot.shared && typeof snapshot.shared === 'object' ? snapshot.shared : null;
+      if (!recordXmind || !recordShared) return false;
+      try {
+        return JSON.stringify(recordXmind) === JSON.stringify(activeXmindSnapshot)
+          && JSON.stringify(recordShared) === JSON.stringify(activeSharedSnapshot);
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function buildPersistedXmindCaseGenSnapshot() {
+      var source = state.xmindCaseGen && typeof state.xmindCaseGen === 'object'
+        ? cloneJson(state.xmindCaseGen, {})
+        : {};
+      var activeWorkspaceId = source && source.activeWorkspaceId ? String(source.activeWorkspaceId || '') : '';
+      if (!activeWorkspaceId || !source.workspaces || typeof source.workspaces !== 'object') {
+        return source;
+      }
+      var activeXmindSnapshot = extractTopLevelXmindSnapshot(source);
+      var activeSharedSnapshot = buildWorkflowSharedXmindSnapshot();
+      if (!shouldCompactActiveXmindWorkspaceSnapshot(source, activeWorkspaceId, activeXmindSnapshot, activeSharedSnapshot)) {
+        return source;
+      }
+      var record = source.workspaces[activeWorkspaceId];
+      if (!record || typeof record !== 'object') return source;
+      record.snapshot = {
+        __topLevelActiveSnapshot: true,
+      };
+      source.workspaces[activeWorkspaceId] = record;
+      return source;
+    }
+
+    function restoreActiveXmindWorkspaceSnapshotFromTopLevel(data) {
+      var source = data && typeof data === 'object' ? data : null;
+      if (!source || !source.xmindCaseGen || typeof source.xmindCaseGen !== 'object') return source;
+      var host = source.xmindCaseGen;
+      var activeWorkspaceId = host.activeWorkspaceId ? String(host.activeWorkspaceId || '') : '';
+      if (!activeWorkspaceId) return source;
+      if (!host.workspaces || typeof host.workspaces !== 'object') {
+        host.workspaces = {};
+      }
+      var record = host.workspaces[activeWorkspaceId];
+      if (!record || typeof record !== 'object') {
+        record = {
+          id: activeWorkspaceId,
+          seq: 0,
+          name: '',
+          pendingOpenPrep: false,
+          updatedAt: 0,
+          createdAt: 0,
+        };
+      }
+      var markerSnapshot = record.snapshot && typeof record.snapshot === 'object' ? record.snapshot : null;
+      var needsInflate = !markerSnapshot
+        || markerSnapshot.__topLevelActiveSnapshot === true
+        || (!markerSnapshot.xmind && !markerSnapshot.shared);
+      if (!needsInflate) return source;
+      record.snapshot = {
+        xmind: extractTopLevelXmindSnapshot(host),
+        shared: buildWorkflowSharedXmindSnapshotFromData(source),
+      };
+      host.workspaces[activeWorkspaceId] = record;
+      if (!Array.isArray(host.workspaceOrder)) {
+        host.workspaceOrder = activeWorkspaceId ? [activeWorkspaceId] : [];
+      } else if (host.workspaceOrder.indexOf(activeWorkspaceId) === -1) {
+        host.workspaceOrder = host.workspaceOrder.concat([activeWorkspaceId]);
+      }
+      return source;
+    }
+
     function buildWorkflowSnapshot() {
+      var legacy = state.caseGenLegacy && typeof state.caseGenLegacy === 'object'
+        ? state.caseGenLegacy
+        : createEmptyLegacyCaseGenSnapshot();
       var data = {
         requirementLabel: state.requirementLabel || '',
         requirementLabelSource: state.requirementLabelSource || '',
@@ -208,6 +391,12 @@
         casesCompareResult: dom.casesCompareResultEl && dom.casesCompareResultEl.value ? dom.casesCompareResultEl.value : '',
         caseText: dom.caseTextEl && dom.caseTextEl.value ? dom.caseTextEl.value : '',
         importedCases: normalizeImportedCases(state.importedCases),
+        requirementMedia: cloneJson(state.requirementMedia, {
+          docxImages: [],
+          pastedImages: [],
+          lastDocxImageCount: 0,
+          updatedAt: 0,
+        }),
         reviewClarifications: serializeReviewClarifications(state.reviewClarifications),
         autoCompareSuggestion: state.autoCompareSuggestion || (autoCompareSuggestionInput ? autoCompareSuggestionInput.value : ''),
         autoRequireClarifications: Boolean(state.autoRequireClarifications),
@@ -218,8 +407,21 @@
         caseGenSuggestions: cloneJson(state.caseGenSuggestions, {}),
         caseGenModuleStatus: cloneJson(state.caseGenModuleStatus, {}),
         caseGenProgress: cloneJson(state.caseGenProgress, {}),
+        caseGenTiming: cloneJson(state.caseGenTiming, {}),
         caseGenProgressNotice: cloneJson(state.caseGenProgressNotice, {}),
-        xmindCaseGen: cloneJson(state.xmindCaseGen, {}),
+        // 旧流程输入已在顶层快照保存；这里仅保留旧流程专属的生成态，避免重复持久化把页面恢复压垮。
+        caseGenLegacy: {
+          modules: cloneJson(legacy.modules, []),
+          source: String(legacy.source || ''),
+          results: cloneJson(legacy.results, {}),
+          selections: cloneJson(legacy.selections, {}),
+          suggestions: cloneJson(legacy.suggestions, {}),
+          moduleStatus: cloneJson(legacy.moduleStatus, {}),
+          progress: cloneJson(legacy.progress, {}),
+          timing: cloneJson(legacy.timing, {}),
+          progressNotice: cloneJson(legacy.progressNotice, {}),
+        },
+        xmindCaseGen: buildPersistedXmindCaseGenSnapshot(),
         caseSelections: serializeCaseSelections(state.caseSelections),
         missingSelections: serializeNumberSet(state.missingSelections),
       };
@@ -342,6 +544,16 @@
         });
         if (hasRes) return true;
       }
+      if (data.caseGenLegacy && typeof data.caseGenLegacy === 'object') {
+        if (Array.isArray(data.caseGenLegacy.modules) && data.caseGenLegacy.modules.length) return true;
+        if (data.caseGenLegacy.results && typeof data.caseGenLegacy.results === 'object') {
+          var hasLegacyResults = Object.keys(data.caseGenLegacy.results).some(function(key) {
+            var val = (data.caseGenLegacy.results[key] || '').trim();
+            return Boolean(val && !/^\[\s*\]$/.test(val));
+          });
+          if (hasLegacyResults) return true;
+        }
+      }
       if (hasXmindCaseGenContent(data.xmindCaseGen)) return true;
       return false;
     }
@@ -397,7 +609,7 @@
 
     function applyWorkflowSnapshot(snapshot) {
       if (!snapshot || !snapshot.data || typeof snapshot.data !== 'object') return false;
-      var data = snapshot.data;
+      var data = restoreActiveXmindWorkspaceSnapshotFromTopLevel(cloneJson(snapshot.data, snapshot.data));
       if (state) state.workflowNavSnapshot = buildWorkflowNavSnapshot(data);
       state.requirementLabel = data.requirementLabel || '';
       state.requirementLabelSource = data.requirementLabelSource || '';
@@ -414,6 +626,31 @@
       if (dom.casesCompareResultEl) dom.casesCompareResultEl.value = data.casesCompareResult || '';
       if (dom.caseTextEl) dom.caseTextEl.value = data.caseText || '';
       state.importedCases = normalizeImportedCases(data.importedCases);
+      state.requirementMedia = (data.requirementMedia && typeof data.requirementMedia === 'object')
+        ? cloneJson(data.requirementMedia, {
+            docxImages: [],
+            pastedImages: [],
+            lastDocxImageCount: 0,
+            updatedAt: 0,
+          })
+        : cloneJson(state.requirementMedia, {
+            docxImages: [],
+            pastedImages: [],
+            lastDocxImageCount: 0,
+            updatedAt: 0,
+          });
+      if (!state.requirementMedia || typeof state.requirementMedia !== 'object') {
+        state.requirementMedia = {
+          docxImages: [],
+          pastedImages: [],
+          lastDocxImageCount: 0,
+          updatedAt: 0,
+        };
+      }
+      if (!Array.isArray(state.requirementMedia.docxImages)) state.requirementMedia.docxImages = [];
+      if (!Array.isArray(state.requirementMedia.pastedImages)) state.requirementMedia.pastedImages = [];
+      if (!Number.isFinite(Number(state.requirementMedia.lastDocxImageCount))) state.requirementMedia.lastDocxImageCount = 0;
+      if (!Number.isFinite(Number(state.requirementMedia.updatedAt))) state.requirementMedia.updatedAt = 0;
       state.reviewClarifications = restoreReviewClarifications(data.reviewClarifications);
       state.autoCompareSuggestion = data.autoCompareSuggestion || '';
       state.autoRequireClarifications = Boolean(data.autoRequireClarifications);
@@ -426,7 +663,39 @@
       state.caseGenSuggestions = (data.caseGenSuggestions && typeof data.caseGenSuggestions === 'object') ? data.caseGenSuggestions : {};
       state.caseGenModuleStatus = (data.caseGenModuleStatus && typeof data.caseGenModuleStatus === 'object') ? data.caseGenModuleStatus : {};
       state.caseGenProgress = (data.caseGenProgress && typeof data.caseGenProgress === 'object') ? data.caseGenProgress : {};
+      state.caseGenTiming = (data.caseGenTiming && typeof data.caseGenTiming === 'object') ? data.caseGenTiming : {};
       state.caseGenProgressNotice = (data.caseGenProgressNotice && typeof data.caseGenProgressNotice === 'object') ? data.caseGenProgressNotice : {};
+      state.caseGenLegacy = (data.caseGenLegacy && typeof data.caseGenLegacy === 'object')
+        ? data.caseGenLegacy
+        : createEmptyLegacyCaseGenSnapshot();
+      if (
+        (!data.caseGenLegacy || typeof data.caseGenLegacy !== 'object')
+        && !hasXmindCaseGenContent(data.xmindCaseGen)
+      ) {
+        state.caseGenLegacy = {
+          requirementLabel: state.requirementLabel || '',
+          requirementLabelSource: state.requirementLabelSource || '',
+          lastRawImportName: state.lastRawImportName || '',
+          rawText: data.rawText || '',
+          caseText: data.caseText || '',
+          importedCases: normalizeImportedCases(data.importedCases),
+          requirementMedia: cloneJson(state.requirementMedia, {
+            docxImages: [],
+            pastedImages: [],
+            lastDocxImageCount: 0,
+            updatedAt: 0,
+          }),
+          modules: cloneJson(state.caseGenModules, []),
+          source: state.caseGenSource || '',
+          results: cloneJson(state.caseGenResults, {}),
+          selections: cloneJson(data.caseSelections, {}),
+          suggestions: cloneJson(state.caseGenSuggestions, {}),
+          moduleStatus: cloneJson(state.caseGenModuleStatus, {}),
+          progress: cloneJson(state.caseGenProgress, {}),
+          timing: cloneJson(state.caseGenTiming, {}),
+          progressNotice: cloneJson(state.caseGenProgressNotice, {}),
+        };
+      }
       state.xmindCaseGen = (data.xmindCaseGen && typeof data.xmindCaseGen === 'object') ? data.xmindCaseGen : {
         activeWorkspaceId: '',
         workspaceOrder: [],
@@ -483,6 +752,73 @@
         state.caseGenProgressNotice.lastStates = {};
       }
       state.caseGenProgressNotice.dotVisible = state.caseGenProgressNotice.dotVisible === true;
+      if (!state.caseGenLegacy || typeof state.caseGenLegacy !== 'object') {
+        state.caseGenLegacy = createEmptyLegacyCaseGenSnapshot();
+      }
+      state.caseGenLegacy.requirementLabel = String(state.caseGenLegacy.requirementLabel || '');
+      state.caseGenLegacy.requirementLabelSource = String(state.caseGenLegacy.requirementLabelSource || '');
+      state.caseGenLegacy.lastRawImportName = String(state.caseGenLegacy.lastRawImportName || '');
+      state.caseGenLegacy.rawText = String(state.caseGenLegacy.rawText || '');
+      state.caseGenLegacy.caseText = String(state.caseGenLegacy.caseText || '');
+      if (!state.caseGenLegacy.requirementLabel && state.requirementLabel) {
+        state.caseGenLegacy.requirementLabel = String(state.requirementLabel || '');
+      }
+      if (!state.caseGenLegacy.requirementLabelSource && state.requirementLabelSource) {
+        state.caseGenLegacy.requirementLabelSource = String(state.requirementLabelSource || '');
+      }
+      if (!state.caseGenLegacy.lastRawImportName && state.lastRawImportName) {
+        state.caseGenLegacy.lastRawImportName = String(state.lastRawImportName || '');
+      }
+      if (!state.caseGenLegacy.rawText && data.rawText) {
+        state.caseGenLegacy.rawText = String(data.rawText || '');
+      }
+      if (!state.caseGenLegacy.caseText && data.caseText) {
+        state.caseGenLegacy.caseText = String(data.caseText || '');
+      }
+      state.caseGenLegacy.importedCases = normalizeImportedCases(state.caseGenLegacy.importedCases);
+      if (!state.caseGenLegacy.importedCases.length && state.importedCases && state.importedCases.length) {
+        state.caseGenLegacy.importedCases = normalizeImportedCases(state.importedCases);
+      }
+      if (!state.caseGenLegacy.requirementMedia || typeof state.caseGenLegacy.requirementMedia !== 'object') {
+        state.caseGenLegacy.requirementMedia = {
+          docxImages: [],
+          pastedImages: [],
+          lastDocxImageCount: 0,
+          updatedAt: 0,
+        };
+      }
+      if (!Array.isArray(state.caseGenLegacy.requirementMedia.docxImages)) state.caseGenLegacy.requirementMedia.docxImages = [];
+      if (!Array.isArray(state.caseGenLegacy.requirementMedia.pastedImages)) state.caseGenLegacy.requirementMedia.pastedImages = [];
+      if (!Number.isFinite(Number(state.caseGenLegacy.requirementMedia.lastDocxImageCount))) {
+        state.caseGenLegacy.requirementMedia.lastDocxImageCount = 0;
+      }
+      if (!Number.isFinite(Number(state.caseGenLegacy.requirementMedia.updatedAt))) {
+        state.caseGenLegacy.requirementMedia.updatedAt = 0;
+      }
+      if (
+        state.requirementMedia
+        && typeof state.requirementMedia === 'object'
+        && !state.caseGenLegacy.requirementMedia.docxImages.length
+        && !state.caseGenLegacy.requirementMedia.pastedImages.length
+      ) {
+        state.caseGenLegacy.requirementMedia = cloneJson(state.requirementMedia, {
+          docxImages: [],
+          pastedImages: [],
+          lastDocxImageCount: 0,
+          updatedAt: 0,
+        });
+      }
+      if (!Array.isArray(state.caseGenLegacy.modules)) state.caseGenLegacy.modules = [];
+      state.caseGenLegacy.source = String(state.caseGenLegacy.source || '');
+      if (!state.caseGenLegacy.results || typeof state.caseGenLegacy.results !== 'object') state.caseGenLegacy.results = {};
+      if (!state.caseGenLegacy.selections || typeof state.caseGenLegacy.selections !== 'object') state.caseGenLegacy.selections = {};
+      if (!state.caseGenLegacy.suggestions || typeof state.caseGenLegacy.suggestions !== 'object') state.caseGenLegacy.suggestions = {};
+      if (!state.caseGenLegacy.moduleStatus || typeof state.caseGenLegacy.moduleStatus !== 'object') state.caseGenLegacy.moduleStatus = {};
+      if (!state.caseGenLegacy.progress || typeof state.caseGenLegacy.progress !== 'object') state.caseGenLegacy.progress = {};
+      if (!state.caseGenLegacy.timing || typeof state.caseGenLegacy.timing !== 'object') state.caseGenLegacy.timing = {};
+      if (!state.caseGenLegacy.progressNotice || typeof state.caseGenLegacy.progressNotice !== 'object') {
+        state.caseGenLegacy.progressNotice = {};
+      }
       if (!Array.isArray(state.xmindCaseGen.history)) state.xmindCaseGen.history = [];
       if (!Array.isArray(state.xmindCaseGen.operationSnapshots)) state.xmindCaseGen.operationSnapshots = [];
       if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
@@ -603,12 +939,51 @@
     function restoreWorkflowState() {
       if (!storage || typeof storage.getJson !== 'function') return false;
       if (!workflowStorageKey) return false;
+      var rawSnapshot = '';
+      try {
+        if (typeof localStorage !== 'undefined') {
+          rawSnapshot = localStorage.getItem(workflowStorageKey) || '';
+        }
+      } catch (err) {
+        rawSnapshot = '';
+      }
+      if (rawSnapshot && rawSnapshot.length > workflowSnapshotMaxChars) {
+        if (storage && typeof storage.remove === 'function') storage.remove(workflowStorageKey);
+        state.workflowRecoveryNotice = {
+          reason: 'oversize',
+          shown: false,
+        };
+        return false;
+      }
       var snapshot = storage.getJson(workflowStorageKey, null);
-      if (!snapshot || typeof snapshot !== 'object') return false;
+      if (!snapshot || typeof snapshot !== 'object') {
+        if (rawSnapshot) {
+          if (storage && typeof storage.remove === 'function') storage.remove(workflowStorageKey);
+          state.workflowRecoveryNotice = {
+            reason: 'invalid',
+            shown: false,
+          };
+        }
+        return false;
+      }
       if (snapshot.user_id && state.currentUser && (state.currentUser.id || state.currentUser.id === 0)) {
         if (String(snapshot.user_id) !== String(state.currentUser.id)) return false;
       }
       return applyWorkflowSnapshot(snapshot);
+    }
+
+    function flushWorkflowRecoveryNotice() {
+      var notice = state && state.workflowRecoveryNotice && typeof state.workflowRecoveryNotice === 'object'
+        ? state.workflowRecoveryNotice
+        : null;
+      if (!notice || notice.shown === true) return false;
+      notice.shown = true;
+      if (!appUtils || typeof appUtils.showCenterToast !== 'function') return true;
+      var text = notice.reason === 'oversize'
+        ? '检测到本地流程缓存过大，已自动清理异常缓存并恢复页面。'
+        : '检测到本地流程缓存异常，已自动清理异常缓存并恢复页面。';
+      appUtils.showCenterToast(text, 'warn', 5000);
+      return true;
     }
 
     function bindWorkflowPersistenceListeners() {
@@ -1198,10 +1573,39 @@
       return true;
     }
 
+    function restoreLegacyCaseGenContextBeforeLeave(nextTabName) {
+      var nextName = nextTabName ? String(nextTabName || '') : '';
+      if (!nextName || nextName === 'casesgen') return false;
+      if (String(state.activeTab || '') !== 'casesgen') return false;
+      var settings = state.caseGenSettings && typeof state.caseGenSettings === 'object'
+        ? state.caseGenSettings
+        : null;
+      var activeCaseGenView = settings && (settings.activeTab === 'xmind-modules' || settings.activeTab === 'modules')
+        ? 'xmind-modules'
+        : (settings && settings.activeTab === 'legacy-modules' ? 'legacy-modules' : 'settings');
+      var xmindApi = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      var xmindDrawerOpen = Boolean(xmindApi && typeof xmindApi.isOpen === 'function' && xmindApi.isOpen());
+      if (!xmindDrawerOpen && activeCaseGenView !== 'xmind-modules') return false;
+      if (xmindDrawerOpen && xmindApi && typeof xmindApi.close === 'function') {
+        xmindApi.close();
+      }
+      if (!casesGenApi || typeof casesGenApi.restoreLegacyCaseGenState !== 'function') return false;
+      casesGenApi.restoreLegacyCaseGenState({
+        render: false,
+        persist: false,
+        restoreInputs: true,
+      });
+      if (typeof casesGenApi.renderCaseGeneration === 'function') {
+        casesGenApi.renderCaseGeneration();
+      }
+      return true;
+    }
+
     function switchTab(name, options) {
       if (name === 'xmind-casegen') {
         name = 'casesgen';
       }
+      restoreLegacyCaseGenContextBeforeLeave(name);
       var mappedToOtherPage = false;
       if (name) {
         var mappedPage = resolveTabPage(name);
@@ -1368,8 +1772,20 @@
     // 兜底：页面刷新/关闭前再写一次 activeTab，避免少数情况下首次切页后未落到 sessionStorage 的问题。
     try {
       if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+        function shouldSkipGlobalUnloadPersist() {
+          try {
+            var xmindApi = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+            if (!xmindApi || typeof xmindApi.isOpen !== 'function') return false;
+            if (xmindApi.isOpen() !== true) return false;
+            return getActiveTabFromDom() === 'casesgen';
+          } catch (err) {
+            return false;
+          }
+        }
         window.addEventListener('beforeunload', function() {
-          persistWorkflowStateNow();
+          if (!shouldSkipGlobalUnloadPersist()) {
+            persistWorkflowStateNow();
+          }
           var tab = getActiveTabFromDom();
           persistActiveTabForSession(tab);
           // 标记“刷新来源页签”，用于执行页做“仅在执行页刷新才触发自动同步/diff”的判定。
@@ -1384,7 +1800,9 @@
         });
         window.addEventListener('visibilitychange', function() {
           if (document && document.visibilityState === 'hidden') {
-            persistWorkflowStateNow();
+            if (!shouldSkipGlobalUnloadPersist()) {
+              persistWorkflowStateNow();
+            }
             persistActiveTabForSession(getActiveTabFromDom());
           }
         });
@@ -1491,6 +1909,7 @@
       generateAllCaseGenModules: api.generateAllCaseGenModules || function() {},
       generateSuggestedCaseGenModules: api.generateSuggestedCaseGenModules || function() {},
       toggleCaseView: toggleCaseView,
+      openXmindMirrorCaseView: api.openXmindMirrorCaseView || function() { return false; },
       exportModuleCases: exportModuleCases,
       exportSelectedCases: exportSelectedCases,
       exportSelectedCasesToXmind: exportSelectedCasesToXmind,
@@ -1524,6 +1943,8 @@
       getLatestCaseGenOperationSnapshot: api.getLatestCaseGenOperationSnapshot || function() { return null; },
       discardCaseGenOperationSnapshot: api.discardCaseGenOperationSnapshot || function() { return false; },
       rollbackCaseGenOperationSnapshot: api.rollbackCaseGenOperationSnapshot || function() { return false; },
+      syncLegacyCaseGenState: api.syncLegacyCaseGenState || function() { return null; },
+      restoreLegacyCaseGenState: api.restoreLegacyCaseGenState || function() { return false; },
       getCaseListForModule: api.getCaseListForModule || function() { return []; },
       refreshExportCaseGenXmindButton: api.refreshExportCaseGenXmindButton || function() {},
       setCaseGenDbStoreNewAction: api.setCaseGenDbStoreNewAction || function() {},
@@ -1541,7 +1962,7 @@
       ensureCaseGenModulesFromSplit: ensureCaseGenModulesFromSplit,
       renderCaseGeneration: renderCaseGeneration,
     }, Object.keys({
-      goToCaseGeneration: 1, generateCasesForModule: 1, generateAllCaseGenModules: 1, generateSuggestedCaseGenModules: 1, toggleCaseView: 1, exportModuleCases: 1, exportSelectedCases: 1,
+      goToCaseGeneration: 1, generateCasesForModule: 1, generateAllCaseGenModules: 1, generateSuggestedCaseGenModules: 1, toggleCaseView: 1, openXmindMirrorCaseView: 1, exportModuleCases: 1, exportSelectedCases: 1,
       exportSelectedCasesToXmind: 1, exportSelectedModulesToXmind: 1, transferModuleToTempExec: 1, importModuleCases: 1, clearModuleCases: 1, topUpCasesForModule: 1,
       topUpAllCaseGenModules: 1,
       appendSelectedCasesToImported: 1, transferSelectedCasesToExec: 1,
@@ -1551,6 +1972,7 @@
       buildModuleCases: 1, buildModuleTopup: 1, commitModuleCases: 1, snapshotModuleCases: 1, rollbackModuleCases: 1,
       snapshotAllCaseGenState: 1, rollbackAllCaseGenState: 1,
       getLatestCaseGenOperationSnapshot: 1, discardCaseGenOperationSnapshot: 1, rollbackCaseGenOperationSnapshot: 1,
+      syncLegacyCaseGenState: 1, restoreLegacyCaseGenState: 1,
       getCaseListForModule: 1,
       refreshExportCaseGenXmindButton: 1,
       setCaseGenDbStoreNewAction: 1, clearCaseGenDbStoreNewActionError: 1,
@@ -1581,12 +2003,71 @@
       }
     }
 
+    function markRuntimeStage(stage) {
+      if (typeof window === 'undefined' || !window) return;
+      window.app = window.app || {};
+      window.app.__tapInitRuntimeStage = stage ? String(stage || '') : '';
+      var nextHistory = Array.isArray(window.app.__tapInitRuntimeStageHistory)
+        ? window.app.__tapInitRuntimeStageHistory.slice()
+        : [];
+      nextHistory.push(window.app.__tapInitRuntimeStage);
+      if (nextHistory.length > 24) nextHistory = nextHistory.slice(nextHistory.length - 24);
+      window.app.__tapInitRuntimeStageHistory = nextHistory;
+      try {
+        var root = document && document.documentElement ? document.documentElement : null;
+        if (!root) return;
+        var historyText = nextHistory.join('>');
+        if (root.dataset) {
+          root.dataset.tapRuntimeStage = window.app.__tapInitRuntimeStage;
+          root.dataset.tapRuntimeStageHistory = historyText;
+        } else {
+          root.setAttribute('data-tap-runtime-stage', window.app.__tapInitRuntimeStage);
+          root.setAttribute('data-tap-runtime-stage-history', historyText);
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    function scheduleDeferredXmindRestore() {
+      if (deferredXmindRestoreTimer) {
+        clearTimeout(deferredXmindRestoreTimer);
+        deferredXmindRestoreTimer = 0;
+      }
+      if (deferredXmindRestoreFallbackTimer) {
+        clearTimeout(deferredXmindRestoreFallbackTimer);
+        deferredXmindRestoreFallbackTimer = 0;
+      }
+      deferredXmindRestoreTimer = setTimeout(function() {
+        deferredXmindRestoreTimer = 0;
+        if (!xmindCasegenModule || typeof xmindCasegenModule.restoreAfterWorkflowReady !== 'function') return;
+        markRuntimeStage('before-xmind-restore-after-ready');
+        xmindCasegenModule.restoreAfterWorkflowReady();
+        markRuntimeStage('after-xmind-restore-after-ready');
+        deferredXmindRestoreFallbackTimer = setTimeout(function() {
+          deferredXmindRestoreFallbackTimer = 0;
+          if (!xmindCasegenModule || typeof xmindCasegenModule.isOpen !== 'function' || typeof xmindCasegenModule.open !== 'function') return;
+          if (xmindCasegenModule.isOpen() === true) return;
+          if (String(state.activeTab || '') !== 'casesgen') return;
+          if (!state.xmindCaseGen || !state.xmindCaseGen.viewState || state.xmindCaseGen.viewState.drawerOpen !== true) return;
+          try {
+            xmindCasegenModule.open({ restoreOpening: true });
+          } catch (err) {
+            // ignore
+          }
+        }, 450);
+      }, 0);
+    }
+
     function initApp() {
+      markRuntimeStage('initApp-enter');
       if (window.app && window.app._inited) return;
       if (!window.app) window.app = {};
       window.app._inited = true;
+      markRuntimeStage('inited-flag-set');
       workflowRestoring = true;
       restoreWorkflowState();
+      markRuntimeStage('workflow-restored');
       function resolveInitialTab() {
         var defaultTab = 'auto';
         try {
@@ -1764,10 +2245,10 @@
       setCaseViewHint('请先上传或输入 XMind 测试用例');
       updateFlowStatus();
       bindWorkflowPersistenceListeners();
-      if (xmindCasegenModule && typeof xmindCasegenModule.restoreAfterWorkflowReady === 'function') {
-        xmindCasegenModule.restoreAfterWorkflowReady();
-      }
       workflowRestoring = false;
+      markRuntimeStage('workflow-ready');
+      flushWorkflowRecoveryNotice();
+      scheduleDeferredXmindRestore();
       return { casegenHandlersModule: casegenHandlersModule, casegenCoreModule: casegenCoreModule, layoutHandlersModule: layoutHandlersModule };
     }
     window.app = window.app || {};

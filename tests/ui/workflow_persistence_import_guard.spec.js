@@ -1,5 +1,113 @@
 const { test, expect } = require('@playwright/test');
 
+async function seedXmindWorkspaceResult(page, options = {}) {
+  const workspaceId = options.workspaceId || 'xmind-import-keep';
+  const workspaceTitle = options.workspaceTitle || '旧 XMind 需求';
+  const moduleId = options.moduleId || 'xmind-mod-1';
+  const moduleTitle = options.moduleTitle || '旧 XMind 模块';
+  const caseTitle = options.caseTitle || '旧 XMind 用例';
+  await page.evaluate(({ workspaceId, workspaceTitle, moduleId, moduleTitle, caseTitle }) => {
+    var app = window.app || {};
+    var state = app.state || null;
+    if (!state || !state.xmindCaseGen) return;
+    var host = state.xmindCaseGen;
+    var now = Date.now();
+    function buildCases() {
+      return JSON.stringify([{
+        module: moduleTitle,
+        title: caseTitle,
+        priority: 'P1',
+        preconditions: moduleTitle + '前置条件',
+        steps: ['1、进入' + moduleTitle, '2、执行' + caseTitle],
+        expected: caseTitle + '执行成功',
+      }], null, 2);
+    }
+    var xmindSnapshot = JSON.parse(JSON.stringify(host || {}));
+    xmindSnapshot.prep = xmindSnapshot.prep && typeof xmindSnapshot.prep === 'object'
+      ? xmindSnapshot.prep
+      : {};
+    xmindSnapshot.prep.requirementMode = 'manual';
+    xmindSnapshot.prep.manualRequirementLabel = workspaceTitle;
+    xmindSnapshot.prep.completed = true;
+    xmindSnapshot.viewState = xmindSnapshot.viewState && typeof xmindSnapshot.viewState === 'object'
+      ? xmindSnapshot.viewState
+      : {};
+    xmindSnapshot.viewState.drawerOpen = false;
+    xmindSnapshot.viewState.fullscreen = false;
+    xmindSnapshot.viewState.transform = '';
+    xmindSnapshot.viewState.scaleVal = 1;
+    xmindSnapshot.viewState.scrollLeft = 0;
+    xmindSnapshot.viewState.scrollTop = 0;
+    xmindSnapshot.viewState.collapsedNodeKeys = [];
+    xmindSnapshot.viewState.treeSourceSignature = '';
+    xmindSnapshot.viewState.updatedAt = now;
+    host.activeWorkspaceId = workspaceId;
+    host.workspaceOrder = [workspaceId];
+    host.nextWorkspaceSeq = 2;
+    host.workspaces = {};
+    host.workspaces[workspaceId] = {
+      id: workspaceId,
+      seq: 1,
+      name: workspaceTitle,
+      pendingOpenPrep: false,
+      updatedAt: now,
+      createdAt: now,
+      snapshot: {
+        xmind: xmindSnapshot,
+        shared: {
+          requirementLabel: workspaceTitle,
+          requirementLabelSource: 'workspace',
+          lastRawImportName: 'old-xmind.txt',
+          rawText: '旧 XMind 需求正文',
+          caseText: '',
+          importedCases: [],
+          caseGenModules: [{
+            id: moduleId,
+            title: moduleTitle,
+            module: moduleTitle,
+            key_scenarios: [moduleTitle + '主场景'],
+            test_points: [moduleTitle + '关键校验'],
+            coupled_modules: [],
+          }],
+          caseGenSource: 'xmind-seeded',
+          caseGenResults: {},
+          caseSelections: {},
+          caseGenSuggestions: {},
+          caseGenModuleStatus: {},
+          caseGenProgress: {},
+          caseGenTiming: {},
+          caseGenProgressNotice: {},
+          caseGenSettings: JSON.parse(JSON.stringify(state.caseGenSettings || {})),
+          requirementMedia: {
+            docxImages: [],
+            pastedImages: [],
+            lastDocxImageCount: 0,
+            updatedAt: now,
+          },
+        },
+      },
+    };
+    host.workspaces[workspaceId].snapshot.shared.caseGenResults[moduleId] = buildCases();
+    if (!state.caseGenSettings || typeof state.caseGenSettings !== 'object') {
+      state.caseGenSettings = {};
+    }
+    state.caseGenSettings.activeTab = 'xmind-modules';
+    state.caseGenModules = JSON.parse(JSON.stringify(host.workspaces[workspaceId].snapshot.shared.caseGenModules));
+    state.caseGenSource = String(host.workspaces[workspaceId].snapshot.shared.caseGenSource || '');
+    state.caseGenResults = JSON.parse(JSON.stringify(host.workspaces[workspaceId].snapshot.shared.caseGenResults));
+    state.caseSelections = {};
+    state.caseGenSuggestions = {};
+    state.caseGenModuleStatus = {};
+    state.caseGenProgress = {};
+    state.caseGenTiming = {};
+    state.caseGenProgressNotice = {};
+    state.caseGenRunning = new Set();
+    if (app.casesGenApi && typeof app.casesGenApi.renderCaseGenProgressBoard === 'function') {
+      app.casesGenApi.renderCaseGenProgressBoard();
+    }
+  }, { workspaceId, workspaceTitle, moduleId, moduleTitle, caseTitle });
+}
+
 test.describe('需求导入确认与持久化', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -61,7 +169,7 @@ test.describe('需求导入确认与持久化', () => {
     });
     const drawer = page.locator('#appConfirmDrawer');
     await expect(drawer).toHaveClass(/open/);
-    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('新导入需求后页面数据会被清空（含用例生成数据）');
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('已有 XMind 用例生成页签和结果会保留');
     await page.click('#appConfirmDrawerCancelBtn');
     await expect(drawer).not.toHaveClass(/open/);
     await expect(page.locator('#rawText')).toHaveValue('Old requirement');
@@ -77,6 +185,70 @@ test.describe('需求导入确认与持久化', () => {
     await expect(drawer).not.toHaveClass(/open/);
     await expect(page.locator('#rawText')).toHaveValue('New requirement');
     await expect(page.locator('#reviewResult')).toHaveValue('');
+  });
+
+  test('确认重新导入需求后保留 XMind 页签与结果', async ({ page }) => {
+    await page.evaluate(() => {
+      try { localStorage.removeItem('usecase-workflow-state-v1'); } catch (_) {}
+    });
+    await page.setInputFiles('#fileInput', {
+      name: 'old.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('Old requirement'),
+    });
+    await expect(page.locator('#rawText')).toHaveValue('Old requirement');
+    await page.evaluate(() => {
+      var review = document.getElementById('reviewResult');
+      if (review) review.value = 'Old review';
+    });
+    await seedXmindWorkspaceResult(page, {
+      workspaceId: 'xmind-import-keep',
+      workspaceTitle: '旧 XMind 需求',
+      moduleId: 'xmind-mod-keep',
+      moduleTitle: '旧 XMind 模块',
+      caseTitle: '旧 XMind 用例',
+    });
+    await expect(page.locator('#caseGenProgressList')).toContainText('旧 XMind 需求');
+    await expect(page.locator('#caseGenProgressList')).toContainText('1 模块');
+    await expect(page.locator('#caseGenProgressList')).toContainText('1 用例');
+
+    await page.setInputFiles('#fileInput', {
+      name: 'new.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('New requirement'),
+    });
+    const drawer = page.locator('#appConfirmDrawer');
+    await expect(drawer).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('已有 XMind 用例生成页签和结果会保留');
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(drawer).not.toHaveClass(/open/);
+    await expect(page.locator('#rawText')).toHaveValue('New requirement');
+    await expect(page.locator('#reviewResult')).toHaveValue('');
+    await expect(page.locator('#caseGenProgressList')).toContainText('旧 XMind 需求');
+    await expect(page.locator('#caseGenProgressList')).toContainText('1 模块');
+    await expect(page.locator('#caseGenProgressList')).toContainText('1 用例');
+
+    await page.click('[data-casegen-workspace="xmind-import-keep"]');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList')).toContainText('旧 XMind 需求');
+
+    const snapshot = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
+      if (!host || !host.workspaces || !host.workspaces['xmind-import-keep']) {
+        return { workspaceCount: 0, caseText: '' };
+      }
+      var record = host.workspaces['xmind-import-keep'];
+      var resultMap = record && record.snapshot && record.snapshot.shared
+        ? record.snapshot.shared.caseGenResults
+        : {};
+      return {
+        workspaceCount: Array.isArray(host.workspaceOrder) ? host.workspaceOrder.length : 0,
+        caseText: resultMap && resultMap['xmind-mod-keep'] ? String(resultMap['xmind-mod-keep']) : '',
+      };
+    });
+    expect(snapshot.workspaceCount).toBe(1);
+    expect(snapshot.caseText).toContain('旧 XMind 用例');
   });
 
   test('刷新后恢复工作流与用例生成数据', async ({ page }) => {

@@ -87,6 +87,7 @@
     function resolveWorkspaceProgressState(item) {
       var statusCls = item && item.statusCls ? String(item.statusCls || '') : '';
       if (statusCls === 'is-running') return 'running';
+      if (statusCls === 'is-error') return 'error';
       if (statusCls === 'is-ready') return 'done';
       if (statusCls === 'is-dirty' || statusCls === 'is-draft') return 'warn';
       return 'pending';
@@ -213,8 +214,11 @@
       return '<div class="progress-item ' + stateClass + '"><span class="marker">' + marker + '</span><span class="label">' + escapeHtml(item.label || '') + '</span><span class="state">' + stateText + '</span></div>';
     }
 
-    function renderCaseModuleProgress(moduleId) {
-      var progress = state.caseGenProgress[moduleId];
+    function renderCaseModuleProgress(moduleId, progressSource) {
+      var source = progressSource && typeof progressSource === 'object'
+        ? progressSource
+        : state.caseGenProgress;
+      var progress = source && moduleId ? source[moduleId] : null;
       if (!progress) {
         return '<div class="case-progress-list"><div class="progress-item pending"><span class="marker">●</span><span class="label">待执行</span><span class="state">待执行</span></div></div>';
       }

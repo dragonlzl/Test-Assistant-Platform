@@ -19,6 +19,220 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 空结果伪成功与跨页签提示串用修复
+- 功能描述：修复 `XMind 用例生成` 根节点执行 `生成全量用例` 时，模型仅返回模块骨架但没有任何有效用例，页面仍提示“已生成 X 个模块，0 条用例”、生成记录被当成成功结果，以及切换到其他生成页签后沿用上一页签完成提示的问题。本次调整将 `FULL_CASES` 的有效成功定义收紧为“至少落下 1 条有效用例”，并把空模块骨架改为在模块任务收口时就地移除；同时在显式切换/新建 workspace 时清空跨页签 inline 状态文案。
+- 操作方式：
+  - 在 `XMind 用例生成` 中准备两个生成页签；
+  - 让其中一个页签执行 `生成全量用例`，并让模型返回模块列表但每个模块都没有可识别的用例；
+  - 生成结束后查看当前页签生成记录，再切换到另一个未生成页签。
+- 使用效果：
+  - `生成全量用例` 最终未落下任何有效用例时，不再保留空模块骨架，也不会提示“已生成 X 个模块，0 条用例”；
+  - 该轮记录改为“本次没有新增结果”，并给出“这次没有生成出任何模块或用例”的说明；
+  - 切换到其他 `XMind` 页签时，不会再继承上一页签的完成提示，未生成页签仍显示自己的空历史。
+- 新增内容/接口/组件：
+  - `xmindCasegen`：调整 `FULL_CASES` 根流水线计数口径，只把最终保留下有效用例的模块计入成功统计；对空结果模块在任务收口时移除，避免保留伪骨架；
+  - `xmindCasegen`：在显式 `workspace` 切换和新建页签时清空 inline 状态文案，避免跨页签串用；
+  - `xmindCasegen`：补齐根/模块后台任务 payload 中的 workspace 结果回退字段，确保 `FULL_CASES -> module_full_cases` 阶段即使模块任务返回空结果，仍可回退使用首轮发现到的用例，不会把页签卡成“只有模块，没有用例”；
+  - `xmindCasegen`：调整 shadow workspace 下的 `notifyStatus/notifySuccessToast/notifyFloatingStatus`，静默消费后台任务时也会把 inline 状态写回所属 workspace snapshot，只是不直接污染当前 DOM；
+  - `xmindCasegen` / `casegenProgress`：为 workspace 摘要补充失败态判定，最近一次生成失败时，页签状态 pill 与左下角 `xmind用例生成进度` 都会明确显示 `失败`，不再错误回退成 `未入库`；
+  - `xmindCasegen`：将 workspace 摘要失败态改为显式持久化字段，不再从 `history/root.status` 临时推导，避免一个页签失败后把其他页签也误判成 `失败`；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增“空用例回滚 + 跨页签提示隔离”回归场景。
+- 复用说明：复用现有模块级空结果移除逻辑、既有 `workspace` hydrate/switch 链路与 XMind Playwright 测试夹具；未新增后端接口，也未引入新的状态仓库。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`，通过；
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`，1/1 通过；
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "生成全量用例返回空用例时会回滚伪骨架，并且切换页签不会串用完成提示|根节点生成全量用例会先展示模块骨架，再逐个展示模块用例|工具栏支持查看生成记录，并展示根节点与模块节点的生成摘要" --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "关闭 XMind 抽屉后，后台完成会同步左下角进度摘要|两个 XMind 页签后台生成全量用例时，会分别保留自己的完成结果" --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "关闭抽屉后切换镜像页签只更新镜像选择，重新打开或走进度入口时不会串写其他 workspace 数据|用例生成页会拆分旧流程模块区与 XMind 模块区，切换 XMind 页签不会覆盖旧流程模块" --workers=1 --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "两个 XMind 页签后台生成全量用例时，即使关闭抽屉并切回旧流程视图，也会各自保留独立结果" --workers=1 --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "生成全量用例返回空用例时会回滚伪骨架，并且切换页签不会串用完成提示|两个 XMind 页签后台生成全量用例时，即使关闭抽屉并切回旧流程视图，也会各自保留独立结果" --workers=1 --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已继续补强到最新回归场景。
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "补全失败时工具栏只显示短提示，详细错误写入生成记录" --workers=1 --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已扩展为同时校验 XMind 页签状态和左下角进度卡片显示 `失败`。
+- 更新记录：
+  - 2026-04-10 12:35 CST，继续修复“双页签并发时一个页签莫名停掉”的缓存侧根因：XMind managed-task 原先把 localStorage 任务列表当成唯一真源，两个 workspace 并发且任务上下文较大时，一旦任务缓存写入失败或读到超大缓存，就会把当前页读回旧/空任务列表，剩余页签随即被误判为无任务并掉回 `已准备`。现改为当前页面在任务缓存写入失败、超大或损坏时回退使用内存态任务真源继续推进，不再因为缓存异常把并发页签停掉；同时补入“任务缓存写入失败时，双页签并发生成仍能继续完成”的 UI 回归。
+  - 2026-04-10 10:20 CST，继续修复“双页签并发时一个先完成会把另一个卡回已准备”的终态任务饥饿问题：XMind managed-task 在消费某个 terminal task 后，会追加一次补偿 reconcile，并且任务事件不再只消费当前 terminal task，而会顺带拉起同批次里其他 terminal task，避免另一个 workspace 的 root pipeline 停在已完成未收口的中间态；同时把“先通过左下角进度入口打开 A，再让 A 先完成时，B 仍保持生成中并继续完成”补入 UI 回归。
+  - 2026-04-09 10:40 CST，修复 `FULL_CASES` 空结果被误判成功并保留伪骨架的问题，同时收口 workspace 切换时的 inline 提示串页签。
+  - 2026-04-09 10:55 CST，移除上一版过重的整轮快照回滚，改为模块任务收口时清理空骨架，避免 workspace 之间互相污染。
+  - 2026-04-09 11:30 CST，修复后台任务在抽屉关闭态下未强制写回 workspace 共享结果，导致左下角摘要停留在 `0 模块 / 0 用例`、活动页签完成后被打回未执行的问题；同时去掉 shadow 恢复时对前一页签记录的旧快照回写，并补充“关闭抽屉后摘要同步”“双页签后台各自完成”回归用例。
+  - 2026-04-09 11:45 CST，进一步修复 shadow workspace 恢复结束时的二次全量持久化会把活动页签 running task restoreContext 刷回旧状态的问题；补强“双页签全量用例并发”回归，要求页签 A 已完成时页签 B 仍保持生成中并最终完成。
+  - 2026-04-09 12:05 CST，优先收口 XMind 页签污染：shadow workspace 恢复不再直接回灌进入前抓取的 live 快照，而是按当前 workspace record 重新挂载活动页签，避免旧快照把其他页签的名称、模块树和运行态串回当前页签。
+  - 2026-04-09 15:01 CST，继续修复关闭态页签污染：新增 `mirrorWorkspaceId`，将“模块镜像当前选中页签”与“live 活动 workspace”解耦；关闭抽屉后切换镜像页签只更新镜像选中项，不再改写 `activeWorkspaceId`，从而避免后续持久化把 A 页签 live 数据写进 B 页签；同时统一“重新打开/进度面板打开”入口，在真正打开抽屉前先按目标 workspace hydrate，再渲染抽屉，并补充“镜像切换不串写 + 重新打开/进度入口不串页签”回归用例。
+  - 2026-04-09 15:32 CST，继续收口“用例结果串页签”根因：XMind 后台任务在 shadow workspace 内提交结果时，不再允许 `casesGenCore.renderCaseGeneration/restoreLegacyCaseGenState/syncLegacyCaseGenState` 介入并回灌旧流程 live 状态；改为仅记录待刷新标记，待 workspace context 恢复到真实活动页签后再统一刷新镜像区，从而避免 A 页签后台完成时把刚提交的结果又被旧流程状态覆盖并错误持久化到其他 workspace。同步把“双页签后台完成且关闭抽屉切回旧流程视图”回归用例升级为校验两页签最终模块和用例内容必须不同。
+  - 2026-04-09 16:00 CST，按用户补充的稳定复现路径继续修复进度入口 reopen 污染：抽屉打开中/恢复中的目标 workspace 改为显式记录，并在 `onOpen` 时一律按最新目标 workspace 再 hydrate 一次；若打开过程中又通过左下角进度卡切到其他 workspace，也会同步刷新待打开目标，避免“先点 A 再点 B，最终 B 被 A 覆盖”。同时把“镜像切换/进度入口不串写”回归补强为先从进度卡打开 A，再关闭并从进度卡打开 B，要求第二次进入仍保持 B 自己的数据不被第一次结果覆盖。该问题与“全量用例只落模块骨架、后续用例任务未继续”共享同一类 reopen 覆盖时序风险，本次一并收口。
+  - 2026-04-09 16:11 CST，继续收口“进度入口切页后只剩模块骨架/两页签用例变一样”的根因：root `生成全量用例` 拆出的 discovery/module/retry 后台任务改为全程显式携带所属 `workspaceId`，不再在任务创建时回退读取当前活动页签；这样即使后台期间通过左下角进度卡打开/切换其他 XMind 页签，后续模块任务和 restoreContext 仍会回写到原 workspace，不会把 A 页签的模块用例串进 B，也不会把 B 卡在“2 模块、0 用例”后停止继续生成。同步把“双页签后台生成全量用例”回归补强为：在 B 仍生成中时，先从进度卡打开 A，再关闭并打开 B，要求 B 仍保持生成中并最终完成。
+  - 2026-04-09 16:58 CST，继续修复“第二个页签只剩模块、不再继续生成”的遗漏：模块后台任务 payload 重新补齐 `fallbackCases`，使 `FULL_CASES` 的模块阶段即使返回空结果，也会回退使用 discovery 阶段已有用例；同时删除根任务 payload 中误写的无效字段，避免后续根任务启动链路再引入运行时风险。
+  - 2026-04-09 16:58 CST，继续修复“红字提示串到别的页签”的阴影态遗漏：shadow workspace 下的状态通知改为静默写回所属 workspace snapshot，而不是直接丢弃；并把“空结果页签通过左下角进度入口重开时 warning 不串页签”补入 UI 回归。
+  - 2026-04-09 17:10 CST，继续修复失败态展示不一致：workspace 摘要新增“最近一次生成失败”判定，页签状态 pill 与左下角 `xmind用例生成进度` 统一显示 `失败`，不再因为历史记录被当作 dirty 而回退成 `未入库`；同时把现有失败回归扩展为校验工具栏、页签和进度面板三处一致。
+  - 2026-04-09 17:55 CST，继续修复“失败状态串到其他页签”：workspace 摘要失败态不再从 `history/root.status` 派生，而改为每个 workspace 自己持久化的显式失败标记，只在该 workspace 记录失败结果时才置位；同时把失败回归扩成双页签场景，要求 A 页签已有成功结果、B 页签失败后，A 仍保持 `未入库`，绝不能被串成 `失败`。
+
+- 功能名称：重新导入需求保留 XMind 页签结果修复
+- 功能描述：修复 `一键执行/功能流程` 已存在执行数据时，重新导入需求触发确认清理后会把 `XMind 用例生成` 页签、已生成用例与工作区快照一并清空的问题。本次调整将“流程执行数据清理”和“XMind 工作区保留”拆开：确认重新导入后，只清理功能流程与一键执行相关状态，保留 XMind 页签与对应结果。
+- 操作方式：
+  - 在 `XMind 用例生成` 中保留至少一个已有结果页签；
+  - 同时让 `功能流程` 或 `一键执行` 已存在历史执行结果；
+  - 重新导入需求文件，确认弹窗后继续导入。
+- 使用效果：
+  - 重新导入需求后，流程区旧结果会被清空，新的需求文本正常导入；
+  - `XMind 用例生成` 的已有页签、模块与用例结果不会丢失；
+  - 导入确认文案会明确说明：XMind 页签与结果会保留。
+- 新增内容/接口/组件：
+  - 调整需求导入确认的工作流数据判定，改为以旧流程数据为准，不再把 XMind 共享生成态误判为需清空对象；
+  - 调整工作流重置逻辑，新增旧流程生成态清空与当前 XMind 共享态保留；
+  - `tests/ui/workflow_persistence_import_guard.spec.js` 补充“确认重新导入后保留 XMind 页签与结果”回归。
+- 复用说明：复用现有 `caseGenLegacy` 旧流程快照、`xmindCaseGen` 工作区快照、导入确认抽屉与既有工作流持久化链路；未新增后端接口，未引入新的状态仓库。
+- 测试与验证：
+  - `node --check scripts/modules/app.js`，通过；
+  - `node --check tests/ui/workflow_persistence_import_guard.spec.js`，通过；
+  - `node --check tests/api/xmind_casegen_no_new_endpoint.spec.js`，通过；
+  - `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js`，1/1 通过；
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npx playwright test --config tests/playwright.config.js tests/ui/workflow_persistence_import_guard.spec.js --reporter=line`，受当前桌面沙箱 `MachPortRendezvous` 权限限制，Chromium headless 无法拉起，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
+- 更新记录：
+  - 2026-04-09 10:10 CST，拆分重新导入需求时的流程清理与 XMind 工作区保留边界，修复确认后 XMind 页签结果丢失，并补充对应 UI 回归。
+
+- 功能名称：XMind 全屏刷新恢复卡死修复
+- 功能描述：修复 `XMind 用例生成` 抽屉在已有生成结果时切到全屏后直接刷新页面，恢复阶段可能卡死、无响应，或抽屉无法重新进入可操作状态的问题。本次调整把刷新恢复改为优先复用已持久化的 workspace/viewState，在恢复期通过 DOM 直开抽屉并延后常规打开副作用，避免恢复时再次触发重型打开链路导致页面失稳。
+- 操作方式：
+  - 在 `用例生成 -> XMind用例生成` 中打开任意已有结果的页签；
+  - 点击全屏按钮后直接刷新页面；
+  - 页面恢复后继续查看 XMind 画布，或再次点击全屏按钮切换全屏/复原。
+- 使用效果：
+  - 全屏刷新后页面不再卡死，抽屉会按刷新前状态恢复；
+  - 抽屉恢复后仍可继续操作，包含再次切换全屏/复原；
+  - 刷新前未打开抽屉时，刷新后也不会被错误自动弹开。
+- 新增内容/接口/组件：
+  - `xmindCasegen`：新增刷新恢复时的抽屉 DOM fast-path 恢复，避免恢复期重复执行常规 `drawer.open()` 副作用；
+  - `casesGenCore`：保留待恢复阶段的 XMind 抽屉恢复意图，避免模块区初始化把该意图冲掉；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补强全屏刷新回归，验证恢复后抽屉仍可继续切换全屏。
+- 复用说明：继续复用现有 `state.xmindCaseGen` 工作区快照、抽屉 viewState 持久化、`casesGenCore` 模块区切换与既有 Playwright 基建；未新增后端接口，未引入第二套恢复状态机。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js scripts/core/appRuntime.js scripts/core/casesGenCore.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "页面刷新后保持在 XMind 用例生成页面，并恢复抽屉、全屏、缩放、位置与已记录折叠状态|全屏展示抽屉在较大 XMind 结构下刷新页面，不会导致页面恢复无响应|刷新前未打开 XMind 用例生成抽屉时，刷新后不会自动打开" --reporter=line`，3/3 通过。
+- 更新记录：
+  - 2026-04-08 15:02 CST，修复 XMind 抽屉全屏刷新恢复卡死，并清理本次排查加入的临时调试探针。
+  - 2026-04-08 19:30 CST，进一步收紧刷新后抽屉恢复判定，只按当前活动工作区/运行中任务恢复，避免非当前页签旧快照误触发自动重开；同时去掉恢复期重复 hydrate，修复全屏刷新恢复、关闭后自动重开相关回归，并补强对应 UI 辅助用例。
+
+- 功能名称：XMind 模块镜像打开页签结果保留修复
+- 功能描述：修复 `用例生成 -> xmind生成模块` 面板内点击 `打开XMind页签` 或关闭后再次通过顶部入口打开时，抽屉会错误回退成旧流程模块/用例结果的问题。此次调整将镜像区的工作区选择、抽屉打开与抽屉 `onOpen` 渲染重新按当前 XMind workspace 快照对齐，避免旧流程共享态在打开时插入覆盖。
+- 操作方式：
+  - 在 `用例生成 -> xmind生成模块` 中切换不同 XMind 工作区镜像；
+  - 点击模块卡片内 `打开XMind页签` 打开抽屉；
+  - 关闭抽屉后，再通过顶部 `XMind用例生成` 入口重新打开当前工作区。
+- 使用效果：
+  - 从镜像区打开抽屉时，会直接看到对应工作区自己的根节点、模块和用例；
+  - 关闭抽屉后再次打开，仍恢复当前工作区快照，不再回退成旧流程模块树；
+  - 旧流程上下文继续在抽屉关闭后恢复，但不会污染 XMind 工作区快照。
+- 新增内容/接口/组件：
+  - `xmindCasegen`：调整关闭态下通过进度/镜像入口切换工作区的策略，优先只切换工作区指针；
+  - `xmindCasegen`：调整抽屉打开前后的 workspace hydrate 时序，并在 `onOpen` 再次按活动 workspace 快照对齐共享态；
+  - `casesGenCore`：补充 `restoreLegacyCaseGenState` 在 `xmind-modules` 关闭态下的保护，避免镜像入口打开时误恢复旧流程模块结果。
+- 复用说明：复用现有 `state.xmindCaseGen` 工作区快照、旧流程快照桥接、`casesGenCore.setCaseGenViewTab` 与 MindElixir 渲染链路；未新增后端接口，未增加新的状态仓库。
+- 测试与验证：
+  - `node --check scripts/core/casesGenCore.js`，通过；
+  - `node --check scripts/modules/xmindCasegen.js`，通过；
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "用例生成页会拆分旧流程模块区与 XMind 模块区，切换 XMind 页签不会覆盖旧流程模块" --reporter=line`，1/1 通过；
+  - 将继续回归“多已生成页签刷新保留结果 / 生成中刷新不丢其他页签”用例，确认本次打开链路修复未带回退。
+- 更新记录：
+  - 2026-04-08 11:29 CST，修复镜像区打开与抽屉重开时误回退旧流程树的问题，并补齐对应 UI 回归。
+  - 2026-04-08 11:49 CST，补回镜像模块卡片的 `用例视图` 按钮，点击后直接复用现有列表式用例视图抽屉展示镜像模块用例；同时修正列表视图中 `steps/actions` 数组的展示方式，改为按换行渲染，不再以 ` / ` 拼接。
+
+- 功能名称：XMind 多页签刷新结果保留修复
+- 功能描述：修复 `XMind 用例生成` 在已有多个已生成页签时刷新页面，活动页签会被普通用例生成区初始化链路错误回切为空态，导致该页签的根节点、模块和用例结果丢失的问题。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 中创建多个页签并分别生成结果；
+  - 保持抽屉打开状态直接刷新页面，或在有后台恢复意图时等待页面重新初始化；
+  - 刷新后继续在各页签之间切换查看。
+- 使用效果：
+  - 活动页签刷新后不再丢失根节点、模块和用例结果；
+  - 非活动页签与“某个页签生成中刷新”的其他空闲页签仍保持各自数据；
+  - 普通用例生成区不会在 XMind 抽屉待恢复阶段把共享态错误覆写回活动工作区。
+- 新增内容/接口/组件：
+  - `casesGenCore`：新增 XMind 抽屉恢复意图判定，在待恢复阶段跳过旧流程共享态回切；
+  - 清理本次排查加入的临时刷新调试钩子与日志输出；
+  - 补强并保留对应 UI 回归用例，覆盖“多已生成页签刷新保留结果”与“生成中刷新不丢其他页签”。
+- 复用说明：复用现有 `state.xmindCaseGen` 工作区快照、抽屉恢复状态、普通用例生成区渲染链路与既有 Playwright 场景；未新增后端接口，未引入第二套刷新恢复状态机。
+- 测试与验证：
+  - `node --check scripts/core/casesGenCore.js`，通过；
+  - `node --check scripts/modules/xmindCasegen.js`，通过；
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "两个已生成的 XMind 页签在刷新后切换查看时，都会保留各自根节点与用例结果|某个 XMind 页签生成中刷新页面时，不会丢失其他空闲页签" --reporter=line`，2/2 通过。
+- 更新记录：
+  - 2026-04-08 10:35 CST，修复刷新初始化时普通模块区误把活动 XMind 工作区空写回的问题，并清理临时调试代码。
+
+- 功能名称：启动期异常缓存自动恢复修复
+- 功能描述：修复 `用例助手` 在本地流程快照或 `XMind 用例生成` 后台任务缓存异常膨胀后，页面启动卡死、无响应、登录态迟迟不出现的问题。此次调整为启动恢复增加本地缓存体积/格式保护，并把旧流程桥接快照改成轻量持久化，避免重复缓存把恢复链路拖死。
+- 操作方式：
+  - 正常进入页面时，系统会继续按原逻辑恢复流程状态；
+  - 若检测到本地 `workflow` 快照过大或格式异常，启动时会自动清理该异常缓存并继续完成页面初始化；
+  - 若检测到 `XMind 用例生成` 任务缓存异常过大或损坏，也会自动清理任务缓存，避免启动被阻塞。
+- 使用效果：
+  - 页面在异常缓存场景下可重新正常打开，不再长时间无响应；
+  - 登录态与主界面初始化不会再被过大的本地快照拖住；
+  - 旧流程桥接快照仍可恢复模块/结果态，但不再重复持久化需求文本、导入用例和图片媒体等大块输入数据。
+- 新增内容/接口/组件：
+  - `appRuntime`：新增启动期工作流快照长度/格式保护、异常缓存清理与恢复提示；
+  - `appRuntime`：将 `caseGenLegacy` 的持久化改为轻量版，仅保存旧流程专属生成态；
+  - `XMind` 后台任务管理：新增异常任务缓存读取保护，避免损坏/超大任务缓存阻塞页面；
+  - 新增 UI 自动化 `tests/ui/workflow_cache_recovery.spec.js`，覆盖异常超大缓存下页面仍可完成启动。
+- 复用说明：复用现有 `workflowStorageKey`、`caseGenLegacy`、`XMind` 后台任务缓存和中心悬浮提示能力；未新增后端接口，也未改动现有生成链路。
+- 测试与验证：
+  - `node --check scripts/core/appRuntime.js`，通过；
+  - `node --check scripts/modules/app.js`，通过；
+  - `node --check tests/ui/workflow_cache_recovery.spec.js`，通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/workflow_cache_recovery.spec.js --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/smoke.spec.js -g "页面加载与导航存在" --reporter=line`，1/1 通过。
+- 更新记录：
+  - 2026-04-07 18:10 CST，补充启动期异常缓存保护与轻量快照持久化，修复页面因本地缓存膨胀导致的卡死/无响应问题。
+
+- 功能名称：旧流程导入上下文与 XMind 工作区解耦修复
+- 功能描述：修复 `XMind 用例生成` 与旧版 `一键执行/功能流程` 共用页面时，进入/关闭 XMind 抽屉或切换 XMind 模块镜像后，会把旧流程的需求导入、用例导入、模块结果错误覆盖掉的问题。此次调整补齐旧流程快照桥接，并限制 XMind 视图下的共享态写回，确保旧流程输入与 XMind 工作区各自独立。
+- 操作方式：
+  - 在 `用例生成` 页导入旧流程需求和用例后，切换到 `xmind生成模块` 或打开 `XMind 用例生成` 抽屉；
+  - 关闭抽屉、切换镜像页签，或从 `用例生成` 切到 `一键执行/功能流程`；
+  - 旧流程需求、用例导入和旧流程模块结果都会保持原样，不再被 XMind 工作区覆盖。
+- 使用效果：
+  - `一键执行/功能流程` 的需求导入、用例导入与旧流程模块结果不再受 XMind 工作区切换影响；
+  - 从 XMind 抽屉返回 `用例生成`，或从 `用例生成` 切到 `auto` 后，旧流程上下文仍能正确恢复；
+  - XMind 仍继续复用共享生成结果与工作区快照，但不会再反向污染旧流程快照。
+- 新增内容/接口/组件：
+  - `scripts/modules/app.js`、`scripts/core/appRuntime.js`：补齐 `syncLegacyCaseGenState` / `restoreLegacyCaseGenState` 的共享 API 暴露；
+  - `scripts/core/casesGenCore.js`：为 legacy 快照同步增加 XMind 视图保护，只允许显式 `force` 同步覆盖旧流程快照；
+  - `scripts/modules/xmindCasegen.js`：进入/关闭抽屉时显式保存并恢复旧流程上下文，避免 XMind 工作区共享态误写回旧流程；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补充旧流程模块区、XMind 镜像区、关闭抽屉和切换到 `auto` 后上下文保持一致的回归断言。
+- 复用说明：继续复用现有 `casesGenCore` 的 legacy 快照能力、`xmindCasegen` 的工作区快照、普通用例生成共享结果真源与现有路由/页签切换逻辑；未新增后端接口，未引入第二套旧流程状态机。
+- 测试与验证：
+  - `node --check scripts/modules/app.js scripts/core/appRuntime.js scripts/core/casesGenCore.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "用例生成页会拆分旧流程模块区与 XMind 模块区，切换 XMind 页签不会覆盖旧流程模块" --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_clear_drawer.spec.js --reporter=line`，1/1 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/auto_case_library_import.spec.js --reporter=line`，3/3 通过。
+- 更新记录：
+  - 2026-04-07 17:47 CST，补齐 legacy 快照桥接与 XMind 视图保护，修复旧流程需求/用例导入被 XMind 共享态覆盖的问题，并补回相关 UI 回归。
+
+- 功能名称：用例生成模块区双入口分离
+- 功能描述：在 `用例生成` 页把原先混合展示的模块区拆成两条独立入口与面板：新增 `一键执行生成模块` 专门承载旧流程模块/用例结果；原 `生成模块` 改名为 `xmind生成模块`，仅镜像展示 XMind 工作区里的模块与用例结果，不再覆盖旧流程模块区。
+- 操作方式：
+  - 进入 `用例生成` 页后，可在页签栏直接看到 `一键执行生成模块` 与 `xmind生成模块` 两个入口；
+  - 点击 `一键执行生成模块` 只查看和操作旧流程模块；
+  - 点击 `xmind生成模块` 只查看当前 XMind 工作区镜像，并可通过模块区镜像页签切换要看的 XMind 工作区；
+  - 点击 `XMind用例生成` 打开抽屉后，仍会进入当前镜像选中的同一工作区。
+- 使用效果：
+  - 旧流程模块和 XMind 模块不再互相覆盖，模块区语义更清晰；
+  - 在旧流程页签下执行清除、导出、批量操作时，不会再把 XMind 工作区结果冲掉；
+  - 在 `xmind生成模块` 中切换镜像工作区时，只会切换当前要看的 XMind 数据，不会把旧流程共享态错误写回到 XMind 工作区快照。
+- 新增内容/接口/组件：
+  - 页面结构：`index.html`、`ai-workflow.html` 新增旧流程模块区独立 panel 和 XMind 镜像模块区独立 panel；
+  - 状态持久化：新增 `caseGenLegacy` 快照，用于隔离旧流程模块结果；
+  - `xmindCasegenApi` 新增模块区镜像专用工作区切换方法，并补充关闭抽屉场景下的共享快照保护；
+  - `casesGenCore` / `casesgen` 调整模块区页签切换、旧流程恢复和 XMind 镜像渲染链路；
+  - UI 回归补充双入口隔离与镜像页签同步场景。
+- 复用说明：继续复用现有 `casesGenCore` 旧流程生成链路、`xmindCasegen` 工作区快照与镜像摘要、左下角 XMind 进度面板和现有工作流持久化；未新增后端接口，未引入第二套生成状态机。
+- 测试与验证：
+  - `node --check scripts/base/state.js scripts/core/appRuntime.js scripts/core/casegenCore.js scripts/core/casesGenCore.js scripts/handlers/casegenHandlers.js scripts/modules/casegenProgress.js scripts/modules/casesgen.js scripts/modules/xmindCasegen.js tests/ui/casegen_clear_drawer.spec.js tests/ui/xmind_casegen_flow.spec.js`；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "拆分旧流程模块区与 XMind 模块区|模块区镜像页签会同步更新标题、状态和存在性" --reporter=line`，2/2 通过；
+  - `npx playwright test --config tests/playwright.config.js tests/ui/casegen_clear_drawer.spec.js --reporter=line`，1/1 通过。
+- 更新记录：
+  - 2026-04-07 15:02 CST，完成模块区双入口分离，并补强关闭抽屉状态下的 XMind 工作区快照保护，避免旧流程页签操作污染 XMind 镜像数据。
+
 - 功能名称：XMind 抽屉关闭态刷新恢复与模块区页签高亮修正
 - 功能描述：修复 `XMind 用例生成` 抽屉在用户手动关闭后，刷新页面仍会被旧工作区快照或后台任务 restore intent 重新弹出的异常；同时补齐 `用例生成 -> 生成模块` 区镜像 XMind 页签的选中高亮，让当前工作区更容易识别。
 - 操作方式：
