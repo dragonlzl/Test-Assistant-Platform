@@ -3013,6 +3013,141 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#caseFileList')).toContainText('旧流程用例导入-A.json');
   });
 
+  test('通过 XMind 页签切换或重开 workspace 时，测试用例导入状态会跟随当前 workspace 同步', async ({ page }) => {
+    const token = 'token-xmind-case-import-status-sync';
+    const user = { id: 312, username: 'demo_user_case_status_sync', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await createXmindWorkspaceByManualPrep(page, '导入状态-A', '需求A：已导入 1 份用例。', {
+      useExistingWorkspace: true,
+      completePrep: true,
+    });
+    await createXmindWorkspaceByManualPrep(page, '导入状态-B', '需求B：当前没有任何导入用例。', {
+      completePrep: true,
+    });
+
+    const workspaceIds = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
+      return host && Array.isArray(host.workspaceOrder) ? host.workspaceOrder.slice() : [];
+    });
+    expect(workspaceIds).toHaveLength(2);
+
+    await page.evaluate(({ ids }) => {
+      function buildCases(moduleTitle, caseTitle) {
+        return JSON.stringify([{
+          module: moduleTitle,
+          title: caseTitle,
+          priority: 'P1',
+          preconditions: moduleTitle + '前置条件',
+          steps: ['1、进入' + moduleTitle, '2、执行' + caseTitle],
+          expected: caseTitle + '执行成功',
+        }], null, 2);
+      }
+      var state = window.app && window.app.state ? window.app.state : null;
+      var casesApi = window.app && window.app.casesCoreApi ? window.app.casesCoreApi : null;
+      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
+      if (!state || !host || !host.workspaces) return;
+      var workspaceA = host.workspaces[ids[0]];
+      var workspaceB = host.workspaces[ids[1]];
+      if (!workspaceA || !workspaceA.snapshot || !workspaceA.snapshot.shared) return;
+      if (!workspaceB || !workspaceB.snapshot || !workspaceB.snapshot.shared) return;
+
+      var importedText = buildCases('导入模块-A', '导入用例-A');
+      workspaceA.snapshot.shared.importedCases = [{
+        id: 'sync-import-a',
+        name: '导入状态-A.json',
+        text: importedText,
+        list: [{
+          module: '导入模块-A',
+          title: '导入用例-A',
+          priority: 'P1',
+          preconditions: '导入模块-A前置条件',
+          steps: ['1、进入导入模块-A', '2、执行导入用例-A'],
+          expected: '导入用例-A执行成功',
+        }],
+        meta: {
+          sourceType: 'case-library-select',
+          caseFileId: 7001,
+          projectId: 91,
+          versionId: 9201,
+          fileName: '导入状态-A.json',
+        },
+      }];
+      workspaceA.snapshot.shared.caseText = importedText;
+      workspaceB.snapshot.shared.importedCases = [];
+      workspaceB.snapshot.shared.caseText = '';
+
+      host.activeWorkspaceId = String(ids[0] || '');
+      host.mirrorWorkspaceId = String(ids[0] || '');
+      state.requirementLabel = String(workspaceA.snapshot.shared.requirementLabel || '');
+      state.requirementLabelSource = String(workspaceA.snapshot.shared.requirementLabelSource || '');
+      state.lastRawImportName = String(workspaceA.snapshot.shared.lastRawImportName || '');
+      state.importedCases = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.importedCases || []));
+      state.caseGenModules = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.caseGenModules || []));
+      state.caseGenSource = String(workspaceA.snapshot.shared.caseGenSource || '');
+      state.caseGenResults = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.caseGenResults || {}));
+      state.caseSelections = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.caseSelections || {}));
+      state.caseGenSuggestions = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.caseGenSuggestions || {}));
+      state.caseGenModuleStatus = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.caseGenModuleStatus || {}));
+      state.caseGenProgress = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.caseGenProgress || {}));
+      state.caseGenTiming = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.caseGenTiming || {}));
+      state.caseGenProgressNotice = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.caseGenProgressNotice || {}));
+      state.caseGenSettings = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.caseGenSettings || state.caseGenSettings || {}));
+      state.requirementMedia = JSON.parse(JSON.stringify(workspaceA.snapshot.shared.requirementMedia || state.requirementMedia || {}));
+      var caseTextEl = document.getElementById('caseText');
+      if (caseTextEl) caseTextEl.value = importedText;
+      if (casesApi && typeof casesApi.renderImportedCaseList === 'function') {
+        casesApi.renderImportedCaseList();
+      }
+      if (casesApi && typeof casesApi.syncCaseTextWithImports === 'function') {
+        casesApi.syncCaseTextWithImports({ skipStatusSync: true });
+      }
+      var caseStatusEl = document.getElementById('caseStatus');
+      if (caseStatusEl) {
+        caseStatusEl.textContent = '已导入 1 份用例';
+        caseStatusEl.className = 'status ok';
+      }
+    }, { ids: workspaceIds });
+
+    await expect(page.locator('#caseFileList')).toContainText('导入状态-A.json');
+    await expect(page.locator('#caseStatus')).toContainText('已导入 1 份');
+
+    await page.click('#closeXmindCaseGenDrawerBtn');
+    await waitXmindDrawerClosedStable(page);
+    await page.evaluate((workspaceId) => {
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.openWorkspace === 'function') {
+        api.openWorkspace(workspaceId);
+      }
+    }, workspaceIds[1]);
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('导入状态-B');
+    await expect(page.locator('#caseFileList')).toContainText('未导入文件');
+    await expect.poll(async () => {
+      return page.locator('#caseStatus').evaluate((el) => {
+        return el && typeof el.textContent === 'string' ? el.textContent.trim() : '';
+      });
+    }).toBe('');
+
+    await page.click('#closeXmindCaseGenDrawerBtn');
+    await waitXmindDrawerClosedStable(page);
+    await page.evaluate((workspaceId) => {
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.openWorkspace === 'function') {
+        api.openWorkspace(workspaceId);
+      }
+    }, workspaceIds[0]);
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('导入状态-A');
+    await expect(page.locator('#caseFileList')).toContainText('导入状态-A.json');
+    await expect(page.locator('#caseStatus')).toContainText('已导入 1 份');
+  });
+
   test('XMind 页签重置或删除后，模块区镜像页签会同步更新标题、状态和存在性', async ({ page }) => {
     const token = 'xmind-module-mirror-sync-token';
     const user = { id: 80222, username: 'xmind-module-mirror-sync' };

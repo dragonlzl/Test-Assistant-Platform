@@ -19,6 +19,29 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：缺失模块视图兼容占位子模块结果
+- 功能描述：修复 `测试用例覆盖对比结果` 中 `missing` 使用“占位/实例化子模块名 -> 缺失测试点数组”结构时，缺失模块视图无法展开有效行的问题。此次调整收紧“模块字段名”的识别范围，只把标准字段名当作 `module` 字段，避免把 `修改此处以确定子模块` 这类实际模块名误判成字段名，导致缺失测试点被吞掉。
+- 操作方式：
+  - 导入 `cases_compare` 结果文件；
+  - 结果中的 `missing` 包含类似 `{ "修改此处以确定子模块": ["测试点1", "测试点2"] }` 的条目；
+  - 点击 `缺失模块视图`。
+- 使用效果：
+  - `缺失模块视图` 可正常展开；
+  - 占位/实例化子模块名会按模块名展示；
+  - 对应缺失测试点会正确拆成可勾选的行，不再出现“可导入但视图为空”的情况。
+- 新增内容/接口/组件：
+  - `compareCore`：新增标准模块字段识别，避免把包含“模块”字样的任意 key 都当作字段名；
+  - `compareCore`：兼容“子模块名/占位模块名 -> 缺失测试点数组”结构；
+  - `tests/ui/cases_missing_view.spec.js`：新增占位子模块格式覆盖结果的缺失视图回归；
+  - `tests/fixtures/cases_compare_missing_view_placeholder_module.txt`：新增对应测试夹具。
+- 复用说明：复用现有 `cases_compare` 导入链路、缺失模块解析与 Playwright 缺失视图测试基建；未新增后端接口，未引入新的视图状态仓库。
+- 测试与验证：
+  - `node --check scripts/core/compareCore.js tests/ui/cases_missing_view.spec.js`，通过；
+  - `node` + `vm` 直连 `compareCore.parseMissingModules/buildMissingRows` 对 `tests/fixtures/cases_compare_missing_view_placeholder_module.txt` 做本地解析校验，得到 `2` 个模块、`3` 行缺失测试点，首行模块名为 `修改此处以确定子模块`，通过；
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/cases_missing_view.spec.js -g "导入占位子模块格式的覆盖结果后仍可展开缺失模块视图" --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
+- 更新记录：
+  - 2026-04-10 16:40 CST，兼容 `missing` 中“占位子模块名 -> 缺失测试点数组”的结果结构，修复覆盖结果可导入但缺失模块视图没有任何可展示行的问题。
+
 - 功能名称：XMind 空结果伪成功与跨页签提示串用修复
 - 功能描述：修复 `XMind 用例生成` 根节点执行 `生成全量用例` 时，模型仅返回模块骨架但没有任何有效用例，页面仍提示“已生成 X 个模块，0 条用例”、生成记录被当成成功结果，以及切换到其他生成页签后沿用上一页签完成提示的问题。本次调整将 `FULL_CASES` 的有效成功定义收紧为“至少落下 1 条有效用例”，并把空模块骨架改为在模块任务收口时就地移除；同时在显式切换/新建 workspace 时清空跨页签 inline 状态文案。
 - 操作方式：
@@ -39,6 +62,8 @@
   - `tests/ui/xmind_casegen_flow.spec.js`：新增“空用例回滚 + 跨页签提示隔离”回归场景。
 - 复用说明：复用现有模块级空结果移除逻辑、既有 `workspace` hydrate/switch 链路与 XMind Playwright 测试夹具；未新增后端接口，也未引入新的状态仓库。
 - 测试与验证：
+  - `node --check scripts/core/casesCore.js scripts/core/appRuntime.js scripts/modules/caseLibrary.js scripts/modules/app.js tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "通过 XMind 页签切换或重开 workspace 时，测试用例导入状态会跟随当前 workspace 同步" --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
   - `node --check scripts/modules/xmindCasegen.js`，通过；
   - `node --check tests/ui/xmind_casegen_flow.spec.js`，通过；
   - `API_BASE_URL=http://127.0.0.1:18080 npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`，1/1 通过；
@@ -49,6 +74,7 @@
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "生成全量用例返回空用例时会回滚伪骨架，并且切换页签不会串用完成提示|两个 XMind 页签后台生成全量用例时，即使关闭抽屉并切回旧流程视图，也会各自保留独立结果" --workers=1 --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已继续补强到最新回归场景。
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "补全失败时工具栏只显示短提示，详细错误写入生成记录" --workers=1 --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动即失败，未能在本机完成 UI 自动化执行；对应断言已扩展为同时校验 XMind 页签状态和左下角进度卡片显示 `失败`。
 - 更新记录：
+  - 2026-04-10 14:35 CST，继续修复 `测试用例导入（XMind）` 状态不同步：将 `caseStatus` 从零散的导入成功文案改为可统一重算的同步函数，并接入启动恢复、XMind workspace hydrate/重开与文件移除链路，避免出现文件列表已经是“未导入文件”，状态仍停留在“已导入 1 份用例”的陈旧提示；同时补入“通过 XMind workspace 切换/重开后，导入状态跟随当前 workspace 同步”的 UI 回归。
   - 2026-04-10 12:35 CST，继续修复“双页签并发时一个页签莫名停掉”的缓存侧根因：XMind managed-task 原先把 localStorage 任务列表当成唯一真源，两个 workspace 并发且任务上下文较大时，一旦任务缓存写入失败或读到超大缓存，就会把当前页读回旧/空任务列表，剩余页签随即被误判为无任务并掉回 `已准备`。现改为当前页面在任务缓存写入失败、超大或损坏时回退使用内存态任务真源继续推进，不再因为缓存异常把并发页签停掉；同时补入“任务缓存写入失败时，双页签并发生成仍能继续完成”的 UI 回归。
   - 2026-04-10 10:20 CST，继续修复“双页签并发时一个先完成会把另一个卡回已准备”的终态任务饥饿问题：XMind managed-task 在消费某个 terminal task 后，会追加一次补偿 reconcile，并且任务事件不再只消费当前 terminal task，而会顺带拉起同批次里其他 terminal task，避免另一个 workspace 的 root pipeline 停在已完成未收口的中间态；同时把“先通过左下角进度入口打开 A，再让 A 先完成时，B 仍保持生成中并继续完成”补入 UI 回归。
   - 2026-04-09 10:40 CST，修复 `FULL_CASES` 空结果被误判成功并保留伪骨架的问题，同时收口 workspace 切换时的 inline 提示串页签。

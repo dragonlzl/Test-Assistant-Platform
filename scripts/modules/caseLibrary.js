@@ -17748,6 +17748,9 @@
       setStatus(dom.importSelectStatus, '缺少用例导入能力（casesCore）', 'err');
       return Promise.resolve(false);
     }
+    var syncImportedCaseStatus = typeof casesApi.syncImportedCaseStatus === 'function'
+      ? casesApi.syncImportedCaseStatus
+      : null;
     state.importSelectDrawer.processing = true;
     renderImportSelectDrawerList();
     syncImportSelectDrawerControls();
@@ -17791,7 +17794,11 @@
         type = 'warn';
       }
       setStatus(dom.importSelectStatus, msg, type);
-      if (caseStatusEl) setStatus(caseStatusEl, msg, type);
+      if (syncImportedCaseStatus) {
+        syncImportedCaseStatus({ text: msg, type: type });
+      } else if (caseStatusEl) {
+        setStatus(caseStatusEl, msg, type);
+      }
       return successCount > 0;
     }).finally(function() {
       state.importSelectDrawer.processing = false;

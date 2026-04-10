@@ -453,6 +453,25 @@
       return text ? [text] : [];
     }
 
+    function normalizeMissingFieldKey(value) {
+      return normalizeMissingTextValue(value)
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[_-]+/g, '');
+    }
+
+    function isCanonicalMissingModuleField(key) {
+      var normalized = normalizeMissingFieldKey(key);
+      return normalized === 'module'
+        || normalized === '模块'
+        || normalized === '模块名'
+        || normalized === '模块名称'
+        || normalized === 'modulename'
+        || normalized === 'moduletitle'
+        || normalized === 'title'
+        || normalized === 'name';
+    }
+
     function normalizeMissingModule(entry) {
       if (!entry || typeof entry !== 'object') return null;
       var normalized = {
@@ -469,7 +488,7 @@
         if (list.length) target.push.apply(target, list);
       }
 
-      if (entries.length === 1 && !/module|模块/.test(entries[0][0])) {
+      if (entries.length === 1 && !isCanonicalMissingModuleField(entries[0][0])) {
         var singleKey = entries[0][0];
         var singleValue = entries[0][1];
         var pointsOnly = coerceMissingList(singleValue);
@@ -484,22 +503,29 @@
       entries.forEach(function(pair, idx) {
         var key = pair[0];
         var value = pair[1];
-        if (!normalized.module && /module|模块/.test(key)) {
-          var text = normalizeMissingTextValue(value);
+        var keyIsCanonicalModuleField = isCanonicalMissingModuleField(key);
+        if (!normalized.module && keyIsCanonicalModuleField) {
+          var text = Array.isArray(value) || (value && typeof value === 'object')
+            ? ''
+            : normalizeMissingTextValue(value);
           if (text) normalized.module = text;
         }
         if (/场景/.test(key)) appendList(normalized.scenarios, value);
         else if (/要点|测点|测试点|缺失/.test(key)) appendList(normalized.points, value);
         else if (/耦合|相关/.test(key)) appendList(normalized.coupled, value);
         else if (/特殊|边界/.test(key)) appendList(normalized.special, value);
-        else if (idx === 0 && (Array.isArray(value) || (value && typeof value === 'object'))) {
-          maybeBlocks.push(value);
-        } else if (!normalized.module && (Array.isArray(value) || typeof value === 'string')) {
+        else if (
+          !normalized.module
+          && !keyIsCanonicalModuleField
+          && (Array.isArray(value) || typeof value === 'string' || (value && typeof value === 'object'))
+        ) {
           var pointList = coerceMissingList(value);
           if (pointList.length) {
             normalized.module = normalizeMissingTextValue(key) || ('模块' + (idx + 1));
             normalized.points = pointList;
           }
+        } else if (idx === 0 && (Array.isArray(value) || (value && typeof value === 'object'))) {
+          maybeBlocks.push(value);
         }
       });
 
@@ -515,11 +541,12 @@
           Object.entries(block).forEach(function(inner) {
             var key = inner[0];
             var value = inner[1];
+            var keyIsCanonicalModuleField = isCanonicalMissingModuleField(key);
             if (/场景/.test(key)) appendList(normalized.scenarios, value);
             else if (/要点|测点|测试点|缺失/.test(key)) appendList(normalized.points, value);
             else if (/耦合|相关/.test(key)) appendList(normalized.coupled, value);
             else if (/特殊|边界/.test(key)) appendList(normalized.special, value);
-            else if (!normalized.module && /module|模块/.test(key)) {
+            else if (!normalized.module && keyIsCanonicalModuleField) {
               var text = normalizeMissingTextValue(value);
               if (text) normalized.module = text;
             }
@@ -573,7 +600,7 @@
       if (typeof rawMissing !== 'object') return [];
       var keys = Object.keys(rawMissing);
       if (!keys.length) return [];
-      if (keys.length === 1 && /模块|module|缺失/.test(keys[0])) {
+      if (keys.length === 1 && isCanonicalMissingModuleField(keys[0])) {
         var wrapped = rawMissing[keys[0]];
         if (Array.isArray(wrapped)) return normalizeMissingPayload(wrapped);
         if (wrapped && typeof wrapped === 'object') {
@@ -582,7 +609,7 @@
           });
         }
       }
-      var hasModuleKey = keys.some(function(key) { return /module|模块/.test(key); });
+      var hasModuleKey = keys.some(function(key) { return isCanonicalMissingModuleField(key); });
       var hasPointKey = keys.some(function(key) { return /要点|测点|测试点|缺失/.test(key); });
       if (hasModuleKey || hasPointKey) return [rawMissing];
       return keys.map(function(moduleName) {

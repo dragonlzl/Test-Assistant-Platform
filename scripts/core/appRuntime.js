@@ -2139,6 +2139,7 @@
       renderSettingsUI();
       renderCaseGeneration();
       renderImportedCaseList();
+      syncCaseTextWithImports();
       renderAutoRawInfo();
       renderCleanView();
       renderCleanRawView(null);

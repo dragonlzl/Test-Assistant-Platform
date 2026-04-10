@@ -63,6 +63,31 @@ test('导入带需求标识的覆盖结果仍可展示缺失模块', async ({ pa
   await expect(container.locator('tbody tr').first()).toContainText('礼包系统综合流程与业务逻辑');
 });
 
+test('导入占位子模块格式的覆盖结果后仍可展开缺失模块视图', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.app && window.app._inited === true);
+  await gotoCleanTab(page);
+
+  const fixturePath = path.join(__dirname, '..', 'fixtures', 'cases_compare_missing_view_placeholder_module.txt');
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.click('#importCasesCoverage'),
+  ]);
+  await chooser.setFiles(fixturePath);
+
+  await expect(page.locator('#casesCoverageStatus')).toContainText('已导入覆盖对比结果');
+
+  const missingBtn = page.locator('#missingViewBtn');
+  await expect(missingBtn).toBeEnabled();
+  await missingBtn.click();
+
+  const container = page.locator('#missingViewContainer');
+  await expect(container).toHaveClass(/visible/);
+  await expect(container.locator('tbody tr')).toHaveCount(3);
+  await expect(container.locator('tbody tr').first()).toContainText('修改此处以确定子模块');
+  await expect(container.locator('tbody tr').first()).toContainText('进入商城首页后检查左侧页签默认选中状态正确');
+});
+
 test('缺失模块表头全选/取消有效', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(() => window.app && window.app._inited === true);

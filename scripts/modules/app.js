@@ -2816,6 +2816,7 @@
       'getCombinedCaseText',
       'getImportedCaseObjects',
       'syncCaseTextWithImports',
+      'syncImportedCaseStatus',
       'resetImportedCaseView',
       'refreshImportedCaseView',
       'toggleImportedCaseView',

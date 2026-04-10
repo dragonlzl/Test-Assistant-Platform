@@ -126,6 +126,8 @@
       if (!files.length) return;
       if (setStatus && dom.caseStatus) setStatus(dom.caseStatus, '正在解析测试用例...', '');
       if (handlers.setStepInProgress) handlers.setStepInProgress('cases-upload');
+      var importedCount = 0;
+      var cancelled = false;
       try {
         for (var i = 0; i < files.length; i += 1) {
           var file = files[i];
@@ -138,6 +140,7 @@
               : true;
             if (!ensured) {
               if (setStatus && dom.caseStatus) setStatus(dom.caseStatus, '已取消导入（需求标识为空）', 'warn');
+              cancelled = true;
               break;
             }
             var result = await (handlers.parseXmindFile ? handlers.parseXmindFile(file) : Promise.resolve({ text: '', list: [] }));
@@ -186,8 +189,18 @@
             sourceType: 'external-import',
             fileName: file && file.name ? String(file.name) : '',
           });
+          importedCount += 1;
         }
-        if (setStatus && dom.caseStatus) setStatus(dom.caseStatus, '已导入 ' + files.length + ' 份测试用例', 'ok');
+        if (!cancelled) {
+          if (importedCount > 0) {
+            syncImportedCaseStatus({
+              text: '已导入 ' + importedCount + ' 份测试用例',
+              type: 'ok',
+            });
+          } else {
+            syncImportedCaseStatus();
+          }
+        }
         if (setStatus && dom.casesCoverageStatus) setStatus(dom.casesCoverageStatus, '', '');
         setCaseViewHint('');
       } catch (err) {
@@ -212,6 +225,38 @@
         : placeholder;
       if (caseFileListEl) caseFileListEl.innerHTML = html;
       if (autoCaseFileListEl) autoCaseFileListEl.innerHTML = html;
+    }
+
+    function getImportedCaseEntries() {
+      return Array.isArray(state.importedCases) ? state.importedCases.filter(Boolean) : [];
+    }
+
+    function resolveImportedCaseStatusLabel(entries) {
+      var list = Array.isArray(entries) ? entries : getImportedCaseEntries();
+      if (!list.length) return '测试用例';
+      var allLibraryImports = list.every(function(item) {
+        var meta = item && item.meta && typeof item.meta === 'object' ? item.meta : null;
+        return Boolean(meta && meta.sourceType === 'case-library-select');
+      });
+      return allLibraryImports ? '用例' : '测试用例';
+    }
+
+    function syncImportedCaseStatus(options) {
+      var opts = options || {};
+      var nextText = '';
+      var nextType = '';
+      if (Object.prototype.hasOwnProperty.call(opts, 'text')) {
+        nextText = opts.text ? String(opts.text) : '';
+        nextType = opts.type ? String(opts.type) : '';
+      } else {
+        var entries = getImportedCaseEntries();
+        if (entries.length) {
+          nextText = '已导入 ' + entries.length + ' 份' + resolveImportedCaseStatusLabel(entries);
+          nextType = 'ok';
+        }
+      }
+      if (setStatus && dom.caseStatus) setStatus(dom.caseStatus, nextText, nextType);
+      return { text: nextText, type: nextType };
     }
 
     function getImportedCaseObjects() {
@@ -255,12 +300,17 @@
       return caseTextEl && caseTextEl.value ? caseTextEl.value.trim() : '';
     }
 
-    function syncCaseTextWithImports() {
-      if (!caseTextEl) return;
-      if (hasImportedCases()) {
-        caseTextEl.value = getCombinedCaseText();
-      } else if (!caseTextEl.value.trim()) {
-        caseTextEl.value = '';
+    function syncCaseTextWithImports(options) {
+      var opts = options || {};
+      if (caseTextEl) {
+        if (hasImportedCases()) {
+          caseTextEl.value = getCombinedCaseText();
+        } else if (!caseTextEl.value.trim()) {
+          caseTextEl.value = '';
+        }
+      }
+      if (opts.skipStatusSync !== true) {
+        syncImportedCaseStatus();
       }
     }
 
@@ -351,7 +401,7 @@
       if (!state.importedCases) state.importedCases = [];
       state.importedCases.push(entry);
       renderImportedCaseList();
-      syncCaseTextWithImports();
+      syncCaseTextWithImports({ skipStatusSync: true });
       refreshImportedCaseView();
     }
 
@@ -394,15 +444,16 @@
       hasImportedCases: hasImportedCases,
       hasCaseSource: hasCaseSource,
       getCombinedCaseList: getCombinedCaseList,
-        getCombinedCaseText: getCombinedCaseText,
-        syncCaseTextWithImports: syncCaseTextWithImports,
-        getImportedCaseObjects: getImportedCaseObjects,
-        resetImportedCaseView: resetImportedCaseView,
-        refreshImportedCaseView: refreshImportedCaseViewInternal,
-        toggleImportedCaseView: toggleImportedCaseView,
-        buildCasesComparePayload: buildCasesComparePayload,
-        importCaseFiles: importCaseFiles,
-      };
+      getCombinedCaseText: getCombinedCaseText,
+      syncCaseTextWithImports: syncCaseTextWithImports,
+      syncImportedCaseStatus: syncImportedCaseStatus,
+      getImportedCaseObjects: getImportedCaseObjects,
+      resetImportedCaseView: resetImportedCaseView,
+      refreshImportedCaseView: refreshImportedCaseViewInternal,
+      toggleImportedCaseView: toggleImportedCaseView,
+      buildCasesComparePayload: buildCasesComparePayload,
+      importCaseFiles: importCaseFiles,
+    };
   }
 
   window.app = window.app || {};
