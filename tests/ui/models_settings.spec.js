@@ -66,6 +66,34 @@ test.describe('模型管理与全局设置', () => {
     await page.click('#resetModelForm');
     await expect(formWrapper).toHaveClass(/hidden/);
   });
+  test('XMind 鍚庡彴浠诲姟淇濈暀妯″瀷娴佸紡閰嶇疆', async ({ page }) => {
+    const snapshot = await page.evaluate(() => {
+      if (!window.app || !window.app.xmindCaseGenTaskManager || typeof window.app.xmindCaseGenTaskManager.createTask !== 'function') {
+        return null;
+      }
+      const task = window.app.xmindCaseGenTaskManager.createTask({
+        prompt: 'XMind prompt',
+        requestMode: 'text',
+        requestText: 'hello',
+        model: {
+          id: 'packy-xmind',
+          name: 'Packy XMind',
+          provider: 'custom',
+          baseUrl: 'https://www.packyapi.com/v1/responses',
+          apiKey: 'sk-test',
+          model: 'gpt-5.4',
+          maxTokens: 1024,
+          stream: true,
+          streamMode: 'stream',
+          capabilities: ['vision'],
+        },
+      });
+      return task && task.model ? task.model : null;
+    });
+    expect(snapshot).not.toBeNull();
+    expect(snapshot.stream).toBe(true);
+    expect(snapshot.streamMode).toBe('stream');
+  });
 
   test('全局设置保存与列/分页逻辑', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });

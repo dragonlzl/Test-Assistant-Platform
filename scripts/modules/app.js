@@ -507,6 +507,8 @@
           apiKey: model.apiKey || '',
           model: model.model || '',
           maxTokens: model.maxTokens,
+          stream: model.stream,
+          streamMode: model.streamMode,
         };
       }
 
@@ -843,6 +845,8 @@
           apiKey: model.apiKey || '',
           model: model.model || '',
           maxTokens: model.maxTokens,
+          stream: model.stream,
+          streamMode: model.streamMode,
         };
       }
 
@@ -1185,6 +1189,8 @@
           apiKey: model.apiKey || '',
           model: model.model || '',
           maxTokens: model.maxTokens,
+          stream: model.stream,
+          streamMode: model.streamMode,
           capabilities: cloneJson(model.capabilities, []),
         };
       }
