@@ -757,6 +757,13 @@ xmind用例生成进度
 <label for="modelMaxTokens">最大输出 Tokens</label>
 <input id="modelMaxTokens" min="256" placeholder="默认 1024" step="128" type="number"/>
 </div>
+<div class="row">
+<label for="modelStreamMode">调用方式</label>
+<select id="modelStreamMode">
+<option value="nonstream">非流式（默认）</option>
+<option value="stream">流式（使用packyapi请选择此选项）</option>
+</select>
+</div>
 <div class="row column">
 <label>模型能力标签（默认不勾选）</label>
 <div class="model-capability-options">

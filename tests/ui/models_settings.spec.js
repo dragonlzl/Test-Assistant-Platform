@@ -48,15 +48,51 @@ test.describe('模型管理与全局设置', () => {
     await page.fill('#modelApiKey', 'sk-test');
     await page.fill('#modelIdentifier', 'deepseek-test');
     await page.fill('#modelMaxTokens', '2048');
+    await page.selectOption('#modelStreamMode', 'stream');
     await page.click('#saveModelBtn');
     await expect(page.locator('#modelFormStatus')).toContainText('模型已保存');
     await expect(formWrapper).toHaveClass(/hidden/);
     await expect(page.locator('#modelList')).toContainText('UI自动化模型');
+    await expect(page.locator('#modelList')).toContainText('调用：流式');
+
+    const storedModel = await page.evaluate(() => {
+      const list = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
+      return list[0] || null;
+    });
+    expect(Boolean(storedModel && storedModel.stream)).toBeTruthy();
 
     await page.click('#createModelBtn');
     await page.fill('#modelDisplayName', '表单重置模型');
     await page.click('#resetModelForm');
     await expect(formWrapper).toHaveClass(/hidden/);
+  });
+  test('XMind 鍚庡彴浠诲姟淇濈暀妯″瀷娴佸紡閰嶇疆', async ({ page }) => {
+    const snapshot = await page.evaluate(() => {
+      if (!window.app || !window.app.xmindCaseGenTaskManager || typeof window.app.xmindCaseGenTaskManager.createTask !== 'function') {
+        return null;
+      }
+      const task = window.app.xmindCaseGenTaskManager.createTask({
+        prompt: 'XMind prompt',
+        requestMode: 'text',
+        requestText: 'hello',
+        model: {
+          id: 'packy-xmind',
+          name: 'Packy XMind',
+          provider: 'custom',
+          baseUrl: 'https://www.packyapi.com/v1/responses',
+          apiKey: 'sk-test',
+          model: 'gpt-5.4',
+          maxTokens: 1024,
+          stream: true,
+          streamMode: 'stream',
+          capabilities: ['vision'],
+        },
+      });
+      return task && task.model ? task.model : null;
+    });
+    expect(snapshot).not.toBeNull();
+    expect(snapshot.stream).toBe(true);
+    expect(snapshot.streamMode).toBe('stream');
   });
 
   test('全局设置保存与列/分页逻辑', async ({ page }) => {

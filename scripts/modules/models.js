@@ -31,6 +31,7 @@
     const modelApiKeyEl = pickEl('modelApiKeyEl', 'modelApiKey');
     const modelIdentifierEl = pickEl('modelIdentifierEl', 'modelIdentifier');
     const modelMaxTokensEl = pickEl('modelMaxTokensEl', 'modelMaxTokens');
+    const modelStreamModeEl = pickEl('modelStreamModeEl', 'modelStreamMode');
     const modelCapabilityVisionEl = pickEl('modelCapabilityVisionEl', 'modelCapabilityVision');
     const modelCapabilityReasoningEl = pickEl('modelCapabilityReasoningEl', 'modelCapabilityReasoning');
     const modelCapabilityChatEl = pickEl('modelCapabilityChatEl', 'modelCapabilityChat');
@@ -227,6 +228,29 @@
       });
     }
 
+    function normalizeModelStream(value) {
+      if (value === true) return true;
+      var raw = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+      if (!raw) return false;
+      return raw === 'true' || raw === '1' || raw === 'stream' || raw === 'sse' || raw === 'on';
+    }
+
+    function readModelStreamFromForm() {
+      if (!modelStreamModeEl) return false;
+      return modelStreamModeEl.value === 'stream';
+    }
+
+    function writeModelStreamToForm(value) {
+      if (!modelStreamModeEl) return;
+      modelStreamModeEl.value = normalizeModelStream(value) ? 'stream' : 'nonstream';
+    }
+
+    function getModelStreamLabel(model) {
+      return normalizeModelStream(model && (model.stream !== undefined ? model.stream : model.streamMode))
+        ? '流式'
+        : '非流式';
+    }
+
     function hasDuplicateModelName(model) {
       if (!model) return false;
       var targetId = getStableModelId(model);
@@ -387,6 +411,7 @@
         apiKey: model.apiKey,
         model: model.model,
         maxTokens: model.maxTokens,
+        stream: normalizeModelStream(model && (model.stream !== undefined ? model.stream : model.streamMode)),
         capabilities: getModelCapabilities(model),
       };
     }
@@ -408,6 +433,9 @@
           apiKey: cfg.apiKey || cfg.api_key || '',
           model: cfg.model || cfg.modelIdentifier || cfg.model_id || '',
           maxTokens: cfg.maxTokens || cfg.max_tokens || defaultMaxTokens,
+          stream: normalizeModelStream(
+            cfg.stream !== undefined && cfg.stream !== null ? cfg.stream : cfg.streamMode
+          ),
           capabilities: normalizeModelCapabilities(
             cfg.capabilities
             || cfg.modelCapabilities
@@ -689,6 +717,7 @@
         const providerHtml = escapeHtml(m && m.provider ? m.provider : 'custom');
         const modelIdHtml = escapeHtml(m && m.model ? m.model : '');
         const maxTokens = m && m.maxTokens ? m.maxTokens : defaultMaxTokens;
+        const streamLabel = escapeHtml(getModelStreamLabel(m));
         return `
         <div class="model-card" data-id="${stableId}">
           <div class="model-name-line">
@@ -699,6 +728,7 @@
             <span>类型：${providerHtml}</span>
             <span>模型 ID：${modelIdHtml}</span>
             <span>Max Tokens：${maxTokens}</span>
+            <span>调用：${streamLabel}</span>
           </div>
           <div class="actions">
             <button class="secondary" data-edit="${stableId}">编辑</button>
@@ -734,6 +764,7 @@
       if (modelApiKeyEl) modelApiKeyEl.value = '';
       if (modelIdentifierEl) modelIdentifierEl.value = '';
       if (modelMaxTokensEl) modelMaxTokensEl.value = defaultMaxTokens;
+      writeModelStreamToForm(false);
       writeModelCapabilitiesToForm([]);
       setStatus(modelFormStatus, hide ? '' : '已重置表单', '');
       if (hide && modelFormWrapper) {
@@ -754,6 +785,7 @@
       if (modelApiKeyEl) modelApiKeyEl.value = model.apiKey || '';
       if (modelIdentifierEl) modelIdentifierEl.value = model.model || '';
       if (modelMaxTokensEl) modelMaxTokensEl.value = model.maxTokens || defaultMaxTokens;
+      writeModelStreamToForm(model.stream !== undefined ? model.stream : model.streamMode);
       writeModelCapabilitiesToForm(getModelCapabilities(model));
       setStatus(modelFormStatus, '已加载待编辑模型，可修改后保存', 'ok');
     }
@@ -818,6 +850,7 @@
         apiKey: modelApiKeyEl ? modelApiKeyEl.value.trim() : '',
         model: modelIdentifierEl ? modelIdentifierEl.value.trim() : '',
         maxTokens: Number.isFinite(maxTokensVal) && maxTokensVal > 0 ? maxTokensVal : defaultMaxTokens,
+        stream: readModelStreamFromForm(),
         capabilities: readModelCapabilitiesFromForm(),
       };
       if (!model.baseUrl || !model.apiKey || !model.model) {
@@ -1371,6 +1404,24 @@
       return false;
     }
 
+    function looksLikeHtmlDocumentText(text) {
+      if (text === null || text === undefined) return false;
+      var trimmed = String(text).trim().toLowerCase();
+      if (!trimmed) return false;
+      if (trimmed.indexOf('<!doctype html') === 0) return true;
+      if (trimmed.indexOf('<html') === 0) return true;
+      if (trimmed.indexOf('<head') === 0) return true;
+      if (trimmed.indexOf('<body') === 0) return true;
+      return trimmed.indexOf('</html>') !== -1 && trimmed.indexOf('<title') !== -1;
+    }
+
+    function extractHtmlTitleText(text) {
+      if (text === null || text === undefined) return '';
+      var match = String(text).match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      if (!match || !match[1]) return '';
+      return String(match[1]).replace(/\s+/g, ' ').trim();
+    }
+
     async function testModel(id, statusEl) {
       const model = getModelById(id);
       if (!model) {
@@ -1382,6 +1433,7 @@
         var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
         var modelId = model && model.model ? String(model.model).toLowerCase() : '';
         var provider = model && model.provider ? String(model.provider).toLowerCase() : '';
+        var useStream = normalizeModelStream(model && (model.stream !== undefined ? model.stream : model.streamMode));
         var isClaudeLike = provider === 'claude' || provider === 'anthropic' || modelId.indexOf('claude') !== -1;
         var useClaudeCompat = isClaudeLike && /\/responses(?:\?|$)/i.test(baseUrl);
         var requestUrl = useClaudeCompat
@@ -1391,6 +1443,7 @@
         const body = isResponsesApi
           ? {
             model: model.model,
+            stream: useStream,
             input: [
               {
                 role: 'user',
@@ -1403,6 +1456,7 @@
           : {
             model: model.model,
             messages: [{ role: 'user', content: 'ping' }],
+            stream: useStream,
             max_tokens: 16,
           };
         const proxyFn = api && typeof api.proxyModelRequest === 'function'
@@ -1454,6 +1508,12 @@
           const detailText = normalizeHttpErrorBody(raw);
           const detail = detailText ? ('：' + detailText.slice(0, 200)) : '';
           throw new Error(`HTTP ${res.status}${detail}`);
+        }
+        if (looksLikeHtmlDocumentText(raw)) {
+          var htmlTitle = extractHtmlTitleText(raw);
+          var titleText = htmlTitle ? ('（页面标题：' + htmlTitle + '）') : '';
+          setStatus(statusEl, '测试失败：接口返回 HTML 页面' + titleText + '，请检查接口地址是否为实际 API 地址', 'err');
+          return;
         }
         let data = null;
         if (raw) {

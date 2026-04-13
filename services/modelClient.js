@@ -69,6 +69,30 @@
     return String(content).trim();
   }
 
+  function looksLikeHtmlDocument(text) {
+    if (text === null || text === undefined) return false;
+    var trimmed = String(text).trim().toLowerCase();
+    if (!trimmed) return false;
+    if (trimmed.indexOf('<!doctype html') === 0) return true;
+    if (trimmed.indexOf('<html') === 0) return true;
+    if (trimmed.indexOf('<head') === 0) return true;
+    if (trimmed.indexOf('<body') === 0) return true;
+    return trimmed.indexOf('</html>') !== -1 && trimmed.indexOf('<title') !== -1;
+  }
+
+  function extractHtmlTitle(text) {
+    if (text === null || text === undefined) return '';
+    var match = String(text).match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    if (!match || !match[1]) return '';
+    return String(match[1]).replace(/\s+/g, ' ').trim();
+  }
+
+  function buildHtmlResponseError(rawText) {
+    var title = extractHtmlTitle(rawText);
+    var extra = title ? '（页面标题：' + title + '）' : '';
+    return new Error('模型接口返回了 HTML 页面' + extra + '，请检查接口地址是否为实际 API 地址（如 /v1/responses 或 /v1/chat/completions），而不是网站首页/控制台页面');
+  }
+
   function createModelClient(options) {
     var defaultPrompts = options && options.defaultPrompts ? options.defaultPrompts : {};
     var defaultMaxTokens = options && options.defaultMaxTokens ? options.defaultMaxTokens : 1024;
@@ -219,12 +243,39 @@
       return /\/responses(?:\?|$)/i.test(baseUrl);
     }
 
+    function modelUsesStreaming(model) {
+      if (!model || typeof model !== 'object') return false;
+      var value = model.stream !== undefined && model.stream !== null ? model.stream : model.streamMode;
+      if (value === true) return true;
+      var raw = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+      if (!raw) return false;
+      return raw === 'true' || raw === '1' || raw === 'stream' || raw === 'sse' || raw === 'on';
+    }
+
+    function modelNeedsPackyResponsesStreamCompat(model) {
+      if (!modelUsesStreaming(model)) return false;
+      if (!modelUsesResponsesApi(model)) return false;
+      var baseUrl = getEffectiveModelBaseUrl(model).toLowerCase();
+      return baseUrl.indexOf('packyapi.com') !== -1;
+    }
+
+    function buildPromptPrefixedText(systemPrompt, userText) {
+      var prompt = systemPrompt === undefined || systemPrompt === null ? '' : String(systemPrompt).trim();
+      var text = userText === undefined || userText === null ? '' : String(userText);
+      if (!prompt) return text;
+      return prompt + '\n\n用户输入：\n' + text;
+    }
+
     function buildModelRequestBody(model, systemPrompt, userText, safeTemperature, maxTokens, reasoningEffort, deepseekJsonMode) {
+      var useStream = modelUsesStreaming(model);
+      var usePackyStreamCompat = modelNeedsPackyResponsesStreamCompat(model);
       if (modelUsesResponsesApi(model)) {
-        var safeText = userText === undefined || userText === null ? '' : String(userText);
+        var safeText = usePackyStreamCompat
+          ? buildPromptPrefixedText(systemPrompt, userText)
+          : (userText === undefined || userText === null ? '' : String(userText));
         var responseBody = {
           model: model.model,
-          stream: false,
+          stream: useStream,
           input: [
             {
               role: 'user',
@@ -233,10 +284,12 @@
               ],
             }
           ],
-          temperature: safeTemperature,
           max_output_tokens: maxTokens,
         };
-        if (systemPrompt) responseBody.instructions = systemPrompt;
+        if (!usePackyStreamCompat) {
+          responseBody.temperature = safeTemperature;
+          if (systemPrompt) responseBody.instructions = systemPrompt;
+        }
         return responseBody;
       }
       var chatBody = {
@@ -245,6 +298,7 @@
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userText }
         ],
+        stream: useStream,
         temperature: safeTemperature,
         max_tokens: maxTokens,
       };
@@ -283,6 +337,8 @@
       var safeTemperature = Number.isFinite(tempValue) ? Math.min(1, Math.max(0, tempValue)) : 0.2;
       var reasoningEffort = opts.reasoningEffort || '';
       var systemPrompt = promptText && String(promptText).trim() ? String(promptText).trim() : '';
+      var useStream = modelUsesStreaming(model);
+      var usePackyStreamCompat = modelNeedsPackyResponsesStreamCompat(model);
       var normalizedBlocks = normalizeContentBlocks(contentBlocks);
       if (!normalizedBlocks.length) {
         normalizedBlocks.push({ type: 'text', text: '请处理输入内容。' });
@@ -300,19 +356,27 @@
             text: block.text,
           };
         });
+        if (usePackyStreamCompat && systemPrompt) {
+          responseContent.unshift({
+            type: 'input_text',
+            text: systemPrompt,
+          });
+        }
         var responseBody = {
           model: model.model,
-          stream: false,
+          stream: useStream,
           input: [
             {
               role: 'user',
               content: responseContent,
             }
           ],
-          temperature: safeTemperature,
           max_output_tokens: maxTokens,
         };
-        if (systemPrompt) responseBody.instructions = systemPrompt;
+        if (!usePackyStreamCompat) {
+          responseBody.temperature = safeTemperature;
+          if (systemPrompt) responseBody.instructions = systemPrompt;
+        }
         return responseBody;
       }
       var messageContent = normalizedBlocks.map(function(block) {
@@ -339,6 +403,7 @@
       var chatBody = {
         model: model.model,
         messages: messages,
+        stream: useStream,
         temperature: safeTemperature,
         max_tokens: maxTokens,
       };
@@ -659,24 +724,27 @@
     function parseModelRawBody(rawBody) {
       var text = rawBody === undefined || rawBody === null ? '' : String(rawBody);
       if (!text) {
-        return { data: null, content: '', isSse: false };
+        return { data: null, content: '', isSse: false, isHtml: false };
       }
       try {
-        return { data: JSON.parse(text), content: '', isSse: false };
+        return { data: JSON.parse(text), content: '', isSse: false, isHtml: false };
       } catch (err) {
         // 非 JSON 时继续按 SSE 或纯文本处理。
       }
       var trimmed = text.trim();
       if (!trimmed) {
-        return { data: null, content: '', isSse: false };
+        return { data: null, content: '', isSse: false, isHtml: false };
+      }
+      if (looksLikeHtmlDocument(trimmed)) {
+        return { data: null, content: '', isSse: false, isHtml: true };
       }
       var sseResult = extractContentFromSse(trimmed);
       if (sseResult.detected) {
         if (sseResult.error) throw new Error(sseResult.error);
-        return { data: null, content: sseResult.content || '', isSse: true };
+        return { data: null, content: sseResult.content || '', isSse: true, isHtml: false };
       }
       var sanitizedRaw = stripCodeFence(trimmed);
-      return { data: null, content: sanitizedRaw || trimmed, isSse: false };
+      return { data: null, content: sanitizedRaw || trimmed, isSse: false, isHtml: false };
     }
 
     async function sendModelRequest(model, headers, body, timeoutSec, signal) {
@@ -854,6 +922,9 @@
       }
       rawBody = await res.text();
       var parsedRaw = parseModelRawBody(rawBody);
+      if (parsedRaw.isHtml) {
+        throw buildHtmlResponseError(rawBody);
+      }
       var data = parsedRaw.data;
       if (!data && parsedRaw.content) return parsedRaw.content;
       if (!data && parsedRaw.isSse) {
@@ -937,6 +1008,9 @@
       }
       rawBody = await res.text();
       var parsedRaw = parseModelRawBody(rawBody);
+      if (parsedRaw.isHtml) {
+        throw buildHtmlResponseError(rawBody);
+      }
       var data = parsedRaw.data;
       if (!data && parsedRaw.content) return parsedRaw.content;
       if (!data && parsedRaw.isSse) {

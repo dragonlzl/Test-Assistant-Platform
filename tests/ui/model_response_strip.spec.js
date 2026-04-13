@@ -265,6 +265,135 @@ test('Claude 模型走 Packy responses 地址时自动兼容为 chat/completions
   expect(captured.hasInput).toBeFalsy();
 });
 
+test('Responses API 启用流式时能解析 SSE 内容', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const captured = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    const request = { body: '' };
+    const client = service.createModelClient({
+      fetchImpl: async function mockFetch(_, options) {
+        request.body = options && options.body ? String(options.body) : '';
+        return {
+          ok: true,
+          text: async function mockText() {
+            return [
+              'event: response.output_text.delta',
+              'data: {"type":"response.output_text.delta","delta":"hel","output_index":0}',
+              '',
+              'event: response.output_text.delta',
+              'data: {"type":"response.output_text.delta","delta":"lo","output_index":0}',
+              '',
+              'event: response.output_text.done',
+              'data: {"type":"response.output_text.done","text":"hello","output_index":0}',
+              '',
+            ].join('\n');
+          },
+        };
+      },
+    });
+
+    const content = await client.callModelWithConfig(
+      { baseUrl: 'https://www.packyapi.com/v1/responses', model: 'gpt-5.4', stream: true },
+      'ping',
+      '任意提示'
+    );
+
+    const body = request.body ? JSON.parse(request.body) : {};
+    return {
+      content,
+      stream: body.stream,
+    };
+  });
+
+  expect(captured.stream).toBeTruthy();
+  expect(captured.content).toBe('hello');
+});
+
+test('Packy Responses 流式调用使用精简兼容请求', async ({ page }) => {
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+      return route.continue();
+    }
+    return route.abort();
+  });
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      localStorage.removeItem('tap-auth-token');
+    } catch (_) {}
+  });
+  const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+  await page.goto(base + '/index.html');
+  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+
+  const captured = await page.evaluate(async () => {
+    const service = window.app && window.app.services && window.app.services.modelClient;
+    if (!service || typeof service.createModelClient !== 'function') {
+      throw new Error('模型客户端未加载');
+    }
+    const request = { body: '' };
+    const client = service.createModelClient({
+      fetchImpl: async function mockFetch(_, options) {
+        request.body = options && options.body ? String(options.body) : '';
+        return {
+          ok: true,
+          text: async function mockText() {
+            return [
+              'event: response.output_text.done',
+              'data: {"type":"response.output_text.done","text":"ok","output_index":0}',
+              '',
+            ].join('\n');
+          },
+        };
+      },
+    });
+
+    const content = await client.callModelWithConfig(
+      { baseUrl: 'https://www.packyapi.com/v1/responses', model: 'gpt-5.4', stream: true, maxTokens: 1024 },
+      '需求正文',
+      '需求评审提示词',
+      '',
+      0.2
+    );
+
+    const body = request.body ? JSON.parse(request.body) : {};
+    return {
+      content,
+      hasInstructions: Object.prototype.hasOwnProperty.call(body, 'instructions'),
+      hasTemperature: Object.prototype.hasOwnProperty.call(body, 'temperature'),
+      inputText: body && body.input && body.input[0] && body.input[0].content && body.input[0].content[0]
+        ? String(body.input[0].content[0].text || '')
+        : '',
+    };
+  });
+
+  expect(captured.content).toBe('ok');
+  expect(captured.hasInstructions).toBeFalsy();
+  expect(captured.hasTemperature).toBeFalsy();
+  expect(captured.inputText).toContain('需求评审提示词');
+  expect(captured.inputText).toContain('需求正文');
+});
+
 test('代理返回 503 时保留真实 HTTP 错误而不是退化成 Failed to fetch', async ({ page }) => {
   await page.route('**/*', (route) => {
     const url = route.request().url();

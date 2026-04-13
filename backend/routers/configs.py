@@ -19,6 +19,11 @@ from ..dependencies import get_current_user
 router = APIRouter(tags=["settings"])
 
 
+class _NoRedirectHandler(urllib_request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def _normalize_scope(scope: Optional[str], allow_all: bool = False) -> str:
     value = (scope or "user").lower()
     if allow_all and value == "all":
@@ -294,8 +299,10 @@ def proxy_model_request(
         method="POST",
     )
 
+    opener = urllib_request.build_opener(_NoRedirectHandler())
+
     try:
-        with urllib_request.urlopen(request_obj, timeout=timeout_sec) as upstream_resp:
+        with opener.open(request_obj, timeout=timeout_sec) as upstream_resp:
             raw = upstream_resp.read()
             content_type = upstream_resp.headers.get("Content-Type", "application/json")
             return Response(
@@ -304,6 +311,19 @@ def proxy_model_request(
                 headers={"Content-Type": content_type},
             )
     except urllib_error.HTTPError as exc:
+        status_code = int(exc.code or 502)
+        if 300 <= status_code < 400:
+            location = ""
+            if exc.headers:
+                location = str(exc.headers.get("Location", "") or "").strip()
+            detail = "模型接口发生重定向"
+            if location:
+                detail += f"：{location}"
+            detail += "，请检查接口地址或网关配置，当前返回的可能不是实际模型 API"
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=detail,
+            ) from exc
         raw = b""
         try:
             raw = exc.read() or b""
@@ -319,7 +339,7 @@ def proxy_model_request(
             raw = reason.encode("utf-8")
         return Response(
             content=raw,
-            status_code=int(exc.code or 502),
+            status_code=status_code,
             headers={"Content-Type": content_type},
         )
     except urllib_error.URLError as exc:
