@@ -48,10 +48,18 @@ test.describe('模型管理与全局设置', () => {
     await page.fill('#modelApiKey', 'sk-test');
     await page.fill('#modelIdentifier', 'deepseek-test');
     await page.fill('#modelMaxTokens', '2048');
+    await page.selectOption('#modelStreamMode', 'stream');
     await page.click('#saveModelBtn');
     await expect(page.locator('#modelFormStatus')).toContainText('模型已保存');
     await expect(formWrapper).toHaveClass(/hidden/);
     await expect(page.locator('#modelList')).toContainText('UI自动化模型');
+    await expect(page.locator('#modelList')).toContainText('调用：流式');
+
+    const storedModel = await page.evaluate(() => {
+      const list = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
+      return list[0] || null;
+    });
+    expect(Boolean(storedModel && storedModel.stream)).toBeTruthy();
 
     await page.click('#createModelBtn');
     await page.fill('#modelDisplayName', '表单重置模型');
