@@ -25,6 +25,11 @@
     var pickMissingSelections = handlers.pickMissingSelections || function() { return []; };
     var scrollElementIntoView = handlers.scrollElementIntoView || function() {};
     var switchTab = handlers.switchTab || function() {};
+    var goToCaseGeneration = handlers.goToCaseGeneration || function() {};
+    var ensureCaseGenModulesFromSplit = handlers.ensureCaseGenModulesFromSplit || function() { return false; };
+    var renderCaseGeneration = handlers.renderCaseGeneration || function() {};
+    var setCaseGenViewTab = handlers.setCaseGenViewTab || function() {};
+    var syncLegacyCaseGenState = handlers.syncLegacyCaseGenState || function() {};
     var getRequirementLabel = handlers.getRequirementLabel || function() { return ''; };
     var getFeishuWebhookUrl = handlers.getFeishuWebhookUrl || function() { return ''; };
     var postFeishuMessage = handlers.postFeishuMessage || function() { return Promise.resolve(); };
@@ -378,8 +383,33 @@
       }
     }
 
+    function ensureLegacyCaseGenReadyForMissingFill() {
+      var splitText = splitResultEl && splitResultEl.value ? String(splitResultEl.value || '').trim() : '';
+      if (!splitText) return false;
+      if (typeof goToCaseGeneration === 'function') {
+        goToCaseGeneration('cases');
+      }
+      var synced = Array.isArray(state.caseGenModules)
+        && state.caseGenModules.length
+        && String(state.caseGenSource || '') === splitText;
+      if (!synced) {
+        var needsSync = !Array.isArray(state.caseGenModules)
+          || !state.caseGenModules.length
+          || String(state.caseGenSource || '') !== splitText;
+        if (needsSync && typeof ensureCaseGenModulesFromSplit === 'function') {
+          ensureCaseGenModulesFromSplit();
+          renderCaseGeneration();
+        }
+        switchTab('casesgen');
+      }
+      if (typeof setCaseGenViewTab === 'function') {
+        setCaseGenViewTab('legacy-modules', { persist: false });
+      }
+      return Boolean(Array.isArray(state.caseGenModules) && state.caseGenModules.length);
+    }
+
     function smartFillMissingSuggestions() {
-      if (!state.caseGenModules.length) {
+      if (!ensureLegacyCaseGenReadyForMissingFill()) {
         setMissingStatus('请先完成测试模块拆分，才能智能填充建议', 'warn');
         return;
       }
@@ -434,8 +464,11 @@
       } else {
         setMissingStatus('已将 ' + updatedCount + ' 个缺失模块的建议同步至用例生成', 'ok');
       }
+      if (typeof syncLegacyCaseGenState === 'function') {
+        syncLegacyCaseGenState({ persist: false });
+      }
+      persistWorkflowState();
       closeMissingDrawersAfterFill();
-      switchTab('casesgen');
     }
 
     function resetAutoCompareMissingView() {

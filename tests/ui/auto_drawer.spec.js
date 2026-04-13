@@ -141,4 +141,129 @@ test.describe('一键执行抽屉视图', () => {
     await expect(page.locator('#autoCompareDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#autoCompareToggleBtn')).toBeEnabled();
   });
+
+  test('缺失智能填充会按当前拆分结果同步旧流程用例生成', async ({ page }) => {
+    await page.evaluate(() => {
+      var splitPayload = JSON.stringify([{
+        module: '短按吞噬功能',
+        key_scenarios: ['吞噬敌人'],
+        test_points: ['已有测试点'],
+        coupled_modules: [],
+      }], null, 2);
+      var coveragePayload = JSON.stringify({
+        coverage: 95,
+        missing: [{
+          module: '短按吞噬功能',
+          points: ['缺失测试点A'],
+        }],
+        extra: [],
+      }, null, 2);
+      var splitEl = document.getElementById('splitResult');
+      if (splitEl) {
+        splitEl.removeAttribute('readonly');
+        splitEl.value = splitPayload;
+        splitEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      var coverageEl = document.getElementById('casesCompareResult');
+      if (coverageEl) {
+        coverageEl.removeAttribute('readonly');
+        coverageEl.value = coveragePayload;
+        coverageEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      var state = window.app && window.app.state ? window.app.state : null;
+      if (!state) return;
+      state.caseGenModules = [{
+        id: 'stale-mod',
+        title: '旧模块',
+        module: '旧模块',
+        scenarios: [],
+        points: [],
+        coupled: [],
+      }];
+      state.caseGenSource = '[{"module":"旧模块"}]';
+      state.caseGenResults = {};
+      state.caseSelections = {};
+      state.caseGenSuggestions = {};
+      state.missingLastList = [{
+        module: '短按吞噬功能',
+        scenarios: [],
+        points: ['缺失测试点A'],
+        coupled: [],
+        special: [],
+      }];
+      state.missingRowCache = [{
+        moduleIndex: 0,
+        moduleName: '短按吞噬功能',
+        pointIndex: 0,
+        text: '缺失测试点A',
+      }];
+      state.missingSelections = new Set([0]);
+      state.autoRunning = false;
+      state.caseGenSettings = state.caseGenSettings && typeof state.caseGenSettings === 'object'
+        ? state.caseGenSettings
+        : {};
+      state.caseGenSettings.activeTab = 'settings';
+      if (window.app && window.app.core && typeof window.app.core.updateAutoMissingCard === 'function') {
+        window.app.core.updateAutoMissingCard();
+      }
+    });
+
+    await expect(page.locator('#autoMissingSmartFill')).toBeEnabled();
+    await page.click('#autoMissingToggle');
+    await expect(page.locator('#autoMissingDrawer')).toHaveClass(/open/);
+    await page.click('#autoMissingSmartFill');
+
+    const firstFillState = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      return {
+        activeTab: state ? String(state.activeTab || '') : '',
+        activeCaseGenTab: state && state.caseGenSettings ? String(state.caseGenSettings.activeTab || '') : '',
+        modules: state && Array.isArray(state.caseGenModules)
+          ? state.caseGenModules.map(function(item) { return String((item && (item.title || item.module)) || ''); })
+          : [],
+        suggestionValues: state && state.caseGenSuggestions
+          ? Object.keys(state.caseGenSuggestions).map(function(key) { return String(state.caseGenSuggestions[key] || ''); })
+          : [],
+      };
+    });
+
+    expect(firstFillState.activeTab).toBe('casesgen');
+    expect(firstFillState.activeCaseGenTab).toBe('legacy-modules');
+    expect(firstFillState.modules).toEqual(['短按吞噬功能']);
+    expect(firstFillState.suggestionValues.some(function(item) {
+      return item.indexOf('缺失测试要点：缺失测试点A') !== -1;
+    })).toBeTruthy();
+    await expect(page.locator('#caseGenLegacyModulesTabBtn')).toHaveClass(/is-active/);
+    await expect(page.locator('#casesGenerationContainer')).toContainText('短按吞噬功能');
+    await expect(page.locator('#casesGenerationContainer textarea[data-suggestion]')).toHaveValue(/缺失测试要点：缺失测试点A/);
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('auto');
+        window.app.switchTab('casesgen');
+      }
+    });
+    await expect(page.locator('#casesGenerationContainer textarea[data-suggestion]')).toHaveValue(/缺失测试要点：缺失测试点A/);
+
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('auto');
+      }
+      if (window.app && window.app.core && typeof window.app.core.updateAutoMissingCard === 'function') {
+        window.app.core.updateAutoMissingCard();
+      }
+    });
+
+    await page.click('#autoMissingToggle');
+    await page.click('#autoMissingSmartFill');
+    const secondFillStatus = await page.evaluate(() => {
+      var autoStatus = document.getElementById('autoMissingStatus');
+      var missingStatus = document.getElementById('missingViewStatus');
+      return {
+        autoStatus: autoStatus ? String(autoStatus.textContent || '').trim() : '',
+        missingStatus: missingStatus ? String(missingStatus.textContent || '').trim() : '',
+      };
+    });
+    expect(secondFillStatus.autoStatus).not.toContain('请先完成测试模块拆分');
+    expect(secondFillStatus.missingStatus).not.toContain('请先完成测试模块拆分');
+  });
 });

@@ -1309,6 +1309,27 @@
       return activeCaseGenView !== 'xmind-modules';
     }
 
+    function shouldXmindOwnLiveWorkspaceState() {
+      if (isDrawerOpen()) return true;
+      if (String(state.activeTab || '') !== 'casesgen') return false;
+      var settings = state.caseGenSettings && typeof state.caseGenSettings === 'object'
+        ? state.caseGenSettings
+        : null;
+      var activeCaseGenView = settings && (settings.activeTab === 'xmind-modules' || settings.activeTab === 'modules')
+        ? 'xmind-modules'
+        : (settings && settings.activeTab === 'legacy-modules' ? 'legacy-modules' : 'settings');
+      return activeCaseGenView === 'xmind-modules';
+    }
+
+    function shouldUseShadowWorkspaceContext(targetWorkspaceId) {
+      var targetId = String(targetWorkspaceId || '');
+      if (!targetId) return false;
+      var currentWorkspaceId = String(getActiveWorkspaceId() || '');
+      if (!currentWorkspaceId) return true;
+      if (targetId !== currentWorkspaceId) return true;
+      return !shouldXmindOwnLiveWorkspaceState();
+    }
+
     function ensureDrawer() {
       if (drawerInstance) return drawerInstance;
       if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') {
@@ -10455,6 +10476,7 @@
 
     function restoreWorkflowContextFromManagedTasks(tasks) {
       var currentWorkspaceId = getActiveWorkspaceId();
+      var shouldApplyLiveRestore = shouldXmindOwnLiveWorkspaceState();
       var scopedTasks = filterTasksByWorkspace(tasks, currentWorkspaceId);
       var otherWorkspaceTasks = (Array.isArray(tasks) ? tasks : []).filter(function(task) {
         var workspaceId = getTaskWorkspaceId(task);
@@ -10474,6 +10496,16 @@
       var restoreContext = buildMergedManagedTaskRestoreContext(scopedTasks);
       var latestTask = pickLatestManagedTaskRestoreContext(scopedTasks);
       if (!restoreContext) return false;
+      if (!shouldApplyLiveRestore) {
+        var recordChanged = applyRestoreContextToWorkspaceRecord(currentWorkspaceId, restoreContext);
+        if (recordChanged) {
+          renderWorkspaceTabs();
+          updateSummary();
+          renderCaseGenProgressBoard();
+          scheduleRecoveredStatePersist();
+        }
+        return recordChanged;
+      }
       var changed = false;
       var rawTextEl = document.getElementById('rawText');
       var fileNameEl = document.getElementById('fileName');
@@ -11561,7 +11593,8 @@
 
     function runInWorkspaceContextNow(workspaceId, handler) {
       var targetId = String(workspaceId || '');
-      if (!targetId || targetId === getActiveWorkspaceId()) {
+      var shouldUseShadow = shouldUseShadowWorkspaceContext(targetId);
+      if (!targetId || !shouldUseShadow) {
         return Promise.resolve().then(function() {
           return handler(false);
         });
@@ -11574,7 +11607,12 @@
       var previousId = String(host.activeWorkspaceId || '');
       var previousMirrorId = String(host.mirrorWorkspaceId || previousId || '');
       var previousSnapshot = null;
-      if (previousId && host.workspaces[previousId]) {
+      var previousLiveSharedSnapshot = null;
+      var liveOwnedByXmind = shouldXmindOwnLiveWorkspaceState();
+      if (!liveOwnedByXmind) {
+        previousLiveSharedSnapshot = buildCurrentSharedWorkspaceSnapshot();
+      }
+      if (liveOwnedByXmind && previousId && host.workspaces[previousId]) {
         previousSnapshot = createWorkspaceSnapshotFromCurrent();
         saveActiveWorkspaceSnapshot({
           skipSummaryDraftSync: true,
@@ -11623,7 +11661,12 @@
           if (previousId && restoreWorkspaces[previousId]) {
             var previousRecord = restoreWorkspaces[previousId];
             var previousRecordSnapshot = normalizeWorkspaceSnapshot(previousRecord && previousRecord.snapshot ? previousRecord.snapshot : null);
-            applySharedWorkspaceSnapshot(previousRecordSnapshot.shared, { silentDom: true });
+            applySharedWorkspaceSnapshot(
+              liveOwnedByXmind
+                ? previousRecordSnapshot.shared
+                : previousLiveSharedSnapshot,
+              { silentDom: true }
+            );
             applyActiveXmindStateSnapshot(previousRecordSnapshot.xmind);
             var restoredHost = getWorkspaceHostState();
             restoredHost.activeWorkspaceId = previousId;

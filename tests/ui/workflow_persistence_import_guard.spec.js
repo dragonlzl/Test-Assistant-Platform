@@ -251,6 +251,234 @@ test.describe('需求导入确认与持久化', () => {
     expect(snapshot.caseText).toContain('旧 XMind 用例');
   });
 
+  test('活动 XMind workspace 后台完成时，不覆盖旧流程 live 模块与需求上下文', async ({ page }) => {
+    await page.evaluate(() => {
+      var app = window.app || {};
+      var state = app.state || null;
+      if (!state || !state.xmindCaseGen) return;
+      var now = Date.now();
+      var workspaceId = 'xmind-live-isolation';
+      var legacyResult = JSON.stringify([{
+        module: '旧流程模块',
+        title: '旧流程用例',
+        priority: 'P1',
+        preconditions: '旧流程前置条件',
+        steps: ['1、执行旧流程'],
+        expected: '旧流程结果正确',
+      }], null, 2);
+      var xmindHost = state.xmindCaseGen;
+      var xmindSnapshot = JSON.parse(JSON.stringify(xmindHost || {}));
+      xmindSnapshot.prep = xmindSnapshot.prep && typeof xmindSnapshot.prep === 'object'
+        ? xmindSnapshot.prep
+        : {};
+      xmindSnapshot.prep.requirementMode = 'manual';
+      xmindSnapshot.prep.manualRequirementLabel = 'XMind后台需求';
+      xmindSnapshot.prep.completed = true;
+      xmindSnapshot.viewState = xmindSnapshot.viewState && typeof xmindSnapshot.viewState === 'object'
+        ? xmindSnapshot.viewState
+        : {};
+      xmindSnapshot.viewState.drawerOpen = false;
+      xmindSnapshot.viewState.fullscreen = false;
+      xmindSnapshot.viewState.updatedAt = now;
+
+      xmindHost.activeWorkspaceId = workspaceId;
+      xmindHost.workspaceOrder = [workspaceId];
+      xmindHost.nextWorkspaceSeq = 2;
+      xmindHost.workspaces = {};
+      xmindHost.workspaces[workspaceId] = {
+        id: workspaceId,
+        seq: 1,
+        name: 'XMind后台需求',
+        pendingOpenPrep: false,
+        updatedAt: now,
+        createdAt: now,
+        snapshot: {
+          xmind: xmindSnapshot,
+          shared: {
+            requirementLabel: 'XMind后台需求',
+            requirementLabelSource: 'workspace',
+            lastRawImportName: 'xmind-background.txt',
+            rawText: 'XMind后台原文',
+            caseText: '',
+            importedCases: [],
+            caseGenModules: [{
+              id: 'xmind-seed-mod',
+              title: 'XMind旧模块',
+              module: 'XMind旧模块',
+              key_scenarios: ['XMind旧场景'],
+              test_points: ['XMind旧校验'],
+              coupled_modules: [],
+            }],
+            caseGenSource: 'xmind-seeded',
+            caseGenResults: {},
+            caseSelections: {},
+            caseGenSuggestions: {},
+            caseGenModuleStatus: {},
+            caseGenProgress: {},
+            caseGenTiming: {},
+            caseGenProgressNotice: {},
+            caseGenSettings: JSON.parse(JSON.stringify(state.caseGenSettings || {})),
+            requirementMedia: {
+              docxImages: [],
+              pastedImages: [],
+              lastDocxImageCount: 0,
+              updatedAt: now,
+            },
+          },
+        },
+      };
+
+      state.activeTab = 'auto';
+      state.requirementLabel = '旧流程需求';
+      state.requirementLabelSource = 'import';
+      state.lastRawImportName = 'legacy-requirement.txt';
+      state.caseGenSettings = state.caseGenSettings && typeof state.caseGenSettings === 'object'
+        ? state.caseGenSettings
+        : {};
+      state.caseGenSettings.activeTab = 'legacy-modules';
+      state.caseGenModules = [{
+        id: 'legacy-mod',
+        title: '旧流程模块',
+        module: '旧流程模块',
+        scenarios: ['旧流程主场景'],
+        points: ['旧流程关键校验'],
+        coupled: [],
+      }];
+      state.caseGenSource = 'legacy-flow';
+      state.caseGenResults = { 'legacy-mod': legacyResult };
+      state.importedCases = [{
+        id: 'legacy-import-1',
+        name: 'legacy-cases.xmind',
+        requirement: '旧流程需求',
+      }];
+      state.caseSelections = {};
+      state.caseGenSuggestions = {};
+      state.caseGenModuleStatus = {};
+      state.caseGenProgress = {};
+      state.caseGenTiming = {};
+      state.caseGenProgressNotice = {};
+      if (state.caseGenLegacy && typeof state.caseGenLegacy === 'object') {
+        state.caseGenLegacy.requirementLabel = '旧流程需求';
+        state.caseGenLegacy.requirementLabelSource = 'import';
+        state.caseGenLegacy.lastRawImportName = 'legacy-requirement.txt';
+        state.caseGenLegacy.rawText = '旧流程原文';
+        state.caseGenLegacy.caseText = '旧流程导入用例正文';
+        state.caseGenLegacy.importedCases = JSON.parse(JSON.stringify(state.importedCases));
+        state.caseGenLegacy.modules = JSON.parse(JSON.stringify(state.caseGenModules));
+        state.caseGenLegacy.source = 'legacy-flow';
+        state.caseGenLegacy.results = JSON.parse(JSON.stringify(state.caseGenResults));
+      }
+
+      var rawTextEl = document.getElementById('rawText');
+      if (rawTextEl) {
+        rawTextEl.value = '旧流程原文';
+        rawTextEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      var fileNameEl = document.getElementById('fileName');
+      if (fileNameEl) fileNameEl.textContent = 'legacy-requirement.txt';
+      var caseTextEl = document.getElementById('caseText');
+      if (caseTextEl) {
+        caseTextEl.value = '旧流程导入用例正文';
+        caseTextEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (app.casesGenApi && typeof app.casesGenApi.renderCaseGeneration === 'function') {
+        app.casesGenApi.renderCaseGeneration();
+      }
+
+      var task = {
+        id: 'xmind-background-done-task',
+        workspaceId: workspaceId,
+        scope: 'root',
+        status: 'done',
+        actionId: 'root-full-modules',
+        historyActionLabel: '生成模块',
+        resultRaw: JSON.stringify([{
+          module: '后台XMind模块',
+          key_scenarios: ['后台XMind主场景'],
+          test_points: ['后台XMind关键校验'],
+          coupled_modules: [],
+        }], null, 2),
+        durationMs: 1200,
+        createdAt: now,
+        updatedAt: now + 50,
+        restoreContext: {
+          workspaceId: workspaceId,
+          requirementLabel: 'XMind后台需求',
+          requirementLabelSource: 'workspace',
+          lastRawImportName: 'xmind-background.txt',
+          rawText: 'XMind后台原文',
+          caseText: '',
+          importedCases: [],
+          caseGenModules: [{
+            id: 'xmind-bg-mod',
+            title: '后台XMind模块',
+            module: '后台XMind模块',
+            key_scenarios: ['后台XMind主场景'],
+            test_points: ['后台XMind关键校验'],
+            coupled_modules: [],
+          }],
+          caseGenResults: {},
+          operationSnapshots: [],
+          nextSnapshotId: 1,
+          history: [],
+          rootPipeline: null,
+          prep: JSON.parse(JSON.stringify(xmindSnapshot.prep || {})),
+          viewState: JSON.parse(JSON.stringify(xmindSnapshot.viewState || {})),
+        },
+      };
+
+      window.dispatchEvent(new CustomEvent('xmind-casegen-task', {
+        detail: {
+          action: 'done',
+          task: task,
+          tasks: [task],
+        },
+      }));
+    });
+
+    await page.waitForFunction(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      if (!state || !state.xmindCaseGen || !state.xmindCaseGen.workspaces) return false;
+      var record = state.xmindCaseGen.workspaces['xmind-live-isolation'];
+      if (!record || !record.snapshot || !record.snapshot.shared) return false;
+      var modules = Array.isArray(record.snapshot.shared.caseGenModules) ? record.snapshot.shared.caseGenModules : [];
+      return modules.some(function(item) {
+        return String((item && (item.title || item.module)) || '') === '后台XMind模块';
+      });
+    }, null, { timeout: 20000 });
+
+    const isolatedState = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
+      var record = host && host.workspaces ? host.workspaces['xmind-live-isolation'] : null;
+      var workspaceModules = record && record.snapshot && record.snapshot.shared && Array.isArray(record.snapshot.shared.caseGenModules)
+        ? record.snapshot.shared.caseGenModules.map(function(item) {
+          return String((item && (item.title || item.module)) || '');
+        })
+        : [];
+      var liveModules = state && Array.isArray(state.caseGenModules)
+        ? state.caseGenModules.map(function(item) {
+          return String((item && (item.title || item.module)) || '');
+        })
+        : [];
+      return {
+        requirementLabel: state ? String(state.requirementLabel || '') : '',
+        rawText: document.getElementById('rawText') ? String(document.getElementById('rawText').value || '') : '',
+        caseText: document.getElementById('caseText') ? String(document.getElementById('caseText').value || '') : '',
+        importedCount: state && Array.isArray(state.importedCases) ? state.importedCases.length : 0,
+        liveModules: liveModules,
+        workspaceModules: workspaceModules,
+      };
+    });
+
+    expect(isolatedState.requirementLabel).toBe('旧流程需求');
+    expect(isolatedState.rawText).toBe('旧流程原文');
+    expect(isolatedState.caseText).toContain('旧流程导入用例正文');
+    expect(isolatedState.importedCount).toBe(1);
+    expect(isolatedState.liveModules).toEqual(['旧流程模块']);
+    expect(isolatedState.workspaceModules).toContain('后台XMind模块');
+  });
+
   test('刷新后恢复工作流与用例生成数据', async ({ page }) => {
     await page.evaluate(() => {
       try { localStorage.removeItem('usecase-workflow-state-v1'); } catch (_) {}

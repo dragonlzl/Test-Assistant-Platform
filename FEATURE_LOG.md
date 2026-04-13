@@ -19,6 +19,56 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：一键执行缺失智能填充与旧流程用例生成同步修复
+- 功能描述：修复 `一键执行/功能流程` 中出现 `用例缺失测试点` 后，从 `缺失模块视图` 勾选并点击 `智能生成填充` 时，没有按当前拆分结果同步旧流程 `用例生成` 模块区，导致页面跳转后仍是空白或沿用旧模块；再次回到缺失视图点击时，又因 `caseGenModules` 已被清空/失配而误提示“请先完成测试模块拆分，才能智能填充建议”。本次调整让智能填充分支复用旧流程现有的 `goToCaseGeneration('cases')` 同步入口，先按当前 `splitResult` 对齐模块状态，再切换到 `legacy-modules` 视图写入 suggestion，避免旧流程状态漂移；修复范围仅限旧流程 `autoCore`，不进入 XMind workspace 链路。
+- 操作方式：
+  - 在 `一键执行` 或 `功能流程` 中完成 `测试模块拆分` 和 `用例覆盖对比`，出现 `用例缺失测试点`；
+  - 在 `缺失模块视图` 中勾选缺失测试点并点击 `智能生成填充`；
+  - 跳转到 `用例生成` 后继续查看模块列表和已填充建议，再返回缺失视图重复点击验证。
+- 使用效果：
+  - `智能生成填充` 会先按当前拆分结果同步旧流程 `用例生成` 模块，而不是继续使用旧模块或空模块态；
+  - 跳转后直接落到旧流程 `legacy-modules` 模块区，可看到当前模块和对应 suggestion；
+  - 重复从缺失视图点击 `智能生成填充` 时，不会再误报“请先完成测试模块拆分”。
+- 新增内容/接口/组件：
+  - `autoCore`：新增旧流程缺失填充前的 casegen 对齐步骤，复用 `goToCaseGeneration('cases')` 和 `setCaseGenViewTab('legacy-modules')`；
+  - `autoCore`：缺失 suggestion 写入后立即持久化旧流程状态，避免回到自动流程再点一次时丢上下文；
+  - `app.js`：为 `autoCore` 注入旧流程 casegen 同步/视图切换代理，不新增 XMind 入口；
+  - `tests/ui/auto_drawer.spec.js`：新增“缺失智能填充会按当前拆分结果同步旧流程用例生成”回归，覆盖旧模块失配、跳转后 suggestion 可见，以及二次点击不再误提示未拆分。
+- 复用说明：复用既有旧流程 `casegenCore.goToCaseGeneration`、`casesGenCore.setCaseGenViewTab` 与自动流程缺失抽屉逻辑；未新增后端接口，未复制第二套模块同步逻辑，也未改动 XMind workspace 状态机。
+- 测试与验证：
+  - `node --check scripts/core/autoCore.js`，通过；
+  - `node --check scripts/modules/app.js`，通过；
+  - `node --check tests/ui/auto_drawer.spec.js`，通过；
+  - `node` + `vm` 直连 `autoCore.smartFillMissingSuggestions`，构造“旧模块态 + 当前拆分结果 + 缺失测试点”场景，结果为：`activeTab=casesgen`、`activeCaseGenTab=legacy-modules`、模块同步为 `短按吞噬功能`、suggestion 正确写入、状态文案为“已将 1 个缺失模块的建议同步至用例生成”，通过；
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/auto_drawer.spec.js -g "缺失智能填充会按当前拆分结果同步旧流程用例生成" --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动阶段即失败，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
+  - 未新增或修改后端接口，本次未执行 API 自动化。
+- 更新记录：
+  - 2026-04-13 10:05 CST，修复旧流程缺失模块智能填充未同步当前拆分结果、二次点击误提示未拆分的问题，并补充对应 UI 回归。
+  - 2026-04-13 10:18 CST，继续修复旧流程缺失智能填充 suggestion 被 `legacy` 快照回写覆盖的问题：写入缺失测试点后立即同步 `caseGenLegacy.suggestions`，避免切到 `用例生成` 或从 `auto -> casesgen` 往返后建议文本丢失；同时把抽屉回归补强为校验切走再回来 suggestion 仍保留。
+
+- 功能名称：XMind 后台完成与一键执行需求上下文隔离修复
+- 功能描述：修复 `XMind 用例生成` 在后台任务完成时，仍把当前页面 live shared state 当成 XMind 自己的需求上下文来回写，导致 `一键执行/功能流程` 中正在使用的需求原文、已导入用例和模块结果被 XMind workspace 的需求数据覆盖，后续继续生成时拿到错误需求的问题。本次调整把“XMind 是否拥有 live workspace state”收敛成单一判定：只有抽屉打开，或页面确实停留在 `用例生成 -> XMind` 视图时，后台恢复才允许写 live state；否则只更新对应 workspace snapshot，并在 shadow context 执行后恢复旧流程 live shared state。
+- 操作方式：
+  - 在 `一键执行` 或 `功能流程` 中导入需求、导入测试用例，并保留旧流程模块结果；
+  - 同时让某个 `XMind 用例生成` workspace 在后台继续生成，或在页面已切回旧流程后完成任务；
+  - 后台任务完成后继续在旧流程里执行 `用例生成/一键执行`。
+- 使用效果：
+  - `XMind` 后台完成不会再覆盖旧流程正在使用的需求原文、需求标识、导入用例文本和模块结果；
+  - `XMind` 自己的 workspace snapshot 仍会正常更新，重新打开对应页签后可以看到最新结果；
+  - `一键执行/功能流程` 继续生成时，使用的仍是自身导入的需求与用例上下文，不会误拿 XMind 的需求数据。
+- 新增内容/接口/组件：
+  - `xmindCasegen`：新增 live-owner / shadow-owner 判定，后台 restore 在 XMind 不拥有 live state 时只回写 workspace snapshot；
+  - `xmindCasegen`：活动 workspace 在页面已切回旧流程时，也改为 shadow context 执行，并在完成后恢复旧流程 live shared state；
+  - `tests/ui/workflow_persistence_import_guard.spec.js`：新增回归，覆盖“活动 XMind workspace 后台完成时，不覆盖旧流程需求原文、导入用例和模块上下文”。
+- 复用说明：复用现有 XMind workspace snapshot、managed-task restoreContext、旧流程 `caseGenLegacy` 持久化与既有 Playwright 持久化测试基建；未新增后端接口，未引入新的状态仓库。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`，通过；
+  - `node --check tests/ui/workflow_persistence_import_guard.spec.js`，通过；
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/workflow_persistence_import_guard.spec.js -g "活动 XMind workspace 后台完成时，不覆盖旧流程 live 模块与需求上下文" --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动阶段即失败，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
+  - 未新增或修改后端接口，本次未执行 API 自动化。
+- 更新记录：
+  - 2026-04-10 17:48 CST，补齐 XMind 后台任务完成时对旧流程 live shared state 的 ownership 判定，修复一键执行/功能流程需求与已导入用例被 XMind workspace 数据覆盖的问题，并补强对应 UI 回归。
+
 - 功能名称：缺失模块视图兼容占位子模块结果
 - 功能描述：修复 `测试用例覆盖对比结果` 中 `missing` 使用“占位/实例化子模块名 -> 缺失测试点数组”结构时，缺失模块视图无法展开有效行的问题。此次调整收紧“模块字段名”的识别范围，只把标准字段名当作 `module` 字段，避免把 `修改此处以确定子模块` 这类实际模块名误判成字段名，导致缺失测试点被吞掉。
 - 操作方式：
