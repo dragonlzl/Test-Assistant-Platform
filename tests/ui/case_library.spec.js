@@ -2325,6 +2325,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 
     await expect(page.locator('#caseLibrarySelectBatchExecBtn')).toBeDisabled();
     await page.click('#caseLibrarySelectListBody input[data-case-lib-select-select="100"]');
+    await page.fill('#caseLibrarySelectSearchInput', 'B');
+    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('鐢ㄤ緥A');
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('鐢ㄤ緥B');
     await page.click('#caseLibrarySelectListBody input[data-case-lib-select-select="101"]');
     await expect(page.locator('#caseLibrarySelectBatchExecBtn')).toBeEnabled();
 

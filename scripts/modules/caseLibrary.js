@@ -15328,15 +15328,15 @@
     var page = resolveDrawerPage(visible.length, state.selectDrawer.pageIndex);
     state.selectDrawer.pageIndex = page.pageIndex;
     var paged = visible.slice(page.start, page.end);
-    var visibleIds = {};
-    visible.forEach(function(f) {
+    var loadedIds = {};
+    (state.selectDrawer.files || []).forEach(function(f) {
       if (!f || !f.id) return;
-      visibleIds[String(f.id)] = true;
+      loadedIds[String(f.id)] = true;
     });
 
     var nextSel = new Set();
     state.selectDrawer.selection.forEach(function(id) {
-      if (visibleIds[String(id)]) nextSel.add(String(id));
+      if (loadedIds[String(id)]) nextSel.add(String(id));
     });
     state.selectDrawer.selection = nextSel;
 
@@ -15375,6 +15375,17 @@
     }
     renderSelectDrawerList();
     syncSelectDrawerControls();
+  }
+
+  function getSelectDrawerSelectedFiles() {
+    state.selectDrawer.selection = state.selectDrawer.selection instanceof Set ? state.selectDrawer.selection : new Set();
+    var selectedMap = {};
+    state.selectDrawer.selection.forEach(function(id) {
+      selectedMap[String(id)] = true;
+    });
+    return (state.selectDrawer.files || []).filter(function(f) {
+      return f && f.id && selectedMap[String(f.id)];
+    });
   }
 
   function normalizeAssociationSwitchState(value) {
@@ -17995,10 +18006,7 @@
       setStatus(dom.selectStatus, '请先选择项目', 'warn');
       return;
     }
-    var visible = getSelectDrawerVisibleFiles();
-    var selectedFiles = visible.filter(function(f) {
-      return f && f.id && state.selectDrawer.selection.has(String(f.id));
-    });
+    var selectedFiles = getSelectDrawerSelectedFiles();
     if (!selectedFiles.length) {
       setStatus(dom.selectStatus, '请先勾选用例', 'warn');
       return;
