@@ -46,6 +46,32 @@
   - 2026-04-13 10:05 CST，修复旧流程缺失模块智能填充未同步当前拆分结果、二次点击误提示未拆分的问题，并补充对应 UI 回归。
   - 2026-04-13 10:18 CST，继续修复旧流程缺失智能填充 suggestion 被 `legacy` 快照回写覆盖的问题：写入缺失测试点后立即同步 `caseGenLegacy.suggestions`，避免切到 `用例生成` 或从 `auto -> casesgen` 往返后建议文本丢失；同时把抽屉回归补强为校验切走再回来 suggestion 仍保留。
 
+- 功能名称：旧流程用例生成运行态跨 XMind 切换保活修复
+- 功能描述：修复 `一键执行/功能流程 -> 用例生成` 旧流程模块在生成中时，打开 `XMind 用例生成` 抽屉、从 `xmind生成模块` 镜像区打开 workspace，或通过左下角 `XMind 用例生成进度` 重开 workspace 后，再切回旧流程视图会把运行态清空，导致界面误判为“已停止/回到未执行”的问题。本次调整把旧流程 `caseGenLegacy` 快照补齐 `running` 字段，并在运行态写入点同步更新，确保 XMind 相关视图只切走 live shared state，不会把旧流程真实运行中的模块误清空。
+- 操作方式：
+  - 在 `一键执行` 或 `功能流程` 中进入旧流程 `用例生成`，让任一模块处于 `生成中`；
+  - 打开 `XMind 用例生成` 抽屉，或在 `xmind生成模块` 面板点击 `打开XMind页签`，或通过左下角 `XMind 用例生成进度` 重开某个 workspace；
+  - 关闭抽屉后切回旧流程 `用例生成` 模块区。
+- 使用效果：
+  - 旧流程模块的 `生成中` 状态不会再因为切到 XMind 或重开 XMind workspace 被清空；
+  - 旧流程模块按钮、批量操作态和运行集合会保持一致，直到真实任务完成；
+  - 修复只落在旧流程 legacy snapshot 边界，不影响 XMind 自身 workspace 状态机。
+- 新增内容/接口/组件：
+  - `casesGenCore`：为旧流程 `caseGenLegacy` 新增 `running` 快照字段，并在 sync/restore 时同步恢复运行中的模块集合；
+  - `casegenProgress`：`setCaseModuleRunning` 同步回写 `caseGenLegacy.running`，避免用户停留在 XMind 期间旧流程任务完成/继续时快照失真；
+  - `tests/ui/xmind_casegen_flow.spec.js`：新增“旧流程生成中时，打开或重开 XMind 不会清掉运行态”回归，覆盖顶部入口、镜像区入口和左下角进度入口三条路径。
+- 复用说明：复用现有旧流程 `caseGenLegacy`、XMind workspace mirror/progress 打开入口与 Playwright XMind 测试基建；未新增后端接口，未改动 XMind 任务执行链路。
+- 测试与验证：
+  - `node --check scripts/core/casesGenCore.js`，通过；
+  - `node --check scripts/modules/casegenProgress.js`，通过；
+  - `node --check scripts/modules/app.js`，通过；
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`，通过；
+  - `node` + `vm` 直连 `casegenProgress.setCaseModuleRunning` 与 `casesGenCore.syncLegacyCaseGenState/restoreLegacyCaseGenState`，构造“旧流程模块运行中 -> top-level running 被清空 -> restore legacy”场景，结果为：`liveRunning=['legacy-running-mod']`、`legacyRunning=['legacy-running-mod']`、模块数量恢复为 `1`，通过；
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "旧流程用例生成进行中时，打开或重开 XMind 不会清掉运行态" --reporter=line`，受当前桌面环境 `Chromium MachPortRendezvous` 权限限制，浏览器启动阶段即失败，未能在本机完成 UI 自动化执行；对应断言已补入用例文件。
+  - 未新增或修改后端接口，本次未执行 API 自动化。
+- 更新记录：
+  - 2026-04-13 11:35 CST，补齐旧流程 `caseGenLegacy.running` 快照与恢复链路，修复旧流程生成中切到 XMind 再切回时运行态被误清空的问题，并新增对应 UI 回归。
+
 - 功能名称：XMind 后台完成与一键执行需求上下文隔离修复
 - 功能描述：修复 `XMind 用例生成` 在后台任务完成时，仍把当前页面 live shared state 当成 XMind 自己的需求上下文来回写，导致 `一键执行/功能流程` 中正在使用的需求原文、已导入用例和模块结果被 XMind workspace 的需求数据覆盖，后续继续生成时拿到错误需求的问题。本次调整把“XMind 是否拥有 live workspace state”收敛成单一判定：只有抽屉打开，或页面确实停留在 `用例生成 -> XMind` 视图时，后台恢复才允许写 live state；否则只更新对应 workspace snapshot，并在 shadow context 执行后恢复旧流程 live shared state。
 - 操作方式：

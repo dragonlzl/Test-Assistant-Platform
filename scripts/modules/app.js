@@ -3844,6 +3844,7 @@
         progress: {},
         timing: {},
         progressNotice: {},
+        running: [],
       };
     }
 

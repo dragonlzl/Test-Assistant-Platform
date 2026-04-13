@@ -1472,7 +1472,26 @@
         progress: {},
         timing: {},
         progressNotice: {},
+        running: [],
       };
+    }
+
+    function cloneCaseGenRunningState(source) {
+      var values = [];
+      if (source instanceof Set) {
+        values = Array.from(source);
+      } else if (Array.isArray(source)) {
+        values = source.slice();
+      }
+      return values.filter(function(item) {
+        if (item === null || item === undefined) return false;
+        if (typeof item === 'string') return item.trim() !== '';
+        return true;
+      });
+    }
+
+    function restoreCaseGenRunningSet(list) {
+      return new Set(cloneCaseGenRunningState(list));
     }
 
     function ensureLegacyCaseGenState() {
@@ -1512,6 +1531,7 @@
       if (!state.caseGenLegacy.progressNotice || typeof state.caseGenLegacy.progressNotice !== 'object') {
         state.caseGenLegacy.progressNotice = {};
       }
+      state.caseGenLegacy.running = cloneCaseGenRunningState(state.caseGenLegacy.running);
       return state.caseGenLegacy;
     }
 
@@ -3883,6 +3903,7 @@
       legacy.progress = current.progress;
       legacy.timing = current.timing;
       legacy.progressNotice = current.progressNotice;
+      legacy.running = cloneCaseGenRunningState(state.caseGenRunning);
       if (!opts || opts.persist !== false) {
         persistWorkflowState();
       }
@@ -3943,7 +3964,7 @@
       state.caseGenProgress = cloneJsonValue(legacy.progress, {});
       state.caseGenTiming = cloneJsonValue(legacy.timing, {});
       state.caseGenProgressNotice = cloneJsonValue(legacy.progressNotice, {});
-      state.caseGenRunning = new Set();
+      state.caseGenRunning = restoreCaseGenRunningSet(legacy.running);
       if (opts.render !== false) {
         renderCaseGeneration();
       }

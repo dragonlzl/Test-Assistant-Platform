@@ -114,6 +114,33 @@
       return state.caseGenRunning;
     }
 
+    function ensureLegacyCaseGenRunningList() {
+      if (!state.caseGenLegacy || typeof state.caseGenLegacy !== 'object') return null;
+      if (state.caseGenLegacy.running instanceof Set) {
+        state.caseGenLegacy.running = Array.from(state.caseGenLegacy.running);
+      } else if (!Array.isArray(state.caseGenLegacy.running)) {
+        state.caseGenLegacy.running = [];
+      }
+      return state.caseGenLegacy.running;
+    }
+
+    function isSameRunningModuleId(left, right) {
+      if (left === right) return true;
+      if (left === null || left === undefined || right === null || right === undefined) return false;
+      return String(left) === String(right);
+    }
+
+    function syncLegacyCaseGenRunningState(moduleId, running) {
+      if (!moduleId) return;
+      var list = ensureLegacyCaseGenRunningList();
+      if (!list) return;
+      var nextList = list.filter(function(item) {
+        return !isSameRunningModuleId(item, moduleId);
+      });
+      if (running === true) nextList.push(moduleId);
+      state.caseGenLegacy.running = nextList;
+    }
+
     function isCaseModuleRunning(moduleId) {
       if (!moduleId) return false;
       return ensureCaseGenRunningSet().has(moduleId);
@@ -124,6 +151,7 @@
       var set = ensureCaseGenRunningSet();
       if (running) set.add(moduleId);
       else set.delete(moduleId);
+      syncLegacyCaseGenRunningState(moduleId, running === true);
       renderCaseGenProgressBoard();
     }
 

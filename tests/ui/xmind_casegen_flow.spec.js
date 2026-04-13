@@ -3013,6 +3013,181 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#caseFileList')).toContainText('旧流程用例导入-A.json');
   });
 
+  test('旧流程用例生成进行中时，打开或重开 XMind 不会清掉运行态', async ({ page }) => {
+    const token = 'xmind-legacy-running-guard-token';
+    const user = { id: 80224, username: 'xmind-legacy-running-guard' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await createXmindWorkspaceByManualPrep(page, '运行态隔离-XMind', '这是用于验证旧流程运行态隔离的 XMind 需求', {
+      useExistingWorkspace: true,
+      completePrep: true,
+    });
+
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await waitXmindDrawerClosedStable(page);
+
+    await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      if (!state || !state.xmindCaseGen || !state.xmindCaseGen.workspaces) return;
+      var host = state.xmindCaseGen;
+      var workspaceId = String(host.activeWorkspaceId || (host.workspaceOrder && host.workspaceOrder[0]) || '');
+      var record = workspaceId ? host.workspaces[workspaceId] : null;
+      function buildCases(moduleTitle, caseTitle) {
+        return JSON.stringify([{
+          module: moduleTitle,
+          title: caseTitle,
+          priority: 'P1',
+          preconditions: moduleTitle + '前置条件',
+          steps: ['1、进入' + moduleTitle, '2、执行' + caseTitle],
+          expected: caseTitle + '执行成功',
+        }], null, 2);
+      }
+      if (record && record.snapshot && record.snapshot.shared) {
+        record.snapshot.shared.caseGenModules = [{
+          id: 'xmind-running-guard-mod',
+          title: 'XMind镜像模块',
+          module: 'XMind镜像模块',
+          key_scenarios: ['XMind镜像主场景'],
+          test_points: ['XMind镜像关键校验'],
+          coupled_modules: [],
+        }];
+        record.snapshot.shared.caseGenResults = {
+          'xmind-running-guard-mod': buildCases('XMind镜像模块', 'XMind镜像用例'),
+        };
+        record.snapshot.shared.caseSelections = {};
+        record.snapshot.shared.caseGenSuggestions = {};
+        record.snapshot.shared.caseGenModuleStatus = {
+          'xmind-running-guard-mod': { text: '已生成 1 条用例', type: 'ok' },
+        };
+        record.snapshot.shared.caseGenProgress = {};
+        record.snapshot.shared.caseGenTiming = {};
+        record.snapshot.shared.caseGenProgressNotice = {};
+        record.snapshot.shared.caseGenSource = 'xmind-running-guard';
+      }
+      host.mirrorWorkspaceId = workspaceId;
+      state.caseGenLegacy = {
+        requirementLabel: '旧流程运行态需求',
+        requirementLabelSource: 'import',
+        lastRawImportName: 'legacy-running.docx',
+        rawText: '旧流程运行态需求正文',
+        caseText: '',
+        importedCases: [],
+        requirementMedia: {
+          docxImages: [],
+          pastedImages: [],
+          lastDocxImageCount: 0,
+          updatedAt: Date.now(),
+        },
+        modules: [{
+          id: 'legacy-running-mod',
+          title: '旧流程运行中模块',
+          module: '旧流程运行中模块',
+          key_scenarios: ['旧流程主场景'],
+          test_points: ['旧流程关键校验'],
+          coupled_modules: [],
+        }],
+        source: 'legacy-running-source',
+        results: {},
+        selections: {},
+        suggestions: {},
+        moduleStatus: {
+          'legacy-running-mod': { text: '正在生成【旧流程运行中模块】的测试用例...', type: '' },
+        },
+        progress: {},
+        timing: {},
+        progressNotice: {},
+        running: ['legacy-running-mod'],
+      };
+      state.caseGenModules = JSON.parse(JSON.stringify(state.caseGenLegacy.modules || []));
+      state.caseGenSource = 'legacy-running-source';
+      state.caseGenResults = {};
+      state.caseSelections = {};
+      state.caseGenSuggestions = {};
+      state.caseGenModuleStatus = {
+        'legacy-running-mod': { text: '正在生成【旧流程运行中模块】的测试用例...', type: '' },
+      };
+      state.caseGenProgress = {};
+      state.caseGenTiming = {};
+      state.caseGenProgressNotice = {};
+      state.caseGenSettings = state.caseGenSettings && typeof state.caseGenSettings === 'object'
+        ? state.caseGenSettings
+        : {};
+      state.caseGenSettings.activeTab = 'legacy-modules';
+      if (window.app && typeof window.app.setCaseModuleRunning === 'function') {
+        window.app.setCaseModuleRunning('legacy-running-mod', true);
+      } else {
+        state.caseGenRunning = new Set(['legacy-running-mod']);
+      }
+      if (window.app && window.app.casesGenApi) {
+        if (typeof window.app.casesGenApi.syncLegacyCaseGenState === 'function') {
+          window.app.casesGenApi.syncLegacyCaseGenState({ persist: false, force: true });
+        }
+        if (typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
+          window.app.casesGenApi.renderCaseGeneration();
+        }
+      }
+    });
+
+    async function expectLegacyRunning(expectedActiveView) {
+      await clickElementById(page, 'caseGenLegacyModulesTabBtn');
+      await expect(page.locator('#casegenLegacyModulesPanel')).toHaveClass(/is-active/);
+      await expect(page.locator('[data-generate="legacy-running-mod"]')).toBeDisabled();
+      await expect(page.locator('[data-generate="legacy-running-mod"]')).toHaveText('生成中...');
+      const runningState = await page.evaluate(() => {
+        var state = window.app && window.app.state ? window.app.state : null;
+        var running = state && state.caseGenRunning instanceof Set ? Array.from(state.caseGenRunning) : [];
+        var legacy = state && state.caseGenLegacy && Array.isArray(state.caseGenLegacy.running)
+          ? state.caseGenLegacy.running.slice()
+          : [];
+        var activeView = state && state.caseGenSettings ? String(state.caseGenSettings.activeTab || '') : '';
+        return {
+          running: running,
+          legacy: legacy,
+          activeView: activeView,
+        };
+      });
+      expect(runningState.running).toContain('legacy-running-mod');
+      expect(runningState.legacy).toContain('legacy-running-mod');
+      expect(runningState.activeView).toBe(expectedActiveView || 'legacy-modules');
+    }
+
+    await expectLegacyRunning('legacy-modules');
+
+    await clickElementById(page, 'xmindCaseGenOpenBtn');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('运行态隔离-XMind');
+    await waitForNodeText(page, 'XMind镜像模块');
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await waitXmindDrawerClosedStable(page);
+    await expectLegacyRunning('legacy-modules');
+
+    await clickElementById(page, 'caseGenModulesTabBtn');
+    await expect(page.locator('#casegenModulesPanel')).toHaveClass(/is-active/);
+    await expect(page.locator('#caseGenXmindModulesContainer')).toContainText('XMind镜像模块');
+    await page.locator('#caseGenXmindModulesContainer [data-open-xmind-workspace]').first().click();
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('运行态隔离-XMind');
+    await waitForNodeText(page, 'XMind镜像模块');
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await waitXmindDrawerClosedStable(page);
+    await expectLegacyRunning('legacy-modules');
+
+    await clickElementById(page, 'caseGenModulesTabBtn');
+    const progressCard = page.locator('#caseGenProgressList [data-casegen-workspace]').first();
+    await expect(progressCard).toContainText('运行态隔离-XMind');
+    await progressCard.click();
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('运行态隔离-XMind');
+    await waitForNodeText(page, 'XMind镜像模块');
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await waitXmindDrawerClosedStable(page);
+    await expectLegacyRunning('legacy-modules');
+  });
+
   test('通过 XMind 页签切换或重开 workspace 时，测试用例导入状态会跟随当前 workspace 同步', async ({ page }) => {
     const token = 'token-xmind-case-import-status-sync';
     const user = { id: 312, username: 'demo_user_case_status_sync', role: 'user', level: 'member' };
