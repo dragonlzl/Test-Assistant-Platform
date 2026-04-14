@@ -7,7 +7,6 @@
     var casesGenApi = ctx.casesGenApi || {};
     var prepApi = ctx.prepApi || {};
     var xmindGenApi = ctx.xmindGenApi || {};
-    var knowledgeBaseApi = ctx.knowledgeBaseApi || null;
 
     var debounce = utils.debounce || function(fn) { return fn; };
     var showCenterToast = typeof utils.showCenterToast === 'function'
@@ -150,8 +149,6 @@
     var workspaceShadowDepth = 0;
     var workspaceUiMutedDepth = 0;
     var shadowWorkspaceSharedState = null;
-    var knowledgeBaseQueryInflightMap = {};
-    var knowledgeBaseWorkspaceStateCache = {};
     var storeValidationState = {
       moduleKeys: {},
       caseKeys: {},
@@ -220,200 +217,6 @@
         baseLocked: false,
         completed: false,
       };
-    }
-
-    function createEmptyKnowledgeBaseQueryResult() {
-      return {
-        used: false,
-        status: 'disabled',
-        reason: '',
-        match_count: 0,
-        used_chunk_count: 0,
-        used_doc_count: 0,
-        context_text: '',
-        hits: [],
-        manifest_meta: {},
-        base_url: '',
-        query_signature: '',
-        prep_signature: '',
-        scope: '',
-        action_mode: '',
-        module_title: '',
-        updated_at: 0,
-      };
-    }
-
-    function normalizeKnowledgeBaseQueryResult(result, extra) {
-      var base = createEmptyKnowledgeBaseQueryResult();
-      var source = result && typeof result === 'object' ? result : {};
-      var patch = extra && typeof extra === 'object' ? extra : {};
-      Object.keys(base).forEach(function(key) {
-        if (Object.prototype.hasOwnProperty.call(source, key)) {
-          base[key] = cloneJson(source[key], source[key]);
-        }
-      });
-      Object.keys(patch).forEach(function(key) {
-        base[key] = cloneJson(patch[key], patch[key]);
-      });
-      base.used = base.used === true;
-      base.status = String(base.status || 'disabled');
-      base.reason = String(base.reason || '');
-      base.match_count = Number(base.match_count || 0) || 0;
-      base.used_chunk_count = Number(base.used_chunk_count || 0) || 0;
-      base.used_doc_count = Number(base.used_doc_count || 0) || 0;
-      base.context_text = String(base.context_text || '');
-      base.hits = Array.isArray(base.hits) ? cloneJson(base.hits, []) : [];
-      base.manifest_meta = base.manifest_meta && typeof base.manifest_meta === 'object'
-        ? cloneJson(base.manifest_meta, {})
-        : {};
-      base.base_url = String(base.base_url || '');
-      base.query_signature = String(base.query_signature || '');
-      base.prep_signature = String(base.prep_signature || '');
-      base.scope = String(base.scope || '');
-      base.action_mode = String(base.action_mode || '');
-      base.module_title = String(base.module_title || '');
-      base.updated_at = Number(base.updated_at || 0) || 0;
-      return base;
-    }
-
-    function createDefaultKnowledgeBaseState() {
-      return {
-        prep_signature: '',
-        last_result: createEmptyKnowledgeBaseQueryResult(),
-        prep_result: createEmptyKnowledgeBaseQueryResult(),
-        root_result: createEmptyKnowledgeBaseQueryResult(),
-        module_results: {},
-        pending_count: 0,
-        pending_scope: '',
-        pending_action_mode: '',
-        pending_module_title: '',
-        last_requested_at: 0,
-      };
-    }
-
-    function normalizeKnowledgeBaseState(snapshot, options) {
-      var opts = options && typeof options === 'object' ? options : {};
-      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
-      var next = createDefaultKnowledgeBaseState();
-      next.prep_signature = String(source.prep_signature || '');
-      next.last_result = normalizeKnowledgeBaseQueryResult(source.last_result);
-      next.prep_result = normalizeKnowledgeBaseQueryResult(source.prep_result);
-      next.root_result = normalizeKnowledgeBaseQueryResult(source.root_result);
-      if (source.module_results && typeof source.module_results === 'object') {
-        Object.keys(source.module_results).forEach(function(key) {
-          next.module_results[String(key)] = normalizeKnowledgeBaseQueryResult(source.module_results[key]);
-        });
-      }
-      next.pending_count = Number(source.pending_count || 0) || 0;
-      if (!Number.isFinite(next.pending_count) || next.pending_count < 0) {
-        next.pending_count = 0;
-      }
-      next.pending_scope = String(source.pending_scope || '');
-      next.pending_action_mode = String(source.pending_action_mode || '');
-      next.pending_module_title = String(source.pending_module_title || '');
-      next.last_requested_at = Number(source.last_requested_at || 0) || 0;
-      if (next.pending_count > 0 && opts.preservePending !== true) {
-        next.pending_count = 0;
-        next.pending_scope = '';
-        next.pending_action_mode = '';
-        next.pending_module_title = '';
-      }
-      return next;
-    }
-
-    function getKnowledgeBaseStateFreshness(snapshot) {
-      var normalized = normalizeKnowledgeBaseState(snapshot, { preservePending: true });
-      var freshness = Math.max(
-        Number(normalized.last_requested_at || 0) || 0,
-        Number(normalized.last_result && normalized.last_result.updated_at || 0) || 0,
-        Number(normalized.prep_result && normalized.prep_result.updated_at || 0) || 0,
-        Number(normalized.root_result && normalized.root_result.updated_at || 0) || 0
-      );
-      Object.keys(normalized.module_results || {}).forEach(function(key) {
-        var item = normalized.module_results[key];
-        var updatedAt = Number(item && item.updated_at || 0) || 0;
-        if (updatedAt > freshness) freshness = updatedAt;
-      });
-      return freshness;
-    }
-
-    function getKnowledgeBaseStateCompleteness(snapshot) {
-      var normalized = normalizeKnowledgeBaseState(snapshot, { preservePending: true });
-      var score = 0;
-      if (normalized.last_result && normalized.last_result.updated_at) score += 100;
-      if (normalized.prep_result && normalized.prep_result.updated_at) score += 100;
-      if (normalized.root_result && normalized.root_result.updated_at) score += 100;
-      if (normalized.last_result && normalized.last_result.used === true) score += 300;
-      if (normalized.prep_result && normalized.prep_result.used === true) score += 300;
-      if (normalized.root_result && normalized.root_result.used === true) score += 300;
-      score += Number(normalized.last_result && normalized.last_result.used_doc_count || 0) || 0;
-      score += Number(normalized.last_result && normalized.last_result.used_chunk_count || 0) || 0;
-      score += Object.keys(normalized.module_results || {}).length * 50;
-      return score;
-    }
-
-    function cloneKnowledgeBaseStateForWorkspace(snapshot) {
-      return normalizeKnowledgeBaseState(snapshot, { preservePending: true });
-    }
-
-    function pickFreshKnowledgeBaseState(primary, fallback) {
-      var base = cloneKnowledgeBaseStateForWorkspace(primary);
-      var candidate = cloneKnowledgeBaseStateForWorkspace(fallback);
-      var baseFreshness = getKnowledgeBaseStateFreshness(base);
-      var candidateFreshness = getKnowledgeBaseStateFreshness(candidate);
-      if (candidateFreshness > baseFreshness) return candidate;
-      if (candidateFreshness < baseFreshness) return base;
-      if (getKnowledgeBaseStateCompleteness(candidate) > getKnowledgeBaseStateCompleteness(base)) {
-        return candidate;
-      }
-      return base;
-    }
-
-    function rememberKnowledgeBaseWorkspaceState(workspaceId, snapshot) {
-      var stableId = String(workspaceId || '').trim();
-      if (!stableId) return null;
-      var next = cloneKnowledgeBaseStateForWorkspace(snapshot);
-      var existing = getRememberedKnowledgeBaseWorkspaceState(stableId);
-      var freshest = pickFreshKnowledgeBaseState(next, existing);
-      knowledgeBaseWorkspaceStateCache[stableId] = freshest;
-      return freshest;
-    }
-
-    function forgetKnowledgeBaseWorkspaceState(workspaceId) {
-      var stableId = String(workspaceId || '').trim();
-      if (!stableId) return false;
-      if (!Object.prototype.hasOwnProperty.call(knowledgeBaseWorkspaceStateCache, stableId)) {
-        return false;
-      }
-      delete knowledgeBaseWorkspaceStateCache[stableId];
-      return true;
-    }
-
-    function getRememberedKnowledgeBaseWorkspaceState(workspaceId) {
-      var stableId = String(workspaceId || '').trim();
-      if (!stableId || !Object.prototype.hasOwnProperty.call(knowledgeBaseWorkspaceStateCache, stableId)) {
-        return null;
-      }
-      return cloneKnowledgeBaseStateForWorkspace(knowledgeBaseWorkspaceStateCache[stableId]);
-    }
-
-    function restoreKnowledgeBaseStateFromWorkspaceCache(workspaceId) {
-      var stableId = String(workspaceId || '').trim();
-      var xmindState = ensureState();
-      var liveState = cloneKnowledgeBaseStateForWorkspace(xmindState.knowledgeBase);
-      if (!stableId) {
-        xmindState.knowledgeBase = liveState;
-        return xmindState.knowledgeBase;
-      }
-      var cachedState = getRememberedKnowledgeBaseWorkspaceState(stableId);
-      var freshest = pickFreshKnowledgeBaseState(liveState, cachedState);
-      xmindState.knowledgeBase = freshest;
-      rememberKnowledgeBaseWorkspaceState(stableId, freshest);
-      var record = getWorkspaceRecord(stableId);
-      if (record && record.snapshot && record.snapshot.xmind) {
-        record.snapshot.xmind.knowledgeBase = cloneJson(freshest, createDefaultKnowledgeBaseState());
-      }
-      return xmindState.knowledgeBase;
     }
 
     function createDefaultRootState() {
@@ -1194,7 +997,6 @@
         caseCount += getVisibleCasesForModuleEntry(entry).length;
       });
       var runningCount = collectRunningGenerationOperations().length;
-      var knowledgeBaseSummary = buildKnowledgeBaseToolbarStatusSummary();
       return {
         runningCount: runningCount,
         runningState: runningCount > 0 ? 'running' : 'idle',
@@ -1204,140 +1006,6 @@
           : '当前可继续发起生成、补全或删除操作',
         moduleCount: moduleCount,
         caseCount: caseCount,
-        knowledgeBase: knowledgeBaseSummary,
-      };
-    }
-
-    function buildKnowledgeBaseToolbarStatusSummary() {
-      var baseUrl = getKnowledgeBaseBaseUrl();
-      var knowledgeBase = getKnowledgeBaseState();
-      var pendingCount = knowledgeBase ? Number(knowledgeBase.pending_count || 0) || 0 : 0;
-      var pendingScope = knowledgeBase && knowledgeBase.pending_scope
-        ? String(knowledgeBase.pending_scope || '')
-        : '';
-      var pendingMode = knowledgeBase && knowledgeBase.pending_action_mode
-        ? String(knowledgeBase.pending_action_mode || '')
-        : '';
-      var pendingModuleTitle = knowledgeBase && knowledgeBase.pending_module_title
-        ? normalizeModuleTitle(knowledgeBase.pending_module_title)
-        : '';
-      var lastResult = knowledgeBase && knowledgeBase.last_result
-        ? normalizeKnowledgeBaseQueryResult(knowledgeBase.last_result)
-        : createEmptyKnowledgeBaseQueryResult();
-      var waitingDetail = '准备自动检索';
-
-      if (!baseUrl) {
-        return {
-          state: 'disabled',
-          label: '未配置知识库',
-          detail: '当前按常规生成',
-          title: '未配置知识库地址，当前不会注入知识库上下文',
-          clickable: false,
-          actionLabel: '',
-        };
-      }
-
-      if (!hasRequirementReady()) {
-        return {
-          state: 'ready',
-          label: '已配置知识库',
-          detail: '导入需求后开始检索',
-          title: '知识库地址已配置，导入需求并确认前置准备后会开始检索',
-          clickable: false,
-          actionLabel: '',
-        };
-      }
-
-      if (!isPrepCompleted()) {
-        return {
-          state: 'ready',
-          label: '已配置知识库',
-          detail: '完成前置准备后开始检索',
-          title: '知识库地址已配置，确认前置准备后会开始检索',
-          clickable: false,
-          actionLabel: '',
-        };
-      }
-
-      if (pendingCount > 0) {
-        var runningDetail = '';
-        if (pendingScope === 'module' && pendingModuleTitle) {
-          runningDetail = '模块：' + pendingModuleTitle;
-        } else if (pendingMode === 'prep') {
-          runningDetail = '前置准备预检索';
-        } else {
-          runningDetail = '正在读取共享文档';
-        }
-        return {
-          state: 'running',
-          label: '知识库检索中',
-          detail: runningDetail,
-          title: '知识库检索中，当前正在读取和整理相关文档',
-          clickable: false,
-          actionLabel: '',
-        };
-      }
-
-      if (!lastResult.updated_at || String(lastResult.base_url || '') !== baseUrl) {
-        return {
-          state: 'ready',
-          label: '已配置知识库',
-          detail: waitingDetail,
-          title: '知识库地址已配置，当前会自动发起知识库检索',
-          clickable: false,
-          actionLabel: '',
-        };
-      }
-
-      if (lastResult.status === 'ok' && lastResult.used === true) {
-        var docCount = Number(lastResult.used_doc_count || 0) || 0;
-        var chunkCount = Number(lastResult.used_chunk_count || 0) || 0;
-        var successDetail = '已使用 ' + String(docCount) + ' 文档 / ' + String(chunkCount) + ' 片段';
-        return {
-          state: 'success',
-          label: '知识库已使用',
-          detail: successDetail,
-          title: '知识库检索成功，' + successDetail + '；点击可查看本轮使用片段',
-          clickable: Boolean(lastResult.context_text),
-          actionLabel: lastResult.context_text ? '查看片段' : '',
-        };
-      }
-
-      if (lastResult.status === 'no_match') {
-        return {
-          state: 'warn',
-          label: '知识库未命中',
-          detail: lastResult.reason || '未找到相关内容',
-          title: '知识库已完成检索，但未找到与当前需求相关的内容',
-          clickable: false,
-          actionLabel: '',
-        };
-      }
-
-      if (lastResult.status === 'disabled') {
-        var disabledReason = lastResult.reason || waitingDetail;
-        if (disabledReason === '等待本轮检索') disabledReason = waitingDetail;
-        var disabledState = disabledReason.indexOf('不可用') !== -1 ? 'error' : 'ready';
-        return {
-          state: disabledState,
-          label: disabledState === 'error' ? '知识库不可用' : '已配置知识库',
-          detail: disabledReason,
-          title: disabledState === 'error'
-            ? ('知识库当前不可用：' + disabledReason)
-            : '知识库地址已配置，当前会自动发起知识库检索',
-          clickable: false,
-          actionLabel: '',
-        };
-      }
-
-      var failureReason = lastResult.reason || '请检查知识库地址和契约文件';
-      return {
-        state: 'error',
-        label: '知识库检索失败',
-        detail: '失败：' + failureReason,
-        title: '知识库检索失败：' + failureReason,
-        clickable: false,
-        actionLabel: '',
       };
     }
 
@@ -1345,20 +1013,6 @@
       var host = getInlineOverviewHost();
       if (!host) return false;
       var summary = getInlineToolbarOverviewSummary();
-      var kbTag = summary.knowledgeBase.clickable ? 'button' : 'div';
-      var kbClassName = 'xmind-casegen-inline-kb-status is-' + escapeHtml(summary.knowledgeBase.state)
-        + (summary.knowledgeBase.clickable ? ' is-clickable' : '');
-      var kbAttrs = ''
-        + (summary.knowledgeBase.clickable ? ' type="button"' : '')
-        + ' class="' + kbClassName + '"'
-        + ' data-xmind-casegen-kb-state="' + escapeHtml(summary.knowledgeBase.state) + '"'
-        + (summary.knowledgeBase.clickable ? ' data-xmind-casegen-kb-open="1"' : '')
-        + ' title="' + escapeHtml(summary.knowledgeBase.title || '') + '"';
-      if (summary.knowledgeBase.clickable) {
-        kbAttrs += ' aria-haspopup="dialog" aria-expanded="'
-          + escapeHtml(summaryDialogOpen === true && summaryDialogMode === 'knowledge-base' ? 'true' : 'false')
-          + '"';
-      }
       var taskClassName = 'xmind-casegen-inline-task-indicator is-' + summary.runningState;
       var taskBadgeHtml = summary.runningCount > 0
         ? ('<span class="xmind-casegen-inline-task-badge" data-xmind-casegen-task-count>' + escapeHtml(String(summary.runningCount)) + '</span>')
@@ -1369,16 +1023,6 @@
         + '<span class="xmind-casegen-inline-task-label">' + escapeHtml(summary.runningLabel) + '</span>'
         + taskBadgeHtml
         + '</div>'
-        + '<' + kbTag + kbAttrs + '>'
-        + '<span class="xmind-casegen-inline-kb-dot" aria-hidden="true"></span>'
-        + '<span class="xmind-casegen-inline-kb-copy">'
-        + '<span class="xmind-casegen-inline-kb-label">' + escapeHtml(summary.knowledgeBase.label || '') + '</span>'
-        + '<span class="xmind-casegen-inline-kb-detail" data-xmind-casegen-kb-detail>' + escapeHtml(summary.knowledgeBase.detail || '') + '</span>'
-        + '</span>'
-        + (summary.knowledgeBase.clickable
-          ? '<span class="xmind-casegen-inline-kb-action">查看片段</span>'
-          : '')
-        + '</' + kbTag + '>'
         + '<div class="xmind-casegen-inline-counts" data-xmind-casegen-counts title="当前画布展示的模块和用例总数会随生成、补全、删除实时刷新">'
         + '<span class="xmind-casegen-inline-count-pill" data-xmind-casegen-count-modules>'
         + '<strong>' + escapeHtml(String(summary.moduleCount)) + '</strong><span>模块</span>'
@@ -1387,227 +1031,6 @@
         + '<strong>' + escapeHtml(String(summary.caseCount)) + '</strong><span>用例</span>'
         + '</span>'
         + '</div>';
-      return true;
-    }
-
-    function getKnowledgeBaseDialogResult() {
-      var baseUrl = getKnowledgeBaseBaseUrl();
-      var knowledgeBase = getKnowledgeBaseState();
-      var lastResult = knowledgeBase && knowledgeBase.last_result
-        ? normalizeKnowledgeBaseQueryResult(knowledgeBase.last_result)
-        : createEmptyKnowledgeBaseQueryResult();
-      if (!baseUrl) return createEmptyKnowledgeBaseQueryResult();
-      if (String(lastResult.base_url || '') !== baseUrl) return createEmptyKnowledgeBaseQueryResult();
-      return lastResult;
-    }
-
-    function hasKnowledgeBaseDialogContent(result) {
-      var normalized = normalizeKnowledgeBaseQueryResult(result);
-      return normalized.status === 'ok' && normalized.used === true && Boolean(normalized.context_text);
-    }
-
-    function parseKnowledgeBaseContextBlocks(text) {
-      var source = String(text || '').trim();
-      if (!source) return [];
-      var docs = [];
-      var currentDoc = null;
-      var currentChunk = null;
-
-      function pushChunk() {
-        if (!currentDoc || !currentChunk) return;
-        currentChunk.text = String(currentChunk.text || '').trim();
-        if (currentChunk.text) currentDoc.chunks.push(currentChunk);
-        currentChunk = null;
-      }
-
-      function pushDoc() {
-        if (!currentDoc) return;
-        pushChunk();
-        if (!Array.isArray(currentDoc.chunks)) currentDoc.chunks = [];
-        if (currentDoc.header || currentDoc.path || currentDoc.summary || currentDoc.chunks.length) {
-          docs.push(currentDoc);
-        }
-        currentDoc = null;
-      }
-
-      source.split('\n').forEach(function(rawLine) {
-        var line = String(rawLine || '').replace(/\r/g, '').trim();
-        if (!line) {
-          if (currentChunk && currentChunk.text) currentChunk.text += '\n';
-          return;
-        }
-        if (line.indexOf('文档：') === 0) {
-          pushDoc();
-          currentDoc = {
-            header: String(line.slice(3) || '').trim(),
-            path: '',
-            summary: '',
-            chunks: [],
-          };
-          return;
-        }
-        if (!currentDoc) {
-          currentDoc = {
-            header: '',
-            path: '',
-            summary: '',
-            chunks: [],
-          };
-        }
-        if (line.indexOf('路径：') === 0) {
-          currentDoc.path = String(line.slice(3) || '').trim();
-          return;
-        }
-        if (line.indexOf('摘要：') === 0) {
-          currentDoc.summary = String(line.slice(3) || '').trim();
-          return;
-        }
-        if (line === '相关内容：') {
-          pushChunk();
-          return;
-        }
-        var headingMatch = line.match(/^\[(.+)\]$/);
-        if (headingMatch) {
-          pushChunk();
-          currentChunk = {
-            heading: String(headingMatch[1] || '').trim(),
-            text: '',
-          };
-          return;
-        }
-        if (!currentChunk) {
-          currentChunk = {
-            heading: '相关片段',
-            text: '',
-          };
-        }
-        currentChunk.text += (currentChunk.text ? '\n' : '') + line;
-      });
-      pushDoc();
-
-      if (!docs.length && source) {
-        return [{
-          header: '知识库片段',
-          path: '',
-          summary: '',
-          chunks: [{
-            heading: '相关内容',
-            text: source,
-          }],
-        }];
-      }
-      return docs;
-    }
-
-    function getKnowledgeBaseDialogScopeText(result) {
-      var normalized = normalizeKnowledgeBaseQueryResult(result);
-      if (normalized.scope === 'module' && normalized.module_title) {
-        return '当前展示的是模块「' + normalizeModuleTitle(normalized.module_title) + '」检索后实际注入的知识库片段。';
-      }
-      if (normalized.action_mode === 'prep') {
-        return '当前展示的是前置准备完成后自动预检索到的知识库片段。';
-      }
-      return '当前展示的是根节点生成阶段实际注入模型的知识库片段。';
-    }
-
-    function renderKnowledgeBaseDialog() {
-      if (!summaryDialogBodyEl) return;
-      var result = getKnowledgeBaseDialogResult();
-      if (!hasKnowledgeBaseDialogContent(result)) {
-        summaryDialogBodyEl.innerHTML = '<div class="xmind-casegen-history-empty">当前没有可查看的知识库片段</div>';
-        return;
-      }
-      var docs = parseKnowledgeBaseContextBlocks(result.context_text);
-      var scopeText = getKnowledgeBaseDialogScopeText(result);
-      var parts = [];
-      parts.push('<div class="xmind-casegen-kb-list">');
-      parts.push('<section class="xmind-casegen-kb-summary-card">');
-      parts.push(
-        '<strong class="xmind-casegen-kb-summary-title">本轮已使用 '
-          + escapeHtml(String(Number(result.used_doc_count || 0) || 0))
-          + ' 份文档 / '
-          + escapeHtml(String(Number(result.used_chunk_count || 0) || 0))
-          + ' 个片段</strong>'
-      );
-      parts.push('<p class="xmind-casegen-kb-summary-meta">' + escapeHtml(scopeText) + '</p>');
-      parts.push('</section>');
-      docs.forEach(function(doc) {
-        var chunks = Array.isArray(doc.chunks) ? doc.chunks : [];
-        parts.push('<article class="xmind-casegen-kb-card">');
-        parts.push('<div class="xmind-casegen-kb-card-head">');
-        parts.push('<div class="xmind-casegen-kb-card-copy">');
-        parts.push('<strong class="xmind-casegen-kb-card-title">' + escapeHtml(doc.header || '知识库文档') + '</strong>');
-        if (doc.path) {
-          parts.push('<div class="xmind-casegen-kb-card-path">' + escapeHtml(doc.path) + '</div>');
-        }
-        if (doc.summary) {
-          parts.push('<div class="xmind-casegen-kb-card-summary">摘要：' + escapeHtml(doc.summary) + '</div>');
-        }
-        parts.push('</div>');
-        parts.push('<span class="xmind-casegen-kb-card-pill">' + escapeHtml(String(chunks.length)) + ' 个片段</span>');
-        parts.push('</div>');
-        if (!chunks.length) {
-          parts.push('<div class="xmind-casegen-history-empty-inline">当前文档没有可展示的片段</div>');
-        } else {
-          parts.push('<div class="xmind-casegen-kb-chunk-list">');
-          chunks.forEach(function(chunk) {
-            parts.push('<section class="xmind-casegen-kb-chunk">');
-            parts.push('<strong class="xmind-casegen-kb-chunk-title">' + escapeHtml(chunk.heading || '相关片段') + '</strong>');
-            parts.push('<pre class="xmind-casegen-kb-chunk-text">' + escapeHtml(chunk.text || '') + '</pre>');
-            parts.push('</section>');
-          });
-          parts.push('</div>');
-        }
-        parts.push('</article>');
-      });
-      parts.push('</div>');
-      summaryDialogBodyEl.innerHTML = parts.join('');
-    }
-
-    function syncKnowledgeBaseToolbarStatus() {
-      syncInlineToolbarOverview();
-    }
-
-    function bindInlineOverviewHost(host) {
-      if (!host || host.__xmindCasegenKbBound === true || !host.addEventListener) return;
-      host.addEventListener('click', function(event) {
-        var kbTarget = event && event.target && event.target.closest
-          ? event.target.closest('[data-xmind-casegen-kb-open="1"]')
-          : null;
-        if (!kbTarget) return;
-        if (event && typeof event.preventDefault === 'function') event.preventDefault();
-        if (summaryDialogOpen === true && summaryDialogMode === 'knowledge-base') {
-          closeSummaryDialog();
-          return;
-        }
-        openKnowledgeBaseDialog();
-      });
-      host.__xmindCasegenKbBound = true;
-    }
-
-    function hasFreshKnowledgeBasePrepResult() {
-      var baseUrl = getKnowledgeBaseBaseUrl();
-      if (!baseUrl) return false;
-      if (!hasRequirementReady() || !isPrepCompleted()) return false;
-      var knowledgeBase = getKnowledgeBaseState();
-      if (!knowledgeBase || !knowledgeBase.prep_result) return false;
-      var prepResult = normalizeKnowledgeBaseQueryResult(knowledgeBase.prep_result);
-      if (!prepResult.updated_at) return false;
-      if (prepResult.status === 'disabled') return false;
-      if (String(prepResult.base_url || '') !== baseUrl) return false;
-      return String(prepResult.prep_signature || '') === buildKnowledgeBasePrepSignature();
-    }
-
-    function maybeAutoPrefetchKnowledgeBase() {
-      var baseUrl = getKnowledgeBaseBaseUrl();
-      if (!baseUrl) return false;
-      if (isDrawerOpen() !== true) return false;
-      if (!hasActiveWorkspace()) return false;
-      if (!hasRequirementReady() || !isPrepCompleted()) return false;
-      var knowledgeBase = getKnowledgeBaseState();
-      if (knowledgeBase && Number(knowledgeBase.pending_count || 0) > 0) return false;
-      if (hasFreshKnowledgeBasePrepResult()) return false;
-      prefetchKnowledgeBaseForPrep({ force: true });
       return true;
     }
 
@@ -1629,7 +1052,6 @@
       }
       var overviewHost = getInlineOverviewHost();
       if (!overviewHost) return false;
-      bindInlineOverviewHost(overviewHost);
       syncInlineToolbarOverview();
       if (historyBtn && historyGroup.appendChild) {
         applyInlineButtonStyle(historyBtn);
@@ -2053,7 +1475,6 @@
           deleteUndoStack: [],
           deleteRedoStack: [],
           root: createDefaultRootState(),
-          knowledgeBase: createDefaultKnowledgeBaseState(),
           summaryCollapsed: false,
           prep: createDefaultPrepState(),
           nextSnapshotId: 1,
@@ -2085,11 +1506,6 @@
       }
       if (!state.xmindCaseGen.root || typeof state.xmindCaseGen.root !== 'object') {
         state.xmindCaseGen.root = createDefaultRootState();
-      }
-      if (!state.xmindCaseGen.knowledgeBase || typeof state.xmindCaseGen.knowledgeBase !== 'object') {
-        state.xmindCaseGen.knowledgeBase = createDefaultKnowledgeBaseState();
-      } else {
-        state.xmindCaseGen.knowledgeBase = normalizeKnowledgeBaseState(state.xmindCaseGen.knowledgeBase);
       }
       if (!state.xmindCaseGen.prep || typeof state.xmindCaseGen.prep !== 'object') {
         state.xmindCaseGen.prep = createDefaultPrepState();
@@ -2730,7 +2146,6 @@
         deleteUndoStack: [],
         deleteRedoStack: [],
         root: createDefaultRootState(),
-        knowledgeBase: createDefaultKnowledgeBaseState(),
         summaryCollapsed: false,
         prep: createDefaultPrepState(),
         nextSnapshotId: 1,
@@ -2764,8 +2179,6 @@
 
     function extractActiveXmindStateSnapshot() {
       var source = state.xmindCaseGen && typeof state.xmindCaseGen === 'object' ? state.xmindCaseGen : {};
-      var activeWorkspaceId = source && source.activeWorkspaceId ? String(source.activeWorkspaceId || '') : '';
-      var freshKnowledgeBase = restoreKnowledgeBaseStateFromWorkspaceCache(activeWorkspaceId);
       var next = createInitialXmindState({
         drawerOpen: source.viewState && source.viewState.drawerOpen === true,
         fullscreen: source.viewState && source.viewState.fullscreen === true,
@@ -2774,20 +2187,10 @@
         if (WORKSPACE_HOST_KEYS[key]) return;
         next[key] = cloneJson(source[key], source[key]);
       });
-      next.knowledgeBase = cloneJson(freshKnowledgeBase, createDefaultKnowledgeBaseState());
       return next;
     }
 
     function applyActiveXmindStateSnapshot(snapshot) {
-      var host = state.xmindCaseGen && typeof state.xmindCaseGen === 'object' ? state.xmindCaseGen : {};
-      var targetWorkspaceId = host && host.activeWorkspaceId ? String(host.activeWorkspaceId || '') : '';
-      var snapshotKnowledgeBase = snapshot && snapshot.knowledgeBase
-        ? snapshot.knowledgeBase
-        : createDefaultKnowledgeBaseState();
-      var resolvedKnowledgeBase = pickFreshKnowledgeBaseState(
-        snapshotKnowledgeBase,
-        getRememberedKnowledgeBaseWorkspaceState(targetWorkspaceId)
-      );
       var next = createInitialXmindState({
         drawerOpen: snapshot && snapshot.viewState && snapshot.viewState.drawerOpen === true,
         fullscreen: snapshot && snapshot.viewState && snapshot.viewState.fullscreen === true,
@@ -2797,13 +2200,12 @@
         if (WORKSPACE_HOST_KEYS[key]) return;
         next[key] = cloneJson(source[key], source[key]);
       });
+      var host = state.xmindCaseGen && typeof state.xmindCaseGen === 'object' ? state.xmindCaseGen : {};
       Object.keys(host).forEach(function(key) {
         if (!WORKSPACE_HOST_KEYS[key]) return;
         next[key] = cloneJson(host[key], host[key]);
       });
-      next.knowledgeBase = cloneJson(resolvedKnowledgeBase, createDefaultKnowledgeBaseState());
       state.xmindCaseGen = next;
-      if (targetWorkspaceId) rememberKnowledgeBaseWorkspaceState(targetWorkspaceId, next.knowledgeBase);
     }
 
     function buildCurrentSharedWorkspaceSnapshot() {
@@ -2946,7 +2348,6 @@
         drawerOpen: xmindSnapshot.viewState.drawerOpen === true,
         fullscreen: xmindSnapshot.viewState.fullscreen === true,
       });
-      xmindSnapshot.knowledgeBase = normalizeKnowledgeBaseState(xmindSnapshot.knowledgeBase);
       return {
         xmind: xmindSnapshot,
         shared: normalizeWorkspaceSharedState(source.shared),
@@ -3118,7 +2519,6 @@
         drawerOpen: drawerOpen === true,
         fullscreen: fullscreen === true,
       });
-      forgetKnowledgeBaseWorkspaceState(activeId);
       host.workspaces[activeId].updatedAt = Date.now();
       return true;
     }
@@ -3261,13 +2661,6 @@
       var stableId = String(workspaceId || '');
       var record = stableId && host.workspaces[stableId] ? host.workspaces[stableId] : null;
       if (!record) return false;
-      var currentRequirementIdentity = getCurrentWorkspaceRequirementIdentity();
-      var targetRequirementIdentity = getWorkspaceSnapshotRequirementIdentity(record.snapshot);
-      var preservedKnowledgeBase = currentRequirementIdentity
-        && targetRequirementIdentity
-        && currentRequirementIdentity === targetRequirementIdentity
-          ? normalizeKnowledgeBaseState(getKnowledgeBaseState())
-          : null;
       var sharedSnapshot = normalizeWorkspaceSharedState(record.snapshot && record.snapshot.shared ? record.snapshot.shared : null);
       if (!sharedSnapshot.requirementLabel && !isDefaultWorkspaceRecordName(record.name)) {
         sharedSnapshot.requirementLabel = String(record.name || '').trim();
@@ -3279,15 +2672,6 @@
       host.mirrorWorkspaceId = stableId;
       applySharedWorkspaceSnapshot(sharedSnapshot);
       applyActiveXmindStateSnapshot(record.snapshot && record.snapshot.xmind ? record.snapshot.xmind : null);
-      if (
-        preservedKnowledgeBase
-        && getKnowledgeBaseStateFreshness(preservedKnowledgeBase) > getKnowledgeBaseStateFreshness(getKnowledgeBaseState())
-      ) {
-        state.xmindCaseGen.knowledgeBase = preservedKnowledgeBase;
-        if (record.snapshot && record.snapshot.xmind) {
-          record.snapshot.xmind.knowledgeBase = cloneJson(preservedKnowledgeBase, createDefaultKnowledgeBaseState());
-        }
-      }
       getWorkspaceHostState().activeWorkspaceId = stableId;
       getWorkspaceHostState().mirrorWorkspaceId = stableId;
       getWorkspaceHostState().workspaceOrder = host.workspaceOrder.slice();
@@ -3302,7 +2686,6 @@
           : false;
       }
       syncInlineStatusFromState();
-      maybeAutoPrefetchKnowledgeBase();
       return true;
     }
 
@@ -4627,17 +4010,13 @@
       return moduleKey && signature ? (moduleKey + '::' + signature) : '';
     }
 
-    function getActiveWorkspaceSharedSnapshot() {
-      var activeRecord = getWorkspaceRecord(getActiveWorkspaceId());
-      return activeRecord && activeRecord.snapshot && activeRecord.snapshot.shared
-        ? normalizeWorkspaceSharedState(activeRecord.snapshot.shared)
-        : null;
-    }
-
     function getDocumentRequirementLabelText() {
       var label = normalizePersistedRequirementLabel(state.requirementLabel);
       if (!label) {
-        var recordShared = getActiveWorkspaceSharedSnapshot();
+        var activeRecord = getWorkspaceRecord(getActiveWorkspaceId());
+        var recordShared = activeRecord && activeRecord.snapshot && activeRecord.snapshot.shared
+          ? normalizeWorkspaceSharedState(activeRecord.snapshot.shared)
+          : null;
         if (recordShared) {
           label = normalizePersistedRequirementLabel(recordShared.requirementLabel);
         }
@@ -4985,16 +4364,12 @@
         ? 'manual'
         : (prep.requirementMode === 'document' ? 'document' : '');
       var rawTextEl = document.getElementById('rawText');
-      var recordShared = getActiveWorkspaceSharedSnapshot();
       var shadowBase = workspaceShadowDepth > 0 && shadowWorkspaceSharedState
         ? normalizeWorkspaceSharedState(shadowWorkspaceSharedState)
         : null;
       var documentText = shadowBase
         ? String(shadowBase.rawText || '').trim()
         : (rawTextEl && rawTextEl.value ? String(rawTextEl.value).trim() : '');
-      if (!documentText && recordShared && recordShared.rawText) {
-        documentText = String(recordShared.rawText || '').trim();
-      }
       var documentLabel = getDocumentRequirementLabelText();
       var manualLabel = getManualRequirementLabelText();
       var manualText = getManualRequirementText();
@@ -5021,9 +4396,7 @@
           label: documentLabel,
           text: documentText,
           supplement: String(prep.requirementSupplement || '').trim(),
-          importName: state.lastRawImportName
-            ? String(state.lastRawImportName).trim()
-            : (recordShared && recordShared.lastRawImportName ? String(recordShared.lastRawImportName || '').trim() : ''),
+          importName: state.lastRawImportName ? String(state.lastRawImportName).trim() : '',
           images: documentImages,
           imageCount: documentImages.length,
           hasLabel: Boolean(documentLabel),
@@ -5043,298 +4416,6 @@
         hasBodyContent: false,
         isReady: false,
       };
-    }
-
-    function getKnowledgeBaseState() {
-      var activeWorkspaceId = getActiveWorkspaceId();
-      return restoreKnowledgeBaseStateFromWorkspaceCache(activeWorkspaceId);
-    }
-
-    function normalizeKnowledgeBaseBaseUrl(value) {
-      if (knowledgeBaseApi && typeof knowledgeBaseApi.normalizeBaseUrl === 'function') {
-        return knowledgeBaseApi.normalizeBaseUrl(value);
-      }
-      var text = String(value || '').trim();
-      if (!text) return '';
-      while (text.length > 1 && text.charAt(text.length - 1) === '/') {
-        text = text.slice(0, -1);
-      }
-      return text;
-    }
-
-    function isKnowledgeBaseBaseUrlValid(value) {
-      var text = normalizeKnowledgeBaseBaseUrl(value);
-      if (!text) return false;
-      if (knowledgeBaseApi && typeof knowledgeBaseApi.isValidBaseUrl === 'function') {
-        return knowledgeBaseApi.isValidBaseUrl(text);
-      }
-      return /^https?:\/\/[^/\s]+/i.test(text);
-    }
-
-    function getKnowledgeBaseBaseUrl() {
-      var settings = state && state.settings && typeof state.settings === 'object'
-        ? state.settings
-        : {};
-      return normalizeKnowledgeBaseBaseUrl(settings.knowledgeBaseBaseUrl);
-    }
-
-    function buildKnowledgeBaseRequirementText(requirementSource) {
-      var source = requirementSource && typeof requirementSource === 'object'
-        ? requirementSource
-        : getSelectedRequirementSource();
-      var parts = [];
-      if (source.text) parts.push(String(source.text || '').trim());
-      if (source.supplement) parts.push(String(source.supplement || '').trim());
-      return parts.join('\n\n').trim();
-    }
-
-    function buildKnowledgeBaseQuerySignature(payload) {
-      var body = payload && typeof payload === 'object' ? payload : {};
-      if (knowledgeBaseApi && typeof knowledgeBaseApi.buildQuerySignature === 'function') {
-        return String(knowledgeBaseApi.buildQuerySignature(body) || '');
-      }
-      return JSON.stringify(body || {});
-    }
-
-    function buildKnowledgeBasePrepSignature() {
-      var requirementSource = getSelectedRequirementSource();
-      var label = requirementSource && requirementSource.label
-        ? String(requirementSource.label || '').trim()
-        : normalizePersistedRequirementLabel(getRequirementLabelText());
-      return buildKnowledgeBaseQuerySignature({
-        base_url: getKnowledgeBaseBaseUrl(),
-        requirement_label: label,
-        requirement_text: buildKnowledgeBaseRequirementText(requirementSource),
-        module_title: '',
-        action_scope: 'prep',
-        action_mode: 'prep',
-      });
-    }
-
-    function buildKnowledgeBaseQueryPayload(actionScope, actionMode, moduleEntry) {
-      var requirementSource = getSelectedRequirementSource();
-      var baseUrl = getKnowledgeBaseBaseUrl();
-      var label = requirementSource && requirementSource.label
-        ? String(requirementSource.label || '').trim()
-        : normalizePersistedRequirementLabel(getRequirementLabelText());
-      return {
-        base_url: baseUrl,
-        requirement_label: label,
-        requirement_text: buildKnowledgeBaseRequirementText(requirementSource),
-        module_title: moduleEntry && moduleEntry.title ? String(moduleEntry.title || '').trim() : '',
-        action_scope: String(actionScope || ''),
-        action_mode: String(actionMode || ''),
-      };
-    }
-
-    function getCachedKnowledgeBaseResult(payload) {
-      var knowledgeBase = getKnowledgeBaseState();
-      var signature = buildKnowledgeBaseQuerySignature(payload);
-      if (!signature) return null;
-      if (payload && payload.action_scope === 'module') {
-        var moduleResult = knowledgeBase.module_results && knowledgeBase.module_results[signature]
-          ? knowledgeBase.module_results[signature]
-          : null;
-        if (moduleResult && moduleResult.query_signature === signature) return moduleResult;
-        return null;
-      }
-      if (payload && payload.action_mode === 'prep') {
-        if (knowledgeBase.prep_result && knowledgeBase.prep_result.query_signature === signature) {
-          return knowledgeBase.prep_result;
-        }
-      }
-      if (knowledgeBase.root_result && knowledgeBase.root_result.query_signature === signature) {
-        return knowledgeBase.root_result;
-      }
-      return null;
-    }
-
-    function storeKnowledgeBaseResult(payload, result) {
-      var knowledgeBase = getKnowledgeBaseState();
-      var normalized = normalizeKnowledgeBaseQueryResult(result, {
-        base_url: normalizeKnowledgeBaseBaseUrl(payload && payload.base_url ? payload.base_url : ''),
-        query_signature: buildKnowledgeBaseQuerySignature(payload),
-        prep_signature: buildKnowledgeBasePrepSignature(),
-        scope: payload && payload.action_scope ? String(payload.action_scope || '') : '',
-        action_mode: payload && payload.action_mode ? String(payload.action_mode || '') : '',
-        module_title: payload && payload.module_title ? String(payload.module_title || '') : '',
-        updated_at: Date.now(),
-      });
-      knowledgeBase.prep_signature = String(normalized.prep_signature || '');
-      knowledgeBase.last_result = normalized;
-      if (payload && payload.action_scope === 'module') {
-        if (!knowledgeBase.module_results || typeof knowledgeBase.module_results !== 'object') {
-          knowledgeBase.module_results = {};
-        }
-        knowledgeBase.module_results[normalized.query_signature] = normalized;
-      } else if (payload && payload.action_mode === 'prep') {
-        knowledgeBase.prep_result = normalized;
-      } else {
-        knowledgeBase.root_result = normalized;
-      }
-      syncActiveWorkspaceKnowledgeBaseSnapshot(knowledgeBase);
-      syncKnowledgeBaseToolbarStatus();
-      return normalized;
-    }
-
-    function setKnowledgeBaseQueryPending(payload, pending) {
-      var knowledgeBase = getKnowledgeBaseState();
-      var nextCount = Number(knowledgeBase.pending_count || 0) || 0;
-      if (pending === true) {
-        nextCount += 1;
-        knowledgeBase.pending_count = nextCount;
-        knowledgeBase.pending_scope = payload && payload.action_scope ? String(payload.action_scope || '') : '';
-        knowledgeBase.pending_action_mode = payload && payload.action_mode ? String(payload.action_mode || '') : '';
-        knowledgeBase.pending_module_title = payload && payload.module_title ? String(payload.module_title || '') : '';
-        knowledgeBase.last_requested_at = Date.now();
-      } else {
-        nextCount -= 1;
-        if (!Number.isFinite(nextCount) || nextCount < 0) nextCount = 0;
-        knowledgeBase.pending_count = nextCount;
-        if (nextCount <= 0) {
-          knowledgeBase.pending_scope = '';
-          knowledgeBase.pending_action_mode = '';
-          knowledgeBase.pending_module_title = '';
-        }
-      }
-      syncActiveWorkspaceKnowledgeBaseSnapshot(knowledgeBase);
-      syncKnowledgeBaseToolbarStatus();
-    }
-
-    function syncActiveWorkspaceKnowledgeBaseSnapshot(snapshot) {
-      var activeId = getActiveWorkspaceId();
-      if (!activeId) return false;
-      var record = getWorkspaceRecord(activeId);
-      if (!record) return false;
-      var freshestKnowledgeBase = pickFreshKnowledgeBaseState(
-        snapshot && typeof snapshot === 'object' ? snapshot : ensureState().knowledgeBase,
-        getRememberedKnowledgeBaseWorkspaceState(activeId)
-      );
-      ensureState().knowledgeBase = freshestKnowledgeBase;
-      if (!record.snapshot || typeof record.snapshot !== 'object') {
-        record.snapshot = createWorkspaceSnapshot({
-          drawerOpen: isDrawerOpen(),
-          fullscreen: drawerEl && drawerEl.classList
-            ? drawerEl.classList.contains('xmind-drawer-fullscreen')
-            : false,
-        });
-      }
-      if (!record.snapshot.xmind || typeof record.snapshot.xmind !== 'object') {
-        record.snapshot.xmind = createInitialXmindState({
-          drawerOpen: isDrawerOpen(),
-          fullscreen: drawerEl && drawerEl.classList
-            ? drawerEl.classList.contains('xmind-drawer-fullscreen')
-            : false,
-        });
-      }
-      record.snapshot.xmind.knowledgeBase = cloneJson(freshestKnowledgeBase, createDefaultKnowledgeBaseState());
-      rememberKnowledgeBaseWorkspaceState(activeId, freshestKnowledgeBase);
-      record.updatedAt = Date.now();
-      return true;
-    }
-
-    function createKnowledgeBaseFallbackResult(payload, statusCode, reason) {
-      return storeKnowledgeBaseResult(payload, {
-        used: false,
-        status: statusCode,
-        reason: reason,
-        match_count: 0,
-        used_chunk_count: 0,
-        used_doc_count: 0,
-        context_text: '',
-        hits: [],
-        manifest_meta: {},
-      });
-    }
-
-    async function ensureKnowledgeBaseQuery(payload, options) {
-      var opts = options || {};
-      var body = payload && typeof payload === 'object' ? payload : {};
-      var querySignature = buildKnowledgeBaseQuerySignature(body);
-      if (!body.base_url) {
-        var disabledResult = createKnowledgeBaseFallbackResult(body, 'disabled', '未配置知识库地址');
-        persistXmindState(true);
-        return disabledResult;
-      }
-      if (!isKnowledgeBaseBaseUrlValid(body.base_url)) {
-        var invalidResult = createKnowledgeBaseFallbackResult(body, 'invalid_url', '知识库地址格式不正确');
-        persistXmindState(true);
-        return invalidResult;
-      }
-      if (opts.force !== true) {
-        var cached = getCachedKnowledgeBaseResult(body);
-        if (cached) return cached;
-      }
-      if (querySignature && knowledgeBaseQueryInflightMap[querySignature]) {
-        return knowledgeBaseQueryInflightMap[querySignature];
-      }
-      if (!knowledgeBaseApi || typeof knowledgeBaseApi.queryKnowledgeBase !== 'function') {
-        var unavailableResult = createKnowledgeBaseFallbackResult(body, 'disabled', '知识库查询能力不可用');
-        persistXmindState(true);
-        return unavailableResult;
-      }
-      var requestPromise = (async function() {
-        setKnowledgeBaseQueryPending(body, true);
-        persistXmindState(false);
-        try {
-          var result = await knowledgeBaseApi.queryKnowledgeBase(body);
-          try {
-            return storeKnowledgeBaseResult(body, result);
-          } catch (storeErr) {
-            return createKnowledgeBaseFallbackResult(
-              body,
-              'unreachable',
-              storeErr && storeErr.message ? String(storeErr.message) : '知识库结果写回失败'
-            );
-          }
-        } catch (queryErr) {
-          return createKnowledgeBaseFallbackResult(
-            body,
-            'unreachable',
-            queryErr && queryErr.message ? String(queryErr.message) : '知识库请求失败'
-          );
-        } finally {
-          setKnowledgeBaseQueryPending(body, false);
-          persistXmindState(true);
-          if (querySignature && knowledgeBaseQueryInflightMap[querySignature] === requestPromise) {
-            delete knowledgeBaseQueryInflightMap[querySignature];
-          }
-        }
-      })();
-      if (querySignature) {
-        knowledgeBaseQueryInflightMap[querySignature] = requestPromise;
-      }
-      return requestPromise;
-    }
-
-    function shouldShowKnowledgeBaseBadge() {
-      var currentBaseUrl = getKnowledgeBaseBaseUrl();
-      if (!currentBaseUrl) return false;
-      var knowledgeBase = getKnowledgeBaseState();
-      var lastResult = knowledgeBase && knowledgeBase.last_result ? knowledgeBase.last_result : null;
-      if (!lastResult) return false;
-      return lastResult.status === 'ok'
-        && lastResult.used === true
-        && String(lastResult.base_url || '') === currentBaseUrl
-        && String(lastResult.prep_signature || '') === buildKnowledgeBasePrepSignature();
-    }
-
-    function prefetchKnowledgeBaseForPrep(options) {
-      var opts = options || {};
-      var requirementSource = getSelectedRequirementSource();
-      if (!requirementSource || requirementSource.isReady !== true) {
-        return Promise.resolve(createEmptyKnowledgeBaseQueryResult());
-      }
-      return ensureKnowledgeBaseQuery(buildKnowledgeBaseQueryPayload('root', 'prep', null), {
-        force: opts.force === true,
-      }).then(function(result) {
-        if (summaryDialogOpen === true && summaryDialogMode === 'prep') {
-          renderSummaryDialogBody();
-        }
-        return result;
-      }).catch(function() {
-        return createEmptyKnowledgeBaseQueryResult();
-      });
     }
 
     function setManualRequirementText(value) {
@@ -5808,13 +4889,8 @@
       if (summaryDialogMode === 'prep') {
         syncSummaryDraftIntoState();
       }
-      if (summaryDialogMode === 'history') {
-        renderHistoryDialog();
-      } else if (summaryDialogMode === 'knowledge-base') {
-        renderKnowledgeBaseDialog();
-      } else {
-        renderPrepDialog();
-      }
+      if (summaryDialogMode === 'history') renderHistoryDialog();
+      else renderPrepDialog();
     }
 
     function syncPrepDialogState() {
@@ -6013,9 +5089,6 @@
         { step: STEP_CASES, label: '是否导入用例', shortLabel: 'step2', done: casesDone },
         { step: STEP_OPTIONS, label: '生成选项', shortLabel: 'step3', done: prep.completed === true && casesDone },
       ];
-      var knowledgeBaseBadgeHtml = shouldShowKnowledgeBaseBadge()
-        ? '<span class="xmind-casegen-prep-kb-badge">已使用知识库</span>'
-        : '';
       return '<div class="xmind-casegen-prep-stepper">'
         + steps.map(function(item) {
           var classes = ['xmind-casegen-prep-step'];
@@ -6025,7 +5098,6 @@
             + '<span class="xmind-casegen-prep-step-badge">' + escapeHtml(item.shortLabel) + '</span>'
             + '</span>';
         }).join('')
-        + knowledgeBaseBadgeHtml
         + '</div>';
     }
 
@@ -6539,21 +5611,6 @@
       applySummaryDialogState();
     }
 
-    function openKnowledgeBaseDialog() {
-      if (!hasActiveWorkspace()) {
-        notifyFloatingStatus('请先新建生成页签', 'warn', 2500);
-        return;
-      }
-      if (!hasKnowledgeBaseDialogContent(getKnowledgeBaseDialogResult())) {
-        notifyFloatingStatus('当前没有可查看的知识库片段', 'warn', 2500);
-        return;
-      }
-      hideOpenMindContextMenu();
-      summaryDialogMode = 'knowledge-base';
-      summaryDialogOpen = true;
-      applySummaryDialogState();
-    }
-
     function closeSummaryDialog(options) {
       syncSummaryDraftIntoState();
       summaryDialogOpen = false;
@@ -6564,9 +5621,7 @@
 
     function applySummaryDialogState() {
       var open = summaryDialogOpen === true;
-      var mode = 'prep';
-      if (summaryDialogMode === 'history') mode = 'history';
-      else if (summaryDialogMode === 'knowledge-base') mode = 'knowledge-base';
+      var mode = summaryDialogMode === 'history' ? 'history' : 'prep';
       if (summaryOverlayEl) {
         summaryOverlayEl.hidden = !open;
         summaryOverlayEl.setAttribute('aria-hidden', open ? 'false' : 'true');
@@ -6584,32 +5639,16 @@
         historyBtn.textContent = '生成记录';
       }
       if (summaryDialogTitleEl) {
-        if (mode === 'history') {
-          summaryDialogTitleEl.textContent = '生成记录';
-        } else if (mode === 'knowledge-base') {
-          summaryDialogTitleEl.textContent = '知识库使用片段';
-        } else {
-          summaryDialogTitleEl.textContent = '生成前置准备';
-        }
+        summaryDialogTitleEl.textContent = mode === 'history' ? '生成记录' : '生成前置准备';
       }
       if (summaryDialogDescEl) {
-        if (mode === 'history') {
-          summaryDialogDescEl.textContent = '记录当前 XMind 用例生成里每次节点操作的结果摘要。';
-        } else if (mode === 'knowledge-base') {
-          summaryDialogDescEl.textContent = '展示本轮实际注入模型的知识库片段，便于确认引用内容和命中范围。';
-        } else {
-          summaryDialogDescEl.textContent = '按 3 步完成前置准备，确认后 step1 和 step2 会在本次生成中锁定。';
-        }
+        summaryDialogDescEl.textContent = mode === 'history'
+          ? '记录当前 XMind 用例生成里每次节点操作的结果摘要。'
+          : '按 3 步完成前置准备，确认后 step1 和 step2 会在本次生成中锁定。';
       }
-      syncInlineToolbarOverview();
       if (!open) return;
-      if (mode === 'history') {
-        renderHistoryDialog();
-      } else if (mode === 'knowledge-base') {
-        renderKnowledgeBaseDialog();
-      } else {
-        renderPrepDialog();
-      }
+      if (mode === 'history') renderHistoryDialog();
+      else renderPrepDialog();
     }
 
     function setPrepStep(step) {
@@ -6638,7 +5677,6 @@
         prep.baseLocked = true;
         prep.completed = true;
         prep.step = STEP_OPTIONS;
-        prefetchKnowledgeBaseForPrep({ force: true });
         persistXmindState(true);
         notifySuccessToast('已保存生成前置准备', 3000);
         closeSummaryDialog({ skipPersist: true });
@@ -6675,7 +5713,6 @@
       ensureState().hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
       renderWorkspaceTabs();
       syncOpenButtonState();
-      syncKnowledgeBaseToolbarStatus();
       renderOpenedSummaryDialog();
     }
 
@@ -7813,38 +6850,10 @@
       });
     }
 
-    async function resolveKnowledgeBaseContext(contract, moduleEntry) {
-      var requirementSource = getSelectedRequirementSource();
-      if (!requirementSource || requirementSource.isReady !== true) {
-        return createEmptyKnowledgeBaseQueryResult();
-      }
-      var baseUrl = getKnowledgeBaseBaseUrl();
-      if (!baseUrl) {
-        return createEmptyKnowledgeBaseQueryResult();
-      }
-      var knowledgeBase = getKnowledgeBaseState();
-      if (
-        moduleEntry === null
-        && knowledgeBase
-        && knowledgeBase.prep_result
-        && knowledgeBase.prep_result.status === 'ok'
-        && knowledgeBase.prep_result.used === true
-        && String(knowledgeBase.prep_result.base_url || '') === baseUrl
-        && String(knowledgeBase.prep_result.prep_signature || '') === buildKnowledgeBasePrepSignature()
-      ) {
-        return knowledgeBase.prep_result;
-      }
-      return ensureKnowledgeBaseQuery(
-        buildKnowledgeBaseQueryPayload(contract && contract.scope ? contract.scope : 'root', contract && contract.mode ? contract.mode : '', moduleEntry),
-        {}
-      );
-    }
-
     async function buildRequirementPayload(contract, visibleContext, moduleEntry) {
       var requirementSource = getSelectedRequirementSource();
       var generationOptions = buildXmindGenerationOptionsSnapshot();
       var hardConstraintText = buildXmindHardConstraintText(contract, generationOptions);
-      var knowledgeBaseResult = await resolveKnowledgeBaseContext(contract, moduleEntry);
       var aiLayerSnapshot = contract && (
         contract.mode === 'regenerate_modules'
         || (contract.scope === 'root' && contract.mode === 'full_cases')
@@ -7868,13 +6877,6 @@
             return normalizeCaseItem(row.item, moduleEntry.title);
           }).filter(Boolean),
         }, null, 2));
-      }
-      if (knowledgeBaseApi && typeof knowledgeBaseApi.buildPromptSections === 'function') {
-        var knowledgeBaseSections = knowledgeBaseApi.buildPromptSections(knowledgeBaseResult) || [];
-        knowledgeBaseSections.forEach(function(sectionText) {
-          if (!sectionText) return;
-          sections.push(String(sectionText));
-        });
       }
       if (requirementSource.mode === 'document') {
         sections.push('【需求正文】\n' + (requirementSource.text || '（无文本）'));
@@ -14052,7 +13054,6 @@
           else openHistoryDialog();
         });
       }
-      bindInlineOverviewHost(getInlineOverviewHost());
       if (storeBtn) {
         storeBtn.addEventListener('click', function() {
           handleStoreToLibrary();
@@ -14312,21 +13313,6 @@
         });
         listObserver.observe(caseFileList, { childList: true, subtree: true });
       }
-      if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-        window.addEventListener('app-settings-loaded', function() {
-          syncKnowledgeBaseToolbarStatus();
-          maybeAutoPrefetchKnowledgeBase();
-          renderOpenedSummaryDialog();
-        });
-        window.addEventListener('app-settings-updated', function(event) {
-          var detail = event && event.detail ? event.detail : null;
-          var keys = detail && Array.isArray(detail.keys) ? detail.keys : [];
-          if (keys.length && keys.indexOf('knowledgeBaseBaseUrl') === -1) return;
-          syncKnowledgeBaseToolbarStatus();
-          maybeAutoPrefetchKnowledgeBase();
-          renderOpenedSummaryDialog();
-        });
-      }
     }
 
     function hasDrawerRestoreIntent() {
@@ -14459,7 +13445,6 @@
         activeWorkspaceId: String(getActiveWorkspaceId() || ''),
       });
       ensureActiveWorkspaceHydrated();
-      updateSummary();
       if (!hasDrawerRestoreIntent()) {
         setDebugState({
           phase: 'drawer-restore-no-intent',
@@ -14505,9 +13490,6 @@
     bindManagedXmindTasks();
     bindRenderListeners();
     updateSummary();
-    if (window.app && window.app.settingsReady === true) {
-      syncKnowledgeBaseToolbarStatus();
-    }
 
     var api = {
       open: open,

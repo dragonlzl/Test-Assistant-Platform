@@ -11,7 +11,6 @@
       feishuWebhook: '',
       feishuMention: '',
       caseAssistantProjectRoot: '',
-      knowledgeBaseBaseUrl: '',
       caseViewFontSize: 13,
       missingCaseReminderPlacement: 'top',
       missingCaseReminderMatchConfig: { type: true, module: true },

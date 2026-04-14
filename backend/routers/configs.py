@@ -14,11 +14,6 @@ from .. import models, schemas
 from ..audit import log_operation
 from ..db import get_db
 from ..dependencies import get_current_user
-from ..knowledge_base_service import (
-    KnowledgeBaseError,
-    normalize_knowledge_base_url,
-    query_knowledge_base,
-)
 
 
 router = APIRouter(tags=["settings"])
@@ -71,13 +66,6 @@ def _validate_model_url(raw_url: Optional[str]) -> str:
             status_code=status.HTTP_400_BAD_REQUEST, detail="模型地址格式不正确"
         )
     return url
-
-
-def _validate_knowledge_base_url(raw_url: Optional[str]) -> str:
-    try:
-        return normalize_knowledge_base_url(raw_url)
-    except KnowledgeBaseError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=exc.reason) from exc
 
 
 @router.get("/settings", response_model=List[schemas.SettingOut])
@@ -368,31 +356,6 @@ def proxy_model_request(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=f"模型代理请求失败：{exc}"
         ) from exc
-
-
-@router.post("/knowledge-base/query", response_model=schemas.KnowledgeBaseQueryResponse)
-def knowledge_base_query(
-    payload: schemas.KnowledgeBaseQueryRequest,
-    _: models.User = Depends(get_current_user),
-):
-    raw = payload.model_dump()
-    if raw.get("base_url"):
-        try:
-            raw["base_url"] = _validate_knowledge_base_url(raw.get("base_url"))
-        except HTTPException:
-            return schemas.KnowledgeBaseQueryResponse(
-                used=False,
-                status="invalid_url",
-                reason="知识库地址格式不正确",
-                match_count=0,
-                used_chunk_count=0,
-                used_doc_count=0,
-                context_text="",
-                hits=[],
-                manifest_meta=schemas.KnowledgeBaseManifestMetaOut(),
-            )
-    result = query_knowledge_base(raw)
-    return schemas.KnowledgeBaseQueryResponse(**result)
 
 
 @router.get("/features", response_model=List[schemas.FeatureAssignmentOut])
