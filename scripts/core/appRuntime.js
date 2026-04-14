@@ -160,6 +160,23 @@
       }
     }
 
+    function clearPersistedXmindTasks(reason) {
+      var manager = xmindCaseGenTaskManager;
+      if (manager && typeof manager.clearAllTasks === 'function') {
+        manager.clearAllTasks(reason || 'workflow-reset');
+        return true;
+      }
+      if (typeof localStorage !== 'undefined') {
+        try {
+          localStorage.removeItem('tap-xmind-casegen-tasks');
+          return true;
+        } catch (err) {
+          // ignore
+        }
+      }
+      return false;
+    }
+
     function normalizeImportedCases(list) {
       if (!Array.isArray(list)) return [];
       return list.map(function(item, idx) {
@@ -949,6 +966,7 @@
       }
       if (rawSnapshot && rawSnapshot.length > workflowSnapshotMaxChars) {
         if (storage && typeof storage.remove === 'function') storage.remove(workflowStorageKey);
+        clearPersistedXmindTasks('workflow-oversize-reset');
         state.workflowRecoveryNotice = {
           reason: 'oversize',
           shown: false,
@@ -959,6 +977,7 @@
       if (!snapshot || typeof snapshot !== 'object') {
         if (rawSnapshot) {
           if (storage && typeof storage.remove === 'function') storage.remove(workflowStorageKey);
+          clearPersistedXmindTasks('workflow-invalid-reset');
           state.workflowRecoveryNotice = {
             reason: 'invalid',
             shown: false,
@@ -970,6 +989,32 @@
         if (String(snapshot.user_id) !== String(state.currentUser.id)) return false;
       }
       return applyWorkflowSnapshot(snapshot);
+    }
+
+    function preclearOversizeWorkflowSnapshotBeforeModuleInit() {
+      if (!workflowStorageKey) return false;
+      var rawSnapshot = '';
+      try {
+        if (typeof localStorage !== 'undefined') {
+          rawSnapshot = localStorage.getItem(workflowStorageKey) || '';
+        }
+      } catch (err) {
+        rawSnapshot = '';
+      }
+      if (!rawSnapshot || rawSnapshot.length <= workflowSnapshotMaxChars) return false;
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(workflowStorageKey);
+        }
+      } catch (err) {
+        // ignore
+      }
+      clearPersistedXmindTasks('workflow-oversize-preinit-reset');
+      state.workflowRecoveryNotice = {
+        reason: 'oversize',
+        shown: false,
+      };
+      return true;
     }
 
     function flushWorkflowRecoveryNotice() {
@@ -2064,6 +2109,7 @@
       if (window.app && window.app._inited) return;
       if (!window.app) window.app = {};
       window.app._inited = true;
+      window.app.__tapWorkflowReady = false;
       markRuntimeStage('inited-flag-set');
       workflowRestoring = true;
       restoreWorkflowState();
@@ -2247,12 +2293,14 @@
       updateFlowStatus();
       bindWorkflowPersistenceListeners();
       workflowRestoring = false;
+      window.app.__tapWorkflowReady = true;
       markRuntimeStage('workflow-ready');
       flushWorkflowRecoveryNotice();
       scheduleDeferredXmindRestore();
       return { casegenHandlersModule: casegenHandlersModule, casegenCoreModule: casegenCoreModule, layoutHandlersModule: layoutHandlersModule };
     }
     window.app = window.app || {};
+    window.app.__tapWorkflowReady = false;
     window.app.init = initApp;
 
     renderCaseGenProgressBoard();
@@ -2379,6 +2427,7 @@
     if (window.app.casesgen && typeof window.app.casesgen.init === 'function') {
       window.app.casesgen.init(moduleContext);
     }
+    preclearOversizeWorkflowSnapshotBeforeModuleInit();
     if (window.app.xmindCasegen && typeof window.app.xmindCasegen.init === 'function') {
       xmindCasegenModule = window.app.xmindCasegen.init(moduleContext) || null;
     }

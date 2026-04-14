@@ -10793,7 +10793,12 @@
       return status === 'done' || status === 'error' || status === 'cancelled';
     }
 
+    function isWorkflowReadyForManagedTasks() {
+      return Boolean(window.app && window.app.__tapWorkflowReady === true);
+    }
+
     function listManagedXmindTasks() {
+      if (!isWorkflowReadyForManagedTasks()) return [];
       var manager = getXmindTaskManager();
       if (!manager || typeof manager.getTasks !== 'function') return [];
       var list = manager.getTasks();

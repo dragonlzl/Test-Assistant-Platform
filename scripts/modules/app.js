@@ -1328,6 +1328,26 @@
         return true;
       }
 
+      function clearAllTasks(action) {
+        Object.keys(takeoverTimers).forEach(function(taskId) {
+          if (takeoverTimers[taskId]) clearTimeout(takeoverTimers[taskId]);
+          delete takeoverTimers[taskId];
+        });
+        Object.keys(runningMap).forEach(function(taskId) {
+          delete runningMap[taskId];
+        });
+        if (typeof localStorage !== 'undefined') {
+          try {
+            localStorage.removeItem(storageKey);
+          } catch (err) {
+            markTaskStorageRecovery('clear-all-failed-volatile');
+          }
+        }
+        rememberVolatileTasks([], { prefer: false });
+        emitTaskUpdate(null, action || 'clear-all', []);
+        return true;
+      }
+
       function resetRunner(task) {
         if (!task) return;
         task.runnerId = '';
@@ -1618,6 +1638,7 @@
         getTask: getTask,
         getTasks: getTasks,
         clearTask: clearTask,
+        clearAllTasks: clearAllTasks,
         cancelTask: cancelTask,
         cancelAllRunning: cancelAllRunning,
         updateTasksContext: updateTasksContext,

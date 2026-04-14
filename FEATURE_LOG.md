@@ -6556,3 +6556,14 @@
   - `node --check scripts/core/compareCore.js scripts/core/appRuntime.js scripts/modules/app.js scripts/base/state.js config/domConfig.js tests/ui/compare_case_assistant_electron.spec.js`（通过）
   - `npx playwright test --config tests/playwright.config.js tests/ui/compare_case_assistant_electron.spec.js --reporter=line`（通过，2/2）
   - 本次改动未新增或变更后端 HTTP 接口，未新增 API 用例
+
+- 更新记录：2026-04-14 修复 XMind 超限缓存清理后的脏恢复问题：当 `usecase-workflow-state-v1` 因超限或损坏在启动时被自动清理时，同步清空残留的 `tap-xmind-casegen-tasks` 任务缓存，避免旧任务 `restoreContext` 在工作流已失效的情况下复活已删除的旧页签，导致后续重新完成前置准备并刷新时落入错误恢复链路（`scripts/core/appRuntime.js`）。
+- 更新记录：2026-04-14 优化 XMind 启动期异常缓存清理性能：将“工作流主快照失效时的 XMind 任务清理”从逐条 `clearTask` 改为 task manager 侧一次性整仓清空，避免残留任务较多时在启动阶段反复读写 `tap-xmind-casegen-tasks` 并派发大量恢复事件，导致页面一打开就长时间无响应（`scripts/modules/app.js`、`scripts/core/appRuntime.js`）。
+- 更新记录：2026-04-14 封住 XMind 启动前读缓存窗口：在 `appRuntime` 初始化阶段先对超限工作流快照做预清理，并把托管任务读取门禁延后到 `workflow-ready` 之后，避免 `xmindCasegen` 模块在 `initApp()` 恢复主流程之前就提前读取大体积 `tap-xmind-casegen-tasks`，造成页面一访问就无响应（`scripts/core/appRuntime.js`、`scripts/modules/xmindCasegen.js`）。
+- 更新记录：2026-04-14 补充 XMind 超限恢复回归：新增自动化断言覆盖“超限清理后重新完成前置准备再刷新仍可恢复”“超限清理后重新导入需求文档再刷新仍可恢复”“超限清理时旧任务缓存不会复活旧页签且重新新建页签后刷新仍正常”三条链路，并保留“生成中刷新自动恢复”用例，确保本次清理不会误伤正常 XMind 后台恢复（`tests/ui/xmind_casegen_flow.spec.js`、`tests/ui/workflow_cache_recovery.spec.js`）。
+- 更新记录：2026-04-14 补充启动期整仓清理回归：新增自动化断言覆盖“工作流主缓存超限 + 大量但未超阈值的 XMind 任务缓存”场景，要求页面仍能在时限内完成启动，且任务缓存只触发一次整仓清理事件，不再逐条清理（`tests/ui/workflow_cache_recovery.spec.js`）。
+- 测试与验证（本次增量）：
+  - `node --check scripts/modules/app.js scripts/core/appRuntime.js tests/ui/workflow_cache_recovery.spec.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/workflow_cache_recovery.spec.js --grep '异常过大的本地流程缓存不会阻塞页面启动|主流程缓存超限时，大量残留的 XMind 任务会被整仓清理，不会在启动时逐条清理卡死'`（通过，2/2）
+  - `node --check scripts/core/appRuntime.js scripts/modules/xmindCasegen.js`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/workflow_cache_recovery.spec.js tests/ui/xmind_casegen_flow.spec.js --grep '异常过大的本地流程缓存不会阻塞页面启动|主流程缓存超限时，大量残留的 XMind 任务会被整仓清理，不会在启动时逐条清理卡死|XMind 生成在刷新后会自动恢复并继续完成，不再卡死在生成中'`（通过，3/3）

@@ -4241,6 +4241,261 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(String(hostState.activeWorkspaceId || '')).toBe(String(hostState.workspaceOrder[1] || ''));
   });
 
+  test('触发一次超大工作流缓存自动清理后，重新完成前置准备再刷新页面不会卡死', async ({ page }) => {
+    const token = 'xmind-oversize-recovery-refresh-token';
+    const user = { id: 8123, username: 'xmind-oversize-recovery' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await page.addInitScript(() => {
+      try {
+        if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('__pw-xmind-oversize-once') === '1') {
+          return;
+        }
+        localStorage.setItem('usecase-workflow-state-v1', 'x'.repeat(1600001));
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('__pw-xmind-oversize-once', '1');
+        }
+      } catch (_) {}
+    });
+
+    await gotoCasesgenWorkflow(page, {
+      resetWorkflowStorage: false,
+    });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+
+    await createXmindWorkspaceByManualPrep(page, '超限恢复后刷新需求', '需求：先发生一次超限缓存自动清理，再完成前置准备后刷新，页面也不能无响应。', {
+      useExistingWorkspace: true,
+      completePrep: true,
+    });
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('超限恢复后刷新需求');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 25000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('超限恢复后刷新需求');
+    await waitForNodeText(page, '超限恢复后刷新需求');
+
+    const restoreState = await page.evaluate(() => {
+      var app = window.app || {};
+      var state = app.state || {};
+      var host = state.xmindCaseGen || {};
+      var activeId = String(host.activeWorkspaceId || '');
+      var record = activeId && host.workspaces ? host.workspaces[activeId] : null;
+      var prep = record && record.snapshot && record.snapshot.xmind ? record.snapshot.xmind.prep : null;
+      var debug = app.__xmindCasegenDebug || null;
+      return {
+        activeWorkspaceId: activeId,
+        workspaceCount: host.workspaces && typeof host.workspaces === 'object'
+          ? Object.keys(host.workspaces).length
+          : 0,
+        prepCompleted: Boolean(prep && prep.completed === true),
+        prepLabel: prep ? String(prep.manualRequirementLabel || '') : '',
+        debugPhase: debug ? String(debug.phase || '') : '',
+      };
+    });
+    expect(restoreState.workspaceCount).toBeGreaterThan(0);
+    expect(restoreState.activeWorkspaceId).not.toBe('');
+    expect(restoreState.prepCompleted).toBe(true);
+    expect(restoreState.prepLabel).toBe('超限恢复后刷新需求');
+    expect(/error/i.test(String(restoreState.debugPhase || ''))).toBe(false);
+  });
+
+  test('触发一次超大工作流缓存自动清理后，重新导入需求并完成前置准备再刷新页面不会卡死', async ({ page }) => {
+    const token = 'xmind-oversize-recovery-doc-refresh-token';
+    const user = { id: 8124, username: 'xmind-oversize-recovery-doc' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await page.addInitScript(() => {
+      try {
+        if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('__pw-xmind-oversize-doc-once') === '1') {
+          return;
+        }
+        localStorage.setItem('usecase-workflow-state-v1', 'x'.repeat(1600001));
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('__pw-xmind-oversize-doc-once', '1');
+        }
+      } catch (_) {}
+    });
+
+    await gotoCasesgenWorkflow(page, {
+      resetWorkflowStorage: false,
+    });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await seedDocumentRequirement(page, {
+      text: '需求：先触发一次超限缓存清理，再重新导入需求文档并完成前置准备，刷新后页面仍然可恢复。',
+      requirementLabel: '超限恢复后文档需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: '超限恢复后文档需求',
+      requirementLabel: '超限恢复后文档需求',
+      requirementLabelSource: 'ui-test',
+      lastRawImportName: 'oversize-recovered.docx',
+      rawText: '需求：先触发一次超限缓存清理，再重新导入需求文档并完成前置准备，刷新后页面仍然可恢复。',
+      prep: {
+        step: 3,
+        requirementMode: 'document',
+        caseImportMode: 'skip',
+        completed: true,
+        baseLocked: true,
+      },
+    });
+    await waitForNodeText(page, '超限恢复后文档需求');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 25000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await waitForNodeText(page, '超限恢复后文档需求');
+
+    const restoreState = await page.evaluate(() => {
+      var app = window.app || {};
+      var state = app.state || {};
+      var host = state.xmindCaseGen || {};
+      var activeId = String(host.activeWorkspaceId || '');
+      var record = activeId && host.workspaces ? host.workspaces[activeId] : null;
+      var prep = record && record.snapshot && record.snapshot.xmind ? record.snapshot.xmind.prep : null;
+      var shared = record && record.snapshot && record.snapshot.shared ? record.snapshot.shared : null;
+      return {
+        activeWorkspaceId: activeId,
+        requirementLabel: shared ? String(shared.requirementLabel || '') : '',
+        lastRawImportName: shared ? String(shared.lastRawImportName || '') : '',
+        prepCompleted: Boolean(prep && prep.completed === true),
+        requirementMode: prep ? String(prep.requirementMode || '') : '',
+      };
+    });
+    expect(restoreState.activeWorkspaceId).not.toBe('');
+    expect(restoreState.requirementLabel).toBe('超限恢复后文档需求');
+    expect(restoreState.lastRawImportName).toBe('oversize-recovered.docx');
+    expect(restoreState.prepCompleted).toBe(true);
+    expect(restoreState.requirementMode).toBe('document');
+  });
+
+  test('超大工作流缓存被清理时，旧的 XMind 任务缓存不会复活已删除的旧页签', async ({ page }) => {
+    const token = 'xmind-oversize-stale-task-token';
+    const user = { id: 8125, username: 'xmind-oversize-stale-task' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+    const staleTask = {
+      id: 'xmind-casegen-stale-task',
+      status: 'done',
+      scope: 'root',
+      actionId: 'full_modules',
+      historyActionLabel: '生成全量模块',
+      workspaceId: 'xmind-workspace-stale',
+      resultRaw: '{"modules":[]}',
+      createdAt: Date.now() - 10000,
+      updatedAt: Date.now() - 5000,
+      endedAt: Date.now() - 1000,
+      restoreContext: {
+        workspaceId: 'xmind-workspace-stale',
+        requirementLabel: '旧任务恢复需求',
+        requirementLabelSource: 'manual',
+        lastRawImportName: '',
+        rawText: '旧任务遗留需求正文',
+        caseText: '',
+        importedCases: [],
+        caseGenModules: [],
+        caseGenResults: {},
+        operationSnapshots: [],
+        nextSnapshotId: 1,
+        history: [],
+        rootPipeline: null,
+        prep: {
+          step: 3,
+          requirementMode: 'manual',
+          requirementSupplement: '',
+          manualRequirementLabel: '旧任务恢复需求',
+          manualRequirementBlocks: [{
+            type: 'text',
+            text: '旧任务遗留需求正文',
+          }],
+          caseImportMode: 'skip',
+          completed: true,
+          baseLocked: true,
+        },
+        viewState: {
+          drawerOpen: true,
+          fullscreen: false,
+          transform: '',
+          scaleVal: 1,
+          scrollLeft: 0,
+          scrollTop: 0,
+          collapsedNodeKeys: [],
+          treeSourceSignature: '',
+          updatedAt: Date.now() - 2000,
+        },
+      },
+    };
+
+    await page.addInitScript((payload) => {
+      try {
+        if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('__pw-xmind-oversize-stale-task-once') === '1') {
+          return;
+        }
+        localStorage.setItem('usecase-workflow-state-v1', 'x'.repeat(1600001));
+        localStorage.setItem('tap-xmind-casegen-tasks', JSON.stringify([payload.task]));
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('__pw-xmind-oversize-stale-task-once', '1');
+        }
+      } catch (_) {}
+    }, {
+      task: staleTask,
+    });
+
+    await gotoCasesgenWorkflow(page, {
+      resetWorkflowStorage: false,
+    });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await page.waitForTimeout(800);
+
+    const recoveredState = await page.evaluate(() => {
+      var app = window.app || {};
+      var state = app.state || {};
+      var host = state.xmindCaseGen || {};
+      var order = Array.isArray(host.workspaceOrder) ? host.workspaceOrder.slice() : [];
+      var activeId = String(host.activeWorkspaceId || '');
+      var labels = order.map(function(id) {
+        var record = host.workspaces && host.workspaces[id] ? host.workspaces[id] : null;
+        return record ? String(record.name || '') : '';
+      });
+      return {
+        workspaceOrder: order,
+        activeWorkspaceId: activeId,
+        labels: labels,
+      };
+    });
+
+    expect(recoveredState.workspaceOrder).toEqual([]);
+    expect(recoveredState.activeWorkspaceId).toBe('');
+    expect(recoveredState.labels).toEqual([]);
+
+    await openXmindCaseGenDrawer(page);
+    await createXmindWorkspaceByManualPrep(page, '清理后新建页签', '需求：旧任务缓存被清掉后，重新完成前置准备并刷新，不应再被旧页签污染。', {
+      useExistingWorkspace: true,
+      completePrep: true,
+    });
+    await waitForNodeText(page, '清理后新建页签');
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 25000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('清理后新建页签');
+    await waitForNodeText(page, '清理后新建页签');
+    await expect(page.locator('#xmindCaseGenWorkspaceList')).not.toContainText('旧任务恢复需求');
+  });
+
   test('两个已生成的 XMind 页签在刷新后切换查看时，都会保留各自根节点与用例结果', async ({ page }) => {
     const token = 'xmind-tabs-refresh-keep-generated-results-token';
     const user = { id: 8022, username: 'tabs-refresh-keep-generated-results' };
