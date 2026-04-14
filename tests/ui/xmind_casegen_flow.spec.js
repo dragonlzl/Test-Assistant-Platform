@@ -117,6 +117,10 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
   const caseItemsByCaseFile = opts.caseItemsByCaseFile && typeof opts.caseItemsByCaseFile === 'object'
     ? opts.caseItemsByCaseFile
     : {};
+  const settingsStore = Array.isArray(opts.settings) ? opts.settings.slice() : [];
+  const knowledgeBaseHandler = typeof opts.knowledgeBaseHandler === 'function'
+    ? opts.knowledgeBaseHandler
+    : null;
 
   await page.addInitScript((tk) => {
     try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
@@ -160,8 +164,55 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
     if (/^\/api\/case-files\/\d+\/items\/append$/.test(pathName) && method === 'POST') {
       return respond(200, { appended: 1, overwritten: 0, skipped: 0 });
     }
-    if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
-    if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+    if (pathName === '/api/settings' && method === 'GET') return respond(200, settingsStore.slice());
+    if (pathName === '/api/settings' && method === 'PUT') {
+      const body = route.request().postDataJSON ? route.request().postDataJSON() : {};
+      const items = body && Array.isArray(body.items) ? body.items : [];
+      const saved = [];
+      items.forEach((item) => {
+        if (!item || !item.key) return;
+        const key = String(item.key || '');
+        const value = item.value_json;
+        let existing = settingsStore.find((row) => row && row.key === key && row.scope === 'user' && Number(row.owner_id) === Number(user.id));
+        if (!existing) {
+          existing = {
+            id: settingsStore.length + saved.length + 1,
+            key,
+            value_json: value,
+            scope: 'user',
+            owner_id: user.id,
+            updated_at: new Date().toISOString(),
+          };
+          settingsStore.push(existing);
+        } else {
+          existing.value_json = value;
+          existing.updated_at = new Date().toISOString();
+        }
+        saved.push({ ...existing });
+      });
+      return respond(200, saved);
+    }
+    if (pathName === '/api/knowledge-base/query' && method === 'POST') {
+      if (!knowledgeBaseHandler) {
+        return respond(200, {
+          used: false,
+          status: 'disabled',
+          reason: 'mock disabled',
+          match_count: 0,
+          used_chunk_count: 0,
+          used_doc_count: 0,
+          context_text: '',
+          hits: [],
+          manifest_meta: {},
+        });
+      }
+      const body = route.request().postDataJSON ? route.request().postDataJSON() : {};
+      const ret = await Promise.resolve(knowledgeBaseHandler(body, { user, pathName, method }));
+      if (ret && typeof ret === 'object' && Object.prototype.hasOwnProperty.call(ret, 'statusCode')) {
+        return respond(Number(ret.statusCode || 200), ret.body === undefined ? {} : ret.body);
+      }
+      return respond(200, ret || {});
+    }
     if (pathName === '/api/models' && method === 'GET') {
       const baseModel = {
         id: modelRemoteId,
@@ -10109,5 +10160,525 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(String(finalState['支付模块'] || '')).toContain('支付模块-尾批用例');
     expect(String(finalState['登录模块'] || '')).toContain('登录模块-首批用例');
     expect(routeCtl.getCalls().length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('根节点与模块生成会注入知识库上下文，并在前置准备显示已使用知识库', async ({ page }) => {
+    const token = 'token-xmind-knowledge-base-success';
+    const user = { id: 401, username: 'demo_user_xmind_kb_success', role: 'user', level: 'member' };
+    const baseUrl = 'http://kb.mock.local/sk';
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      settings: [{
+        id: 1,
+        key: 'knowledgeBaseBaseUrl',
+        value_json: baseUrl,
+        scope: 'user',
+        owner_id: user.id,
+        updated_at: new Date().toISOString(),
+      }],
+      knowledgeBaseHandler(body) {
+        const payload = body || {};
+        const moduleTitle = String(payload.module_title || '');
+        if (moduleTitle === '登录模块') {
+          return new Promise((resolve) => {
+            setTimeout(() => resolve({
+              used: true,
+              status: 'ok',
+              reason: '知识库检索命中',
+              match_count: 1,
+              used_chunk_count: 1,
+              used_doc_count: 1,
+              context_text: [
+                '文档：登录与账号',
+                '路径：_llm/docs/03_角色与养成/角色.md',
+                '摘要：登录模块需要覆盖账号状态、异常提示和角色进入条件。',
+                '相关内容：',
+                '[登录模块]',
+                '模块专属知识：登录模块需要覆盖账号锁定与异常提示。',
+              ].join('\n'),
+              hits: [{
+                doc_id: '03_角色与养成/角色',
+                module: '角色与养成',
+                title: '角色',
+                heading: '登录模块',
+                clean_path: '_llm/docs/03_角色与养成/角色.md',
+                score: 96,
+                reasons: ['module', 'title'],
+                used: true,
+              }],
+              manifest_meta: {
+                base_url: baseUrl,
+                version: 1,
+                generated_at: '2026-04-13T11:00:00+08:00',
+                index_path: '_llm/search-index.json',
+                docs_dir: '_llm/docs',
+                doc_count: 8,
+                entry_count: 22,
+              },
+            }), 160);
+          });
+        }
+        return new Promise((resolve) => {
+          setTimeout(() => resolve({
+            used: true,
+            status: 'ok',
+            reason: '知识库检索命中',
+            match_count: 2,
+            used_chunk_count: 2,
+            used_doc_count: 1,
+            context_text: [
+              '文档：怪兽崛起',
+              '路径：_llm/docs/05_模式与活动/怪兽崛起.md',
+              '摘要：怪兽崛起入口、玩法分支和联机流程说明。',
+              '相关内容：',
+              '[玩法与机制]',
+              '根节点知识：怪兽崛起入口在骑士之家二楼游戏机，并包含单人闯关与联机对战两类流程。',
+            ].join('\n'),
+            hits: [{
+              doc_id: '05_模式与活动/怪兽崛起',
+              module: '模式与活动',
+              title: '怪兽崛起',
+              heading: '玩法与机制',
+              clean_path: '_llm/docs/05_模式与活动/怪兽崛起.md',
+              score: 120,
+              reasons: ['title', 'body'],
+              used: true,
+            }],
+            manifest_meta: {
+              base_url: baseUrl,
+              version: 1,
+              generated_at: '2026-04-13T11:00:00+08:00',
+              index_path: '_llm/search-index.json',
+              docs_dir: '_llm/docs',
+              doc_count: 8,
+              entry_count: 22,
+            },
+          }), 160);
+        });
+      },
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 120);
+    await seedDocumentRequirement(page, {
+      text: '需求：怪兽崛起入口在骑士之家游戏机，需要先生成模块，再单独生成登录模块用例。',
+      requirementLabel: '怪兽崛起知识库需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '怪兽崛起知识库需求');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库已使用');
+
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库已使用');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('1 文档 / 2 片段');
+    await expect(page.locator('[data-xmind-casegen-kb-open="1"]')).toHaveCount(1);
+
+    const rootCalls = await page.evaluate(() => (window.__xmindCasegenCalls || []).slice());
+    expect(rootCalls.length).toBeGreaterThan(0);
+    const rootCall = rootCalls[rootCalls.length - 1];
+    expect(String(rootCall.user || '')).toContain('【知识库检索结果(JSON)】');
+    expect(String(rootCall.user || '')).toContain('【知识库相关内容】');
+    expect(String(rootCall.user || '')).toContain('根节点知识：怪兽崛起入口在骑士之家二楼游戏机');
+
+    await page.click('[data-xmind-casegen-kb-open="1"]');
+    await expect(page.locator('#xmindCaseGenSummaryDialogTitle')).toHaveText('知识库使用片段');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('怪兽崛起');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('根节点知识：怪兽崛起入口在骑士之家二楼游戏机');
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+
+    await page.click('#xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-kb-badge')).toHaveText('已使用知识库');
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+
+    await openNodeContextMenu(page, '登录模块');
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText(/知识库检索中|知识库已使用/);
+    await waitForNodeText(page, '登录模块-完整-1');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库已使用');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('1 文档 / 1 片段');
+
+    const finalCalls = await page.evaluate(() => (window.__xmindCasegenCalls || []).slice());
+    expect(finalCalls.length).toBeGreaterThanOrEqual(2);
+    const moduleCall = finalCalls[finalCalls.length - 1];
+    expect(String(moduleCall.user || '')).toContain('【知识库检索结果(JSON)】');
+    expect(String(moduleCall.user || '')).toContain('模块专属知识：登录模块需要覆盖账号锁定与异常提示。');
+    expect(String(moduleCall.user || '')).not.toContain('根节点知识：怪兽崛起入口在骑士之家二楼游戏机');
+
+    await page.click('[data-xmind-casegen-kb-open="1"]');
+    await expect(page.locator('#xmindCaseGenSummaryDialogTitle')).toHaveText('知识库使用片段');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('登录与账号');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('模块专属知识：登录模块需要覆盖账号锁定与异常提示。');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).not.toContainText('根节点知识：怪兽崛起入口在骑士之家二楼游戏机');
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+  });
+
+  test('已完成前置准备的 workspace 刷新后会清掉旧的知识库等待文案与挂起计数', async ({ page }) => {
+    const token = 'token-xmind-knowledge-base-refresh-prefetch';
+    const user = { id: 404, username: 'demo_user_xmind_kb_refresh', role: 'user', level: 'member' };
+    const baseUrl = 'http://kb.mock.local/sk';
+    const label = '刷新恢复知识库需求';
+    const text = '需求：刷新页面后，XMind 知识库状态要自动恢复并重新检索成功。';
+    const knowledgeBaseCalls = [];
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      settings: [{
+        id: 1,
+        key: 'knowledgeBaseBaseUrl',
+        value_json: baseUrl,
+        scope: 'user',
+        owner_id: user.id,
+        updated_at: new Date().toISOString(),
+      }],
+      knowledgeBaseHandler(body) {
+        knowledgeBaseCalls.push(JSON.parse(JSON.stringify(body || {})));
+        return new Promise((resolve) => {
+          setTimeout(() => resolve({
+            used: true,
+            status: 'ok',
+            reason: '知识库检索命中',
+            match_count: 1,
+            used_chunk_count: 1,
+            used_doc_count: 1,
+            context_text: '刷新恢复知识：需要覆盖自动恢复后的知识库重新检索。',
+            hits: [{
+              doc_id: '05_模式与活动/怪兽崛起',
+              module: '模式与活动',
+              title: '怪兽崛起',
+              heading: '刷新恢复',
+              clean_path: '_llm/docs/05_模式与活动/怪兽崛起.md',
+              score: 100,
+              reasons: ['title'],
+              used: true,
+            }],
+            manifest_meta: {
+              base_url: baseUrl,
+              version: 1,
+              generated_at: '2026-04-13T11:00:00+08:00',
+              index_path: '_llm/search-index.json',
+              docs_dir: '_llm/docs',
+              doc_count: 8,
+              entry_count: 22,
+            },
+          }), 120);
+        });
+      },
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await seedDocumentRequirement(page, {
+      text,
+      requirementLabel: label,
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      requirementLabel: label,
+      requirementLabelSource: 'ui-test',
+      lastRawImportName: 'refresh-kb.docx',
+      rawText: text,
+      workspaceName: label,
+      prep: {
+        step: 3,
+        requirementMode: 'document',
+        caseImportMode: 'skip',
+        completed: true,
+        baseLocked: true,
+      },
+    });
+
+    const workflowKey = 'usecase-workflow-state-v1';
+    const activeTabKey = 'usecase-active-tab';
+    const snapshot = await captureBrowserStorageSnapshot(page, {
+      localKeys: [workflowKey],
+      sessionKeys: [activeTabKey],
+    });
+    const persisted = JSON.parse(String(snapshot.local[workflowKey] || '{}'));
+    const workflowData = persisted && persisted.data ? persisted.data : null;
+    const xmindState = workflowData && workflowData.xmindCaseGen ? workflowData.xmindCaseGen : null;
+    const activeWorkspaceId = xmindState ? String(xmindState.activeWorkspaceId || '') : '';
+    const workspaceRecord = activeWorkspaceId && xmindState && xmindState.workspaces
+      ? xmindState.workspaces[activeWorkspaceId]
+      : null;
+    expect(workspaceRecord).toBeTruthy();
+
+    const staleKnowledgeBaseState = {
+      prep_signature: '',
+      last_result: {
+        used: false,
+        status: 'disabled',
+        reason: '等待本轮检索',
+        match_count: 0,
+        used_chunk_count: 0,
+        used_doc_count: 0,
+        context_text: '',
+        hits: [],
+        manifest_meta: {},
+        base_url: baseUrl,
+        query_signature: '',
+        prep_signature: '',
+        scope: 'prep',
+        action_mode: 'prep',
+        module_title: '',
+        updated_at: Date.now(),
+      },
+      prep_result: {
+        used: false,
+        status: 'disabled',
+        reason: '等待本轮检索',
+        match_count: 0,
+        used_chunk_count: 0,
+        used_doc_count: 0,
+        context_text: '',
+        hits: [],
+        manifest_meta: {},
+        base_url: baseUrl,
+        query_signature: '',
+        prep_signature: '',
+        scope: 'prep',
+        action_mode: 'prep',
+        module_title: '',
+        updated_at: Date.now(),
+      },
+      root_result: {
+        used: false,
+        status: 'disabled',
+        reason: '等待本轮检索',
+        match_count: 0,
+        used_chunk_count: 0,
+        used_doc_count: 0,
+        context_text: '',
+        hits: [],
+        manifest_meta: {},
+        base_url: baseUrl,
+        query_signature: '',
+        prep_signature: '',
+        scope: '',
+        action_mode: '',
+        module_title: '',
+        updated_at: 0,
+      },
+      module_results: {},
+      pending_count: 1,
+      pending_scope: 'root',
+      pending_action_mode: 'prep',
+      pending_module_title: '',
+      last_requested_at: Date.now(),
+    };
+
+    xmindState.knowledgeBase = JSON.parse(JSON.stringify(staleKnowledgeBaseState));
+    workspaceRecord.snapshot = workspaceRecord.snapshot || {};
+    workspaceRecord.snapshot.xmind = workspaceRecord.snapshot.xmind || {};
+    workspaceRecord.snapshot.xmind.knowledgeBase = JSON.parse(JSON.stringify(staleKnowledgeBaseState));
+    snapshot.local[workflowKey] = JSON.stringify(persisted);
+
+    await seedBrowserStorageSnapshot(page, snapshot);
+    await page.reload();
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    await waitForNodeText(page, label);
+    const debugAfterReload = await page.evaluate(() => {
+      var app = window.app || {};
+      var state = app.state || {};
+      var xmind = state.xmindCaseGen || {};
+      return {
+        pendingCount: xmind && xmind.knowledgeBase ? Number(xmind.knowledgeBase.pending_count || 0) || 0 : 0,
+        kbText: document.querySelector('[data-xmind-casegen-kb-state]')
+          ? String(document.querySelector('[data-xmind-casegen-kb-state]').textContent || '').replace(/\s+/g, '')
+          : '',
+      };
+    });
+    expect(debugAfterReload.pendingCount).toBe(0);
+    expect(String(debugAfterReload.kbText || '')).toContain('准备自动检索');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).not.toContainText('等待本轮检索');
+  });
+
+  test('未配置知识库地址时不会注入知识库段落，也不会显示已使用知识库', async ({ page }) => {
+    const token = 'token-xmind-knowledge-base-disabled';
+    const user = { id: 402, username: 'demo_user_xmind_kb_disabled', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 120);
+    await seedDocumentRequirement(page, {
+      text: '需求：未配置知识库时，生成模块请求不应带知识库段落。',
+      requirementLabel: '知识库关闭需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('未配置知识库');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await waitForNodeText(page, '登录模块');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('未配置知识库');
+
+    const calls = await page.evaluate(() => (window.__xmindCasegenCalls || []).slice());
+    expect(calls.length).toBeGreaterThan(0);
+    const latest = calls[calls.length - 1];
+    expect(String(latest.user || '')).not.toContain('【知识库检索结果(JSON)】');
+    expect(String(latest.user || '')).not.toContain('【知识库相关内容】');
+
+    await page.click('#xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-kb-badge')).toHaveCount(0);
+  });
+
+  test('知识库失败状态不会阻塞生成，且 workspace 的知识库使用状态彼此隔离', async ({ page }) => {
+    const token = 'token-xmind-knowledge-base-workspace-isolation';
+    const user = { id: 403, username: 'demo_user_xmind_kb_isolation', role: 'user', level: 'member' };
+    const baseUrl = 'http://kb.mock.local/sk';
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      settings: [{
+        id: 1,
+        key: 'knowledgeBaseBaseUrl',
+        value_json: baseUrl,
+        scope: 'user',
+        owner_id: user.id,
+        updated_at: new Date().toISOString(),
+      }],
+      knowledgeBaseHandler(body) {
+        const label = String(body && body.requirement_label || '');
+        if (label === '知识库失败页签') {
+          return {
+            used: false,
+            status: 'unreachable',
+            reason: '知识库服务不可达',
+            match_count: 0,
+            used_chunk_count: 0,
+            used_doc_count: 0,
+            context_text: '',
+            hits: [],
+            manifest_meta: {
+              base_url: baseUrl,
+              version: 1,
+              generated_at: '2026-04-13T11:00:00+08:00',
+              index_path: '_llm/search-index.json',
+              docs_dir: '_llm/docs',
+              doc_count: 8,
+              entry_count: 22,
+            },
+          };
+        }
+        return {
+          used: true,
+          status: 'ok',
+          reason: '知识库检索命中',
+          match_count: 1,
+          used_chunk_count: 1,
+          used_doc_count: 1,
+          context_text: '成功页签知识：需要覆盖怪兽崛起游戏机入口。',
+          hits: [{
+            doc_id: '05_模式与活动/怪兽崛起',
+            module: '模式与活动',
+            title: '怪兽崛起',
+            heading: '介绍',
+            clean_path: '_llm/docs/05_模式与活动/怪兽崛起.md',
+            score: 100,
+            reasons: ['title'],
+            used: true,
+          }],
+          manifest_meta: {
+            base_url: baseUrl,
+            version: 1,
+            generated_at: '2026-04-13T11:00:00+08:00',
+            index_path: '_llm/search-index.json',
+            docs_dir: '_llm/docs',
+            doc_count: 8,
+            entry_count: 22,
+          },
+        };
+      },
+    });
+
+    async function prepareWorkspace(label, text) {
+      await seedDocumentRequirement(page, {
+        text,
+        requirementLabel: label,
+      });
+      await seedPrepState(page, {
+        step: 3,
+        requirementMode: 'document',
+        caseImportMode: 'skip',
+        completed: true,
+      });
+      await syncActiveWorkspaceSnapshotFromLiveState(page, {
+        requirementLabel: label,
+        requirementLabelSource: 'ui-test',
+        rawText: text,
+        workspaceName: label,
+        prep: {
+          step: 3,
+          requirementMode: 'document',
+          caseImportMode: 'skip',
+          completed: true,
+          baseLocked: true,
+        },
+      });
+      const closeBtn = page.locator('#xmindCaseGenSummaryCloseBtn');
+      if (await closeBtn.isVisible().catch(() => false)) {
+        await closeBtn.click();
+      }
+    }
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 120);
+    await openXmindCaseGenDrawer(page);
+
+    await prepareWorkspace('知识库失败页签', '需求：这个页签的知识库查询没有命中，但生成流程仍要继续。');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库检索失败');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库服务不可达');
+    await waitForNodeText(page, '知识库失败页签');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await waitForNodeText(page, '登录模块');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库检索失败');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库服务不可达');
+    await page.click('#xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-kb-badge')).toHaveCount(0);
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+    await prepareWorkspace('知识库成功页签', '需求：怪兽崛起游戏机入口需要默认带知识库上下文。');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库已使用');
+    await waitForNodeText(page, '知识库成功页签');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await waitForNodeText(page, '登录模块');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库已使用');
+    await page.click('#xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-kb-badge')).toHaveText('已使用知识库');
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+
+    const tabs = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]');
+    await expect(tabs).toHaveCount(2);
+    await page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
+      hasText: '知识库失败页签',
+    }).click();
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库检索失败');
+    await expect(page.locator('[data-xmind-casegen-kb-state]')).toContainText('知识库服务不可达');
+    await page.click('#xmindCaseGenSummaryBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody .xmind-casegen-prep-kb-badge')).toHaveCount(0);
   });
 });

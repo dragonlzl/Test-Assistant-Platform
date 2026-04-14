@@ -670,6 +670,48 @@ class ModelProxyRequest(BaseModel):
     timeout_sec: Optional[int] = 60
 
 
+class KnowledgeBaseQueryRequest(BaseModel):
+    base_url: Optional[str] = None
+    requirement_label: Optional[str] = None
+    requirement_text: Optional[str] = None
+    module_title: Optional[str] = None
+    action_scope: Optional[str] = None
+    action_mode: Optional[str] = None
+
+
+class KnowledgeBaseHitOut(BaseModel):
+    doc_id: str
+    module: Optional[str] = None
+    title: str
+    heading: Optional[str] = None
+    clean_path: Optional[str] = None
+    score: float = 0
+    reasons: List[str] = Field(default_factory=list)
+    used: bool = False
+
+
+class KnowledgeBaseManifestMetaOut(BaseModel):
+    base_url: Optional[str] = None
+    version: Optional[Any] = None
+    generated_at: Optional[str] = None
+    index_path: Optional[str] = None
+    docs_dir: Optional[str] = None
+    doc_count: int = 0
+    entry_count: int = 0
+
+
+class KnowledgeBaseQueryResponse(BaseModel):
+    used: bool = False
+    status: str
+    reason: str = ""
+    match_count: int = 0
+    used_chunk_count: int = 0
+    used_doc_count: int = 0
+    context_text: str = ""
+    hits: List[KnowledgeBaseHitOut] = Field(default_factory=list)
+    manifest_meta: KnowledgeBaseManifestMetaOut = Field(default_factory=KnowledgeBaseManifestMetaOut)
+
+
 class ModelConfigOut(ModelConfigBase):
     id: int
     owner_id: Optional[int]

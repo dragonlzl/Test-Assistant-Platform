@@ -59,6 +59,7 @@
     feishuWebhook: '',
     feishuMention: '',
     caseAssistantProjectRoot: '',
+    knowledgeBaseBaseUrl: '',
     theme: 'light',
     caseViewFontSize: defaultCaseViewFontSize,
     missingCaseReminderPlacement: 'top',

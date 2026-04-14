@@ -2257,6 +2257,14 @@
 
     renderCaseGenProgressBoard();
 
+    var knowledgeBaseBridge = window.app && window.app.knowledgeBaseBridge
+      && typeof window.app.knowledgeBaseBridge.init === 'function'
+      ? window.app.knowledgeBaseBridge.init({
+        api: api,
+        state: state,
+      })
+      : null;
+
     const moduleContext = {
       state: state,
       config: window.app.config,
@@ -2299,6 +2307,7 @@
       xmindCoreApi: window.app.xmindCoreApi || null,
       mindElixirCoreApi: window.app.mindElixirCoreApi || null,
       casesCoreApi: window.app.casesCoreApi || null,
+      knowledgeBaseApi: knowledgeBaseBridge,
     };
     const autoContext = {
       state: state,

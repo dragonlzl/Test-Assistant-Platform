@@ -19,6 +19,46 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 知识库增强上下文接入
+- 功能描述：为 XMind 生成模块、生成全量用例接入可选的 Markdown 知识库增强上下文。新增知识库整理脚本，把共享目录中的原始 Markdown 生成面向模型的清洗文档、索引契约和搜索索引；在“其他设置”增加可选的知识库服务器地址；新增后端通用查询代理 `POST /api/knowledge-base/query`，负责校验地址、拉取 `kb-manifest.json`、缓存索引、召回压缩并返回结构化上下文；XMind 前置准备和生成链路按 workspace 记录知识库结果，命中时默认自动注入 `【知识库检索结果(JSON)】` 与 `【知识库相关内容】`，并在前置准备 step 行右侧显示绿色“已使用知识库”标识。知识库地址为空、非法、远端不可达、缺少契约、索引损坏或无命中时，主生成流程不受影响。
+- 操作方式：
+  - 使用 `python3 scripts/build_knowledge_base_index.py --root <知识库目录>` 生成 `kb-manifest.json`、`_llm/docs/` 和 `_llm/search-index.json`；
+  - 在“设置 -> 其他设置”填写知识库服务器地址，例如 `http://192.168.50.10:8003/download/sk`，保存时会自动去掉末尾 `/`，留空表示关闭；
+  - 在 XMind 前置准备确认后，系统会按当前需求自动做根级知识库预检索；后续执行“生成模块”“生成全量用例”时，如知识库可用则自动注入上下文；
+  - 命中成功时，前置准备弹窗 step 行右侧显示绿色“已使用知识库”；模块级生成会按“需求文本 + 当前模块标题”单独检索模块专属片段。
+- 使用效果：
+  - 共享 Markdown 知识库先被整理成稳定契约，再由后端代理检索，不依赖浏览器跨域直连目录页；
+  - XMind 根节点与模块级生成都能默认使用相关知识内容，提升生成结果的准确性与关联性；
+  - 同一轮多模块生成会复用后端短 TTL 缓存，减少重复拉取索引；
+  - 知识库不可用时仅回退为原有无知识库流程，不阻塞主链路；
+  - workspace 之间的知识库使用状态彼此隔离，不会串页签。
+- 新增内容/接口/组件：
+  - 新增知识库整理脚本，生成 `kb-manifest.json`、清洗文档镜像和检索索引；
+  - 新增前端知识库桥接模块，负责地址标准化、查询封装、结果归一化和 prompt 段落拼装；
+  - 新增后端知识库查询服务与通用接口 `POST /api/knowledge-base/query`；
+  - 扩展现有设置体系，新增 `knowledgeBaseBaseUrl` 可选项并复用现有设置保存/加载接口；
+  - 扩展 XMind 前置准备、workspace 状态与生成链路，支持知识库 badge、预检索和 prompt 注入；
+  - 新增 API 自动化与 UI 自动化用例，覆盖设置持久化、查询状态回退、上下文注入和 workspace 隔离。
+- 复用说明：复用现有设置保存/读取接口、现有 XMind workspace 状态机和生成请求拼装链路；后端复用现有 `configs` 路由入口新增通用知识库查询端点，没有新增数据库表，也没有引入前端跨域直连远端目录的实现。
+- 测试与验证：
+  - `node --check services/apiClient.js scripts/modules/knowledgeBaseBridge.js scripts/modules/settings.js scripts/modules/xmindCasegen.js scripts/core/appRuntime.js scripts/modules/app.js scripts/base/state.js config/constants.js tests/ui/xmind_casegen_flow.spec.js tests/ui/settings_knowledge_base.spec.js tests/api/knowledge_base.spec.js`，通过；
+  - `python3 -m py_compile backend/knowledge_base_service.py backend/routers/configs.py backend/schemas.py scripts/build_knowledge_base_index.py`，通过；
+  - `git diff --check`，通过；
+  - `API_BASE_URL=http://127.0.0.1:18082 npx playwright test --config tests/api/playwright.api.config.js tests/api/knowledge_base.spec.js --reporter=line`，4/4 通过，覆盖 `knowledgeBaseBaseUrl` 设置保存/读取/覆盖/清空、接口鉴权，以及 `ok / invalid_url / manifest_missing / index_invalid / unreachable / no_match / disabled` 状态；
+  - `API_BASE_URL=http://127.0.0.1:18082 npx playwright test --config tests/api/playwright.api.config.js tests/api/casegen_settings_no_new_endpoint.spec.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`，2/2 通过；
+  - `python3 scripts/build_knowledge_base_index.py --root <临时知识库样本目录>`，通过，成功生成 `kb-manifest.json`、`_llm/docs/`、`_llm/search-index.json`，且清洗文档已去除 `抓取时间` 噪音行；
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/settings_knowledge_base.spec.js --reporter=line`，未能在本机完成，Chromium 启动阶段被系统 `MachPortRendezvous` 权限限制拦截；
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8090 npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "知识库" --workers=1 --reporter=line`，未能在本机完成，Chromium 启动阶段被系统 `MachPortRendezvous` 权限限制拦截；对应知识库断言已补入用例文件。
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js tests/ui/settings_knowledge_base.spec.js -g "知识库" --reporter=line`，5/5 通过，覆盖设置保存回显、工具栏状态、前置准备 badge、根节点/模块注入、失败回退与 workspace 隔离；
+  - `API_BASE_URL=http://127.0.0.1:18123 npx playwright test --config tests/api/playwright.api.config.js tests/api/knowledge_base.spec.js --reporter=line`，4/4 通过，使用测试库后端验证设置接口与知识库查询接口的鉴权、状态分类和回退逻辑。
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "根节点与模块生成会注入知识库上下文，并在前置准备显示已使用知识库" --reporter=line`，1/1 通过，覆盖工具栏“知识库已使用”成功态点击后弹出本轮实际使用片段，并校验根节点与模块级片段切换展示。
+- 更新记录：
+  - 2026-04-13 16:10 CST，完成 XMind 知识库增强上下文接入：新增知识库整理契约、设置项、后端查询代理、XMind prompt 注入、前置准备 badge 与 API/UI 回归用例。
+  - 2026-04-13 16:26 CST，补充 XMind 工具栏知识库状态展示：新增“未配置知识库 / 已配置知识库 / 知识库检索中 / 知识库已使用 / 知识库检索失败：原因”状态提示，并按 workspace 跟随查询过程实时刷新。
+  - 2026-04-13 16:39 CST，修复工具栏知识库状态长期停留在“等待本轮检索”：对于已完成前置准备的恢复态 workspace，打开 XMind 页时会自动补发一次知识库预检索；若当前尚未导入需求或尚未确认前置准备，工具栏会明确显示阻塞原因，不再误导为“正在等本轮检索结果”。
+  - 2026-04-14 09:22 CST，补修知识库设置与页签回归细节：知识库地址保存成功提示改为跨异步设置重渲染保留，避免状态文案被清空；同时对齐 XMind 抽屉“自动创建首个 workspace”的真实行为，修正知识库失败/成功隔离用例并重跑 UI/API 回归全部通过。
+  - 2026-04-14 10:00 CST，补充 XMind 工具栏“知识库已使用”成功态交互：成功态支持点击，复用现有 summary dialog 展示本轮实际注入模型的知识库片段、文档摘要与路径信息，并补充对应 UI 断言。
+
 - 功能名称：一键执行缺失智能填充与旧流程用例生成同步修复
 - 功能描述：修复 `一键执行/功能流程` 中出现 `用例缺失测试点` 后，从 `缺失模块视图` 勾选并点击 `智能生成填充` 时，没有按当前拆分结果同步旧流程 `用例生成` 模块区，导致页面跳转后仍是空白或沿用旧模块；再次回到缺失视图点击时，又因 `caseGenModules` 已被清空/失配而误提示“请先完成测试模块拆分，才能智能填充建议”。本次调整让智能填充分支复用旧流程现有的 `goToCaseGeneration('cases')` 同步入口，先按当前 `splitResult` 对齐模块状态，再切换到 `legacy-modules` 视图写入 suggestion，避免旧流程状态漂移；修复范围仅限旧流程 `autoCore`，不进入 XMind workspace 链路。
 - 操作方式：

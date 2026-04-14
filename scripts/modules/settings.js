@@ -38,6 +38,9 @@
     var caseAssistantProjectRootInput = dom.caseAssistantProjectRootInput || document.getElementById('caseAssistantProjectRootInput');
     var saveCaseAssistantProjectRootBtn = dom.saveCaseAssistantProjectRootBtn || document.getElementById('saveCaseAssistantProjectRoot');
     var caseAssistantProjectRootStatus = dom.caseAssistantProjectRootStatus || document.getElementById('caseAssistantProjectRootStatus');
+    var knowledgeBaseBaseUrlInput = dom.knowledgeBaseBaseUrlInput || document.getElementById('knowledgeBaseBaseUrlInput');
+    var saveKnowledgeBaseBaseUrlBtn = dom.saveKnowledgeBaseBaseUrlBtn || document.getElementById('saveKnowledgeBaseBaseUrl');
+    var knowledgeBaseBaseUrlStatus = dom.knowledgeBaseBaseUrlStatus || document.getElementById('knowledgeBaseBaseUrlStatus');
     var tempExecColumnForm = dom.tempExecColumnForm || document.getElementById('tempExecColumnForm');
     var tempExecColumnStatus = dom.tempExecColumnStatus || document.getElementById('tempExecColumnStatus');
     var saveModelTimeoutBtn = dom.saveModelTimeoutBtn || document.getElementById('saveModelTimeout');
@@ -99,6 +102,9 @@
     var defaultCaseAssistantProjectRoot = defaultSettings && typeof defaultSettings.caseAssistantProjectRoot === 'string'
       ? String(defaultSettings.caseAssistantProjectRoot || '')
       : '';
+    var defaultKnowledgeBaseBaseUrl = defaultSettings && typeof defaultSettings.knowledgeBaseBaseUrl === 'string'
+      ? String(defaultSettings.knowledgeBaseBaseUrl || '')
+      : '';
     var minCaseLibraryGenCoverageThreshold = 50;
     var maxCaseLibraryGenCoverageThreshold = 100;
     var defaultMissingReminderPlacement = defaultSettings && defaultSettings.missingCaseReminderPlacement
@@ -140,6 +146,7 @@
       feishuWebhook: false,
       feishuMention: false,
       caseAssistantProjectRoot: false,
+      knowledgeBaseBaseUrl: false,
       tempExecColumns: false,
       tempExecPageSize: false,
       caseViewFontSize: false,
@@ -151,6 +158,18 @@
       missingCaseReminderMatchConfig: false,
       missingCaseReminderAiEnabled: false,
     };
+    var knowledgeBaseBaseUrlStatusState = {
+      text: '',
+      type: '',
+    };
+
+    function setKnowledgeBaseBaseUrlStatus(text, type) {
+      knowledgeBaseBaseUrlStatusState.text = text || '';
+      knowledgeBaseBaseUrlStatusState.type = type || '';
+      if (knowledgeBaseBaseUrlStatus) {
+        setStatus(knowledgeBaseBaseUrlStatus, knowledgeBaseBaseUrlStatusState.text, knowledgeBaseBaseUrlStatusState.type);
+      }
+    }
 
     function setSettingsReady(source) {
       state.settingsReady = true;
@@ -280,6 +299,27 @@
       return String(value).trim();
     }
 
+    function normalizeKnowledgeBaseBaseUrl(value) {
+      var text = value === undefined || value === null ? '' : String(value).trim();
+      if (!text) return '';
+      while (text.length > 1 && text.charAt(text.length - 1) === '/') {
+        text = text.slice(0, -1);
+      }
+      return text;
+    }
+
+    function isValidKnowledgeBaseBaseUrl(value) {
+      var text = normalizeKnowledgeBaseBaseUrl(value);
+      if (!text) return false;
+      try {
+        var parsed = new URL(text);
+        var protocol = String(parsed.protocol || '').toLowerCase();
+        return (protocol === 'http:' || protocol === 'https:') && Boolean(parsed.host);
+      } catch (err) {
+        return false;
+      }
+    }
+
     function isLikelyAbsoluteDirectoryPath(value) {
       var text = normalizeCaseAssistantProjectRoot(value);
       if (!text) return false;
@@ -384,6 +424,10 @@
         state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
       }
       state.settings.caseAssistantProjectRoot = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
+      if (state.settings.knowledgeBaseBaseUrl === undefined || state.settings.knowledgeBaseBaseUrl === null) {
+        state.settings.knowledgeBaseBaseUrl = defaultKnowledgeBaseBaseUrl;
+      }
+      state.settings.knowledgeBaseBaseUrl = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
       }
@@ -641,6 +685,10 @@
         state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
       }
       state.settings.caseAssistantProjectRoot = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
+      if (state.settings.knowledgeBaseBaseUrl === undefined || state.settings.knowledgeBaseBaseUrl === null) {
+        state.settings.knowledgeBaseBaseUrl = defaultKnowledgeBaseBaseUrl;
+      }
+      state.settings.knowledgeBaseBaseUrl = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
       }
@@ -771,6 +819,17 @@
       }
       if (caseAssistantProjectRootStatus) {
         setStatus(caseAssistantProjectRootStatus, '', '');
+      }
+      if (knowledgeBaseBaseUrlInput) {
+        if (!dirtyDrafts.knowledgeBaseBaseUrl) {
+          knowledgeBaseBaseUrlInput.value = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
+        }
+      }
+      if (knowledgeBaseBaseUrlStatus) {
+        setKnowledgeBaseBaseUrlStatus(
+          knowledgeBaseBaseUrlStatusState.text,
+          knowledgeBaseBaseUrlStatusState.type
+        );
       }
       if (tempExecPageSizeInput) {
         if (!dirtyDrafts.tempExecPageSize) {
@@ -1233,6 +1292,31 @@
       }
     }
 
+    function saveKnowledgeBaseBaseUrl() {
+      if (!knowledgeBaseBaseUrlInput) return;
+      var raw = knowledgeBaseBaseUrlInput.value;
+      var value = normalizeKnowledgeBaseBaseUrl(raw);
+      var prev = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
+      knowledgeBaseBaseUrlInput.value = value;
+      if (value && !isValidKnowledgeBaseBaseUrl(value)) {
+        setKnowledgeBaseBaseUrlStatus('知识库地址仅支持 http/https，且必须包含有效主机', 'warn');
+        return;
+      }
+      state.settings.knowledgeBaseBaseUrl = value;
+      dirtyDrafts.knowledgeBaseBaseUrl = false;
+      persistSettings(['knowledgeBaseBaseUrl']);
+      notifySettingsUpdated(['knowledgeBaseBaseUrl']);
+      if (!value) {
+        setKnowledgeBaseBaseUrlStatus('已关闭知识库增强上下文', 'ok');
+        return;
+      }
+      if (prev === value) {
+        setKnowledgeBaseBaseUrlStatus('知识库地址保持不变', 'ok');
+      } else {
+        setKnowledgeBaseBaseUrlStatus('知识库地址已保存', 'ok');
+      }
+    }
+
     async function testFeishuWebhookConfig() {
       if (!feishuWebhookStatus) return;
       var value = applyFeishuInput();
@@ -1630,6 +1714,11 @@
         dirtyDrafts.caseAssistantProjectRoot = true;
         setStatus(caseAssistantProjectRootStatus, '', '');
       });
+      if (saveKnowledgeBaseBaseUrlBtn) saveKnowledgeBaseBaseUrlBtn.addEventListener('click', saveKnowledgeBaseBaseUrl);
+      if (knowledgeBaseBaseUrlInput) knowledgeBaseBaseUrlInput.addEventListener('input', function() {
+        dirtyDrafts.knowledgeBaseBaseUrl = true;
+        setKnowledgeBaseBaseUrlStatus('', '');
+      });
       if (tempExecColumnForm) tempExecColumnForm.addEventListener('change', function() {
         saveTempExecColumnsSetting();
       });
@@ -1709,6 +1798,7 @@
       saveTimeoutSetting: saveTimeoutSetting,
       saveFeishuWebhookConfig: saveFeishuWebhookConfig,
       saveCaseAssistantProjectRoot: saveCaseAssistantProjectRoot,
+      saveKnowledgeBaseBaseUrl: saveKnowledgeBaseBaseUrl,
       testFeishuWebhookConfig: testFeishuWebhookConfig,
       saveTempExecColumnsSetting: saveTempExecColumnsSetting,
       getFeishuWebhookUrl: getFeishuWebhookUrl,
