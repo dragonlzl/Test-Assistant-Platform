@@ -131,6 +131,8 @@
       || 'usecase-workflow-state-v1';
     var storage = window.app && window.app.services && window.app.services.storage ? window.app.services.storage : null;
     var workflowSnapshotMaxChars = 1500000;
+    var xmindTaskStorageKey = 'tap-xmind-casegen-tasks';
+    var xmindTaskStoragePreclearChars = 450000;
     var workflowPersistBound = false;
     var workflowRestoring = false;
     var deferredXmindRestoreTimer = 0;
@@ -138,6 +140,7 @@
     var autoCompareSuggestionInput = typeof document !== 'undefined' ? document.getElementById('autoCompareSuggestion') : null;
     var xmindWorkspaceHostKeys = {
       activeWorkspaceId: 1,
+      mirrorWorkspaceId: 1,
       workspaceOrder: 1,
       workspaces: 1,
       nextWorkspaceSeq: 1,
@@ -168,13 +171,22 @@
       }
       if (typeof localStorage !== 'undefined') {
         try {
-          localStorage.removeItem('tap-xmind-casegen-tasks');
+          localStorage.removeItem(xmindTaskStorageKey);
           return true;
         } catch (err) {
           // ignore
         }
       }
       return false;
+    }
+
+    function markXmindTaskStorageRecovery(reason) {
+      if (typeof window === 'undefined') return;
+      window.app = window.app || {};
+      window.app.__xmindCasegenTaskStorageRecovered = {
+        reason: String(reason || ''),
+        at: Date.now(),
+      };
     }
 
     function normalizeImportedCases(list) {
@@ -256,8 +268,179 @@
       };
     }
 
-    function buildWorkflowSharedXmindSnapshot() {
+    function compactCaseGenResultForPersistence(value) {
+      var text = value === null || value === undefined ? '' : String(value || '');
+      if (!text) return '';
+      try {
+        return JSON.stringify(JSON.parse(text));
+      } catch (err) {
+        return text;
+      }
+    }
+
+    function compactCaseGenResultsMapForPersistence(map) {
+      var source = map && typeof map === 'object' ? map : {};
+      var next = {};
+      Object.keys(source).forEach(function(key) {
+        next[key] = compactCaseGenResultForPersistence(source[key]);
+      });
+      return next;
+    }
+
+    function compactRootPipelineSnapshotForPersistence(pipeline) {
+      var source = pipeline && typeof pipeline === 'object' ? pipeline : null;
+      if (!source) return null;
       return {
+        id: String(source.id || ''),
+        actionId: String(source.actionId || ''),
+        snapshotId: String(source.snapshotId || ''),
+        historyActionLabel: String(source.historyActionLabel || ''),
+        stage: String(source.stage || ''),
+        discoveryStatus: String(source.discoveryStatus || ''),
+        hadAiContentBeforeAction: source.hadAiContentBeforeAction === true,
+        hadAiLayerBeforeAction: source.hadAiLayerBeforeAction === true,
+        hadAiCasesBeforeAction: source.hadAiCasesBeforeAction === true,
+        cancelled: source.cancelled === true,
+        cancelReason: String(source.cancelReason || ''),
+        errorCount: Number(source.errorCount || 0) || 0,
+        createdModules: Number(source.createdModules || 0) || 0,
+        addedCases: Number(source.addedCases || 0) || 0,
+        detailMap: cloneJson(source.detailMap, {}) || {},
+        diagnostics: Array.isArray(source.diagnostics) ? source.diagnostics.slice() : [],
+        pendingQueue: Array.isArray(source.pendingQueue) ? cloneJson(source.pendingQueue, []) : [],
+        updatedAt: Number(source.updatedAt || 0) || 0,
+      };
+    }
+
+    function compactRootStateForPersistence(root) {
+      var source = root && typeof root === 'object' ? root : {};
+      return {
+        lastAction: String(source.lastAction || ''),
+        running: source.running === true,
+        taskId: String(source.taskId || ''),
+        hideAiLayer: source.hideAiLayer === true,
+        snapshotId: '',
+        status: String(source.status || ''),
+        error: String(source.error || ''),
+        updatedAt: Number(source.updatedAt || 0) || 0,
+        pipeline: compactRootPipelineSnapshotForPersistence(source.pipeline),
+      };
+    }
+
+    function compactModuleUiStateForPersistence(moduleState) {
+      var source = moduleState && typeof moduleState === 'object' ? moduleState : {};
+      return {
+        lastAction: String(source.lastAction || ''),
+        running: source.running === true,
+        taskId: String(source.taskId || ''),
+        rootPendingActionId: String(source.rootPendingActionId || ''),
+        snapshotId: '',
+        status: String(source.status || ''),
+        error: String(source.error || ''),
+        hideResults: source.hideResults === true,
+        updatedAt: Number(source.updatedAt || 0) || 0,
+        topupHighlight: null,
+        rollbackRestoreTopupHighlight: null,
+      };
+    }
+
+    function compactModulesMapForPersistence(map) {
+      var source = map && typeof map === 'object' ? map : {};
+      var next = {};
+      Object.keys(source).forEach(function(key) {
+        next[key] = compactModuleUiStateForPersistence(source[key]);
+      });
+      return next;
+    }
+
+    function buildPersistedSharedXmindSnapshotFromSource(source) {
+      var current = source && typeof source === 'object' ? source : {};
+      return {
+        requirementLabel: current.requirementLabel || '',
+        requirementLabelSource: current.requirementLabelSource || '',
+        lastRawImportName: current.lastRawImportName || '',
+        rawText: current.rawText || '',
+        caseText: current.caseText || '',
+        importedCases: normalizeImportedCases(current.importedCases),
+        caseGenModules: cloneJson(current.caseGenModules, []),
+        caseGenSource: current.caseGenSource || '',
+        caseGenResults: compactCaseGenResultsMapForPersistence(current.caseGenResults),
+        caseSelections: cloneJson(current.caseSelections, {}),
+        caseGenSuggestions: cloneJson(current.caseGenSuggestions, {}),
+        caseGenModuleStatus: cloneJson(current.caseGenModuleStatus, {}),
+        caseGenProgress: cloneJson(current.caseGenProgress, {}),
+        caseGenTiming: cloneJson(current.caseGenTiming, {}),
+        caseGenProgressNotice: cloneJson(current.caseGenProgressNotice, {}),
+        caseGenSettings: cloneJson(current.caseGenSettings, {}),
+        requirementMedia: cloneJson(current.requirementMedia, createEmptyRequirementMediaSnapshot()),
+      };
+    }
+
+    function compactXmindSnapshotForPersistence(snapshot) {
+      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      var next = {};
+      Object.keys(source).forEach(function(key) {
+        if (xmindWorkspaceHostKeys[key]) return;
+        if (
+          key === 'operationSnapshots'
+          || key === 'rootSnapshots'
+          || key === 'snapshots'
+          || key === 'deleteUndoStack'
+          || key === 'deleteRedoStack'
+        ) {
+          next[key] = [];
+          return;
+        }
+        if (key === 'root') {
+          next.root = compactRootStateForPersistence(source.root);
+          return;
+        }
+        if (key === 'modules') {
+          next.modules = compactModulesMapForPersistence(source.modules);
+          return;
+        }
+        next[key] = cloneJson(source[key], source[key]);
+      });
+      next.lastOperationSnapshotId = '';
+      next.rootSnapshotId = '';
+      if (!next.root || typeof next.root !== 'object') {
+        next.root = compactRootStateForPersistence(null);
+      } else {
+        next.root.snapshotId = '';
+      }
+      if (next.modules && typeof next.modules === 'object') {
+        Object.keys(next.modules).forEach(function(key) {
+          if (!next.modules[key] || typeof next.modules[key] !== 'object') return;
+          next.modules[key].snapshotId = '';
+        });
+      }
+      return next;
+    }
+
+    function compactWorkspaceSnapshotForPersistence(snapshot) {
+      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      return {
+        xmind: compactXmindSnapshotForPersistence(source.xmind),
+        shared: buildPersistedSharedXmindSnapshotFromSource(source.shared),
+      };
+    }
+
+    function compactWorkspaceRecordForPersistence(id, record) {
+      var source = record && typeof record === 'object' ? record : {};
+      var stableId = String(id || source.id || '');
+      return {
+        id: stableId,
+        seq: Number(source.seq || 0) || 0,
+        name: String(source.name || ''),
+        pendingOpenPrep: source.pendingOpenPrep === true,
+        updatedAt: Number(source.updatedAt || 0) || 0,
+        createdAt: Number(source.createdAt || 0) || 0,
+        snapshot: compactWorkspaceSnapshotForPersistence(source.snapshot),
+      };
+    }
+
+    function buildWorkflowSharedXmindSnapshot() {
+      return buildPersistedSharedXmindSnapshotFromSource({
         requirementLabel: state.requirementLabel || '',
         requirementLabelSource: state.requirementLabelSource || '',
         lastRawImportName: state.lastRawImportName || '',
@@ -266,7 +449,7 @@
         importedCases: normalizeImportedCases(state.importedCases),
         caseGenModules: cloneJson(state.caseGenModules, []),
         caseGenSource: state.caseGenSource || '',
-        caseGenResults: cloneJson(state.caseGenResults, {}),
+        caseGenResults: state.caseGenResults,
         caseSelections: serializeCaseSelections(state.caseSelections),
         caseGenSuggestions: cloneJson(state.caseGenSuggestions, {}),
         caseGenModuleStatus: cloneJson(state.caseGenModuleStatus, {}),
@@ -275,30 +458,11 @@
         caseGenProgressNotice: cloneJson(state.caseGenProgressNotice, {}),
         caseGenSettings: cloneJson(state.caseGenSettings, {}),
         requirementMedia: cloneJson(state.requirementMedia, createEmptyRequirementMediaSnapshot()),
-      };
+      });
     }
 
     function buildWorkflowSharedXmindSnapshotFromData(data) {
-      var source = data && typeof data === 'object' ? data : {};
-      return {
-        requirementLabel: source.requirementLabel || '',
-        requirementLabelSource: source.requirementLabelSource || '',
-        lastRawImportName: source.lastRawImportName || '',
-        rawText: source.rawText || '',
-        caseText: source.caseText || '',
-        importedCases: normalizeImportedCases(source.importedCases),
-        caseGenModules: cloneJson(source.caseGenModules, []),
-        caseGenSource: source.caseGenSource || '',
-        caseGenResults: cloneJson(source.caseGenResults, {}),
-        caseSelections: cloneJson(source.caseSelections, {}),
-        caseGenSuggestions: cloneJson(source.caseGenSuggestions, {}),
-        caseGenModuleStatus: cloneJson(source.caseGenModuleStatus, {}),
-        caseGenProgress: cloneJson(source.caseGenProgress, {}),
-        caseGenTiming: cloneJson(source.caseGenTiming, {}),
-        caseGenProgressNotice: cloneJson(source.caseGenProgressNotice, {}),
-        caseGenSettings: cloneJson(source.caseGenSettings, {}),
-        requirementMedia: cloneJson(source.requirementMedia, createEmptyRequirementMediaSnapshot()),
-      };
+      return buildPersistedSharedXmindSnapshotFromSource(data);
     }
 
     function extractTopLevelXmindSnapshot(source) {
@@ -333,24 +497,40 @@
 
     function buildPersistedXmindCaseGenSnapshot() {
       var source = state.xmindCaseGen && typeof state.xmindCaseGen === 'object'
-        ? cloneJson(state.xmindCaseGen, {})
+        ? state.xmindCaseGen
         : {};
-      var activeWorkspaceId = source && source.activeWorkspaceId ? String(source.activeWorkspaceId || '') : '';
-      if (!activeWorkspaceId || !source.workspaces || typeof source.workspaces !== 'object') {
-        return source;
-      }
-      var activeXmindSnapshot = extractTopLevelXmindSnapshot(source);
+      var host = {
+        activeWorkspaceId: source && source.activeWorkspaceId ? String(source.activeWorkspaceId || '') : '',
+        mirrorWorkspaceId: source && source.mirrorWorkspaceId ? String(source.mirrorWorkspaceId || '') : '',
+        workspaceOrder: Array.isArray(source && source.workspaceOrder) ? cloneJson(source.workspaceOrder, []) : [],
+        workspaces: {},
+        nextWorkspaceSeq: Number(source && source.nextWorkspaceSeq || 1) || 1,
+        openButtonDotVisible: source && source.openButtonDotVisible === true,
+      };
+      var activeWorkspaceId = host.activeWorkspaceId;
+      var activeXmindSnapshot = compactXmindSnapshotForPersistence(source);
       var activeSharedSnapshot = buildWorkflowSharedXmindSnapshot();
-      if (!shouldCompactActiveXmindWorkspaceSnapshot(source, activeWorkspaceId, activeXmindSnapshot, activeSharedSnapshot)) {
-        return source;
+      Object.keys(activeXmindSnapshot).forEach(function(key) {
+        host[key] = activeXmindSnapshot[key];
+      });
+      if (source.workspaces && typeof source.workspaces === 'object') {
+        Object.keys(source.workspaces).forEach(function(workspaceId) {
+          host.workspaces[workspaceId] = compactWorkspaceRecordForPersistence(workspaceId, source.workspaces[workspaceId]);
+        });
       }
-      var record = source.workspaces[activeWorkspaceId];
-      if (!record || typeof record !== 'object') return source;
+      if (!activeWorkspaceId || !host.workspaces || typeof host.workspaces !== 'object') {
+        return host;
+      }
+      if (!shouldCompactActiveXmindWorkspaceSnapshot(host, activeWorkspaceId, activeXmindSnapshot, activeSharedSnapshot)) {
+        return host;
+      }
+      var record = host.workspaces[activeWorkspaceId];
+      if (!record || typeof record !== 'object') return host;
       record.snapshot = {
         __topLevelActiveSnapshot: true,
       };
-      source.workspaces[activeWorkspaceId] = record;
-      return source;
+      host.workspaces[activeWorkspaceId] = record;
+      return host;
     }
 
     function restoreActiveXmindWorkspaceSnapshotFromTopLevel(data) {
@@ -419,7 +599,7 @@
         autoRequireClarifications: Boolean(state.autoRequireClarifications),
         caseGenSource: state.caseGenSource || '',
         caseGenModules: cloneJson(state.caseGenModules, []),
-        caseGenResults: cloneJson(state.caseGenResults, {}),
+        caseGenResults: compactCaseGenResultsMapForPersistence(state.caseGenResults),
         caseGenSettings: cloneJson(state.caseGenSettings, {}),
         caseGenSuggestions: cloneJson(state.caseGenSuggestions, {}),
         caseGenModuleStatus: cloneJson(state.caseGenModuleStatus, {}),
@@ -430,7 +610,7 @@
         caseGenLegacy: {
           modules: cloneJson(legacy.modules, []),
           source: String(legacy.source || ''),
-          results: cloneJson(legacy.results, {}),
+          results: compactCaseGenResultsMapForPersistence(legacy.results),
           selections: cloneJson(legacy.selections, {}),
           suggestions: cloneJson(legacy.suggestions, {}),
           moduleStatus: cloneJson(legacy.moduleStatus, {}),
@@ -715,6 +895,7 @@
       }
       state.xmindCaseGen = (data.xmindCaseGen && typeof data.xmindCaseGen === 'object') ? data.xmindCaseGen : {
         activeWorkspaceId: '',
+        mirrorWorkspaceId: '',
         workspaceOrder: [],
         workspaces: {},
         nextWorkspaceSeq: 1,
@@ -843,6 +1024,7 @@
       if (!Array.isArray(state.xmindCaseGen.workspaceOrder)) state.xmindCaseGen.workspaceOrder = [];
       if (!state.xmindCaseGen.workspaces || typeof state.xmindCaseGen.workspaces !== 'object') state.xmindCaseGen.workspaces = {};
       state.xmindCaseGen.activeWorkspaceId = String(state.xmindCaseGen.activeWorkspaceId || '');
+      state.xmindCaseGen.mirrorWorkspaceId = String(state.xmindCaseGen.mirrorWorkspaceId || '');
       if (!Number.isFinite(Number(state.xmindCaseGen.nextWorkspaceSeq))) state.xmindCaseGen.nextWorkspaceSeq = 1;
       if (!state.xmindCaseGen.viewState || typeof state.xmindCaseGen.viewState !== 'object') {
         state.xmindCaseGen.viewState = {
@@ -1014,6 +1196,27 @@
         reason: 'oversize',
         shown: false,
       };
+      return true;
+    }
+
+    function preclearOversizeXmindTaskStorageBeforeModuleInit() {
+      var rawTasks = '';
+      try {
+        if (typeof localStorage !== 'undefined') {
+          rawTasks = localStorage.getItem(xmindTaskStorageKey) || '';
+        }
+      } catch (err) {
+        rawTasks = '';
+      }
+      if (!rawTasks || rawTasks.length <= xmindTaskStoragePreclearChars) return false;
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(xmindTaskStorageKey);
+        }
+      } catch (err) {
+        return false;
+      }
+      markXmindTaskStorageRecovery('preinit-oversize');
       return true;
     }
 
@@ -2419,6 +2622,7 @@
       window.app.casesgen.init(moduleContext);
     }
     preclearOversizeWorkflowSnapshotBeforeModuleInit();
+    preclearOversizeXmindTaskStorageBeforeModuleInit();
     if (window.app.xmindCasegen && typeof window.app.xmindCasegen.init === 'function') {
       xmindCasegenModule = window.app.xmindCasegen.init(moduleContext) || null;
     }

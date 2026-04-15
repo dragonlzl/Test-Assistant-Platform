@@ -19,6 +19,39 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 抽屉关闭后后台完成导致脏恢复与缓存污染修复
+- 功能描述：修复 `XMind 用例生成` 在用户关闭抽屉后，后台任务仍可能把旧的 `drawerOpen=true` 恢复意图重新写回 workspace/task cache，并在 XMind 已不再拥有 live shared state 时，继续把后台 workspace 快照回灌到页面当前工作流状态，导致双页签并发时更容易在后台完成后把关闭态污染成待恢复态，甚至把摘要/视图同步拖入长时间无响应；一旦脏状态进入本地缓存，后续即使只开一个 XMind 页签生成，也可能继续触发抽屉错误恢复，通常只能靠清缓存暂时缓解。本次调整将 `viewState` 合并策略从“打开态并集”收紧为“按更新时间采用最新明确状态”，并且限制后台完成只在 XMind 真正拥有 live state 时才回填当前工作区，同时忽略终态任务携带的抽屉恢复意图，避免关闭后的旧任务/旧页签重新点燃恢复链路。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 中启动一个或多个页签的生成任务；
+  - 生成过程中关闭 XMind 抽屉，并继续停留在页面或切回旧流程模块视图；
+  - 等待后台任务完成后，再通过左下角进度摘要或顶部入口重新进入 XMind。
+- 使用效果：
+  - 关闭抽屉后，后台任务完成不会再把旧的 `drawerOpen=true` 写回本地状态；
+  - 关闭抽屉并切回旧流程或镜像视图后，后台摘要完成只更新各自 workspace/progress 数据，不会越权把 XMind snapshot 重新灌回当前 live 工作流状态；
+  - 双页签并发生成完成后，不会再因为历史终态任务残留而把抽屉错误标记成“应恢复打开”；
+  - 用户主动点击左下角进度摘要重开某个 XMind 页签时，仍可立即打开对应 workspace，不会被“最近手动关闭抽屉”的抑制窗口误拦截；
+  - 即使此前触发过一次后台脏恢复，只要页面重新持久化了本次修复后的状态，后续单页签生成也不会继续沿用旧的错误恢复意图。
+- 新增内容/接口/组件：
+  - `xmindCasegen`：调整 `mergeStoredViewState`，改为按最新时间戳决定 `drawerOpen/fullscreen`，不再把旧的打开态与新的关闭态做并集；
+  - `xmindCasegen`：关闭抽屉时，同步把所有托管任务的 `restoreContext.viewState` 改写为关闭态，避免终态任务残留旧恢复意图；
+  - `xmindCasegen`：`ensureActiveWorkspaceHydrated` 增加 live-state ownership 守卫，XMind 未持有 live shared state 时不再把后台 workspace snapshot 重新回灌到当前页面状态；
+  - `xmindCasegen`：托管任务的 `restoreContext` 与跨 workspace 恢复快照改为使用紧凑版模块/根流程信息，减少后台恢复链路把大体积旧结果重新带回 live state 的机会；
+  - `xmindCasegen`：`getManagedTaskRestoreWorkspaceId` 不再从 `done/error/cancelled` 终态任务中提取抽屉恢复意图；
+  - `xmindCasegen`：左下角进度摘要触发的显式重开改为按用户主动操作处理，不再被手动关闭抑制误挡；
+  - `tests/ui/xmind_casegen_flow.spec.js`：补强“双页签后台完成后关闭态缓存不残留 `drawerOpen=true`”断言。
+- 复用说明：复用现有 XMind workspace snapshot、task manager `restoreContext`、左下角进度摘要与抽屉恢复判定链路；未新增后端接口，也未引入新的持久化仓库，仅在既有恢复边界上做最小增量收紧。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `node` 提取并执行 `scripts/modules/xmindCasegen.js` 中的实际函数体，验证“较新的关闭态覆盖旧的打开态”以及“终态任务不再提供恢复页签”两条核心逻辑，结果为：`mergedDrawerOpen=false`、`mergedFullscreen=false`、`restoreWorkspaceId=ws-running`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "关闭抽屉后若缓存残留旧的终态恢复意图，刷新后仍保持关闭" --reporter=line`（通过，1/1）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "刷新前未打开 XMind 用例生成抽屉时，刷新后不会自动打开" --reporter=line`（通过，1/1）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "关闭 XMind 抽屉后，后台完成会同步左下角进度摘要|两个 XMind 页签后台生成全量用例时，即使关闭抽屉并切回旧流程视图，也会各自保留独立结果|关闭抽屉后若缓存残留旧的终态恢复意图，刷新后仍保持关闭|刷新前未打开 XMind 用例生成抽屉时，刷新后不会自动打开" --reporter=line`（通过，4/4）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1）
+- 更新记录：
+  - 2026-04-14 收紧 XMind 抽屉关闭后的后台恢复边界，修复旧任务把 `drawerOpen=true` 重新写回缓存，导致双页签后台完成后页面无响应、且脏状态可跨后续单页签生成延续的问题。
+  - 2026-04-14 继续修复后台完成越权回灌 live shared state 的问题：仅当 XMind 真正拥有 live state 时才回填当前 workspace；同时保留用户从左下角进度摘要主动重开页签的能力，并补跑关闭抽屉、刷新恢复、双页签并发与 API 回归，结果全部通过。
+
 - 功能名称：一键执行缺失智能填充与旧流程用例生成同步修复
 - 功能描述：修复 `一键执行/功能流程` 中出现 `用例缺失测试点` 后，从 `缺失模块视图` 勾选并点击 `智能生成填充` 时，没有按当前拆分结果同步旧流程 `用例生成` 模块区，导致页面跳转后仍是空白或沿用旧模块；再次回到缺失视图点击时，又因 `caseGenModules` 已被清空/失配而误提示“请先完成测试模块拆分，才能智能填充建议”。本次调整让智能填充分支复用旧流程现有的 `goToCaseGeneration('cases')` 同步入口，先按当前 `splitResult` 对齐模块状态，再切换到 `legacy-modules` 视图写入 suggestion，避免旧流程状态漂移；修复范围仅限旧流程 `autoCore`，不进入 XMind workspace 链路。
 - 操作方式：

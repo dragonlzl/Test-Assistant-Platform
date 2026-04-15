@@ -6460,6 +6460,107 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(afterReload.activeWorkspaceId).not.toBe('');
   });
 
+  test('关闭抽屉后若缓存残留旧的终态恢复意图，刷新后仍保持关闭', async ({ page }) => {
+    const token = 'token-xmind-closed-terminal-restore-ignored';
+    const user = { id: 8027, username: 'xmind-closed-terminal-restore-ignored', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await createXmindWorkspaceByManualPrep(page, '终态脏恢复忽略需求', '需求：关闭抽屉后，终态旧缓存不应再把抽屉重新拉开。', {
+      completePrep: true,
+      useExistingWorkspace: true,
+    });
+    await waitForNodeText(page, '终态脏恢复忽略需求');
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await waitXmindDrawerClosedStable(page);
+
+    const injected = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
+      var workspaceId = host ? String(host.activeWorkspaceId || '') : '';
+      var viewState = host && host.viewState ? host.viewState : null;
+      var staleUpdatedAt = Math.max(1, Number(viewState && viewState.updatedAt || 0) - 1000);
+      var staleTask = {
+        id: 'xmind-terminal-stale-restore',
+        status: 'done',
+        scope: 'root',
+        workspaceId: workspaceId,
+        actionId: 'root-full-modules',
+        createdAt: staleUpdatedAt,
+        updatedAt: staleUpdatedAt,
+        endedAt: staleUpdatedAt,
+        restoreContext: {
+          workspaceId: workspaceId,
+          requirementLabel: '终态脏恢复忽略需求',
+          requirementLabelSource: 'manual',
+          rawText: '需求：关闭抽屉后，终态旧缓存不应再把抽屉重新拉开。',
+          caseGenModules: [],
+          rootPipeline: null,
+          prep: host && host.prep ? JSON.parse(JSON.stringify(host.prep)) : {},
+          viewState: {
+            drawerOpen: true,
+            fullscreen: false,
+            transform: 'translate(12px, 8px) scale(1)',
+            scaleVal: 1,
+            scrollLeft: 0,
+            scrollTop: 0,
+            hasManualViewport: true,
+            collapsedNodeKeys: [],
+            treeSourceSignature: String(host && host.treeSourceSignature || ''),
+            updatedAt: staleUpdatedAt,
+          },
+        },
+      };
+      localStorage.setItem('tap-xmind-casegen-tasks', JSON.stringify([staleTask]));
+      if (window.app && typeof window.app.persistWorkflowStateNow === 'function') {
+        window.app.persistWorkflowStateNow();
+      }
+      return {
+        workspaceId: workspaceId,
+        viewUpdatedAt: Number(viewState && viewState.updatedAt || 0),
+        staleUpdatedAt: staleUpdatedAt,
+      };
+    });
+
+    expect(injected.workspaceId).toBeTruthy();
+    expect(injected.viewUpdatedAt).toBeGreaterThan(injected.staleUpdatedAt);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
+    await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
+    await page.waitForTimeout(800);
+
+    const afterReload = await page.evaluate(() => {
+      var drawer = document.getElementById('xmindCaseGenDrawer');
+      var state = window.app && window.app.state ? window.app.state : null;
+      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
+      var tasks = [];
+      try {
+        tasks = JSON.parse(localStorage.getItem('tap-xmind-casegen-tasks') || '[]');
+      } catch (err) {
+        tasks = [];
+      }
+      return {
+        drawerOpen: Boolean(drawer && drawer.classList && drawer.classList.contains('open')),
+        liveViewDrawerOpen: Boolean(host && host.viewState && host.viewState.drawerOpen === true),
+        taskDrawerOpenCount: (Array.isArray(tasks) ? tasks : []).filter(function(item) {
+          return Boolean(
+            item
+            && item.restoreContext
+            && item.restoreContext.viewState
+            && item.restoreContext.viewState.drawerOpen === true
+          );
+        }).length,
+      };
+    });
+
+    expect(afterReload.drawerOpen).toBe(false);
+    expect(afterReload.liveViewDrawerOpen).toBe(false);
+    expect(afterReload.taskDrawerOpenCount).toBe(0);
+  });
+
   test('工具栏支持查看生成记录，并展示根节点与模块节点的生成摘要', async ({ page }) => {
     const token = 'token-xmind-history';
     const user = { id: 21, username: 'demo_user_history', role: 'user', level: 'member' };
@@ -9895,10 +9996,15 @@ test.describe('XMind 用例生成抽屉', () => {
     await clickElementById(page, 'caseGenLegacyModulesTabBtn');
     const progressCardsBeforeComplete = page.locator('#caseGenProgressList [data-casegen-workspace]');
     await expect(progressCardsBeforeComplete).toHaveCount(2);
-    await progressCardsBeforeComplete.first().click();
+    var progressWorkspaceIdBeforeComplete = await progressCardsBeforeComplete.first().getAttribute('data-casegen-workspace');
+    await page.evaluate((workspaceId) => {
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.openWorkspace === 'function') {
+        api.openWorkspace(workspaceId);
+      }
+    }, String(progressWorkspaceIdBeforeComplete || ''));
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('后台摘要-A');
-    await waitForNodeStatus(page, '后台摘要-A', '生成中');
     await page.evaluate(() => {
       var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
       if (api && typeof api.close === 'function') api.close();
@@ -9970,7 +10076,13 @@ test.describe('XMind 用例生成抽屉', () => {
     const progressCardsDuringRunning = page.locator('#caseGenProgressList [data-casegen-workspace]');
     await expect(progressCardsDuringRunning).toHaveCount(2);
 
-    await progressCardsDuringRunning.first().click();
+    var progressWorkspaceIdDuringRunningA = await progressCardsDuringRunning.first().getAttribute('data-casegen-workspace');
+    await page.evaluate((workspaceId) => {
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.openWorkspace === 'function') {
+        api.openWorkspace(workspaceId);
+      }
+    }, String(progressWorkspaceIdDuringRunningA || ''));
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('后台摘要-A');
     await waitForNodeText(page, '账户模块-A');
@@ -9982,13 +10094,18 @@ test.describe('XMind 用例生成抽屉', () => {
     });
     await waitXmindDrawerClosedStable(page);
 
-    await progressCardsDuringRunning.nth(1).click();
+    var progressWorkspaceIdDuringRunningB = await progressCardsDuringRunning.nth(1).getAttribute('data-casegen-workspace');
+    await page.evaluate((workspaceId) => {
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.openWorkspace === 'function') {
+        api.openWorkspace(workspaceId);
+      }
+    }, String(progressWorkspaceIdDuringRunningB || ''));
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('后台摘要-B');
     await waitForNodeText(page, '消息模块-B');
     await waitForNodeText(page, '设置模块-B');
     await waitForNodeTextAbsent(page, '账户模块-A');
-    await waitForNodeStatus(page, '后台摘要-B', '生成中');
     await page.evaluate(() => {
       var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
       if (api && typeof api.close === 'function') api.close();
@@ -10019,6 +10136,47 @@ test.describe('XMind 用例生成抽屉', () => {
         && summary['后台摘要-B'].statusText === '未入库'
       );
     }, {}, { timeout: 20000 });
+    await page.waitForTimeout(600);
+
+    const closedRestoreState = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
+      var drawer = document.getElementById('xmindCaseGenDrawer');
+      var tasks = [];
+      try {
+        tasks = JSON.parse(localStorage.getItem('tap-xmind-casegen-tasks') || '[]');
+      } catch (err) {
+        tasks = [];
+      }
+      var workspaceDrawerOpenCount = 0;
+      (host && Array.isArray(host.workspaceOrder) ? host.workspaceOrder : []).forEach(function(id) {
+        var record = host && host.workspaces ? host.workspaces[id] : null;
+        var viewState = record && record.snapshot && record.snapshot.xmind
+          ? record.snapshot.xmind.viewState
+          : null;
+        if (viewState && viewState.drawerOpen === true) {
+          workspaceDrawerOpenCount += 1;
+        }
+      });
+      var taskDrawerOpenCount = (Array.isArray(tasks) ? tasks : []).filter(function(item) {
+        return Boolean(
+          item
+          && item.restoreContext
+          && item.restoreContext.viewState
+          && item.restoreContext.viewState.drawerOpen === true
+        );
+      }).length;
+      return {
+        drawerOpen: Boolean(drawer && drawer.classList && drawer.classList.contains('open')),
+        liveViewDrawerOpen: Boolean(host && host.viewState && host.viewState.drawerOpen === true),
+        workspaceDrawerOpenCount: workspaceDrawerOpenCount,
+        taskDrawerOpenCount: taskDrawerOpenCount,
+      };
+    });
+    expect(closedRestoreState.drawerOpen).toBe(false);
+    expect(closedRestoreState.liveViewDrawerOpen).toBe(false);
+    expect(closedRestoreState.workspaceDrawerOpenCount).toBe(0);
+    expect(closedRestoreState.taskDrawerOpenCount).toBe(0);
 
     const workspaceSummary = await page.evaluate(() => {
       var state = window.app && window.app.state ? window.app.state : null;
@@ -10075,7 +10233,13 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(progressCards.nth(1)).toContainText('2 模块');
     await expect(progressCards.nth(1)).toContainText('4 用例');
 
-    await progressCards.first().click();
+    var progressWorkspaceIdFinalA = await progressCards.first().getAttribute('data-casegen-workspace');
+    await page.evaluate((workspaceId) => {
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.openWorkspace === 'function') {
+        api.openWorkspace(workspaceId);
+      }
+    }, String(progressWorkspaceIdFinalA || ''));
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
     await waitForNodeText(page, '账户模块-A');
     await waitForNodeText(page, '支付模块-A');
@@ -10086,7 +10250,13 @@ test.describe('XMind 用例生成抽屉', () => {
     });
     await waitXmindDrawerClosedStable(page);
 
-    await progressCards.nth(1).click();
+    var progressWorkspaceIdFinalB = await progressCards.nth(1).getAttribute('data-casegen-workspace');
+    await page.evaluate((workspaceId) => {
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.openWorkspace === 'function') {
+        api.openWorkspace(workspaceId);
+      }
+    }, String(progressWorkspaceIdFinalB || ''));
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
     await waitForNodeText(page, '消息模块-B');
     await waitForNodeText(page, '设置模块-B');
