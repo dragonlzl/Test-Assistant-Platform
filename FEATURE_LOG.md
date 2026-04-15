@@ -20,36 +20,41 @@
 ```
 
 - 功能名称：XMind 共享知识库上下文接入与页签隔离
-- 功能描述：为 `XMind 用例生成` 接入可选的共享知识库能力。用户在“通用设置”保存合法的知识库地址后，系统会按“整份需求 + 当前 workspace”先走一次后端代理规则检索，再复用当前 XMind 生成模型执行 AI 精筛，只把最终筛选出的知识块注入后续生成上下文；同一 workspace 下的模块生成、补全、重生成功能都会复用这份筛选结果，不再按模块重复检索或重复 AI 筛选；同时将规则检索状态、AI 筛选状态、筛选结果、是否实际注入、弹窗内容全部按 workspace 隔离，避免不同 XMind 页签之间互相串写。
+- 功能描述：为 `XMind 用例生成` 接入可选的共享知识库能力。用户在“通用设置”保存合法的知识库地址后，系统会按“整份需求 + 当前 workspace”先读取后端代理知识库目录，再复用当前 XMind 生成模型执行“AI 目录检索 -> AI 正文精筛”，只把最终筛选出的知识片段注入后续生成上下文；同一 workspace 下的模块生成、补全、重生成功能都会复用这份筛选结果，不再按模块重复检索或重复 AI 筛选；同时将知识检索状态、AI 筛选状态、筛选结果、是否实际注入、弹窗内容全部按 workspace 隔离，避免不同 XMind 页签之间互相串写。
 - 操作方式：
   - 在“设置 -> 通用设置”中填写并保存共享知识库地址，可选点击“校验地址”确认可用性；
   - 进入“用例生成 -> XMind 用例生成”，完成前置准备后发起“生成全量用例 / 生成全量模块 / 模块补全”等动作；
-  - 生成过程中可通过工具栏的 `规则检索`、`AI筛选` 查看当前页签状态，点击后弹窗查看最终筛选内容；
+  - 生成过程中可通过工具栏的 `知识检索`、`AI筛选` 查看当前页签状态，点击后弹窗查看最终筛选内容；
   - 若本轮成功注入知识库，上方前置准备弹窗的 `step1-step2-step3` 行后方会显示绿色 `已使用知识库` 标识。
 - 使用效果：
   - 未配置知识库地址时，XMind 生成保持原流程不变；
-  - 已配置且校验可用时，会先按整份需求执行一次“规则检索 -> AI 精筛 -> 上下文注入”，同页签后续模块生成/补全会直接复用该结果；
+  - 已配置且校验可用时，会先按整份需求执行一次“AI 目录检索 -> AI 正文精筛 -> 上下文注入”，同页签后续模块生成/补全会直接复用该结果；
   - AI 精筛失败或超时时，本轮会继续生成，但跳过知识库注入，不点亮绿色标识；
   - 当前活动页签的工具栏状态、弹窗内容、绿色标识只读取该页签自己的知识库快照，双页签并发生成不会串结果。
 - 新增内容/接口/组件：
   - 用户设置键：`knowledgeBaseBaseUrl`；
-  - 后端新增接口：`POST /api/knowledge-base/validate`、`POST /api/knowledge-base/search`；
-  - 后端新增知识库代理服务与缓存：规范化 URL、拉取 manifest/index/doc、规则检索、候选片段返回；
-  - 前端新增 `xmindKnowledgeBase` 辅助模块：知识库状态归一化、规则检索/AI 精筛编排、上下文注入文本组装、结果弹窗渲染；
+  - 用户设置键补充：`knowledgeBaseCatalogCharLimit`、`knowledgeBaseInjectedContextCharLimit`、`xmindRequestPayloadLimit`，用于放宽知识库目录送模、知识库上下文注入和 XMind 请求体本地上限；
+  - 后端新增接口：`POST /api/knowledge-base/validate`、`POST /api/knowledge-base/catalog`、`POST /api/knowledge-base/documents`，并保留 `POST /api/knowledge-base/search` 作为调试/回退接口；
+  - 后端新增知识库代理服务与缓存：规范化 URL、拉取 manifest/index/doc、按文档聚合目录、按需拉正文并切分 section；
+  - 前端新增 `xmindKnowledgeBase` 辅助模块：知识库状态归一化、目录级 AI 选文档、正文级 AI 精筛、上下文注入文本组装、结果弹窗渲染；
   - XMind 页签快照新增 `knowledgeBase` workspace 级状态，并接入工具栏状态按钮、结果弹窗、前置准备绿色标识；
   - 新增知识库辅助工具 `scripts/knowledge_base_tool.py`，支持 `validate` 与 `rebuild`；
   - 新增自动化用例：`tests/api/knowledge_base.spec.js`、`tests/ui/xmind_knowledge_base.spec.js`。
 - 复用说明：复用现有用户设置持久化、XMind 生成模型配置、XMind 生成任务链路、现有总结弹窗与 workspace 快照机制；新增后端知识库服务与前端知识库辅助模块，是因为跨域限制要求共享知识库必须经后端代理，且 workspace 隔离状态不适合继续堆入原有重型 XMind 主模块。
 - 测试与验证：
-  - `node --check scripts/modules/settings.js scripts/modules/xmindCasegen.js scripts/core/appRuntime.js tests/api/knowledge_base.spec.js tests/ui/xmind_knowledge_base.spec.js`（通过）
-  - `python3 -m py_compile scripts/knowledge_base_tool.py backend/knowledge_base_service.py backend/routers/knowledge_base.py`（通过）
+  - `node --check config/constants.js scripts/modules/settings.js services/apiClient.js scripts/modules/xmindKnowledgeBase.js scripts/modules/xmindCasegen.js tests/api/knowledge_base.spec.js tests/ui/xmind_knowledge_base.spec.js`（通过）
+  - `python3 -m py_compile scripts/knowledge_base_tool.py backend/knowledge_base_service.py backend/routers/knowledge_base.py backend/schemas.py`（通过）
   - `python3 scripts/knowledge_base_tool.py validate --path '/Users/linzhenlong/work/元气骑士知识库'`（通过；当前知识库结构可直接使用，存在 1 条告警：`kb-manifest` 文档数 `80` 与索引文档数 `89` 不一致）
-  - `API_BASE_URL=http://127.0.0.1:8081 npm run test:api -- tests/api/knowledge_base.spec.js`（通过，6/6）
-  - `npm run test:ui -- tests/ui/xmind_knowledge_base.spec.js`（通过，2/2）
+  - `API_BASE_URL=http://127.0.0.1:8081 npm run test:api -- tests/api/knowledge_base.spec.js`（通过，12/12）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npm run test:ui -- tests/ui/xmind_knowledge_base.spec.js -g "设置页可保存并校验知识库地址|知识库状态和结果按 workspace 隔离，AI 失败时仍继续生成" --workers=1`（未完成：当前桌面沙箱环境启动 Chromium 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段退出，未进入业务断言）
 - 更新记录：
   - 2026-04-15 首次接入共享知识库能力，完成设置入口、后端代理检索、XMind 规则检索/AI 精筛/上下文注入、工具栏状态展示、弹窗查看、绿色使用标识，以及严格的 workspace 级隔离回归。
   - 2026-04-15 修复共享知识库中文目录/文件名读取失败：后端读取 `_llm/docs/...` 文档时统一对 URL 路径做百分号编码，解决 `ascii codec can't encode characters` 导致的“规则检索失败”；补充中文 `clean_path` 的 API 回归并验证通过。
   - 2026-04-15 将知识库检索范围收敛为“整份需求 / 单个 workspace 一次检索一次 AI 筛选”，后续模块重生成、追加生成和补全都会复用同一份筛选结果；若上一轮筛选失败，则下一次生成会重新尝试，不会把失败状态永久复用。
+  - 2026-04-15 补充共享知识库远端短断连容错：当文件服务器偶发返回 `Remote end closed connection without response` 这类“连接已建立但对端无响应就断开”的瞬时异常时，后端代理会自动做短重试，避免前端直接看到一次性失败；新增断连重试 API 回归并验证通过。
+  - 2026-04-15 将 XMind 主链路从“规则检索 -> AI 精筛”升级为“AI 目录检索 -> AI 正文精筛”：后端新增 `catalog/documents` 接口，前端先让模型在目录级选文档，再按需拉正文 section 做二次精筛；保留整份需求级结果复用、workspace 级隔离和绿色 `已使用知识库` 标识，工具栏第一阶段文案同步改为 `知识检索`。
+  - 2026-04-15 新增知识库/XMind 上限设置并取消静默降级：设置页补充“目录送模上限 / 知识库注入上限 / XMind 请求体上限”，默认值整体提高；当多模态请求体超限时不再偷偷降级为纯文本，而是明确提示去提升上限；若模型接口返回上下文超限，也会在 XMind 失败提示中直接引导调整知识库或请求体上限。
+  - 2026-04-15 补修设置页模板与 XMind 空上下文容错：独立 `settings.html` 页面补齐“知识库/XMind 上限设置”输入区，避免只在 `index.html` 可见；同时将 XMind 生成链路里的可见模块上下文统一归一化，修复旧/异常上下文下直接读取 `visibleContext.map` 导致的 `Cannot read properties of undefined (reading 'map')` 失败。
 
 - 功能名称：XMind 双页签刷新恢复无响应补充修复
 - 功能描述：修复 `XMind 用例生成` 在已有两个已生成页签时刷新页面，恢复链路会在首帧渲染完成后同步回放旧的画布 transform/anchor，导致主线程长时间阻塞、页面看起来无响应的问题。本次调整把 `render-success` 之后的视口恢复统一收敛到异步 restore 调度器，不再在首帧同步修改画布位置，让刷新恢复与跨 workspace 视口接力都等待布局稳定后再执行。

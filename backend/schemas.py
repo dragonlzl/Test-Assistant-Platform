@@ -727,6 +727,70 @@ class KnowledgeBaseCandidateOut(BaseModel):
     document_excerpt: str = ""
 
 
+class KnowledgeBaseCatalogItemOut(BaseModel):
+    doc_id: str
+    module: str = ""
+    title: str = ""
+    aliases: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+    summary: str = ""
+    relative_path: str = ""
+    clean_path: str = ""
+    source_url: str = ""
+    heading_samples: List[str] = Field(default_factory=list)
+
+
+class KnowledgeBaseCatalogRequest(BaseModel):
+    base_url: str
+    timeout_sec: Optional[int] = 15
+    force_refresh: bool = False
+    max_docs: Optional[int] = None
+
+
+class KnowledgeBaseCatalogResponse(BaseModel):
+    base_url: str = ""
+    normalized_base_url: str = ""
+    manifest: KnowledgeBaseManifestSummary = Field(default_factory=KnowledgeBaseManifestSummary)
+    documents: List[KnowledgeBaseCatalogItemOut] = Field(default_factory=list)
+    doc_count: int = 0
+    warnings: List[str] = Field(default_factory=list)
+
+
+class KnowledgeBaseSectionOut(BaseModel):
+    section_id: str
+    heading: str = ""
+    content: str = ""
+    order: int = 0
+    char_count: int = 0
+
+
+class KnowledgeBaseDocumentOut(BaseModel):
+    doc_id: str
+    module: str = ""
+    title: str = ""
+    relative_path: str = ""
+    clean_path: str = ""
+    source_url: str = ""
+    section_count: int = 0
+    sections: List[KnowledgeBaseSectionOut] = Field(default_factory=list)
+
+
+class KnowledgeBaseDocumentsRequest(BaseModel):
+    base_url: str
+    doc_ids: List[str] = Field(default_factory=list)
+    timeout_sec: Optional[int] = 15
+    force_refresh: bool = False
+
+
+class KnowledgeBaseDocumentsResponse(BaseModel):
+    base_url: str = ""
+    normalized_base_url: str = ""
+    manifest: KnowledgeBaseManifestSummary = Field(default_factory=KnowledgeBaseManifestSummary)
+    documents: List[KnowledgeBaseDocumentOut] = Field(default_factory=list)
+    doc_count: int = 0
+    warnings: List[str] = Field(default_factory=list)
+
+
 class KnowledgeBaseSearchRequest(BaseModel):
     base_url: str
     workspace_id: Optional[str] = None

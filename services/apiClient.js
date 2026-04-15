@@ -851,6 +851,22 @@
     }).then(handleResponse);
   }
 
+  function catalogKnowledgeBase(payload) {
+    return fetch('/api/knowledge-base/catalog', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function getKnowledgeBaseDocuments(payload) {
+    return fetch('/api/knowledge-base/documents', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
   function searchKnowledgeBase(payload) {
     return fetch('/api/knowledge-base/search', {
       method: 'POST',
@@ -1050,6 +1066,8 @@
     updateModelConfig: updateModelConfig,
     proxyModelRequest: proxyModelRequest,
     validateKnowledgeBase: validateKnowledgeBase,
+    catalogKnowledgeBase: catalogKnowledgeBase,
+    getKnowledgeBaseDocuments: getKnowledgeBaseDocuments,
     searchKnowledgeBase: searchKnowledgeBase,
     listFeatureAssignments: listFeatureAssignments,
     createFeatureAssignment: createFeatureAssignment,

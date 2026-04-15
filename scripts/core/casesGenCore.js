@@ -2184,6 +2184,7 @@
       var moduleId = options.moduleId || '';
       var includeRemark = Boolean(options.showRemark);
       var selection = moduleId ? ensureCaseSelectionSet(moduleId) : new Set();
+      var safeList = Array.isArray(list) ? list : [];
       var toolbar = selectable
         ? '<div class="caseview-toolbar">' +
             '<button class="secondary" data-export-selected="' + moduleId + '" ' + (selection.size ? '' : 'disabled') + '>导出所选用例</button>' +
@@ -2193,7 +2194,7 @@
       var headerCheckbox = selectable ? '<th class="check"><input type="checkbox" data-case-select-all="' + moduleId + '"></th>' : '';
       var indexHeader = '<th class="index">编号</th>';
       var remarkHeader = includeRemark ? '<th class="remark">备注</th>' : '';
-      var rows = list.map(function(item, idx) {
+      var rows = safeList.map(function(item, idx) {
         var moduleTitle = mod && mod.title ? mod.title : '';
         var moduleName = item.module || moduleTitle || item.module_name || item['模块'] || '模块' + (idx + 1);
         var title = stringifyCaseField(item.title || item.case_title || moduleName);
@@ -4536,17 +4537,24 @@
 
     function renderLegacyCaseGeneration() {
       if (!casesGenerationContainer) return;
-      if (!state.caseGenModules.length) {
+      var moduleList = Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
+      var resultMap = state.caseGenResults && typeof state.caseGenResults === 'object'
+        ? state.caseGenResults
+        : {};
+      var suggestionMap = state.caseGenSuggestions && typeof state.caseGenSuggestions === 'object'
+        ? state.caseGenSuggestions
+        : {};
+      if (!moduleList.length) {
         casesGenerationContainer.innerHTML = '<p class="hint">请先在“测试模块拆分”中生成模块（JSON），然后点击“生成用例”进入本页。</p>';
         return;
       }
-      casesGenerationContainer.innerHTML = state.caseGenModules.map(function(mod, idx) {
+      casesGenerationContainer.innerHTML = moduleList.map(function(mod, idx) {
         normalizeStaleCaseProgress(mod.id, mod.title || mod.module || '');
-        var rawResult = (state.caseGenResults[mod.id] || '').trim();
+        var rawResult = String(resultMap[mod.id] || '').trim();
         var hasResult = Boolean(rawResult && !/^\[\s*\]$/.test(rawResult));
         var moduleBusy = isCaseModuleRunning(mod.id);
         var generateLabel = moduleBusy ? '生成中...' : '生成用例';
-        var resultInfo = parseGeneratedCases(state.caseGenResults[mod.id] || '');
+        var resultInfo = parseGeneratedCases(resultMap[mod.id] || '');
         var resultText = resultInfo.normalized || '';
         var timing = ensureCaseModuleTimingState()[mod.id];
         var timingText = Number.isFinite(timing) ? (timing / 1000).toFixed(2) : '--';
@@ -4567,16 +4575,16 @@
           '<input type="file" data-import-input="' + mod.id + '" accept=".txt,.json" hidden>' +
           '<div class="suggestion-panel">' +
             '<label>生成建议</label>' +
-            '<textarea data-suggestion="' + mod.id + '" placeholder="可输入补充说明/限制条件...">' + escapeHtml(state.caseGenSuggestions[mod.id] || '') + '</textarea>' +
+            '<textarea data-suggestion="' + mod.id + '" placeholder="可输入补充说明/限制条件...">' + escapeHtml(suggestionMap[mod.id] || '') + '</textarea>' +
             '<p class="hint suggestion-panel-hint">如需补全生成，请点击上方【生成用例】后，在抽屉的【补全生成】页签中执行。</p>' +
           '</div>' +
         '</div>';
       }).join('');
-      state.caseGenModules.forEach(function(mod) {
+      moduleList.forEach(function(mod) {
         syncCaseModuleStatus(mod.id);
         syncCaseModuleTiming(mod.id);
         updateCaseProgressView(mod.id);
-        var rawResult = (state.caseGenResults[mod.id] || '').trim();
+        var rawResult = String(resultMap[mod.id] || '').trim();
         var hasResult = Boolean(rawResult && !/^\[\s*\]$/.test(rawResult));
         updateSupplementButtons(mod.id, hasResult);
         var viewBtn = casesGenerationContainer && casesGenerationContainer.querySelector('[data-view="' + mod.id + '"]');

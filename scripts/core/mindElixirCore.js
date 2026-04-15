@@ -894,6 +894,7 @@
         ids: [],
         index: -1,
       };
+      var searchFocusRestoreTimer = 0;
       var exportState = {
         pending: false,
       };
@@ -1320,6 +1321,60 @@
         }
       }
 
+      function clearSearchFocusRestoreTimer() {
+        if (!searchFocusRestoreTimer) return;
+        clearTimeout(searchFocusRestoreTimer);
+        searchFocusRestoreTimer = 0;
+      }
+
+      function readSearchInputSelection() {
+        if (!searchInputEl) return null;
+        var start = typeof searchInputEl.selectionStart === 'number'
+          ? Number(searchInputEl.selectionStart)
+          : NaN;
+        var end = typeof searchInputEl.selectionEnd === 'number'
+          ? Number(searchInputEl.selectionEnd)
+          : NaN;
+        return {
+          start: isFinite(start) ? start : NaN,
+          end: isFinite(end) ? end : NaN,
+        };
+      }
+
+      function scheduleSearchInputFocus(selection) {
+        if (!searchInputEl || typeof searchInputEl.focus !== 'function') return;
+        clearSearchFocusRestoreTimer();
+        var range = selection && typeof selection === 'object' ? selection : null;
+        searchFocusRestoreTimer = setTimeout(function() {
+          searchFocusRestoreTimer = 0;
+          if (!searchInputEl) return;
+          var ownerDoc = searchInputEl.ownerDocument || document;
+          if (!ownerDoc || !ownerDoc.body || !ownerDoc.body.contains || !ownerDoc.body.contains(searchInputEl)) return;
+          try {
+            searchInputEl.focus({ preventScroll: true });
+          } catch (err) {
+            try {
+              searchInputEl.focus();
+            } catch (err2) {
+              return;
+            }
+          }
+          if (typeof searchInputEl.setSelectionRange !== 'function') return;
+          var length = String(searchInputEl.value || '').length;
+          var start = range && isFinite(Number(range.start)) ? Number(range.start) : length;
+          var end = range && isFinite(Number(range.end)) ? Number(range.end) : start;
+          if (start < 0) start = 0;
+          if (end < 0) end = 0;
+          if (start > length) start = length;
+          if (end > length) end = length;
+          try {
+            searchInputEl.setSelectionRange(start, end);
+          } catch (err3) {
+            // ignore
+          }
+        }, 0);
+      }
+
       function clearSearchClasses() {
         if (!viewerEl || !viewerEl.querySelectorAll) return;
         var marked = viewerEl.querySelectorAll('me-tpc.xmind-search-hit, me-tpc.xmind-search-active');
@@ -1349,11 +1404,15 @@
         setSearchCount();
       }
 
-      function focusSearchIndex(index) {
+      function focusSearchIndex(index, options) {
+        var opts2 = options || {};
         var ids = Array.isArray(searchState.ids) ? searchState.ids : [];
         if (!ids.length) {
           searchState.index = -1;
           applySearchClasses();
+          if (opts2.preserveInputFocus) {
+            scheduleSearchInputFocus(opts2.selection);
+          }
           return;
         }
         var nextIndex = Number(index);
@@ -1375,17 +1434,24 @@
             // ignore
           }
         }
+        if (opts2.preserveInputFocus) {
+          scheduleSearchInputFocus(opts2.selection);
+        }
       }
 
       function runSearch(options) {
         var opts2 = options || {};
         var keepIndex = opts2.keepIndex === true;
+        var selection = opts2.preserveInputFocus ? readSearchInputSelection() : null;
         var keyword = normalizeSearchKeyword(searchInputEl ? searchInputEl.value : '');
         searchState.keyword = keyword;
         if (!keyword) {
           searchState.ids = [];
           searchState.index = -1;
           applySearchClasses();
+          if (opts2.preserveInputFocus) {
+            scheduleSearchInputFocus(selection);
+          }
           return;
         }
         var matchedIds = [];
@@ -1395,41 +1461,54 @@
         if (!matchedIds.length) {
           searchState.index = -1;
           applySearchClasses();
+          if (opts2.preserveInputFocus) {
+            scheduleSearchInputFocus(selection);
+          }
           return;
         }
         if (keepIndex && searchState.index >= 0 && searchState.index < matchedIds.length) {
-          focusSearchIndex(searchState.index);
+          focusSearchIndex(searchState.index, {
+            preserveInputFocus: opts2.preserveInputFocus,
+            selection: selection,
+          });
         } else {
-          focusSearchIndex(0);
+          focusSearchIndex(0, {
+            preserveInputFocus: opts2.preserveInputFocus,
+            selection: selection,
+          });
         }
       }
 
-      function moveSearch(step) {
+      function moveSearch(step, options) {
         if (!Array.isArray(searchState.ids) || !searchState.ids.length) return;
         var delta = Number(step);
         if (!isFinite(delta) || delta === 0) return;
         var base = searchState.index >= 0 ? searchState.index : 0;
-        focusSearchIndex(base + delta);
+        focusSearchIndex(base + delta, options);
       }
 
-      function clearSearch() {
+      function clearSearch(options) {
+        var opts2 = options || {};
         if (searchInputEl) searchInputEl.value = '';
         searchState.keyword = '';
         searchState.ids = [];
         searchState.index = -1;
         applySearchClasses();
+        if (opts2.focusInput) {
+          scheduleSearchInputFocus({ start: 0, end: 0 });
+        }
       }
 
       function onSearchInput() {
-        runSearch({ keepIndex: false });
+        runSearch({ keepIndex: false, preserveInputFocus: true });
       }
 
       function onSearchKeydown(e) {
         if (!e) return;
         if (e.key !== 'Enter') return;
         if (e.preventDefault) e.preventDefault();
-        if (e.shiftKey) moveSearch(-1);
-        else moveSearch(1);
+        if (e.shiftKey) moveSearch(-1, { preserveInputFocus: true, selection: readSearchInputSelection() });
+        else moveSearch(1, { preserveInputFocus: true, selection: readSearchInputSelection() });
       }
 
       function getCanvasCenterPoint() {
@@ -3253,8 +3332,7 @@
         } else if (action === 'search-next') {
           moveSearch(1);
         } else if (action === 'search-clear') {
-          clearSearch();
-          focusViewerForKeyboard();
+          clearSearch({ focusInput: true });
         } else if (action === 'export-xmind') {
           if (exportState.pending) return;
           if (!opts || typeof opts.onExportXmind !== 'function') return;
@@ -4607,6 +4685,7 @@
           clearTimeout(recordTimer);
           recordTimer = 0;
         }
+        clearSearchFocusRestoreTimer();
         if (nodeDecorateTimer) {
           clearTimeout(nodeDecorateTimer);
           nodeDecorateTimer = 0;

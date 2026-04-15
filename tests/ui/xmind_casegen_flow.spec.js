@@ -6792,6 +6792,71 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(layout.interruptRight).toBeLessThanOrEqual(layout.utilityRight + 1);
   });
 
+  test('XMind 节点搜索保持输入焦点，回退与清空后不会误删已生成节点', async ({ page }) => {
+    const token = 'token-xmind-search-focus-guard';
+    const user = { id: 213, username: 'demo_user_search_focus_guard', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 120);
+    await seedDocumentRequirement(page, {
+      text: '需求：验证 XMind 节点搜索在已有模块和用例时不会抢走搜索框焦点，也不会在清空搜索时误删节点。',
+      requirementLabel: 'XMind搜索焦点保护需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind搜索焦点保护需求');
+    await openNodeContextMenu(page, 'XMind搜索焦点保护需求');
+    await clickContextMenuAction(page, '生成全量用例');
+    await waitForNodeText(page, '登录模块-完整-1');
+    await waitForNodeText(page, '支付模块-完整-1');
+
+    const searchInput = page.locator('#xmindCaseGenMindContainer [data-mind-search-input]');
+    const searchCount = page.locator('#xmindCaseGenMindContainer [data-mind-search-count]');
+    const clearBtn = page.locator('#xmindCaseGenMindContainer [data-mind-action="search-clear"]');
+
+    await searchInput.click();
+    await searchInput.fill('登录模块-完整-1');
+    await expect(searchCount).toHaveText(/1\s*\/\s*[1-9]\d*/);
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var input = document.querySelector('#xmindCaseGenMindContainer [data-mind-search-input]');
+        return Boolean(input && document.activeElement === input);
+      });
+    }).toBe(true);
+    await page.keyboard.press('Backspace');
+    await expect(searchInput).toHaveValue('登录模块-完整-');
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var input = document.querySelector('#xmindCaseGenMindContainer [data-mind-search-input]');
+        return Boolean(input && document.activeElement === input);
+      });
+    }).toBe(true);
+    await waitForNodeText(page, '登录模块-完整-1');
+    await waitForNodeText(page, '支付模块-完整-1');
+
+    await searchInput.fill('完全不存在的节点');
+    await expect(searchCount).toHaveText(/0\s*\/\s*0/);
+    await clearBtn.click();
+    await expect(searchInput).toHaveValue('');
+    await expect(searchCount).toHaveText(/0\s*\/\s*0/);
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var input = document.querySelector('#xmindCaseGenMindContainer [data-mind-search-input]');
+        return Boolean(input && document.activeElement === input);
+      });
+    }).toBe(true);
+    await waitForNodeText(page, '登录模块-完整-1');
+    await waitForNodeText(page, '支付模块-完整-1');
+  });
+
   test('右侧导出XMind按钮替换为模型选择框，并支持直接切换 XMind 模型', async ({ page }) => {
     const token = 'token-xmind-inline-model-select';
     const user = { id: 211, username: 'demo_user_inline_model', role: 'user', level: 'member' };

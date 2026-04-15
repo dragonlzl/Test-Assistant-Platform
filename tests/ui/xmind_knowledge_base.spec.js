@@ -141,16 +141,11 @@ async function openXmindCaseGenDrawer(page) {
     return Boolean(drawer && drawer.classList && drawer.classList.contains('open'));
   });
   if (!drawerOpen) {
-    await page.waitForTimeout(260);
-    drawerOpen = await page.evaluate(() => {
-      var drawer = document.getElementById('xmindCaseGenDrawer');
-      return Boolean(drawer && drawer.classList && drawer.classList.contains('open'));
+    await page.evaluate(() => {
+      if (window.app && window.app.xmindCasegenApi && typeof window.app.xmindCasegenApi.open === 'function') {
+        window.app.xmindCasegenApi.open({ instant: true, userInitiated: true });
+      }
     });
-  }
-  if (!drawerOpen) {
-    await page.click('#caseGenModulesTabBtn');
-    await expect(page.locator('#casegenModulesPanel')).toHaveClass(/is-active/);
-    await page.click('#xmindCaseGenOpenBtn');
   }
   await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
   await page.waitForFunction(() => {
@@ -417,7 +412,8 @@ async function installKnowledgeBaseStubs(page) {
     var client = window.app && window.app.apiClient ? window.app.apiClient : null;
     if (!client) return;
     window.__kbValidateCalls = [];
-    window.__kbSearchCalls = [];
+    window.__kbCatalogCalls = [];
+    window.__kbDocumentCalls = [];
     window.__xmindKbProxyCalls = [];
 
     client.validateKnowledgeBase = function(payload) {
@@ -433,57 +429,86 @@ async function installKnowledgeBaseStubs(page) {
       });
     };
 
-    client.searchKnowledgeBase = function(payload) {
+    client.catalogKnowledgeBase = function(payload) {
       var body = JSON.parse(JSON.stringify(payload || {}));
-      window.__kbSearchCalls.push(body);
-      var label = String(body.requirement_label || '');
-      if (label.indexOf('页签A') !== -1) {
-        return Promise.resolve({
-          normalized_base_url: String(body.base_url || ''),
-          manifest: { doc_count: 89, entry_count: 847 },
-          warnings: [],
-          candidates: [{
-            candidate_id: 'kb-a-1',
-            doc_id: 'doc-a-1',
-            module: '技能系统',
-            title: '页签A知识条目',
-            heading: '技能系统规则',
-            relative_path: 'skills/a.md',
-            clean_path: '_llm/docs/skills/a.md',
-            source_url: 'http://kb.example/skills/a',
-            snippet: '页签A规则候选',
-            document_excerpt: '页签A知识摘录：技能按钮状态、冷却和中断恢复规则。',
-            matched_terms: ['页签A', '技能按钮'],
-            score: 88,
-          }],
-        });
-      }
-      if (label.indexOf('页签B') !== -1) {
-        return Promise.resolve({
-          normalized_base_url: String(body.base_url || ''),
-          manifest: { doc_count: 89, entry_count: 847 },
-          warnings: [],
-          candidates: [{
-            candidate_id: 'kb-b-1',
-            doc_id: 'doc-b-1',
-            module: '支付系统',
-            title: '页签B知识条目',
-            heading: '支付约束',
-            relative_path: 'payment/b.md',
-            clean_path: '_llm/docs/payment/b.md',
-            source_url: 'http://kb.example/payment/b',
-            snippet: '页签B规则候选',
-            document_excerpt: '页签B知识摘录：扣费与失败回滚规则。',
-            matched_terms: ['页签B', '支付'],
-            score: 76,
-          }],
-        });
-      }
+      window.__kbCatalogCalls.push(body);
       return Promise.resolve({
         normalized_base_url: String(body.base_url || ''),
         manifest: { doc_count: 89, entry_count: 847 },
         warnings: [],
-        candidates: [],
+        documents: [{
+          doc_id: 'doc-a-1',
+          module: '技能系统',
+          title: '页签A知识文档',
+          aliases: ['页签A', '技能按钮'],
+          keywords: ['冷却', '中断恢复'],
+          summary: '技能按钮状态、冷却和中断恢复规则。',
+          relative_path: 'skills/a.md',
+          clean_path: '_llm/docs/skills/a.md',
+          source_url: 'http://kb.example/skills/a',
+          heading_samples: ['技能按钮状态', '冷却恢复'],
+        }, {
+          doc_id: 'doc-b-1',
+          module: '支付系统',
+          title: '页签B知识文档',
+          aliases: ['页签B', '支付'],
+          keywords: ['扣费', '失败回滚'],
+          summary: '扣费、失败回滚和重试规则。',
+          relative_path: 'payment/b.md',
+          clean_path: '_llm/docs/payment/b.md',
+          source_url: 'http://kb.example/payment/b',
+          heading_samples: ['扣费校验', '失败回滚'],
+        }],
+      });
+    };
+
+    client.getKnowledgeBaseDocuments = function(payload) {
+      var body = JSON.parse(JSON.stringify(payload || {}));
+      window.__kbDocumentCalls.push(body);
+      var docIds = Array.isArray(body.doc_ids) ? body.doc_ids : [];
+      var documents = [];
+      docIds.forEach(function(docId) {
+        if (docId === 'doc-a-1') {
+          documents.push({
+            doc_id: 'doc-a-1',
+            module: '技能系统',
+            title: '页签A知识文档',
+            relative_path: 'skills/a.md',
+            clean_path: '_llm/docs/skills/a.md',
+            source_url: 'http://kb.example/skills/a',
+            sections: [{
+              section_id: 'doc-a-1::section-1',
+              heading: '技能按钮状态',
+              content: '页签A知识摘录：技能按钮状态、冷却和中断恢复规则。',
+            }, {
+              section_id: 'doc-a-1::section-2',
+              heading: '冷却恢复',
+              content: '页签A补充知识：技能冷却结束后按钮状态需要同步恢复。',
+            }],
+          });
+          return;
+        }
+        if (docId === 'doc-b-1') {
+          documents.push({
+            doc_id: 'doc-b-1',
+            module: '支付系统',
+            title: '页签B知识文档',
+            relative_path: 'payment/b.md',
+            clean_path: '_llm/docs/payment/b.md',
+            source_url: 'http://kb.example/payment/b',
+            sections: [{
+              section_id: 'doc-b-1::section-1',
+              heading: '扣费校验',
+              content: '页签B知识摘录：扣费与失败回滚规则。',
+            }],
+          });
+        }
+      });
+      return Promise.resolve({
+        normalized_base_url: String(body.base_url || ''),
+        manifest: { doc_count: 89, entry_count: 847 },
+        warnings: [],
+        documents: documents,
       });
     };
 
@@ -492,19 +517,42 @@ async function installKnowledgeBaseStubs(page) {
       var messages = Array.isArray(modelPayload.messages) ? modelPayload.messages : [];
       var promptText = flattenContent(messages[0] && messages[0].content);
       var userText = flattenContent(messages[1] && messages[1].content);
+      var requirementContext = parseJsonText(extractSection(userText, '【需求上下文(JSON)】')) || {};
+      var documentContext = parseJsonText(extractSection(userText, '【知识文档正文(JSON)】')) || [];
+      var requirementLabel = String(requirementContext.requirementLabel || '');
+      var requirementText = String(requirementContext.requirementText || '');
+      var selectedDocIds = Array.isArray(documentContext)
+        ? documentContext.map(function(item) { return item && item.doc_id ? String(item.doc_id || '') : ''; }).filter(Boolean)
+        : [];
       window.__xmindKbProxyCalls.push({ prompt: promptText, user: userText });
 
-      if (promptText.indexOf('共享知识库精筛助手') !== -1 || userText.indexOf('【候选知识块(JSON)】') !== -1) {
-        if (userText.indexOf('页签A') !== -1) {
+      if (promptText.indexOf('共享知识库目录检索助手') !== -1 || userText.indexOf('【知识库目录(JSON)】') !== -1) {
+        if (requirementLabel.indexOf('页签A') !== -1 || requirementText.indexOf('技能按钮') !== -1) {
           return successResponse(JSON.stringify({
-            selected_ids: ['kb-a-1'],
-            items: [{ candidate_id: 'kb-a-1', reason: '命中页签A规则' }],
+            selected_doc_ids: ['doc-a-1'],
+            items: [{ doc_id: 'doc-a-1', reason: '命中页签A规则' }],
           }));
         }
-        if (userText.indexOf('页签B') !== -1) {
+        if (requirementLabel.indexOf('页签B') !== -1 || requirementText.indexOf('支付扣费') !== -1) {
+          return successResponse(JSON.stringify({
+            selected_doc_ids: ['doc-b-1'],
+            items: [{ doc_id: 'doc-b-1', reason: '命中页签B规则' }],
+          }));
+        }
+        return successResponse(JSON.stringify({ selected_doc_ids: [], items: [] }));
+      }
+
+      if (promptText.indexOf('共享知识库正文精筛助手') !== -1 || userText.indexOf('【知识文档正文(JSON)】') !== -1) {
+        if (selectedDocIds.indexOf('doc-a-1') !== -1) {
+          return successResponse(JSON.stringify({
+            selected_sections: ['doc-a-1::section-1'],
+            items: [{ section_id: 'doc-a-1::section-1', reason: '命中页签A规则' }],
+          }));
+        }
+        if (selectedDocIds.indexOf('doc-b-1') !== -1) {
           return successResponse('这不是合法JSON');
         }
-        return successResponse(JSON.stringify({ selected_ids: [], items: [] }));
+        return successResponse(JSON.stringify({ selected_sections: [], items: [] }));
       }
 
       var contract = parseJsonText(extractSection(userText, '【operation_contract(JSON)】'))
@@ -526,22 +574,32 @@ async function installKnowledgeBaseStubs(page) {
 test.describe('XMind 共享知识库', () => {
   test('设置页可保存并校验知识库地址', async ({ page }) => {
     const state = await setupSettingsRoutes(page);
-    await page.goto(base + '/index.html?_=' + Date.now().toString(36));
+    await page.goto(base + '/settings.html?_=' + Date.now().toString(36));
     await waitForAppReady(page);
-
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') {
-        window.app.switchTab('settings');
-      }
-    });
+    await expect(page.locator('#knowledgeBaseBaseUrlInput')).toBeVisible();
 
     await page.fill('#knowledgeBaseBaseUrlInput', 'http://192.168.50.10:8003/sk');
     await page.click('#saveKnowledgeBaseBaseUrl');
     await expect(page.locator('#knowledgeBaseBaseUrlStatus')).toContainText('知识库地址已保存');
 
+    await page.fill('#knowledgeBaseCatalogCharLimitInput', '180000');
+    await page.fill('#knowledgeBaseInjectedContextCharLimitInput', '36000');
+    await page.fill('#xmindRequestPayloadLimitInput', '5200000');
+    await page.click('#saveKnowledgeBaseLimitSettings');
+    await expect(page.locator('#knowledgeBaseLimitSettingsStatus')).toContainText('上限已保存');
+
     const saved = state.savedSettings.find((item) => item.key === 'knowledgeBaseBaseUrl');
     expect(saved).toBeTruthy();
     expect(saved.value_json).toBe('http://192.168.50.10:8003/sk/');
+    const savedCatalogLimit = state.savedSettings.find((item) => item.key === 'knowledgeBaseCatalogCharLimit');
+    expect(savedCatalogLimit).toBeTruthy();
+    expect(savedCatalogLimit.value_json).toBe(180000);
+    const savedInjectedLimit = state.savedSettings.find((item) => item.key === 'knowledgeBaseInjectedContextCharLimit');
+    expect(savedInjectedLimit).toBeTruthy();
+    expect(savedInjectedLimit.value_json).toBe(36000);
+    const savedPayloadLimit = state.savedSettings.find((item) => item.key === 'xmindRequestPayloadLimit');
+    expect(savedPayloadLimit).toBeTruthy();
+    expect(savedPayloadLimit.value_json).toBe(5200000);
 
     await page.click('#validateKnowledgeBaseBaseUrl');
     await expect(page.locator('#knowledgeBaseBaseUrlStatus')).toContainText('校验成功');
@@ -550,6 +608,15 @@ test.describe('XMind 共享知识库', () => {
   });
 
   test('知识库状态和结果按 workspace 隔离，AI 失败时仍继续生成', async ({ page }) => {
+    page.on('console', (msg) => {
+      var text = msg.text();
+      if (text && (text.indexOf('XMind managed task consume failed') !== -1 || text.indexOf('XMind casegen mirror render failed') !== -1)) {
+        console.log('[page-console]', text);
+      }
+    });
+    page.on('pageerror', (err) => {
+      console.log('[page-error]', err && err.stack ? err.stack : String(err || ''));
+    });
     await mockCaseGenApisWithModel(page);
     await gotoCasesgenWorkflow(page);
     await waitXmindModelAssigned(page);
@@ -573,6 +640,7 @@ test.describe('XMind 共享知识库', () => {
     await expect(page.locator('#xmindCaseGenKnowledgeAiBtn')).toContainText('已完成');
 
     await page.click('#xmindCaseGenKnowledgeRuleBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('页签A知识文档');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('页签A知识摘录');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('命中页签A规则');
     await page.click('#xmindCaseGenSummaryCloseBtn');
@@ -590,19 +658,26 @@ test.describe('XMind 共享知识库', () => {
       return Array.isArray(window.__xmindKbProxyCalls) && window.__xmindKbProxyCalls.length > beforeCount;
     }, modelCallCountBeforeReuse, { timeout: 15000 });
 
-    const searchCallsAfterReuse = await page.evaluate(() => {
-      return window.__kbSearchCalls ? JSON.parse(JSON.stringify(window.__kbSearchCalls)) : [];
+    const catalogCallsAfterReuse = await page.evaluate(() => {
+      return window.__kbCatalogCalls ? JSON.parse(JSON.stringify(window.__kbCatalogCalls)) : [];
     });
-    expect(searchCallsAfterReuse).toHaveLength(1);
+    expect(catalogCallsAfterReuse).toHaveLength(1);
+    const documentCallsAfterReuse = await page.evaluate(() => {
+      return window.__kbDocumentCalls ? JSON.parse(JSON.stringify(window.__kbDocumentCalls)) : [];
+    });
+    expect(documentCallsAfterReuse).toHaveLength(1);
     const filterCallsAfterReuse = await page.evaluate(() => {
       var calls = window.__xmindKbProxyCalls ? JSON.parse(JSON.stringify(window.__xmindKbProxyCalls)) : [];
       return calls.filter((item) => {
         var prompt = String(item && item.prompt ? item.prompt : '');
         var user = String(item && item.user ? item.user : '');
-        return prompt.indexOf('共享知识库精筛助手') !== -1 || user.indexOf('【候选知识块(JSON)】') !== -1;
+        return prompt.indexOf('共享知识库目录检索助手') !== -1
+          || user.indexOf('【知识库目录(JSON)】') !== -1
+          || prompt.indexOf('共享知识库正文精筛助手') !== -1
+          || user.indexOf('【知识文档正文(JSON)】') !== -1;
       });
     });
-    expect(filterCallsAfterReuse).toHaveLength(1);
+    expect(filterCallsAfterReuse).toHaveLength(2);
 
     await createXmindWorkspaceByManualPrep(page, '页签B', '需求B：支付扣费失败继续生成，但不要注入错误知识。');
     await waitForNodeText(page, '页签B');
@@ -614,7 +689,8 @@ test.describe('XMind 共享知识库', () => {
     await expect(page.locator('#xmindCaseGenKnowledgeAiBtn')).toContainText('失败');
 
     await page.click('#xmindCaseGenKnowledgeAiBtn');
-    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('AI 精筛返回结果无法解析为 JSON');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('AI 正文精筛返回结果无法解析为 JSON');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('页签B知识文档');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).not.toContainText('页签A知识摘录');
     await page.click('#xmindCaseGenSummaryCloseBtn');
 
@@ -625,42 +701,63 @@ test.describe('XMind 共享知识库', () => {
     await switchWorkspace(page, '页签A');
     await expect(page.locator('#xmindCaseGenKnowledgeAiBtn')).toContainText('已完成');
     await page.click('#xmindCaseGenKnowledgeRuleBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('页签A知识文档');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('页签A知识摘录');
-    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).not.toContainText('页签B知识摘录');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).not.toContainText('页签B知识文档');
 
-    const searchCalls = await page.evaluate(() => {
-      return window.__kbSearchCalls ? JSON.parse(JSON.stringify(window.__kbSearchCalls)) : [];
+    const catalogCalls = await page.evaluate(() => {
+      return window.__kbCatalogCalls ? JSON.parse(JSON.stringify(window.__kbCatalogCalls)) : [];
     });
-    expect(searchCalls).toHaveLength(2);
-    const workspaceIds = Array.from(new Set(searchCalls.map((item) => item.workspace_id)));
-    expect(workspaceIds).toHaveLength(2);
+    expect(catalogCalls).toHaveLength(2);
+    const documentCalls = await page.evaluate(() => {
+      return window.__kbDocumentCalls ? JSON.parse(JSON.stringify(window.__kbDocumentCalls)) : [];
+    });
+    expect(documentCalls).toHaveLength(2);
+    expect(documentCalls.some((item) => JSON.stringify(item.doc_ids || []).indexOf('doc-a-1') !== -1)).toBe(true);
+    expect(documentCalls.some((item) => JSON.stringify(item.doc_ids || []).indexOf('doc-b-1') !== -1)).toBe(true);
 
-    const workspaceAId = searchCalls.find((item) => String(item.requirement_label || '').indexOf('页签A') !== -1).workspace_id;
-    const workspaceBId = searchCalls.find((item) => String(item.requirement_label || '').indexOf('页签B') !== -1).workspace_id;
-    expect(workspaceAId).toBeTruthy();
-    expect(workspaceBId).toBeTruthy();
-    expect(workspaceAId).not.toBe(workspaceBId);
-
-    const workspaceALabels = searchCalls
-      .filter((item) => item.workspace_id === workspaceAId)
-      .map((item) => String(item.requirement_label || ''));
-    const workspaceBLabels = searchCalls
-      .filter((item) => item.workspace_id === workspaceBId)
-      .map((item) => String(item.requirement_label || ''));
-
-    expect(workspaceALabels.length).toBeGreaterThan(0);
-    expect(workspaceBLabels.length).toBeGreaterThan(0);
-    expect(workspaceALabels.every((label) => label.indexOf('页签A') !== -1)).toBe(true);
-    expect(workspaceBLabels.every((label) => label.indexOf('页签B') !== -1)).toBe(true);
+    const workspaceStates = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
+      var workspaces = host && host.workspaces ? host.workspaces : {};
+      return Object.keys(workspaces).map((id) => {
+        var record = workspaces[id] || {};
+        var snapshot = record.snapshot && record.snapshot.xmind ? record.snapshot.xmind : {};
+        var kb = snapshot.knowledgeBase || {};
+        return {
+          id: id,
+          name: String(record.name || ''),
+          usedInLatestGeneration: kb.usedInLatestGeneration === true,
+          latestError: String(kb.latestError || ''),
+          selectedDocuments: Array.isArray(kb.selectedDocuments) ? kb.selectedDocuments : [],
+          selectedSections: Array.isArray(kb.selectedSections) ? kb.selectedSections : [],
+        };
+      });
+    });
+    expect(workspaceStates).toHaveLength(2);
+    var workspaceAState = workspaceStates.find((item) => String(item.name || '').indexOf('页签A') !== -1);
+    var workspaceBState = workspaceStates.find((item) => String(item.name || '').indexOf('页签B') !== -1);
+    expect(workspaceAState).toBeTruthy();
+    expect(workspaceBState).toBeTruthy();
+    expect(workspaceAState.usedInLatestGeneration).toBe(true);
+    expect(workspaceBState.usedInLatestGeneration).toBe(false);
+    expect(JSON.stringify(workspaceAState.selectedDocuments)).toContain('页签A知识文档');
+    expect(JSON.stringify(workspaceBState.selectedDocuments)).toContain('页签B知识文档');
+    expect(JSON.stringify(workspaceAState.selectedSections)).toContain('页签A知识摘录');
+    expect(JSON.stringify(workspaceBState.selectedSections)).not.toContain('页签A知识摘录');
+    expect(workspaceBState.latestError).toContain('AI 正文精筛返回结果无法解析为 JSON');
 
     const filterCalls = await page.evaluate(() => {
       var calls = window.__xmindKbProxyCalls ? JSON.parse(JSON.stringify(window.__xmindKbProxyCalls)) : [];
       return calls.filter((item) => {
         var prompt = String(item && item.prompt ? item.prompt : '');
         var user = String(item && item.user ? item.user : '');
-        return prompt.indexOf('共享知识库精筛助手') !== -1 || user.indexOf('【候选知识块(JSON)】') !== -1;
+        return prompt.indexOf('共享知识库目录检索助手') !== -1
+          || user.indexOf('【知识库目录(JSON)】') !== -1
+          || prompt.indexOf('共享知识库正文精筛助手') !== -1
+          || user.indexOf('【知识文档正文(JSON)】') !== -1;
       });
     });
-    expect(filterCalls).toHaveLength(2);
+    expect(filterCalls).toHaveLength(4);
   });
 });

@@ -2,6 +2,7 @@
   function init(ctx) {
     ctx = ctx || {};
     var state = ctx.state || {};
+    var config = ctx.config || (window.app && window.app.config) || {};
     var utils = ctx.utils || {};
     var core = ctx.core || {};
     var casesGenApi = ctx.casesGenApi || {};
@@ -684,7 +685,11 @@
           candidateCount: 0,
           selectedCount: 0,
         },
+        catalogItems: [],
         candidates: [],
+        selectedDocuments: [],
+        documentSections: [],
+        selectedSections: [],
         selectedItems: [],
         usedInLatestGeneration: false,
         injectedContextText: '',
@@ -833,7 +838,7 @@
         : 'disabled';
       syncKnowledgeBaseToolbarButton(
         knowledgeRuleBtn,
-        '规则检索',
+        '知识检索',
         ruleStage,
         kbState && kbState.ruleSearch ? (kbState.ruleSearch.reason || kbState.ruleSearch.error || '') : ''
       );
@@ -913,7 +918,11 @@
           status: stageStatus,
           reason: reason || (baseUrl ? '本轮未执行知识库检索' : '未启用知识库'),
         },
+        catalogItems: [],
         candidates: [],
+        selectedDocuments: [],
+        documentSections: [],
+        selectedSections: [],
         selectedItems: [],
         usedInLatestGeneration: false,
         injectedContextText: '',
@@ -935,8 +944,16 @@
         return false;
       }
       pendingCasesGenPageRender = false;
-      casesGenApi.renderCaseGeneration();
-      return true;
+      try {
+        casesGenApi.renderCaseGeneration();
+        return true;
+      } catch (err) {
+        pendingCasesGenPageRender = true;
+        if (typeof console !== 'undefined' && console && typeof console.error === 'function') {
+          console.error('XMind casegen mirror render failed', err);
+        }
+        return false;
+      }
     }
 
     function shouldDeferCasesGenPageRender() {
@@ -2279,7 +2296,8 @@
 
     function resolveRootPipelineDescriptor(serialized, visibleContext) {
       if (!serialized || typeof serialized !== 'object') return null;
-      var context = visibleContext && visibleContext.list ? visibleContext : buildVisibleModuleContext();
+      var context = ensureVisibleModuleContext(visibleContext);
+      var contextMap = context.map || {};
       var targetModuleId = String(serialized.moduleId || '');
       var targetModuleKey = String(serialized.moduleKey || '');
       var targetTitle = normalizeModuleTitle(serialized.moduleTitle || '');
@@ -2293,8 +2311,8 @@
           return false;
         });
       }
-      if (!moduleEntry && targetModuleKey && context.map && context.map[targetModuleKey]) {
-        moduleEntry = context.map[targetModuleKey];
+      if (!moduleEntry && targetModuleKey && contextMap[targetModuleKey]) {
+        moduleEntry = contextMap[targetModuleKey];
       }
       if (!moduleEntry && targetTitle) {
         context.list.some(function(entry) {
@@ -6030,7 +6048,7 @@
         summaryDialogDescEl.textContent = mode === 'history'
           ? '记录当前 XMind 用例生成里每次节点操作的结果摘要。'
           : (mode === 'knowledge-base'
-            ? '展示当前页签最近一次规则检索与 AI 精筛的状态和最终筛选内容。'
+            ? '展示当前页签最近一次知识检索与 AI 筛选的状态和最终筛选内容。'
             : '按 3 步完成前置准备，确认后 step1 和 step2 会在本次生成中锁定。');
       }
       if (!open) return;
@@ -6508,6 +6526,29 @@
         map: map,
         list: order.map(function(key) { return map[key]; }),
       };
+    }
+
+    function ensureVisibleModuleContext(value) {
+      if (value && Array.isArray(value.list) && value.map && typeof value.map === 'object') {
+        return value;
+      }
+      if (value && Array.isArray(value.list)) {
+        var fallbackMap = {};
+        var fallbackOrder = [];
+        value.list.forEach(function(entry) {
+          if (!entry || typeof entry !== 'object') return;
+          var key = String(entry.moduleKey || normalizeModuleKey(entry.title || '') || '').trim();
+          if (!key || fallbackMap[key]) return;
+          fallbackMap[key] = entry;
+          fallbackOrder.push(key);
+        });
+        return {
+          order: fallbackOrder,
+          map: fallbackMap,
+          list: fallbackOrder.map(function(key) { return fallbackMap[key]; }),
+        };
+      }
+      return buildVisibleModuleContext();
     }
 
     function getVisibleCasesForModuleEntry(entry) {
@@ -7361,7 +7402,7 @@
         });
       }
       return JSON.stringify({
-        version: 2,
+        version: 3,
         baseUrl: normalizeKnowledgeBaseBaseUrl(baseUrl),
         requirementLabel: queryContext && queryContext.requirementLabel ? String(queryContext.requirementLabel || '').trim() : '',
         requirementText: queryContext && queryContext.requirementText ? String(queryContext.requirementText || '').trim() : '',
@@ -7399,7 +7440,11 @@
         validation: cloneJson(normalized.validation, {}),
         ruleSearch: cloneJson(normalized.ruleSearch, {}),
         aiFilter: cloneJson(normalized.aiFilter, {}),
+        catalogItems: cloneJson(normalized.catalogItems, []),
         candidates: cloneJson(normalized.candidates, []),
+        selectedDocuments: cloneJson(normalized.selectedDocuments, []),
+        documentSections: cloneJson(normalized.documentSections, []),
+        selectedSections: cloneJson(normalized.selectedSections, []),
         selectedItems: cloneJson(normalized.selectedItems, []),
         usedInLatestGeneration: Boolean(normalized.injectedContextText),
         injectedContextText: normalized.injectedContextText,
@@ -7422,7 +7467,7 @@
 
     function callKnowledgeBaseFilterModel(model, userText, prompt, reasoning, temperature) {
       if (!xmindGenApi || typeof xmindGenApi.callModelWithConfig !== 'function') {
-        return Promise.reject(new Error('当前 XMind 生成模型不可用，无法执行知识库 AI 精筛'));
+        return Promise.reject(new Error('当前 XMind 生成模型不可用，无法执行知识库 AI 筛选'));
       }
       return callXmindModelWithGuard(function() {
         return xmindGenApi.callModelWithConfig(
@@ -7495,7 +7540,7 @@
             },
             aiFilter: {
               status: 'skipped',
-              reason: '规则检索未执行，已跳过 AI 筛选',
+              reason: '知识检索未执行，已跳过 AI 筛选',
             },
             usedInLatestGeneration: false,
             injectedContextText: '',
@@ -7797,6 +7842,42 @@
       }
     }
 
+    function clampPositiveInteger(value, fallback, min, max) {
+      var num = Math.round(Number(value));
+      var safeFallback = Math.round(Number(fallback));
+      var lower = Math.round(Number(min || 0));
+      var upper = Math.round(Number(max || 0));
+      if (!Number.isFinite(safeFallback) || safeFallback <= 0) safeFallback = 1;
+      if (!Number.isFinite(num) || num <= 0) num = safeFallback;
+      if (Number.isFinite(lower) && lower > 0 && num < lower) num = lower;
+      if (Number.isFinite(upper) && upper > 0 && num > upper) num = upper;
+      return num;
+    }
+
+    function getXmindRequestPayloadLimit() {
+      var defaultSettings = config && config.defaultSettings ? config.defaultSettings : {};
+      var fallback = Number(config.defaultXmindRequestPayloadLimit)
+        || Number(defaultSettings.xmindRequestPayloadLimit)
+        || 4000000;
+      var raw = state && state.settings ? state.settings.xmindRequestPayloadLimit : null;
+      return clampPositiveInteger(
+        raw,
+        fallback,
+        Number(config.minXmindRequestPayloadLimit) || 500000,
+        Number(config.maxXmindRequestPayloadLimit) || 10000000
+      );
+    }
+
+    function buildXmindPayloadLimitError(payloadSize, payloadLimit) {
+      return new Error(
+        'XMind 请求体超出当前上限（约 '
+          + String(payloadSize)
+          + ' 字符，当前上限 '
+          + String(payloadLimit)
+          + '）。请在设置中提高 XMind 请求体上限后重试。'
+      );
+    }
+
     async function buildXmindGenerationTaskInput(contract, visibleContext, moduleEntry, options) {
       var opts = options || {};
       var prompt = buildXmindPrompt(contract);
@@ -7816,6 +7897,7 @@
       var contentBlocks = [];
       var degradedToTextOnly = false;
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
+      var requestPayloadLimit = getXmindRequestPayloadLimit();
 
       if (payload.images && payload.images.length) {
         if (!modelCanSeeImages && !payload.text) {
@@ -7825,11 +7907,11 @@
           var imageBlocks = await buildImageContentBlocks(payload.images, payload.mode === 'manual');
           if (imageBlocks.stats.sent > 0) {
             contentBlocks = [{ type: 'text', text: payload.text }].concat(imageBlocks.blocks || []);
-            if (estimateTaskContentBlocksSize(contentBlocks) > 1800000 && String(payload.text || '').trim()) {
-              degradedToTextOnly = true;
-            } else {
-              requestMode = 'content';
+            var payloadSize = estimateTaskContentBlocksSize(contentBlocks);
+            if (payloadSize > requestPayloadLimit) {
+              throw buildXmindPayloadLimitError(payloadSize, requestPayloadLimit);
             }
+            requestMode = 'content';
           }
         }
       }
@@ -8055,7 +8137,13 @@
       var rawMessage = err && err.message ? String(err.message) : '未知错误';
       var detailText = normalizeHistoryLongText(rawMessage, 2000);
       var reasonText = '模型调用出错，请稍后重试。';
-      if (/超时/.test(rawMessage)) {
+      if (/XMind 请求体超出当前上限/.test(rawMessage)) {
+        reasonText = rawMessage;
+      } else if (
+        /context length|maximum context|context window|maximum context length|max context|too many tokens|token limit|prompt too long|input is too long|request too large|payload too large|context_length_exceeded|maximum token|超出.*上下文|上下文.*超限|输入.*过长/i.test(rawMessage)
+      ) {
+        reasonText = '模型上下文超限，请在设置中提高知识库注入上限、目录送模上限或 XMind 请求体上限后重试。';
+      } else if (/超时/.test(rawMessage)) {
         reasonText = '模型响应超时，请稍后重试。';
       } else if (/503|service unavailable/i.test(rawMessage)) {
         reasonText = '模型服务暂时不可用，请稍后重试。';
@@ -9292,7 +9380,8 @@
       var selection = nodeMeta && Array.isArray(nodeMeta.selection) && nodeMeta.selection.length
         ? nodeMeta.selection
         : (nodeMeta ? [nodeMeta] : []);
-      var visibleContext = buildVisibleModuleContext();
+      var visibleContext = ensureVisibleModuleContext(buildVisibleModuleContext());
+      var visibleMap = visibleContext.map || {};
       var moduleTargets = {};
       var caseTargets = {};
 
@@ -9300,7 +9389,7 @@
         var meta = item && item.meta ? item.meta : null;
         if (!meta || !isDeleteNodeType(meta.type)) return;
         var moduleKey = String(meta.moduleKey || normalizeModuleKey(meta.moduleTitle || ''));
-        var moduleEntry = moduleKey ? visibleContext.map[moduleKey] : null;
+        var moduleEntry = moduleKey ? visibleMap[moduleKey] : null;
         var moduleTitle = normalizeModuleTitle(
           meta.moduleTitle
           || (moduleEntry && moduleEntry.title)
@@ -9867,8 +9956,9 @@
       }
       if (meta.type === 'root') return getRootActions();
       if (meta.type === 'module') {
-        var context = buildVisibleModuleContext();
-        return getModuleActions(context.map[meta.moduleKey]).concat([deleteAction]);
+        var context = ensureVisibleModuleContext(buildVisibleModuleContext());
+        var contextMap = context.map || {};
+        return getModuleActions(contextMap[meta.moduleKey]).concat([deleteAction]);
       }
       if (isDeleteNodeType(meta.type)) {
         return [deleteAction];
@@ -9881,8 +9971,9 @@
       if (!meta || meta.type !== 'module') return null;
       var actions = getNodeActions(nodeMeta);
       if (!actions.length) return null;
-      var context = buildVisibleModuleContext();
-      var entry = context.map[meta.moduleKey] || null;
+      var context = ensureVisibleModuleContext(buildVisibleModuleContext());
+      var contextMap = context.map || {};
+      var entry = contextMap[meta.moduleKey] || null;
       var preferredActionId = entry && Array.isArray(entry.aiCases) && entry.aiCases.length > 0
         ? MODULE_ACTIONS.APPEND
         : MODULE_ACTIONS.FULL_CASES;
@@ -10305,8 +10396,9 @@
     }
 
     function resolveModuleEntryByMeta(meta) {
-      var context = buildVisibleModuleContext();
-      return context.map[meta && meta.moduleKey ? meta.moduleKey : ''] || null;
+      var context = ensureVisibleModuleContext(buildVisibleModuleContext());
+      var contextMap = context.map || {};
+      return contextMap[meta && meta.moduleKey ? meta.moduleKey : ''] || null;
     }
 
     function ensurePrepReadyOrOpen() {
@@ -10360,6 +10452,8 @@
     }
 
     function applyRootOutput(actionId, modules, visibleContext, durationMs) {
+      visibleContext = ensureVisibleModuleContext(visibleContext);
+      var visibleMap = visibleContext.map || {};
       var createdModules = 0;
       var affectedModules = 0;
       var addedCases = 0;
@@ -10414,7 +10508,7 @@
       }
 
       (modules || []).forEach(function(item) {
-        var entryBefore = visibleContext.map[normalizeModuleKey(item.module)] || null;
+        var entryBefore = visibleMap[normalizeModuleKey(item.module)] || null;
         var existedBefore = Boolean(entryBefore && entryBefore.aiModule);
         var record = ensureAiModuleRecord(item.module, item);
         var moduleState = ensureModuleUiState(record.id);
@@ -10646,8 +10740,9 @@
     }
 
     function resolveTaskModuleEntry(task, visibleContext) {
-      var context = visibleContext && visibleContext.map ? visibleContext : buildVisibleModuleContext();
-      if (task && task.moduleKey && context.map[task.moduleKey]) return context.map[task.moduleKey];
+      var context = ensureVisibleModuleContext(visibleContext);
+      var contextMap = context.map || {};
+      if (task && task.moduleKey && contextMap[task.moduleKey]) return contextMap[task.moduleKey];
       if (task && task.moduleId) {
         var found = null;
         context.list.some(function(entry) {
@@ -11594,6 +11689,8 @@
       var visibleContext = rootState.hideAiLayer === true
         ? buildVisibleModuleContext({ includeAiLayer: false })
         : buildVisibleModuleContext();
+      visibleContext = ensureVisibleModuleContext(visibleContext);
+      var visibleMap = visibleContext.map || {};
       var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
       var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
       var modules = filtered.list;
@@ -11625,7 +11722,7 @@
         skeletonActionId = ROOT_ACTIONS.FULL_MODULES;
       } else if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES || actionId === ROOT_ACTIONS.APPEND_ALL) {
         newModules = modules.filter(function(item) {
-          return !visibleContext.map[normalizeModuleKey(item && item.module ? item.module : '')];
+          return !visibleMap[normalizeModuleKey(item && item.module ? item.module : '')];
         });
         skeletonModules = cloneModulesWithoutCases(newModules);
         skeletonActionId = ROOT_ACTIONS.TOPUP_MODULES;
@@ -11658,11 +11755,12 @@
         }
       });
 
-      var postContext = buildVisibleModuleContext();
+      var postContext = ensureVisibleModuleContext(buildVisibleModuleContext());
+      var postContextMap = postContext.map || {};
       var descriptors = existingDescriptors.slice();
       newModules.forEach(function(item) {
         var moduleKey = normalizeModuleKey(item && item.module ? item.module : '');
-        var resolvedEntry = moduleKey ? postContext.map[moduleKey] : null;
+        var resolvedEntry = moduleKey ? postContextMap[moduleKey] : null;
         if (!resolvedEntry) return;
         descriptors.push({
           moduleEntry: resolvedEntry,
@@ -11675,7 +11773,7 @@
       if (actionId === ROOT_ACTIONS.FULL_CASES) {
         descriptors = newModules.map(function(item) {
           var moduleKey = normalizeModuleKey(item && item.module ? item.module : '');
-          var resolvedEntry = moduleKey ? postContext.map[moduleKey] : null;
+          var resolvedEntry = moduleKey ? postContextMap[moduleKey] : null;
           if (!resolvedEntry) return null;
           return {
             moduleEntry: resolvedEntry,
@@ -12431,6 +12529,15 @@
             return completeModuleTaskError(task, null, { renderReason: 'module-task-error' });
           })
           .catch(function(err) {
+            if (typeof console !== 'undefined' && console && typeof console.error === 'function') {
+              console.error('XMind managed task consume failed', {
+                taskId: task && task.id ? String(task.id || '') : '',
+                scope: task && task.scope ? String(task.scope || '') : '',
+                actionId: task && task.actionId ? String(task.actionId || '') : '',
+                workspaceId: getTaskWorkspaceId(task),
+                error: err && err.stack ? String(err.stack || '') : String(err && err.message ? err.message : err || ''),
+              });
+            }
             if (task.scope === 'root') return completeRootTaskError(task, err, { renderReason: 'root-task-consume-error' });
             return completeModuleTaskError(task, err, { renderReason: 'module-task-consume-error' });
           });
@@ -12614,7 +12721,7 @@
 
     function buildRootPipelineTaskDescriptors(actionId, visibleContext) {
       var descriptors = [];
-      var context = visibleContext && visibleContext.list ? visibleContext : buildVisibleModuleContext();
+      var context = ensureVisibleModuleContext(visibleContext);
       if (actionId !== ROOT_ACTIONS.EXISTING_CASES && actionId !== ROOT_ACTIONS.APPEND_ALL) {
         return descriptors;
       }
@@ -12697,8 +12804,9 @@
       };
 
       try {
-        var visibleContext = buildVisibleModuleContext();
-        var resolvedEntry = visibleContext.map[moduleEntry.moduleKey] || moduleEntry;
+        var visibleContext = ensureVisibleModuleContext(buildVisibleModuleContext());
+        var visibleContextMap = visibleContext.map || {};
+        var resolvedEntry = visibleContextMap[moduleEntry.moduleKey] || moduleEntry;
         var contract = options.contractOverride || createOperationContract(actionId, resolvedEntry);
         var historyModuleTitle = normalizeModuleTitle(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : moduleEntry.title);
         moduleTaskMeta.contract = cloneJson(contract, {});

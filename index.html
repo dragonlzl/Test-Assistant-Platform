@@ -2718,6 +2718,32 @@ xmind用例生成进度
 <div class="settings-divider"></div>
 <div class="settings-inline">
 <div class="meta">
+<strong>知识库/XMind 上限设置</strong>
+<p>用于放宽 AI 目录检索、知识库上下文注入和 XMind 多模态请求体的本地上限。默认值已提高；若模型提示上下文或请求过大，可继续在这里调高。</p>
+</div>
+<div class="control">
+<label class="settings-field">
+<span>目录送模上限（字符）</span>
+<input id="knowledgeBaseCatalogCharLimitInput" type="number" min="20000" step="1000" placeholder="如：120000"/>
+</label>
+<label class="settings-field">
+<span>知识库注入上限（字符）</span>
+<input id="knowledgeBaseInjectedContextCharLimitInput" type="number" min="4000" step="1000" placeholder="如：24000"/>
+</label>
+<label class="settings-field">
+<span>XMind 请求体上限（字符）</span>
+<input id="xmindRequestPayloadLimitInput" type="number" min="500000" step="100000" placeholder="如：4000000"/>
+</label>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveKnowledgeBaseLimitSettings">保存知识库上限</button>
+</div>
+<p class="status" id="knowledgeBaseLimitSettingsStatus"></p>
+
+<div class="settings-divider"></div>
+<div class="settings-inline">
+<div class="meta">
 <strong>页面主题</strong>
 <p>选择页面配色主题，保存后生效并同步到账号。</p>
 </div>

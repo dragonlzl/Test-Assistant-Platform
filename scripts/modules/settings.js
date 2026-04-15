@@ -42,6 +42,16 @@
     var saveKnowledgeBaseBaseUrlBtn = dom.saveKnowledgeBaseBaseUrlBtn || document.getElementById('saveKnowledgeBaseBaseUrl');
     var validateKnowledgeBaseBaseUrlBtn = dom.validateKnowledgeBaseBaseUrlBtn || document.getElementById('validateKnowledgeBaseBaseUrl');
     var knowledgeBaseBaseUrlStatus = dom.knowledgeBaseBaseUrlStatus || document.getElementById('knowledgeBaseBaseUrlStatus');
+    var knowledgeBaseCatalogCharLimitInput = dom.knowledgeBaseCatalogCharLimitInput
+      || document.getElementById('knowledgeBaseCatalogCharLimitInput');
+    var knowledgeBaseInjectedContextCharLimitInput = dom.knowledgeBaseInjectedContextCharLimitInput
+      || document.getElementById('knowledgeBaseInjectedContextCharLimitInput');
+    var xmindRequestPayloadLimitInput = dom.xmindRequestPayloadLimitInput
+      || document.getElementById('xmindRequestPayloadLimitInput');
+    var saveKnowledgeBaseLimitSettingsBtn = dom.saveKnowledgeBaseLimitSettingsBtn
+      || document.getElementById('saveKnowledgeBaseLimitSettings');
+    var knowledgeBaseLimitSettingsStatus = dom.knowledgeBaseLimitSettingsStatus
+      || document.getElementById('knowledgeBaseLimitSettingsStatus');
     var tempExecColumnForm = dom.tempExecColumnForm || document.getElementById('tempExecColumnForm');
     var tempExecColumnStatus = dom.tempExecColumnStatus || document.getElementById('tempExecColumnStatus');
     var saveModelTimeoutBtn = dom.saveModelTimeoutBtn || document.getElementById('saveModelTimeout');
@@ -106,6 +116,20 @@
     var defaultKnowledgeBaseBaseUrl = defaultSettings && typeof defaultSettings.knowledgeBaseBaseUrl === 'string'
       ? String(defaultSettings.knowledgeBaseBaseUrl || '')
       : '';
+    var defaultKnowledgeBaseCatalogCharLimit = Number(config.defaultKnowledgeBaseCatalogCharLimit)
+      || (defaultSettings && defaultSettings.knowledgeBaseCatalogCharLimit ? Number(defaultSettings.knowledgeBaseCatalogCharLimit) : 120000);
+    var minKnowledgeBaseCatalogCharLimit = Number(config.minKnowledgeBaseCatalogCharLimit) || 20000;
+    var maxKnowledgeBaseCatalogCharLimit = Number(config.maxKnowledgeBaseCatalogCharLimit) || 2000000;
+    var defaultKnowledgeBaseInjectedContextCharLimit = Number(config.defaultKnowledgeBaseInjectedContextCharLimit)
+      || (defaultSettings && defaultSettings.knowledgeBaseInjectedContextCharLimit
+        ? Number(defaultSettings.knowledgeBaseInjectedContextCharLimit)
+        : 24000);
+    var minKnowledgeBaseInjectedContextCharLimit = Number(config.minKnowledgeBaseInjectedContextCharLimit) || 4000;
+    var maxKnowledgeBaseInjectedContextCharLimit = Number(config.maxKnowledgeBaseInjectedContextCharLimit) || 200000;
+    var defaultXmindRequestPayloadLimit = Number(config.defaultXmindRequestPayloadLimit)
+      || (defaultSettings && defaultSettings.xmindRequestPayloadLimit ? Number(defaultSettings.xmindRequestPayloadLimit) : 4000000);
+    var minXmindRequestPayloadLimit = Number(config.minXmindRequestPayloadLimit) || 500000;
+    var maxXmindRequestPayloadLimit = Number(config.maxXmindRequestPayloadLimit) || 10000000;
     var minCaseLibraryGenCoverageThreshold = 50;
     var maxCaseLibraryGenCoverageThreshold = 100;
     var defaultMissingReminderPlacement = defaultSettings && defaultSettings.missingCaseReminderPlacement
@@ -148,6 +172,7 @@
       feishuMention: false,
       caseAssistantProjectRoot: false,
       knowledgeBaseBaseUrl: false,
+      knowledgeBaseLimitSettings: false,
       tempExecColumns: false,
       tempExecPageSize: false,
       caseViewFontSize: false,
@@ -354,6 +379,45 @@
       return num;
     }
 
+    function clampKnowledgeBaseCatalogCharLimit(value) {
+      var num = Math.round(Number(value));
+      if (!Number.isFinite(num) || num <= 0) return defaultKnowledgeBaseCatalogCharLimit;
+      if (num < minKnowledgeBaseCatalogCharLimit) return minKnowledgeBaseCatalogCharLimit;
+      if (num > maxKnowledgeBaseCatalogCharLimit) return maxKnowledgeBaseCatalogCharLimit;
+      return num;
+    }
+
+    function clampKnowledgeBaseInjectedContextCharLimit(value) {
+      var num = Math.round(Number(value));
+      if (!Number.isFinite(num) || num <= 0) return defaultKnowledgeBaseInjectedContextCharLimit;
+      if (num < minKnowledgeBaseInjectedContextCharLimit) return minKnowledgeBaseInjectedContextCharLimit;
+      if (num > maxKnowledgeBaseInjectedContextCharLimit) return maxKnowledgeBaseInjectedContextCharLimit;
+      return num;
+    }
+
+    function clampXmindRequestPayloadLimit(value) {
+      var num = Math.round(Number(value));
+      if (!Number.isFinite(num) || num <= 0) return defaultXmindRequestPayloadLimit;
+      if (num < minXmindRequestPayloadLimit) return minXmindRequestPayloadLimit;
+      if (num > maxXmindRequestPayloadLimit) return maxXmindRequestPayloadLimit;
+      return num;
+    }
+
+    function normalizeKnowledgeBaseLimitSettings() {
+      if (!state.settings || typeof state.settings !== 'object') {
+        state.settings = Object.assign({}, defaultSettings);
+      }
+      state.settings.knowledgeBaseCatalogCharLimit = clampKnowledgeBaseCatalogCharLimit(
+        state.settings.knowledgeBaseCatalogCharLimit
+      );
+      state.settings.knowledgeBaseInjectedContextCharLimit = clampKnowledgeBaseInjectedContextCharLimit(
+        state.settings.knowledgeBaseInjectedContextCharLimit
+      );
+      state.settings.xmindRequestPayloadLimit = clampXmindRequestPayloadLimit(
+        state.settings.xmindRequestPayloadLimit
+      );
+    }
+
     function applyCaseViewFontSize(value) {
       if (typeof document === 'undefined' || !document.documentElement) return;
       var base = clampCaseViewFontSize(value);
@@ -414,6 +478,7 @@
         state.settings.knowledgeBaseBaseUrl = defaultKnowledgeBaseBaseUrl;
       }
       state.settings.knowledgeBaseBaseUrl = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
+      normalizeKnowledgeBaseLimitSettings();
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
       }
@@ -675,6 +740,7 @@
         state.settings.knowledgeBaseBaseUrl = defaultKnowledgeBaseBaseUrl;
       }
       state.settings.knowledgeBaseBaseUrl = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
+      normalizeKnowledgeBaseLimitSettings();
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
       }
@@ -810,6 +876,17 @@
         if (!dirtyDrafts.knowledgeBaseBaseUrl) {
           knowledgeBaseBaseUrlInput.value = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
         }
+      }
+      if (knowledgeBaseCatalogCharLimitInput && !dirtyDrafts.knowledgeBaseLimitSettings) {
+        knowledgeBaseCatalogCharLimitInput.value = state.settings.knowledgeBaseCatalogCharLimit || defaultKnowledgeBaseCatalogCharLimit || '';
+      }
+      if (knowledgeBaseInjectedContextCharLimitInput && !dirtyDrafts.knowledgeBaseLimitSettings) {
+        knowledgeBaseInjectedContextCharLimitInput.value = state.settings.knowledgeBaseInjectedContextCharLimit
+          || defaultKnowledgeBaseInjectedContextCharLimit
+          || '';
+      }
+      if (xmindRequestPayloadLimitInput && !dirtyDrafts.knowledgeBaseLimitSettings) {
+        xmindRequestPayloadLimitInput.value = state.settings.xmindRequestPayloadLimit || defaultXmindRequestPayloadLimit || '';
       }
       if (tempExecPageSizeInput) {
         if (!dirtyDrafts.tempExecPageSize) {
@@ -1299,6 +1376,51 @@
       }
     }
 
+    function saveKnowledgeBaseLimitSettings() {
+      var nextCatalogLimit = clampKnowledgeBaseCatalogCharLimit(
+        knowledgeBaseCatalogCharLimitInput ? knowledgeBaseCatalogCharLimitInput.value : state.settings.knowledgeBaseCatalogCharLimit
+      );
+      var nextInjectedLimit = clampKnowledgeBaseInjectedContextCharLimit(
+        knowledgeBaseInjectedContextCharLimitInput
+          ? knowledgeBaseInjectedContextCharLimitInput.value
+          : state.settings.knowledgeBaseInjectedContextCharLimit
+      );
+      var nextPayloadLimit = clampXmindRequestPayloadLimit(
+        xmindRequestPayloadLimitInput ? xmindRequestPayloadLimitInput.value : state.settings.xmindRequestPayloadLimit
+      );
+      var changed = false;
+      if (Number(state.settings.knowledgeBaseCatalogCharLimit || 0) !== nextCatalogLimit) changed = true;
+      if (Number(state.settings.knowledgeBaseInjectedContextCharLimit || 0) !== nextInjectedLimit) changed = true;
+      if (Number(state.settings.xmindRequestPayloadLimit || 0) !== nextPayloadLimit) changed = true;
+      state.settings.knowledgeBaseCatalogCharLimit = nextCatalogLimit;
+      state.settings.knowledgeBaseInjectedContextCharLimit = nextInjectedLimit;
+      state.settings.xmindRequestPayloadLimit = nextPayloadLimit;
+      if (knowledgeBaseCatalogCharLimitInput) knowledgeBaseCatalogCharLimitInput.value = nextCatalogLimit;
+      if (knowledgeBaseInjectedContextCharLimitInput) knowledgeBaseInjectedContextCharLimitInput.value = nextInjectedLimit;
+      if (xmindRequestPayloadLimitInput) xmindRequestPayloadLimitInput.value = nextPayloadLimit;
+      dirtyDrafts.knowledgeBaseLimitSettings = false;
+      persistSettings([
+        'knowledgeBaseCatalogCharLimit',
+        'knowledgeBaseInjectedContextCharLimit',
+        'xmindRequestPayloadLimit',
+      ]);
+      notifySettingsUpdated([
+        'knowledgeBaseCatalogCharLimit',
+        'knowledgeBaseInjectedContextCharLimit',
+        'xmindRequestPayloadLimit',
+      ]);
+      if (!knowledgeBaseLimitSettingsStatus) return;
+      if (!changed) {
+        setStatus(knowledgeBaseLimitSettingsStatus, '知识库/XMind 上限保持不变', 'ok');
+        return;
+      }
+      setStatus(
+        knowledgeBaseLimitSettingsStatus,
+        '上限已保存：目录送模 ' + nextCatalogLimit + '，知识库注入 ' + nextInjectedLimit + '，XMind 请求体 ' + nextPayloadLimit,
+        'ok'
+      );
+    }
+
     async function validateKnowledgeBaseBaseUrl() {
       if (!knowledgeBaseBaseUrlInput) return;
       var value = normalizeKnowledgeBaseBaseUrl(knowledgeBaseBaseUrlInput.value);
@@ -1762,6 +1884,27 @@
         dirtyDrafts.knowledgeBaseBaseUrl = true;
         setStatus(knowledgeBaseBaseUrlStatus, '', '');
       });
+      if (saveKnowledgeBaseLimitSettingsBtn) {
+        saveKnowledgeBaseLimitSettingsBtn.addEventListener('click', saveKnowledgeBaseLimitSettings);
+      }
+      if (knowledgeBaseCatalogCharLimitInput) {
+        knowledgeBaseCatalogCharLimitInput.addEventListener('input', function() {
+          dirtyDrafts.knowledgeBaseLimitSettings = true;
+          setStatus(knowledgeBaseLimitSettingsStatus, '', '');
+        });
+      }
+      if (knowledgeBaseInjectedContextCharLimitInput) {
+        knowledgeBaseInjectedContextCharLimitInput.addEventListener('input', function() {
+          dirtyDrafts.knowledgeBaseLimitSettings = true;
+          setStatus(knowledgeBaseLimitSettingsStatus, '', '');
+        });
+      }
+      if (xmindRequestPayloadLimitInput) {
+        xmindRequestPayloadLimitInput.addEventListener('input', function() {
+          dirtyDrafts.knowledgeBaseLimitSettings = true;
+          setStatus(knowledgeBaseLimitSettingsStatus, '', '');
+        });
+      }
       if (tempExecColumnForm) tempExecColumnForm.addEventListener('change', function() {
         saveTempExecColumnsSetting();
       });

@@ -41,6 +41,15 @@
   var defaultCaseViewFontSize = 13;
   var minCaseViewFontSize = 11;
   var maxCaseViewFontSize = 16;
+  var defaultKnowledgeBaseCatalogCharLimit = 120000;
+  var minKnowledgeBaseCatalogCharLimit = 20000;
+  var maxKnowledgeBaseCatalogCharLimit = 2000000;
+  var defaultKnowledgeBaseInjectedContextCharLimit = 24000;
+  var minKnowledgeBaseInjectedContextCharLimit = 4000;
+  var maxKnowledgeBaseInjectedContextCharLimit = 200000;
+  var defaultXmindRequestPayloadLimit = 4000000;
+  var minXmindRequestPayloadLimit = 500000;
+  var maxXmindRequestPayloadLimit = 10000000;
 
   var defaultPageGuideSwitches = {
     auto: true,
@@ -60,6 +69,9 @@
     feishuMention: '',
     caseAssistantProjectRoot: '',
     knowledgeBaseBaseUrl: '',
+    knowledgeBaseCatalogCharLimit: defaultKnowledgeBaseCatalogCharLimit,
+    knowledgeBaseInjectedContextCharLimit: defaultKnowledgeBaseInjectedContextCharLimit,
+    xmindRequestPayloadLimit: defaultXmindRequestPayloadLimit,
     theme: 'light',
     caseViewFontSize: defaultCaseViewFontSize,
     missingCaseReminderPlacement: 'top',
@@ -143,6 +155,15 @@
     defaultCaseViewFontSize: defaultCaseViewFontSize,
     minCaseViewFontSize: minCaseViewFontSize,
     maxCaseViewFontSize: maxCaseViewFontSize,
+    defaultKnowledgeBaseCatalogCharLimit: defaultKnowledgeBaseCatalogCharLimit,
+    minKnowledgeBaseCatalogCharLimit: minKnowledgeBaseCatalogCharLimit,
+    maxKnowledgeBaseCatalogCharLimit: maxKnowledgeBaseCatalogCharLimit,
+    defaultKnowledgeBaseInjectedContextCharLimit: defaultKnowledgeBaseInjectedContextCharLimit,
+    minKnowledgeBaseInjectedContextCharLimit: minKnowledgeBaseInjectedContextCharLimit,
+    maxKnowledgeBaseInjectedContextCharLimit: maxKnowledgeBaseInjectedContextCharLimit,
+    defaultXmindRequestPayloadLimit: defaultXmindRequestPayloadLimit,
+    minXmindRequestPayloadLimit: minXmindRequestPayloadLimit,
+    maxXmindRequestPayloadLimit: maxXmindRequestPayloadLimit,
     moduleFieldAliases: {
       title: ['module', 'name', 'title', '模块', '模块名称'],
       scenarios: ['key_scenarios', '测试场景', '关键场景'],

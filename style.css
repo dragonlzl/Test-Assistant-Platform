@@ -9146,7 +9146,20 @@ tr.import-invalid-locate-active td {
       min-width: 180px;
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
+    }
+    .settings-inline .control .settings-field {
+      flex: 1 1 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 180px;
+    }
+    .settings-inline .control .settings-field span {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
     }
     .settings-inline .control input,
     .settings-inline .control select {
