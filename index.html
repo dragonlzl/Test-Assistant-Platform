@@ -1734,6 +1734,8 @@ xmind用例生成进度
           <div class="xmind-casegen-actions">
             <button class="secondary" id="xmindCaseGenSummaryBtn" type="button" aria-expanded="false" title="打开生成前置准备">生成前置准备</button>
             <button class="secondary" id="xmindCaseGenHistoryBtn" type="button" aria-expanded="false" title="查看生成记录">生成记录</button>
+            <button class="secondary" id="xmindCaseGenKnowledgeRuleBtn" type="button" aria-expanded="false" title="查看当前页签规则检索状态">规则检索：未启用</button>
+            <button class="secondary" id="xmindCaseGenKnowledgeAiBtn" type="button" aria-expanded="false" title="查看当前页签 AI 筛选状态">AI筛选：未启用</button>
             <button class="secondary" id="xmindCaseGenStoreBtn" type="button" title="保存当前生成结果到用例库">保存入库</button>
             <button class="secondary" id="xmindCaseGenInterruptBtn" type="button" title="中断当前 XMind 生成任务" disabled>中断生成</button>
             <button class="secondary" id="xmindCaseGenDeleteUndoBtn" type="button" title="撤回最近一次删除" disabled>撤回删除</button>
@@ -2696,6 +2698,22 @@ xmind用例生成进度
 <button class="secondary" id="saveCaseAssistantProjectRoot">保存项目路径</button>
 </div>
 <p class="status" id="caseAssistantProjectRootStatus"></p>
+
+<div class="settings-divider"></div>
+<div class="settings-inline">
+<div class="meta">
+<strong>共享知识库地址</strong>
+<p>可选配置。保存后，XMind 用例生成会在每次生成前执行规则检索、AI 精筛，并把最终结果作为知识库上下文注入。示例：`http://192.168.50.10:8003/sk/`。</p>
+</div>
+<div class="control">
+<input id="knowledgeBaseBaseUrlInput" type="text" placeholder="如：http://192.168.50.10:8003/sk/"/>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveKnowledgeBaseBaseUrl">保存知识库地址</button>
+<button class="secondary" id="validateKnowledgeBaseBaseUrl">校验地址</button>
+</div>
+<p class="status" id="knowledgeBaseBaseUrlStatus"></p>
 
 <div class="settings-divider"></div>
 <div class="settings-inline">
@@ -4148,6 +4166,7 @@ xmind用例生成进度
 <script src="./scripts/core/casegenCore.js" defer></script>
 <script src="./scripts/modules/casegenProgress.js" defer></script>
 <script src="./scripts/modules/memoPad.js" defer></script>
+<script src="./scripts/modules/xmindKnowledgeBase.js" defer></script>
 <script src="./scripts/handlers/layoutHandlers.js" defer></script>
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>

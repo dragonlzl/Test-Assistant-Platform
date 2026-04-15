@@ -1168,6 +1168,16 @@
 
       function compactTaskCaseGenModules(modules) {
         return (Array.isArray(modules) ? modules : []).map(function(item) {
+          if (item && item.title) {
+            return {
+              id: item.id ? String(item.id || '') : '',
+              title: String(item.title || ''),
+              scenarios: Array.isArray(item.scenarios) ? cloneJson(item.scenarios, []) : [],
+              points: Array.isArray(item.points) ? cloneJson(item.points, []) : [],
+              coupled: Array.isArray(item.coupled) ? cloneJson(item.coupled, []) : [],
+              special: Array.isArray(item.special) ? cloneJson(item.special, []) : [],
+            };
+          }
           return {
             module: item && item.module ? String(item.module || '') : '',
             key_scenarios: Array.isArray(item && item.key_scenarios) ? cloneJson(item.key_scenarios, []) : [],
@@ -1176,7 +1186,7 @@
             cases: [],
           };
         }).filter(function(item) {
-          return Boolean(item && item.module);
+          return Boolean(item && (item.module || item.title));
         });
       }
 
@@ -1205,10 +1215,61 @@
         };
       }
 
-      function compactTaskRestoreContext(restoreContext) {
+      function collectTaskRestoreSnapshotIds(task, restoreContext) {
+        var ids = {};
+        var directSnapshotId = task && task.snapshotId ? String(task.snapshotId || '') : '';
+        if (directSnapshotId) ids[directSnapshotId] = true;
+        var pipeline = restoreContext && restoreContext.rootPipeline && typeof restoreContext.rootPipeline === 'object'
+          ? restoreContext.rootPipeline
+          : null;
+        var pipelineSnapshotId = pipeline && pipeline.snapshotId ? String(pipeline.snapshotId || '') : '';
+        if (pipelineSnapshotId) ids[pipelineSnapshotId] = true;
+        if (Object.keys(ids).length) return ids;
+        var list = Array.isArray(restoreContext && restoreContext.operationSnapshots)
+          ? restoreContext.operationSnapshots
+          : [];
+        var latest = list.length ? list[list.length - 1] : null;
+        if (latest && latest.id) {
+          ids[String(latest.id || '')] = true;
+        }
+        return ids;
+      }
+
+      function compactTaskOperationSnapshots(list, task, restoreContext) {
+        var sourceList = Array.isArray(list) ? list : [];
+        if (!sourceList.length) return [];
+        var keepIds = collectTaskRestoreSnapshotIds(task, restoreContext);
+        var filtered = sourceList.filter(function(item) {
+          if (!item || !item.id) return false;
+          if (!Object.keys(keepIds).length) return true;
+          return keepIds[String(item.id || '')] === true;
+        });
+        if (!filtered.length && sourceList.length) {
+          filtered = [sourceList[sourceList.length - 1]];
+        }
+        return filtered.map(function(item) {
+          if (!item || typeof item !== 'object') return null;
+          return {
+            id: String(item.id || ''),
+            scope: item.scope === 'module' ? 'module' : 'root',
+            moduleId: item.moduleId ? String(item.moduleId || '') : '',
+            caseGenModules: cloneJson(item.caseGenModules, []),
+            caseGenResults: cloneJson(item.caseGenResults, {}),
+            caseSelections: cloneJson(item.caseSelections, {}),
+            caseGenSuggestions: cloneJson(item.caseGenSuggestions, {}),
+            caseGenModuleStatus: cloneJson(item.caseGenModuleStatus, {}),
+            caseGenProgress: cloneJson(item.caseGenProgress, {}),
+            caseGenTiming: cloneJson(item.caseGenTiming, {}),
+            caseGenSource: String(item.caseGenSource || ''),
+            createdAt: Number(item.createdAt || 0),
+          };
+        }).filter(Boolean);
+      }
+
+      function compactTaskRestoreContext(restoreContext, task) {
         var source = restoreContext && typeof restoreContext === 'object' ? restoreContext : null;
         if (!source) return null;
-        return {
+        var next = {
           workspaceId: String(source.workspaceId || ''),
           requirementLabel: String(source.requirementLabel || ''),
           requirementLabelSource: String(source.requirementLabelSource || ''),
@@ -1219,20 +1280,24 @@
           prep: cloneJson(source.prep, {}),
           viewState: cloneJson(source.viewState, {}),
         };
+        var operationSnapshots = compactTaskOperationSnapshots(source.operationSnapshots, task, source);
+        if (operationSnapshots.length) {
+          next.operationSnapshots = operationSnapshots;
+          next.nextSnapshotId = Number(source.nextSnapshotId || 1) || 1;
+        }
+        return next;
       }
 
-      function isTaskTerminalStatus(status) {
-        var value = status === null || status === undefined ? '' : String(status || '');
-        return value === 'done' || value === 'error' || value === 'cancelled';
-      }
-
-      function buildPersistableTask(task) {
+      function buildPersistableTask(task, options) {
+        var opts = options && typeof options === 'object' ? options : {};
         var snapshot = task && typeof task === 'object' ? cloneJson(task, null) : null;
         if (!snapshot) return null;
         if (snapshot.model) snapshot.model = normalizeModelSnapshot(snapshot.model);
         if (snapshot.requestMode !== 'content') snapshot.contentBlocks = [];
         if (snapshot.restoreContext && typeof snapshot.restoreContext === 'object') {
-          snapshot.restoreContext = compactTaskRestoreContext(snapshot.restoreContext);
+          snapshot.restoreContext = opts.compactRestoreContext === true
+            ? compactTaskRestoreContext(snapshot.restoreContext, snapshot)
+            : cloneJson(snapshot.restoreContext, {});
         } else {
           delete snapshot.restoreContext;
         }
@@ -1260,10 +1325,13 @@
         return snapshot;
       }
 
-      function serializeTasksForStorage(tasks) {
-        var persistableList = (Array.isArray(tasks) ? tasks : []).map(function(item) {
-          return buildPersistableTask(item);
+      function buildPersistableTaskList(tasks, options) {
+        return (Array.isArray(tasks) ? tasks : []).map(function(item) {
+          return buildPersistableTask(item, options);
         }).filter(Boolean);
+      }
+
+      function serializeTaskList(persistableList) {
         if (!persistableList.length) {
           return {
             ok: true,
@@ -1288,6 +1356,25 @@
             reason: 'serialize-failed',
           };
         }
+      }
+
+      function isTaskTerminalStatus(status) {
+        var value = status === null || status === undefined ? '' : String(status || '');
+        return value === 'done' || value === 'error' || value === 'cancelled';
+      }
+
+      function serializeTasksForStorage(tasks) {
+        var persistableList = buildPersistableTaskList(tasks, {
+          compactRestoreContext: false,
+        });
+        var serialized = serializeTaskList(persistableList);
+        if (serialized.ok === true || serialized.reason === 'serialize-failed') {
+          return serialized;
+        }
+        var compactList = buildPersistableTaskList(tasks, {
+          compactRestoreContext: true,
+        });
+        return serializeTaskList(compactList);
       }
 
       function readTasks() {

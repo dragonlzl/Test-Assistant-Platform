@@ -514,6 +514,22 @@ xmind用例生成进度
 <div class="settings-divider"></div>
 <div class="settings-inline">
 <div class="meta">
+<strong>共享知识库地址</strong>
+<p>可选配置。保存后，XMind 用例生成会在每次生成前执行规则检索、AI 精筛，并把最终结果作为知识库上下文注入。示例：`http://192.168.50.10:8003/sk/`。</p>
+</div>
+<div class="control">
+<input id="knowledgeBaseBaseUrlInput" type="text" placeholder="如：http://192.168.50.10:8003/sk/"/>
+</div>
+</div>
+<div class="actions">
+<button class="secondary" id="saveKnowledgeBaseBaseUrl">保存知识库地址</button>
+<button class="secondary" id="validateKnowledgeBaseBaseUrl">校验地址</button>
+</div>
+<p class="status" id="knowledgeBaseBaseUrlStatus"></p>
+
+<div class="settings-divider"></div>
+<div class="settings-inline">
+<div class="meta">
 <strong>用例库生成用例覆盖度阈值</strong>
 <p>设置用例库 AI 生成用例的覆盖度阈值，范围 50-100，默认 90。</p>
 </div>

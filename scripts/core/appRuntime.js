@@ -2317,6 +2317,7 @@
       workflowRestoring = true;
       restoreWorkflowState();
       markRuntimeStage('workflow-restored');
+      ensureXmindCasegenModule();
       function resolveInitialTab() {
         var defaultTab = 'auto';
         try {
@@ -2550,6 +2551,13 @@
       xmindCoreApi: window.app.xmindCoreApi || null,
       mindElixirCoreApi: window.app.mindElixirCoreApi || null,
       casesCoreApi: window.app.casesCoreApi || null,
+      xmindKnowledgeBaseApi: window.app.xmindKnowledgeBase && typeof window.app.xmindKnowledgeBase.init === 'function'
+        ? window.app.xmindKnowledgeBase.init({
+          state: state,
+          apiClient: window.app.apiClient || null,
+          escapeHtml: escapeHtml,
+        })
+        : null,
     };
     const autoContext = {
       state: state,
@@ -2621,11 +2629,17 @@
     if (window.app.casesgen && typeof window.app.casesgen.init === 'function') {
       window.app.casesgen.init(moduleContext);
     }
+    function ensureXmindCasegenModule() {
+      if (xmindCasegenModule) return xmindCasegenModule;
+      if (!window.app.xmindCasegen || typeof window.app.xmindCasegen.init !== 'function') {
+        return null;
+      }
+      xmindCasegenModule = window.app.xmindCasegen.init(moduleContext) || null;
+      return xmindCasegenModule;
+    }
+
     preclearOversizeWorkflowSnapshotBeforeModuleInit();
     preclearOversizeXmindTaskStorageBeforeModuleInit();
-    if (window.app.xmindCasegen && typeof window.app.xmindCasegen.init === 'function') {
-      xmindCasegenModule = window.app.xmindCasegen.init(moduleContext) || null;
-    }
     if (window.app.tempexec && typeof window.app.tempexec.init === 'function') {
       window.app.tempexec.init(moduleContext);
     }

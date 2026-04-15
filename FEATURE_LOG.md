@@ -19,6 +19,59 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 共享知识库上下文接入与页签隔离
+- 功能描述：为 `XMind 用例生成` 接入可选的共享知识库能力。用户在“通用设置”保存合法的知识库地址后，系统会按“整份需求 + 当前 workspace”先走一次后端代理规则检索，再复用当前 XMind 生成模型执行 AI 精筛，只把最终筛选出的知识块注入后续生成上下文；同一 workspace 下的模块生成、补全、重生成功能都会复用这份筛选结果，不再按模块重复检索或重复 AI 筛选；同时将规则检索状态、AI 筛选状态、筛选结果、是否实际注入、弹窗内容全部按 workspace 隔离，避免不同 XMind 页签之间互相串写。
+- 操作方式：
+  - 在“设置 -> 通用设置”中填写并保存共享知识库地址，可选点击“校验地址”确认可用性；
+  - 进入“用例生成 -> XMind 用例生成”，完成前置准备后发起“生成全量用例 / 生成全量模块 / 模块补全”等动作；
+  - 生成过程中可通过工具栏的 `规则检索`、`AI筛选` 查看当前页签状态，点击后弹窗查看最终筛选内容；
+  - 若本轮成功注入知识库，上方前置准备弹窗的 `step1-step2-step3` 行后方会显示绿色 `已使用知识库` 标识。
+- 使用效果：
+  - 未配置知识库地址时，XMind 生成保持原流程不变；
+  - 已配置且校验可用时，会先按整份需求执行一次“规则检索 -> AI 精筛 -> 上下文注入”，同页签后续模块生成/补全会直接复用该结果；
+  - AI 精筛失败或超时时，本轮会继续生成，但跳过知识库注入，不点亮绿色标识；
+  - 当前活动页签的工具栏状态、弹窗内容、绿色标识只读取该页签自己的知识库快照，双页签并发生成不会串结果。
+- 新增内容/接口/组件：
+  - 用户设置键：`knowledgeBaseBaseUrl`；
+  - 后端新增接口：`POST /api/knowledge-base/validate`、`POST /api/knowledge-base/search`；
+  - 后端新增知识库代理服务与缓存：规范化 URL、拉取 manifest/index/doc、规则检索、候选片段返回；
+  - 前端新增 `xmindKnowledgeBase` 辅助模块：知识库状态归一化、规则检索/AI 精筛编排、上下文注入文本组装、结果弹窗渲染；
+  - XMind 页签快照新增 `knowledgeBase` workspace 级状态，并接入工具栏状态按钮、结果弹窗、前置准备绿色标识；
+  - 新增知识库辅助工具 `scripts/knowledge_base_tool.py`，支持 `validate` 与 `rebuild`；
+  - 新增自动化用例：`tests/api/knowledge_base.spec.js`、`tests/ui/xmind_knowledge_base.spec.js`。
+- 复用说明：复用现有用户设置持久化、XMind 生成模型配置、XMind 生成任务链路、现有总结弹窗与 workspace 快照机制；新增后端知识库服务与前端知识库辅助模块，是因为跨域限制要求共享知识库必须经后端代理，且 workspace 隔离状态不适合继续堆入原有重型 XMind 主模块。
+- 测试与验证：
+  - `node --check scripts/modules/settings.js scripts/modules/xmindCasegen.js scripts/core/appRuntime.js tests/api/knowledge_base.spec.js tests/ui/xmind_knowledge_base.spec.js`（通过）
+  - `python3 -m py_compile scripts/knowledge_base_tool.py backend/knowledge_base_service.py backend/routers/knowledge_base.py`（通过）
+  - `python3 scripts/knowledge_base_tool.py validate --path '/Users/linzhenlong/work/元气骑士知识库'`（通过；当前知识库结构可直接使用，存在 1 条告警：`kb-manifest` 文档数 `80` 与索引文档数 `89` 不一致）
+  - `API_BASE_URL=http://127.0.0.1:8081 npm run test:api -- tests/api/knowledge_base.spec.js`（通过，6/6）
+  - `npm run test:ui -- tests/ui/xmind_knowledge_base.spec.js`（通过，2/2）
+- 更新记录：
+  - 2026-04-15 首次接入共享知识库能力，完成设置入口、后端代理检索、XMind 规则检索/AI 精筛/上下文注入、工具栏状态展示、弹窗查看、绿色使用标识，以及严格的 workspace 级隔离回归。
+  - 2026-04-15 修复共享知识库中文目录/文件名读取失败：后端读取 `_llm/docs/...` 文档时统一对 URL 路径做百分号编码，解决 `ascii codec can't encode characters` 导致的“规则检索失败”；补充中文 `clean_path` 的 API 回归并验证通过。
+  - 2026-04-15 将知识库检索范围收敛为“整份需求 / 单个 workspace 一次检索一次 AI 筛选”，后续模块重生成、追加生成和补全都会复用同一份筛选结果；若上一轮筛选失败，则下一次生成会重新尝试，不会把失败状态永久复用。
+
+- 功能名称：XMind 双页签刷新恢复无响应补充修复
+- 功能描述：修复 `XMind 用例生成` 在已有两个已生成页签时刷新页面，恢复链路会在首帧渲染完成后同步回放旧的画布 transform/anchor，导致主线程长时间阻塞、页面看起来无响应的问题。本次调整把 `render-success` 之后的视口恢复统一收敛到异步 restore 调度器，不再在首帧同步修改画布位置，让刷新恢复与跨 workspace 视口接力都等待布局稳定后再执行。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 中准备两个已生成完成的页签；
+  - 保持其中一个页签处于打开态，直接刷新页面；
+  - 页面恢复后继续查看当前页签或切换到另一个页签。
+- 使用效果：
+  - 刷新恢复不再在 `render-success` 后立刻同步改写画布 transform；
+  - 两个已生成页签的恢复流程会先完成首帧渲染，再异步恢复视口，避免刷新后页面假死；
+  - 既有的视口保持、全屏恢复和跨 workspace 视口接力逻辑继续复用原有 restore 调度器，不额外新增持久化结构。
+- 新增内容/接口/组件：
+  - `xmindCasegen`：移除 `render()` 成功后的同步 `applyCurrentMindViewState/applyCurrentMindAnchorState` 路径，统一改为异步 `scheduleWorkspaceViewRestore`；
+  - `xmindCasegen`：补充注释，明确刷新恢复必须等待首帧布局稳定后再回放视口；
+  - `tests/ui/xmind_casegen_flow.spec.js`：保留并复用现有“页面刷新后恢复视图状态”“两个已生成页签刷新后保留结果”的回归覆盖，同时清理本轮排查时临时加入的调试探针。
+- 复用说明：复用既有 `scheduleWorkspaceViewRestore`、workspace 视口快照、刷新恢复回归场景和 deferred restore 链路；未新增后端接口，也未新增新的本地缓存键。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js scripts/modules/app.js scripts/core/appRuntime.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `APP_DB_FILE=apitest.db npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "页面刷新后保持在 XMind 用例生成页面，并恢复抽屉、全屏、缩放、位置与已记录折叠状态"`（未完成：当前桌面沙箱环境启动 Chromium/Chrome 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段退出）
+  - 未涉及后端接口或接口契约，本次未新增/调整 API 自动化。
+- 更新记录：2026-04-15 将 XMind 刷新恢复后的视口回放从同步 DOM 改位收敛为异步 restore 调度，补修“双页签已生成后刷新页面无响应”的刷新链路，并清理本轮排查临时探针。
+
 - 功能名称：XMind 生成页签数量上限收敛为 2
 - 功能描述：将 `XMind 用例生成` 的生成页签上限从 5 个收敛为 2 个，避免继续堆积过多并发 workspace，降低页签切换、后台恢复和本地缓存体积的复杂度；同时把上限提示文案统一改为读取页签上限常量，避免后续再次调整时遗漏按钮 title 或告警提示。
 - 操作方式：

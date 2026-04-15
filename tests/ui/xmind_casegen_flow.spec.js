@@ -1892,6 +1892,18 @@ async function getContextMenuItems(page) {
 
 async function clickContextMenuAction(page, label) {
   const actionLabel = String(label || '').trim();
+  const clickedDirectly = await page.evaluate((text) => {
+    var buttons = document.querySelectorAll('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn');
+    for (var i = 0; i < buttons.length; i += 1) {
+      var btn = buttons[i];
+      if (String(btn.textContent || '').trim() !== String(text || '').trim()) continue;
+      if (btn.disabled === true) return false;
+      btn.click();
+      return true;
+    }
+    return false;
+  }, actionLabel);
+  if (clickedDirectly) return;
   const button = page.locator('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn', {
     hasText: actionLabel,
   }).first();
@@ -6173,7 +6185,6 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(beforeReload.drawerFullscreen).toBe(true);
     expect(beforeReload.transform).not.toBe('');
     expect(parseMindTransformText(beforeReload.transform || '').scale).toBeGreaterThan(beforeZoomTransform.scale);
-
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
     await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
@@ -9239,7 +9250,6 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(String(page.url())).toContain('ai-workflow.html');
     expect(String(page.url())).toContain('tab=casesgen');
     expect(String(workflowUrl)).toContain('ai-workflow.html');
-
     await openNodeContextMenu(page, 'XMind后台恢复需求');
     const rootItemsAfterRefresh = await getContextMenuItems(page);
     expect(rootItemsAfterRefresh.find((item) => item.label === '放弃本次生成').disabled).toBe(false);

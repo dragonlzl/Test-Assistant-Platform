@@ -843,6 +843,22 @@
     });
   }
 
+  function validateKnowledgeBase(payload) {
+    return fetch('/api/knowledge-base/validate', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function searchKnowledgeBase(payload) {
+    return fetch('/api/knowledge-base/search', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
   function listFeatureAssignments(scope, ownerId) {
     var query = [];
     if (scope) query.push('scope=' + encodeURIComponent(scope));
@@ -1033,6 +1049,8 @@
     createModelConfig: createModelConfig,
     updateModelConfig: updateModelConfig,
     proxyModelRequest: proxyModelRequest,
+    validateKnowledgeBase: validateKnowledgeBase,
+    searchKnowledgeBase: searchKnowledgeBase,
     listFeatureAssignments: listFeatureAssignments,
     createFeatureAssignment: createFeatureAssignment,
     updateFeatureAssignment: updateFeatureAssignment,

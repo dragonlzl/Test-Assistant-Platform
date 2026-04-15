@@ -14544,3 +14544,246 @@ button.exec-overview-file-chip,
   filter: invert(1) brightness(1.1);
   opacity: 0.8;
 }
+.xmind-casegen-prep-stepper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.xmind-casegen-kb-used-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(34,197,94,0.24);
+  background: rgba(240,253,244,0.98);
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.xmind-casegen-kb-used-badge-inline {
+  flex: 0 0 auto;
+}
+.xmind-casegen-inline-btn[data-kb-stage-status="pending"] {
+  border-color: rgba(37,99,235,0.26);
+  background: rgba(219,234,254,0.9);
+  color: #1d4ed8;
+}
+.xmind-casegen-inline-btn[data-kb-stage-status="done"] {
+  border-color: rgba(34,197,94,0.28);
+  background: rgba(240,253,244,0.96);
+  color: #15803d;
+}
+.xmind-casegen-inline-btn[data-kb-stage-status="skipped"] {
+  border-color: rgba(148,163,184,0.28);
+  background: rgba(248,250,252,0.9);
+  color: var(--muted);
+}
+.xmind-casegen-inline-btn[data-kb-stage-status="failed"] {
+  border-color: rgba(239,68,68,0.28);
+  background: rgba(254,242,242,0.98);
+  color: #b91c1c;
+}
+.xmind-casegen-kb-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.xmind-casegen-kb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  flex-wrap: wrap;
+}
+.xmind-casegen-kb-head-meta {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.xmind-casegen-kb-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.xmind-casegen-kb-stage-card,
+.xmind-casegen-kb-result-card {
+  border-radius: 16px;
+  border: 1px solid rgba(148,163,184,0.22);
+  background: linear-gradient(135deg, rgba(248,250,252,0.94), rgba(255,255,255,0.98));
+}
+.xmind-casegen-kb-stage-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+}
+.xmind-casegen-kb-stage-card-head,
+.xmind-casegen-kb-section-head,
+.xmind-casegen-kb-result-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.xmind-casegen-kb-stage-title,
+.xmind-casegen-kb-section-title,
+.xmind-casegen-kb-result-title {
+  color: var(--text);
+}
+.xmind-casegen-kb-stage-title,
+.xmind-casegen-kb-section-title {
+  font-size: 14px;
+  line-height: 1.45;
+}
+.xmind-casegen-kb-stage-meta,
+.xmind-casegen-kb-section-desc,
+.xmind-casegen-kb-result-meta {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.xmind-casegen-kb-stage-reason,
+.xmind-casegen-kb-result-reason {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.xmind-casegen-kb-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.xmind-casegen-kb-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.xmind-casegen-kb-result-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+.xmind-casegen-kb-result-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.xmind-casegen-kb-result-title {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+.xmind-casegen-kb-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.xmind-casegen-kb-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.xmind-casegen-kb-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(37,99,235,0.18);
+  background: rgba(239,246,255,0.96);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+.xmind-casegen-kb-result-snippet {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(248,250,252,0.88);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.xmind-casegen-kb-empty,
+.xmind-casegen-kb-warning-item {
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.xmind-casegen-kb-empty {
+  border: 1px dashed rgba(148,163,184,0.28);
+  background: rgba(248,250,252,0.8);
+  color: var(--muted);
+  text-align: center;
+}
+.xmind-casegen-kb-warning-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.xmind-casegen-kb-warning-item {
+  border: 1px solid rgba(249,115,22,0.24);
+  background: rgba(255,247,237,0.96);
+  color: #9a3412;
+}
+@media (max-width: 820px) {
+  .xmind-casegen-kb-stage-grid {
+    grid-template-columns: 1fr;
+  }
+}
+:root[data-theme="dark"] .xmind-casegen-kb-used-badge {
+  border-color: rgba(74,222,128,0.28);
+  background: rgba(20,83,45,0.42);
+  color: #86efac;
+}
+:root[data-theme="dark"] .xmind-casegen-inline-btn[data-kb-stage-status="pending"] {
+  border-color: rgba(96,165,250,0.34);
+  background: rgba(30,64,175,0.22);
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .xmind-casegen-inline-btn[data-kb-stage-status="done"] {
+  border-color: rgba(74,222,128,0.32);
+  background: rgba(20,83,45,0.34);
+  color: #86efac;
+}
+:root[data-theme="dark"] .xmind-casegen-inline-btn[data-kb-stage-status="skipped"] {
+  border-color: rgba(71,85,105,0.72);
+  background: rgba(30,41,59,0.84);
+  color: rgba(203,213,225,0.78);
+}
+:root[data-theme="dark"] .xmind-casegen-inline-btn[data-kb-stage-status="failed"] {
+  border-color: rgba(248,113,113,0.34);
+  background: rgba(127,29,29,0.28);
+  color: #fecaca;
+}
+:root[data-theme="dark"] .xmind-casegen-kb-stage-card,
+:root[data-theme="dark"] .xmind-casegen-kb-result-card {
+  border-color: rgba(71,85,105,0.72);
+  background: linear-gradient(135deg, rgba(15,23,42,0.94), rgba(30,41,59,0.94));
+}
+:root[data-theme="dark"] .xmind-casegen-kb-result-snippet,
+:root[data-theme="dark"] .xmind-casegen-kb-empty {
+  background: rgba(15,23,42,0.74);
+}
+:root[data-theme="dark"] .xmind-casegen-kb-empty {
+  border-color: rgba(71,85,105,0.62);
+}
+:root[data-theme="dark"] .xmind-casegen-kb-chip {
+  border-color: rgba(96,165,250,0.26);
+  background: rgba(30,64,175,0.22);
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .xmind-casegen-kb-warning-item {
+  border-color: rgba(251,146,60,0.34);
+  background: rgba(124,45,18,0.32);
+  color: #fed7aa;
+}

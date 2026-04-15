@@ -670,6 +670,93 @@ class ModelProxyRequest(BaseModel):
     timeout_sec: Optional[int] = 60
 
 
+class KnowledgeBaseManifestSummary(BaseModel):
+    generated_at: Optional[str] = None
+    docs_dir: Optional[str] = None
+    index_path: Optional[str] = None
+    doc_count: int = 0
+    entry_count: int = 0
+    manifest_doc_count: int = 0
+    indexed_doc_count: int = 0
+
+
+class KnowledgeBaseIssueItem(BaseModel):
+    path: str = ""
+    detail: str = ""
+
+
+class KnowledgeBaseManifestExample(BaseModel):
+    title: str = ""
+    relative_path: str = ""
+
+
+class KnowledgeBaseValidateRequest(BaseModel):
+    base_url: str
+    timeout_sec: Optional[int] = 15
+    force_refresh: bool = False
+    deep_check: bool = True
+
+
+class KnowledgeBaseValidateResponse(BaseModel):
+    ok: bool = False
+    base_url: str = ""
+    normalized_base_url: str = ""
+    manifest: KnowledgeBaseManifestSummary = Field(default_factory=KnowledgeBaseManifestSummary)
+    checked_doc_count: int = 0
+    missing_files: List[KnowledgeBaseIssueItem] = Field(default_factory=list)
+    invalid_paths: List[KnowledgeBaseIssueItem] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    manifest_examples: List[KnowledgeBaseManifestExample] = Field(default_factory=list)
+    lookup_size: int = 0
+
+
+class KnowledgeBaseCandidateOut(BaseModel):
+    candidate_id: str
+    doc_id: str
+    module: str = ""
+    title: str = ""
+    heading: str = ""
+    summary: str = ""
+    snippet: str = ""
+    clean_path: str = ""
+    relative_path: str = ""
+    source_url: str = ""
+    chunk_index: int = 0
+    score: float = 0
+    matched_terms: List[str] = Field(default_factory=list)
+    document_excerpt: str = ""
+
+
+class KnowledgeBaseSearchRequest(BaseModel):
+    base_url: str
+    workspace_id: Optional[str] = None
+    request_id: Optional[str] = None
+    timeout_sec: Optional[int] = 15
+    force_refresh: bool = False
+    max_candidates: Optional[int] = 12
+    requirement_label: Optional[str] = None
+    requirement_text: Optional[str] = None
+    requirement_supplement: Optional[str] = None
+    requirement_mode: Optional[str] = None
+    operation_type: Optional[str] = None
+    target_module: Optional[str] = None
+    visible_modules: Optional[List[Any]] = None
+    visible_cases: Optional[List[Any]] = None
+    operation_contract: Optional[Any] = None
+
+
+class KnowledgeBaseSearchResponse(BaseModel):
+    base_url: str = ""
+    normalized_base_url: str = ""
+    workspace_id: str = ""
+    request_id: str = ""
+    query_summary: str = ""
+    manifest: KnowledgeBaseManifestSummary = Field(default_factory=KnowledgeBaseManifestSummary)
+    candidates: List[KnowledgeBaseCandidateOut] = Field(default_factory=list)
+    candidate_count: int = 0
+    warnings: List[str] = Field(default_factory=list)
+
+
 class ModelConfigOut(ModelConfigBase):
     id: int
     owner_id: Optional[int]

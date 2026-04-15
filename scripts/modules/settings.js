@@ -38,6 +38,10 @@
     var caseAssistantProjectRootInput = dom.caseAssistantProjectRootInput || document.getElementById('caseAssistantProjectRootInput');
     var saveCaseAssistantProjectRootBtn = dom.saveCaseAssistantProjectRootBtn || document.getElementById('saveCaseAssistantProjectRoot');
     var caseAssistantProjectRootStatus = dom.caseAssistantProjectRootStatus || document.getElementById('caseAssistantProjectRootStatus');
+    var knowledgeBaseBaseUrlInput = dom.knowledgeBaseBaseUrlInput || document.getElementById('knowledgeBaseBaseUrlInput');
+    var saveKnowledgeBaseBaseUrlBtn = dom.saveKnowledgeBaseBaseUrlBtn || document.getElementById('saveKnowledgeBaseBaseUrl');
+    var validateKnowledgeBaseBaseUrlBtn = dom.validateKnowledgeBaseBaseUrlBtn || document.getElementById('validateKnowledgeBaseBaseUrl');
+    var knowledgeBaseBaseUrlStatus = dom.knowledgeBaseBaseUrlStatus || document.getElementById('knowledgeBaseBaseUrlStatus');
     var tempExecColumnForm = dom.tempExecColumnForm || document.getElementById('tempExecColumnForm');
     var tempExecColumnStatus = dom.tempExecColumnStatus || document.getElementById('tempExecColumnStatus');
     var saveModelTimeoutBtn = dom.saveModelTimeoutBtn || document.getElementById('saveModelTimeout');
@@ -99,6 +103,9 @@
     var defaultCaseAssistantProjectRoot = defaultSettings && typeof defaultSettings.caseAssistantProjectRoot === 'string'
       ? String(defaultSettings.caseAssistantProjectRoot || '')
       : '';
+    var defaultKnowledgeBaseBaseUrl = defaultSettings && typeof defaultSettings.knowledgeBaseBaseUrl === 'string'
+      ? String(defaultSettings.knowledgeBaseBaseUrl || '')
+      : '';
     var minCaseLibraryGenCoverageThreshold = 50;
     var maxCaseLibraryGenCoverageThreshold = 100;
     var defaultMissingReminderPlacement = defaultSettings && defaultSettings.missingCaseReminderPlacement
@@ -140,6 +147,7 @@
       feishuWebhook: false,
       feishuMention: false,
       caseAssistantProjectRoot: false,
+      knowledgeBaseBaseUrl: false,
       tempExecColumns: false,
       tempExecPageSize: false,
       caseViewFontSize: false,
@@ -280,6 +288,24 @@
       return String(value).trim();
     }
 
+    function normalizeKnowledgeBaseBaseUrl(value) {
+      if (value === undefined || value === null) return '';
+      var text = String(value).trim();
+      if (!text) return '';
+      text = text.replace(/[?#].*$/, '');
+      if (/^https?:\/\//i.test(text) && text.charAt(text.length - 1) !== '/') {
+        text += '/';
+      }
+      return text;
+    }
+
+    function isLikelyKnowledgeBaseUrl(value) {
+      var text = normalizeKnowledgeBaseBaseUrl(value);
+      if (!text) return false;
+      if (text.indexOf('\0') !== -1) return false;
+      return /^https?:\/\/[^/\s?#]+(?:\/[^\s?#]*)?$/i.test(text);
+    }
+
     function isLikelyAbsoluteDirectoryPath(value) {
       var text = normalizeCaseAssistantProjectRoot(value);
       if (!text) return false;
@@ -384,6 +410,10 @@
         state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
       }
       state.settings.caseAssistantProjectRoot = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
+      if (state.settings.knowledgeBaseBaseUrl === undefined || state.settings.knowledgeBaseBaseUrl === null) {
+        state.settings.knowledgeBaseBaseUrl = defaultKnowledgeBaseBaseUrl;
+      }
+      state.settings.knowledgeBaseBaseUrl = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
       }
@@ -641,6 +671,10 @@
         state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
       }
       state.settings.caseAssistantProjectRoot = normalizeCaseAssistantProjectRoot(state.settings.caseAssistantProjectRoot);
+      if (state.settings.knowledgeBaseBaseUrl === undefined || state.settings.knowledgeBaseBaseUrl === null) {
+        state.settings.knowledgeBaseBaseUrl = defaultKnowledgeBaseBaseUrl;
+      }
+      state.settings.knowledgeBaseBaseUrl = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
       if (state.settings.tempExecColumns && typeof state.settings.tempExecColumns === 'object') {
         state.settings.tempExecColumns = Object.assign({}, defaultTempExecColumns, state.settings.tempExecColumns);
       }
@@ -771,6 +805,11 @@
       }
       if (caseAssistantProjectRootStatus) {
         setStatus(caseAssistantProjectRootStatus, '', '');
+      }
+      if (knowledgeBaseBaseUrlInput) {
+        if (!dirtyDrafts.knowledgeBaseBaseUrl) {
+          knowledgeBaseBaseUrlInput.value = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
+        }
       }
       if (tempExecPageSizeInput) {
         if (!dirtyDrafts.tempExecPageSize) {
@@ -1233,6 +1272,91 @@
       }
     }
 
+    function saveKnowledgeBaseBaseUrl() {
+      if (!knowledgeBaseBaseUrlInput) return;
+      var value = normalizeKnowledgeBaseBaseUrl(knowledgeBaseBaseUrlInput.value);
+      var prev = normalizeKnowledgeBaseBaseUrl(state.settings.knowledgeBaseBaseUrl);
+      knowledgeBaseBaseUrlInput.value = value;
+      if (value && !isLikelyKnowledgeBaseUrl(value)) {
+        if (knowledgeBaseBaseUrlStatus) {
+          setStatus(knowledgeBaseBaseUrlStatus, '请输入合法的共享知识库地址，例如 http://192.168.50.10:8003/sk/', 'warn');
+        }
+        return;
+      }
+      state.settings.knowledgeBaseBaseUrl = value;
+      dirtyDrafts.knowledgeBaseBaseUrl = false;
+      persistSettings(['knowledgeBaseBaseUrl']);
+      notifySettingsUpdated(['knowledgeBaseBaseUrl']);
+      if (!knowledgeBaseBaseUrlStatus) return;
+      if (!value) {
+        setStatus(knowledgeBaseBaseUrlStatus, '已关闭共享知识库，后续生成将直接走原链路', 'ok');
+        return;
+      }
+      if (prev === value) {
+        setStatus(knowledgeBaseBaseUrlStatus, '知识库地址保持不变', 'ok');
+      } else {
+        setStatus(knowledgeBaseBaseUrlStatus, '知识库地址已保存，可继续点击“校验地址”确认可用性', 'ok');
+      }
+    }
+
+    async function validateKnowledgeBaseBaseUrl() {
+      if (!knowledgeBaseBaseUrlInput) return;
+      var value = normalizeKnowledgeBaseBaseUrl(knowledgeBaseBaseUrlInput.value);
+      knowledgeBaseBaseUrlInput.value = value;
+      if (!value) {
+        if (knowledgeBaseBaseUrlStatus) {
+          setStatus(knowledgeBaseBaseUrlStatus, '请先填写共享知识库地址', 'warn');
+        }
+        return;
+      }
+      if (!isLikelyKnowledgeBaseUrl(value)) {
+        if (knowledgeBaseBaseUrlStatus) {
+          setStatus(knowledgeBaseBaseUrlStatus, '地址格式不正确，请检查协议、IP 和目录路径', 'warn');
+        }
+        return;
+      }
+      if (!api || typeof api.validateKnowledgeBase !== 'function') {
+        if (knowledgeBaseBaseUrlStatus) {
+          setStatus(knowledgeBaseBaseUrlStatus, '知识库校验接口不可用，请刷新页面后重试', 'err');
+        }
+        return;
+      }
+      if (knowledgeBaseBaseUrlStatus) {
+        setStatus(knowledgeBaseBaseUrlStatus, '正在校验共享知识库地址...', '');
+      }
+      try {
+        var result = await api.validateKnowledgeBase({
+          base_url: value,
+          timeout_sec: clampTimeoutSeconds(state.settings.timeoutSec),
+          deep_check: true,
+        });
+        var manifest = result && result.manifest && typeof result.manifest === 'object'
+          ? result.manifest
+          : {};
+        var docCount = Number(manifest.doc_count || 0);
+        var entryCount = Number(manifest.entry_count || 0);
+        var warnings = Array.isArray(result && result.warnings) ? result.warnings : [];
+        var summary = '校验成功';
+        if (docCount > 0 || entryCount > 0) {
+          summary += '：文档 ' + String(docCount) + ' 份，索引 ' + String(entryCount) + ' 条';
+        }
+        if (warnings.length) {
+          summary += '；存在告警：' + String(warnings[0] || '');
+        }
+        if (knowledgeBaseBaseUrlStatus) {
+          setStatus(knowledgeBaseBaseUrlStatus, summary, warnings.length ? 'warn' : 'ok');
+        }
+      } catch (err) {
+        if (knowledgeBaseBaseUrlStatus) {
+          setStatus(
+            knowledgeBaseBaseUrlStatus,
+            '校验失败：' + (err && err.message ? err.message : '共享知识库不可用'),
+            'err'
+          );
+        }
+      }
+    }
+
     async function testFeishuWebhookConfig() {
       if (!feishuWebhookStatus) return;
       var value = applyFeishuInput();
@@ -1630,6 +1754,14 @@
         dirtyDrafts.caseAssistantProjectRoot = true;
         setStatus(caseAssistantProjectRootStatus, '', '');
       });
+      if (saveKnowledgeBaseBaseUrlBtn) saveKnowledgeBaseBaseUrlBtn.addEventListener('click', saveKnowledgeBaseBaseUrl);
+      if (validateKnowledgeBaseBaseUrlBtn) {
+        validateKnowledgeBaseBaseUrlBtn.addEventListener('click', validateKnowledgeBaseBaseUrl);
+      }
+      if (knowledgeBaseBaseUrlInput) knowledgeBaseBaseUrlInput.addEventListener('input', function() {
+        dirtyDrafts.knowledgeBaseBaseUrl = true;
+        setStatus(knowledgeBaseBaseUrlStatus, '', '');
+      });
       if (tempExecColumnForm) tempExecColumnForm.addEventListener('change', function() {
         saveTempExecColumnsSetting();
       });
@@ -1709,6 +1841,8 @@
       saveTimeoutSetting: saveTimeoutSetting,
       saveFeishuWebhookConfig: saveFeishuWebhookConfig,
       saveCaseAssistantProjectRoot: saveCaseAssistantProjectRoot,
+      saveKnowledgeBaseBaseUrl: saveKnowledgeBaseBaseUrl,
+      validateKnowledgeBaseBaseUrl: validateKnowledgeBaseBaseUrl,
       testFeishuWebhookConfig: testFeishuWebhookConfig,
       saveTempExecColumnsSetting: saveTempExecColumnsSetting,
       getFeishuWebhookUrl: getFeishuWebhookUrl,

@@ -7,6 +7,7 @@
     var casesGenApi = ctx.casesGenApi || {};
     var prepApi = ctx.prepApi || {};
     var xmindGenApi = ctx.xmindGenApi || {};
+    var xmindKnowledgeBaseApi = ctx.xmindKnowledgeBaseApi || {};
 
     var debounce = utils.debounce || function(fn) { return fn; };
     var showCenterToast = typeof utils.showCenterToast === 'function'
@@ -66,6 +67,8 @@
     var toolbarEl = document.getElementById('xmindCaseGenToolbar');
     var summaryBtn = document.getElementById('xmindCaseGenSummaryBtn');
     var historyBtn = document.getElementById('xmindCaseGenHistoryBtn');
+    var knowledgeRuleBtn = document.getElementById('xmindCaseGenKnowledgeRuleBtn');
+    var knowledgeAiBtn = document.getElementById('xmindCaseGenKnowledgeAiBtn');
     var storeBtn = document.getElementById('xmindCaseGenStoreBtn');
     var interruptBtn = document.getElementById('xmindCaseGenInterruptBtn');
     var deleteUndoBtn = document.getElementById('xmindCaseGenDeleteUndoBtn');
@@ -135,6 +138,8 @@
     var pendingOpenInstant = false;
     var pendingDrawerOpenWorkspaceId = '';
     var drawerOpenedViaDomRestore = false;
+    var knowledgeBasePipelinePromiseMap = {};
+    var knowledgeBaseActionResultMap = {};
     var pendingDrawerFullscreenRestore = false;
     var restoreDrawerOpenInFlight = false;
     var drawerLegacyRestoreSnapshot = null;
@@ -641,6 +646,283 @@
       notifyInlineStatus(text, type || '');
     }
 
+    function createFallbackKnowledgeBaseState() {
+      return {
+        baseUrl: '',
+        enabled: false,
+        workspaceId: '',
+        queryKey: '',
+        latestRequestId: '',
+        lastOperation: '',
+        validation: {
+          status: 'disabled',
+          normalizedBaseUrl: '',
+          checkedAt: 0,
+          docCount: 0,
+          entryCount: 0,
+          error: '',
+        },
+        ruleSearch: {
+          status: 'disabled',
+          requestId: '',
+          startedAt: 0,
+          finishedAt: 0,
+          durationMs: 0,
+          reason: '',
+          error: '',
+          candidateCount: 0,
+          selectedCount: 0,
+        },
+        aiFilter: {
+          status: 'disabled',
+          requestId: '',
+          startedAt: 0,
+          finishedAt: 0,
+          durationMs: 0,
+          reason: '',
+          error: '',
+          candidateCount: 0,
+          selectedCount: 0,
+        },
+        candidates: [],
+        selectedItems: [],
+        usedInLatestGeneration: false,
+        injectedContextText: '',
+        latestError: '',
+        warnings: [],
+        updatedAt: 0,
+      };
+    }
+
+    function createDefaultKnowledgeBaseState() {
+      if (xmindKnowledgeBaseApi && typeof xmindKnowledgeBaseApi.createDefaultState === 'function') {
+        return xmindKnowledgeBaseApi.createDefaultState();
+      }
+      return createFallbackKnowledgeBaseState();
+    }
+
+    function normalizeKnowledgeBaseBaseUrl(value) {
+      if (xmindKnowledgeBaseApi && typeof xmindKnowledgeBaseApi.normalizeBaseUrl === 'function') {
+        return xmindKnowledgeBaseApi.normalizeBaseUrl(value);
+      }
+      var text = value === null || value === undefined ? '' : String(value || '').trim();
+      if (!text) return '';
+      text = text.replace(/[?#].*$/, '');
+      if (/^https?:\/\//i.test(text) && text.charAt(text.length - 1) !== '/') {
+        text += '/';
+      }
+      return text;
+    }
+
+    function normalizeKnowledgeBaseState(value) {
+      if (xmindKnowledgeBaseApi && typeof xmindKnowledgeBaseApi.normalizeState === 'function') {
+        return xmindKnowledgeBaseApi.normalizeState(value);
+      }
+      var source = value && typeof value === 'object' ? value : {};
+      var next = createFallbackKnowledgeBaseState();
+      Object.keys(next).forEach(function(key) {
+        if (!Object.prototype.hasOwnProperty.call(source, key)) return;
+        next[key] = cloneJson(source[key], next[key]);
+      });
+      next.baseUrl = normalizeKnowledgeBaseBaseUrl(source.baseUrl || source.base_url || next.baseUrl);
+      next.enabled = source.enabled === true || Boolean(next.baseUrl);
+      next.workspaceId = source.workspaceId ? String(source.workspaceId || '') : '';
+      next.queryKey = source.queryKey ? String(source.queryKey || '') : '';
+      next.latestRequestId = source.latestRequestId ? String(source.latestRequestId || '') : '';
+      next.lastOperation = source.lastOperation ? String(source.lastOperation || '') : '';
+      next.usedInLatestGeneration = source.usedInLatestGeneration === true;
+      next.injectedContextText = source.injectedContextText ? String(source.injectedContextText || '') : '';
+      next.latestError = source.latestError ? String(source.latestError || '') : '';
+      next.updatedAt = Number(source.updatedAt || 0);
+      if (!Number.isFinite(next.updatedAt) || next.updatedAt < 0) next.updatedAt = 0;
+      return next;
+    }
+
+    function getKnowledgeBaseStageLabel(status) {
+      if (xmindKnowledgeBaseApi && typeof xmindKnowledgeBaseApi.getStageLabel === 'function') {
+        return xmindKnowledgeBaseApi.getStageLabel(status);
+      }
+      var stable = status === null || status === undefined ? '' : String(status || '').trim();
+      if (stable === 'pending') return '进行中';
+      if (stable === 'done') return '已完成';
+      if (stable === 'skipped') return '已跳过';
+      if (stable === 'failed') return '失败';
+      return '未启用';
+    }
+
+    function ensureKnowledgeBaseStateOnSnapshot(xmindSnapshot) {
+      if (!xmindSnapshot || typeof xmindSnapshot !== 'object') return createDefaultKnowledgeBaseState();
+      xmindSnapshot.knowledgeBase = normalizeKnowledgeBaseState(xmindSnapshot.knowledgeBase);
+      return xmindSnapshot.knowledgeBase;
+    }
+
+    function ensureKnowledgeBaseStateOnRecord(record) {
+      if (!record || typeof record !== 'object') return createDefaultKnowledgeBaseState();
+      if (!record.snapshot || typeof record.snapshot !== 'object') {
+        record.snapshot = createWorkspaceSnapshot();
+      }
+      if (!record.snapshot.xmind || typeof record.snapshot.xmind !== 'object') {
+        record.snapshot.xmind = createInitialXmindState();
+      }
+      return ensureKnowledgeBaseStateOnSnapshot(record.snapshot.xmind);
+    }
+
+    function getKnowledgeBaseRequestId(stateValue) {
+      var kbState = normalizeKnowledgeBaseState(stateValue);
+      if (kbState.latestRequestId) return String(kbState.latestRequestId || '');
+      if (kbState.aiFilter && kbState.aiFilter.requestId) return String(kbState.aiFilter.requestId || '');
+      if (kbState.ruleSearch && kbState.ruleSearch.requestId) return String(kbState.ruleSearch.requestId || '');
+      return '';
+    }
+
+    function shouldAcceptKnowledgeBaseState(currentState, incomingState) {
+      var currentId = getKnowledgeBaseRequestId(currentState);
+      var incomingId = getKnowledgeBaseRequestId(incomingState);
+      if (!incomingId) return true;
+      if (!currentId) return true;
+      if (currentId === incomingId) return true;
+      if (
+        incomingState
+        && incomingState.ruleSearch
+        && String(incomingState.ruleSearch.status || '') === 'pending'
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    function getCurrentKnowledgeBaseBaseUrl() {
+      var raw = state && state.settings && typeof state.settings.knowledgeBaseBaseUrl === 'string'
+        ? state.settings.knowledgeBaseBaseUrl
+        : '';
+      return normalizeKnowledgeBaseBaseUrl(raw);
+    }
+
+    function getActiveKnowledgeBaseState() {
+      return ensureKnowledgeBaseStateOnSnapshot(ensureState());
+    }
+
+    function getWorkspaceKnowledgeBaseState(workspaceId) {
+      var stableId = String(workspaceId || getActiveWorkspaceId() || '');
+      if (!stableId) return normalizeKnowledgeBaseState(createDefaultKnowledgeBaseState());
+      if (stableId === String(getActiveWorkspaceId() || '')) {
+        return getActiveKnowledgeBaseState();
+      }
+      var record = getWorkspaceRecord(stableId);
+      return ensureKnowledgeBaseStateOnRecord(record);
+    }
+
+    function syncKnowledgeBaseToolbarButton(button, title, stageStatus, reasonText) {
+      if (!button) return;
+      var stableStatus = stageStatus ? String(stageStatus || '') : 'disabled';
+      var label = getKnowledgeBaseStageLabel(stableStatus);
+      button.textContent = title + '：' + label;
+      button.setAttribute('data-kb-stage-status', stableStatus);
+      button.title = reasonText
+        ? (title + '状态：' + label + '。' + reasonText)
+        : (title + '状态：' + label);
+    }
+
+    function syncKnowledgeBaseToolbarState() {
+      var kbState = getActiveKnowledgeBaseState();
+      var ruleStage = kbState && kbState.ruleSearch && kbState.ruleSearch.status
+        ? String(kbState.ruleSearch.status || '')
+        : 'disabled';
+      var aiStage = kbState && kbState.aiFilter && kbState.aiFilter.status
+        ? String(kbState.aiFilter.status || '')
+        : 'disabled';
+      syncKnowledgeBaseToolbarButton(
+        knowledgeRuleBtn,
+        '规则检索',
+        ruleStage,
+        kbState && kbState.ruleSearch ? (kbState.ruleSearch.reason || kbState.ruleSearch.error || '') : ''
+      );
+      syncKnowledgeBaseToolbarButton(
+        knowledgeAiBtn,
+        'AI筛选',
+        aiStage,
+        kbState && kbState.aiFilter ? (kbState.aiFilter.reason || kbState.aiFilter.error || '') : ''
+      );
+    }
+
+    function setWorkspaceKnowledgeBaseState(workspaceId, nextValue, options) {
+      var stableId = String(workspaceId || getActiveWorkspaceId() || '');
+      if (!stableId) return false;
+      var opts = options || {};
+      var normalized = normalizeKnowledgeBaseState(nextValue);
+      var record = getWorkspaceRecord(stableId);
+      if (!record) return false;
+      var currentState = ensureKnowledgeBaseStateOnRecord(record);
+      if (opts.force !== true && !shouldAcceptKnowledgeBaseState(currentState, normalized)) {
+        return false;
+      }
+      record.snapshot.xmind.knowledgeBase = normalized;
+      record.updatedAt = Date.now();
+      if (stableId === String(getActiveWorkspaceId() || '')) {
+        ensureState().knowledgeBase = normalizeKnowledgeBaseState(normalized);
+        syncKnowledgeBaseToolbarState();
+        if (summaryDialogOpen === true) {
+          renderOpenedSummaryDialog();
+        }
+      }
+      if (workspaceShadowDepth <= 0 && opts.skipPersist !== true) {
+        persistWorkflowState();
+      }
+      return true;
+    }
+
+    function renderKnowledgeBaseDialog() {
+      if (!summaryDialogBodyEl) return;
+      if (xmindKnowledgeBaseApi && typeof xmindKnowledgeBaseApi.renderDialogHtml === 'function') {
+        summaryDialogBodyEl.innerHTML = xmindKnowledgeBaseApi.renderDialogHtml(getActiveKnowledgeBaseState());
+        return;
+      }
+      summaryDialogBodyEl.innerHTML = '<div class="xmind-casegen-kb-empty">当前知识库结果暂不可展示，请刷新页面后重试。</div>';
+    }
+
+    function openKnowledgeBaseDialog() {
+      if (!hasActiveWorkspace()) {
+        notifyFloatingStatus('请先新建生成页签', 'warn', 2500);
+        return;
+      }
+      hideOpenMindContextMenu();
+      summaryDialogMode = 'knowledge-base';
+      summaryDialogOpen = true;
+      applySummaryDialogState();
+    }
+
+    function buildKnowledgeBaseSkipState(workspaceId, contract, reason) {
+      var baseUrl = getCurrentKnowledgeBaseBaseUrl();
+      var stageStatus = baseUrl ? 'skipped' : 'disabled';
+      return normalizeKnowledgeBaseState({
+        baseUrl: baseUrl,
+        enabled: Boolean(baseUrl),
+        workspaceId: String(workspaceId || ''),
+        queryKey: '',
+        latestRequestId: '',
+        lastOperation: contract && contract.mode ? String(contract.mode || '') : '',
+        validation: {
+          status: baseUrl ? 'disabled' : 'disabled',
+          normalizedBaseUrl: baseUrl,
+        },
+        ruleSearch: {
+          status: stageStatus,
+          reason: reason || (baseUrl ? '本轮未执行知识库检索' : '未启用知识库'),
+        },
+        aiFilter: {
+          status: stageStatus,
+          reason: reason || (baseUrl ? '本轮未执行知识库检索' : '未启用知识库'),
+        },
+        candidates: [],
+        selectedItems: [],
+        usedInLatestGeneration: false,
+        injectedContextText: '',
+        latestError: '',
+        warnings: [],
+        updatedAt: Date.now(),
+      });
+    }
+
     function syncCasesGenPageRender(options) {
       var opts = options || {};
       if (!casesGenApi || typeof casesGenApi.renderCaseGeneration !== 'function') return false;
@@ -786,6 +1068,8 @@
       return [
         summaryBtn,
         historyBtn,
+        knowledgeRuleBtn,
+        knowledgeAiBtn,
         storeBtn,
         interruptBtn,
         deleteUndoBtn,
@@ -1062,11 +1346,12 @@
       var controlsRoot = getMindControlsRoot();
       var primaryHost = getInlinePrimaryHost();
       var historyGroup = getInlineGroupHost('history');
+      var knowledgeGroup = getInlineGroupHost('knowledge');
       var persistenceGroup = getInlineGroupHost('result');
       var deleteGroup = getInlineGroupHost('delete-history');
       var taskGroup = getInlineGroupHost('task');
       var statusHost = getInlineStatusHost();
-      if (!controlsRoot || !primaryHost || !historyGroup || !persistenceGroup || !deleteGroup || !taskGroup) {
+      if (!controlsRoot || !primaryHost || !historyGroup || !knowledgeGroup || !persistenceGroup || !deleteGroup || !taskGroup) {
         return false;
       }
       controlsRoot.classList.add('xmind-casegen-inline-controls-ready');
@@ -1080,6 +1365,14 @@
       if (historyBtn && historyGroup.appendChild) {
         applyInlineButtonStyle(historyBtn);
         historyGroup.appendChild(historyBtn);
+      }
+      if (knowledgeRuleBtn && knowledgeGroup.appendChild) {
+        applyInlineButtonStyle(knowledgeRuleBtn);
+        knowledgeGroup.appendChild(knowledgeRuleBtn);
+      }
+      if (knowledgeAiBtn && knowledgeGroup.appendChild) {
+        applyInlineButtonStyle(knowledgeAiBtn);
+        knowledgeGroup.appendChild(knowledgeAiBtn);
       }
       if (storeBtn && persistenceGroup.appendChild) {
         applyInlineButtonStyle(storeBtn, 'xmind-casegen-inline-btn-success');
@@ -1107,6 +1400,7 @@
       }
       syncDeleteHistoryButtons();
       syncInterruptButton();
+      syncKnowledgeBaseToolbarState();
       syncInlineModelPicker();
       return true;
     }
@@ -1408,10 +1702,15 @@
             if (openWorkspaceId) {
               setMirrorWorkspaceSelection(openWorkspaceId);
             }
-            if (openWorkspaceId && openWorkspaceId !== String(getActiveWorkspaceId() || '')) {
-              hydrateWorkspaceSnapshot(openWorkspaceId, { keepDrawerOpen: true });
-            } else {
-              hydrateActiveWorkspaceSnapshot({ keepDrawerOpen: true });
+            var targetWorkspaceId = openWorkspaceId || String(getActiveWorkspaceId() || '');
+            var shouldSkipSnapshotHydrate = restoreOpening === true
+              && hasManagedTaskRestoreContextForWorkspace(targetWorkspaceId);
+            if (!shouldSkipSnapshotHydrate) {
+              if (openWorkspaceId && openWorkspaceId !== String(getActiveWorkspaceId() || '')) {
+                hydrateWorkspaceSnapshot(openWorkspaceId, { keepDrawerOpen: true });
+              } else {
+                hydrateActiveWorkspaceSnapshot({ keepDrawerOpen: true });
+              }
             }
           } catch (errHydrate) {
             setDebugState({
@@ -1444,6 +1743,16 @@
             if (drawerOpenRenderTimer) {
               clearTimeout(drawerOpenRenderTimer);
               drawerOpenRenderTimer = 0;
+            }
+            if (restoreOpening === true) {
+              setDebugState({ phase: 'drawer-open-render-inline' });
+              render({
+                reason: 'drawer-open-restore-inline',
+                persist: false,
+                centerRootAfterRender: shouldCenterRootAfterOpen,
+                skipRestorableViewState: shouldCenterRootAfterOpen,
+              });
+              return;
             }
             drawerOpenRenderTimer = setTimeout(function() {
               drawerOpenRenderTimer = 0;
@@ -1485,10 +1794,11 @@
           nextWorkspaceSeq: 1,
           mode: 'modules',
           treeSourceSignature: '',
-          hasModuleSkeleton: false,
-          hasImportedBaseline: false,
-          openButtonDotVisible: false,
-          viewState: createDefaultViewState(),
+        hasModuleSkeleton: false,
+        hasImportedBaseline: false,
+        openButtonDotVisible: false,
+        knowledgeBase: createDefaultKnowledgeBaseState(),
+        viewState: createDefaultViewState(),
           history: [],
           operationSnapshots: [],
           lastOperationSnapshotId: '',
@@ -1550,6 +1860,7 @@
       state.xmindCaseGen.inlineStatusText = String(state.xmindCaseGen.inlineStatusText || '');
       state.xmindCaseGen.inlineStatusType = normalizeInlineStatusType(state.xmindCaseGen.inlineStatusType || '');
       state.xmindCaseGen.openButtonDotVisible = state.xmindCaseGen.openButtonDotVisible === true;
+      state.xmindCaseGen.knowledgeBase = normalizeKnowledgeBaseState(state.xmindCaseGen.knowledgeBase);
       state.xmindCaseGen.workspaceOrder = state.xmindCaseGen.workspaceOrder.map(function(item) {
         return String(item || '').trim();
       }).filter(Boolean);
@@ -2184,6 +2495,7 @@
         inlineStatusText: '',
         inlineStatusType: '',
         openButtonDotVisible: false,
+        knowledgeBase: createDefaultKnowledgeBaseState(),
         viewState: nextViewState,
         history: [],
         operationSnapshots: [],
@@ -2390,6 +2702,7 @@
       var xmindSnapshot = source.xmind && typeof source.xmind === 'object'
         ? cloneJson(source.xmind, createInitialXmindState())
         : createInitialXmindState();
+      xmindSnapshot.knowledgeBase = normalizeKnowledgeBaseState(xmindSnapshot.knowledgeBase);
       if (!xmindSnapshot.viewState || typeof xmindSnapshot.viewState !== 'object') {
         xmindSnapshot.viewState = createDefaultViewState();
       }
@@ -2735,6 +3048,7 @@
           : false;
       }
       syncInlineStatusFromState();
+      syncKnowledgeBaseToolbarState();
       return true;
     }
 
@@ -4937,8 +5251,15 @@
       if (summaryDialogMode === 'prep') {
         syncSummaryDraftIntoState();
       }
-      if (summaryDialogMode === 'history') renderHistoryDialog();
-      else renderPrepDialog();
+      if (summaryDialogMode === 'history') {
+        renderHistoryDialog();
+        return;
+      }
+      if (summaryDialogMode === 'knowledge-base') {
+        renderKnowledgeBaseDialog();
+        return;
+      }
+      renderPrepDialog();
     }
 
     function syncPrepDialogState() {
@@ -5132,12 +5453,14 @@
       var prep = getPrepState();
       var requirementDone = hasRequirementReady();
       var casesDone = requirementDone && hasCaseStepReady();
+      var kbState = getActiveKnowledgeBaseState();
       var steps = [
         { step: STEP_REQUIREMENT, label: '需求导入', shortLabel: 'step1', done: requirementDone },
         { step: STEP_CASES, label: '是否导入用例', shortLabel: 'step2', done: casesDone },
         { step: STEP_OPTIONS, label: '生成选项', shortLabel: 'step3', done: prep.completed === true && casesDone },
       ];
-      return '<div class="xmind-casegen-prep-stepper">'
+      return '<div class="xmind-casegen-prep-stepper-row">'
+        + '<div class="xmind-casegen-prep-stepper">'
         + steps.map(function(item) {
           var classes = ['xmind-casegen-prep-step'];
           if (prep.step === item.step) classes.push('is-active');
@@ -5146,6 +5469,10 @@
             + '<span class="xmind-casegen-prep-step-badge">' + escapeHtml(item.shortLabel) + '</span>'
             + '</span>';
         }).join('')
+        + '</div>'
+        + (kbState.usedInLatestGeneration === true
+          ? '<span class="xmind-casegen-kb-used-badge xmind-casegen-kb-used-badge-inline">已使用知识库</span>'
+          : '')
         + '</div>';
     }
 
@@ -5669,7 +5996,9 @@
 
     function applySummaryDialogState() {
       var open = summaryDialogOpen === true;
-      var mode = summaryDialogMode === 'history' ? 'history' : 'prep';
+      var mode = summaryDialogMode === 'history'
+        ? 'history'
+        : (summaryDialogMode === 'knowledge-base' ? 'knowledge-base' : 'prep');
       if (summaryOverlayEl) {
         summaryOverlayEl.hidden = !open;
         summaryOverlayEl.setAttribute('aria-hidden', open ? 'false' : 'true');
@@ -5686,17 +6015,34 @@
         historyBtn.setAttribute('aria-expanded', open && mode === 'history' ? 'true' : 'false');
         historyBtn.textContent = '生成记录';
       }
+      if (knowledgeRuleBtn) {
+        knowledgeRuleBtn.setAttribute('aria-expanded', open && mode === 'knowledge-base' ? 'true' : 'false');
+      }
+      if (knowledgeAiBtn) {
+        knowledgeAiBtn.setAttribute('aria-expanded', open && mode === 'knowledge-base' ? 'true' : 'false');
+      }
       if (summaryDialogTitleEl) {
-        summaryDialogTitleEl.textContent = mode === 'history' ? '生成记录' : '生成前置准备';
+        summaryDialogTitleEl.textContent = mode === 'history'
+          ? '生成记录'
+          : (mode === 'knowledge-base' ? '知识库检索结果' : '生成前置准备');
       }
       if (summaryDialogDescEl) {
         summaryDialogDescEl.textContent = mode === 'history'
           ? '记录当前 XMind 用例生成里每次节点操作的结果摘要。'
-          : '按 3 步完成前置准备，确认后 step1 和 step2 会在本次生成中锁定。';
+          : (mode === 'knowledge-base'
+            ? '展示当前页签最近一次规则检索与 AI 精筛的状态和最终筛选内容。'
+            : '按 3 步完成前置准备，确认后 step1 和 step2 会在本次生成中锁定。');
       }
       if (!open) return;
-      if (mode === 'history') renderHistoryDialog();
-      else renderPrepDialog();
+      if (mode === 'history') {
+        renderHistoryDialog();
+        return;
+      }
+      if (mode === 'knowledge-base') {
+        renderKnowledgeBaseDialog();
+        return;
+      }
+      renderPrepDialog();
     }
 
     function setPrepStep(step) {
@@ -5761,6 +6107,7 @@
       ensureState().hasModuleSkeleton = Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
       renderWorkspaceTabs();
       syncOpenButtonState();
+      syncKnowledgeBaseToolbarState();
       renderOpenedSummaryDialog();
     }
 
@@ -6944,6 +7291,259 @@
       };
     }
 
+    function buildKnowledgeBaseVisibleModuleSummary(visibleContext) {
+      return (visibleContext && Array.isArray(visibleContext.list) ? visibleContext.list : []).slice(0, 12).map(function(entry) {
+        var visibleCases = getVisibleCasesForModuleEntry(entry).slice(0, 8).map(function(row) {
+          var normalized = normalizeCaseItem(row && row.item, entry && entry.title ? entry.title : '');
+          return normalized && normalized.title ? String(normalized.title || '') : '';
+        }).filter(Boolean);
+        return {
+          module: entry && entry.title ? String(entry.title || '') : '',
+          key_scenarios: entry && entry.aiModule && Array.isArray(entry.aiModule.scenarios)
+            ? entry.aiModule.scenarios.slice(0, 8)
+            : [],
+          test_points: entry && entry.aiModule && Array.isArray(entry.aiModule.points)
+            ? entry.aiModule.points.slice(0, 8)
+            : [],
+          case_titles: visibleCases,
+        };
+      }).filter(function(item) {
+        return Boolean(item && item.module);
+      });
+    }
+
+    function buildKnowledgeBaseVisibleCaseSummary(visibleContext, moduleEntry) {
+      var entries = [];
+      if (moduleEntry) {
+        entries.push(moduleEntry);
+      }
+      (visibleContext && Array.isArray(visibleContext.list) ? visibleContext.list : []).forEach(function(entry) {
+        if (!entry) return;
+        if (moduleEntry && String(entry.moduleKey || '') === String(moduleEntry.moduleKey || '')) return;
+        entries.push(entry);
+      });
+      var result = [];
+      entries.slice(0, 8).forEach(function(entry) {
+        getVisibleCasesForModuleEntry(entry).slice(0, moduleEntry ? 16 : 6).forEach(function(row) {
+          if (!row || !row.item) return;
+          var normalized = normalizeCaseItem(row.item, entry && entry.title ? entry.title : '');
+          var title = normalized && normalized.title ? String(normalized.title || '') : '';
+          if (!title) return;
+          result.push({
+            module: entry && entry.title ? String(entry.title || '') : '',
+            title: title,
+          });
+        });
+      });
+      return result.slice(0, 24);
+    }
+
+    function buildKnowledgeBaseQueryContext(requirementSource) {
+      var source = requirementSource && typeof requirementSource === 'object' ? requirementSource : {};
+      return {
+        requirementLabel: getRequirementLabelText(),
+        requirementText: source.text ? String(source.text || '') : '',
+        requirementSupplement: source.supplement ? String(source.supplement || '') : '',
+        requirementMode: source.mode ? String(source.mode || '') : '',
+        operationType: 'workspace_requirement',
+        targetModule: '',
+        visibleModules: [],
+        visibleCases: [],
+        operationContract: {},
+      };
+    }
+
+    function buildKnowledgeBaseQueryKey(baseUrl, queryContext) {
+      if (xmindKnowledgeBaseApi && typeof xmindKnowledgeBaseApi.buildQueryKey === 'function') {
+        return xmindKnowledgeBaseApi.buildQueryKey({
+          baseUrl: baseUrl,
+          queryContext: queryContext,
+        });
+      }
+      return JSON.stringify({
+        version: 2,
+        baseUrl: normalizeKnowledgeBaseBaseUrl(baseUrl),
+        requirementLabel: queryContext && queryContext.requirementLabel ? String(queryContext.requirementLabel || '').trim() : '',
+        requirementText: queryContext && queryContext.requirementText ? String(queryContext.requirementText || '').trim() : '',
+        requirementSupplement: queryContext && queryContext.requirementSupplement ? String(queryContext.requirementSupplement || '').trim() : '',
+        requirementMode: queryContext && queryContext.requirementMode ? String(queryContext.requirementMode || '').trim() : '',
+      });
+    }
+
+    function canReuseKnowledgeBaseState(kbState, baseUrl, queryKey) {
+      var normalized = normalizeKnowledgeBaseState(kbState);
+      if (!normalized.enabled) return false;
+      if (normalizeKnowledgeBaseBaseUrl(normalized.baseUrl) !== normalizeKnowledgeBaseBaseUrl(baseUrl)) return false;
+      if (!queryKey || String(normalized.queryKey || '') !== String(queryKey || '')) return false;
+      if (!normalized.ruleSearch || String(normalized.ruleSearch.status || '') !== 'done') return false;
+      if (!normalized.aiFilter) return false;
+      var aiStatus = String(normalized.aiFilter.status || '');
+      if (aiStatus === 'pending' || aiStatus === 'failed' || aiStatus === 'disabled') return false;
+      if (aiStatus === 'done') return true;
+      if (aiStatus === 'skipped') {
+        return Number(normalized.ruleSearch.candidateCount || 0) <= 0
+          || (Array.isArray(normalized.candidates) && normalized.candidates.length === 0);
+      }
+      return false;
+    }
+
+    function buildReusedKnowledgeBaseState(kbState, contract, workspaceId) {
+      var normalized = normalizeKnowledgeBaseState(kbState);
+      return normalizeKnowledgeBaseState({
+        baseUrl: normalized.baseUrl,
+        enabled: normalized.enabled,
+        workspaceId: String(workspaceId || normalized.workspaceId || ''),
+        queryKey: normalized.queryKey,
+        latestRequestId: normalized.latestRequestId,
+        lastOperation: contract && contract.mode ? String(contract.mode || '') : normalized.lastOperation,
+        validation: cloneJson(normalized.validation, {}),
+        ruleSearch: cloneJson(normalized.ruleSearch, {}),
+        aiFilter: cloneJson(normalized.aiFilter, {}),
+        candidates: cloneJson(normalized.candidates, []),
+        selectedItems: cloneJson(normalized.selectedItems, []),
+        usedInLatestGeneration: Boolean(normalized.injectedContextText),
+        injectedContextText: normalized.injectedContextText,
+        latestError: normalized.latestError,
+        warnings: cloneJson(normalized.warnings, []),
+        updatedAt: Date.now(),
+      });
+    }
+
+    function getKnowledgeBaseActionResult(workspaceId, actionKey, queryKey) {
+      var stableWorkspaceId = String(workspaceId || '');
+      var stableActionKey = String(actionKey || '');
+      if (!stableWorkspaceId || !stableActionKey || !queryKey) return null;
+      var cached = knowledgeBaseActionResultMap[stableWorkspaceId];
+      if (!cached) return null;
+      if (String(cached.actionKey || '') !== stableActionKey) return null;
+      if (String(cached.queryKey || '') !== String(queryKey || '')) return null;
+      return normalizeKnowledgeBaseState(cached.state);
+    }
+
+    function callKnowledgeBaseFilterModel(model, userText, prompt, reasoning, temperature) {
+      if (!xmindGenApi || typeof xmindGenApi.callModelWithConfig !== 'function') {
+        return Promise.reject(new Error('当前 XMind 生成模型不可用，无法执行知识库 AI 精筛'));
+      }
+      return callXmindModelWithGuard(function() {
+        return xmindGenApi.callModelWithConfig(
+          model,
+          userText,
+          prompt,
+          reasoning || '',
+          temperature
+        );
+      });
+    }
+
+    async function runKnowledgeBasePipelineForGeneration(contract, visibleContext, moduleEntry, model, reasoning, temperature, workspaceId, actionKey) {
+      var stableWorkspaceId = String(workspaceId || getActiveWorkspaceId() || '');
+      if (!stableWorkspaceId) return null;
+      var stableActionKey = String(actionKey || '');
+      var baseUrl = getCurrentKnowledgeBaseBaseUrl();
+      var requirementSource = getSelectedRequirementSource();
+      var queryContext = buildKnowledgeBaseQueryContext(requirementSource);
+      var queryKey = buildKnowledgeBaseQueryKey(baseUrl, queryContext);
+      if (!baseUrl) {
+        setWorkspaceKnowledgeBaseState(
+          stableWorkspaceId,
+          buildKnowledgeBaseSkipState(stableWorkspaceId, contract, '未配置共享知识库地址，本轮已跳过'),
+          { force: true }
+        );
+        return null;
+      }
+      var existingState = getWorkspaceKnowledgeBaseState(stableWorkspaceId);
+      if (canReuseKnowledgeBaseState(existingState, baseUrl, queryKey)) {
+        var reusedState = buildReusedKnowledgeBaseState(existingState, contract, stableWorkspaceId);
+        setWorkspaceKnowledgeBaseState(stableWorkspaceId, reusedState, { force: true });
+        return reusedState;
+      }
+      var actionScopedState = getKnowledgeBaseActionResult(stableWorkspaceId, stableActionKey, queryKey);
+      if (actionScopedState) {
+        var reusedActionState = buildReusedKnowledgeBaseState(actionScopedState, contract, stableWorkspaceId);
+        setWorkspaceKnowledgeBaseState(stableWorkspaceId, reusedActionState, { force: true });
+        return reusedActionState;
+      }
+      if (
+        knowledgeBasePipelinePromiseMap[stableWorkspaceId]
+        && String(knowledgeBasePipelinePromiseMap[stableWorkspaceId].actionKey || '') === stableActionKey
+        && String(knowledgeBasePipelinePromiseMap[stableWorkspaceId].queryKey || '') === String(queryKey || '')
+      ) {
+        var inflightState = await knowledgeBasePipelinePromiseMap[stableWorkspaceId].promise;
+        var reusedInflightState = buildReusedKnowledgeBaseState(inflightState, contract, stableWorkspaceId);
+        setWorkspaceKnowledgeBaseState(stableWorkspaceId, reusedInflightState, { force: true });
+        return reusedInflightState;
+      }
+      if (!xmindKnowledgeBaseApi || typeof xmindKnowledgeBaseApi.runPipeline !== 'function') {
+        setWorkspaceKnowledgeBaseState(
+          stableWorkspaceId,
+          normalizeKnowledgeBaseState({
+            baseUrl: baseUrl,
+            enabled: true,
+            workspaceId: stableWorkspaceId,
+            queryKey: queryKey,
+            lastOperation: contract && contract.mode ? String(contract.mode || '') : '',
+            validation: {
+              status: 'failed',
+              normalizedBaseUrl: baseUrl,
+              checkedAt: Date.now(),
+              error: '知识库能力未初始化，请刷新页面后重试',
+            },
+            ruleSearch: {
+              status: 'failed',
+              reason: '知识库能力未初始化，请刷新页面后重试',
+              error: '知识库能力未初始化，请刷新页面后重试',
+            },
+            aiFilter: {
+              status: 'skipped',
+              reason: '规则检索未执行，已跳过 AI 筛选',
+            },
+            usedInLatestGeneration: false,
+            injectedContextText: '',
+            latestError: '知识库能力未初始化，请刷新页面后重试',
+            updatedAt: Date.now(),
+          }),
+          { force: true }
+        );
+        return null;
+      }
+      var requestId = generateLocalId('kb');
+      var runPromise = xmindKnowledgeBaseApi.runPipeline({
+        baseUrl: baseUrl,
+        workspaceId: stableWorkspaceId,
+        requestId: requestId,
+        queryContext: queryContext,
+        model: cloneJson(model, null),
+        reasoning: reasoning,
+        temperature: temperature,
+        callModel: callKnowledgeBaseFilterModel,
+        onStateChange: function(nextState) {
+          setWorkspaceKnowledgeBaseState(stableWorkspaceId, nextState);
+        },
+      }).then(function(finalState) {
+        var normalizedFinal = normalizeKnowledgeBaseState(finalState);
+        if (stableActionKey) {
+          knowledgeBaseActionResultMap[stableWorkspaceId] = {
+            actionKey: stableActionKey,
+            queryKey: queryKey,
+            state: normalizedFinal,
+          };
+        }
+        setWorkspaceKnowledgeBaseState(stableWorkspaceId, normalizedFinal);
+        return normalizedFinal;
+      }).finally(function() {
+        var current = knowledgeBasePipelinePromiseMap[stableWorkspaceId];
+        if (current && current.promise === runPromise) {
+          delete knowledgeBasePipelinePromiseMap[stableWorkspaceId];
+        }
+      });
+      knowledgeBasePipelinePromiseMap[stableWorkspaceId] = {
+        actionKey: stableActionKey,
+        queryKey: queryKey,
+        promise: runPromise,
+      };
+      return runPromise;
+    }
+
     function extractNamedSectionText(text, title) {
       var source = String(text || '');
       var marker = '【' + String(title || '').trim() + '】';
@@ -7197,7 +7797,8 @@
       }
     }
 
-    async function buildXmindGenerationTaskInput(contract, visibleContext, moduleEntry) {
+    async function buildXmindGenerationTaskInput(contract, visibleContext, moduleEntry, options) {
+      var opts = options || {};
       var prompt = buildXmindPrompt(contract);
       var payload = await buildRequirementPayload(contract, visibleContext, moduleEntry);
       var model = xmindGenApi && typeof xmindGenApi.getAssignedModel === 'function'
@@ -7214,6 +7815,7 @@
       var requestText = payload.text;
       var contentBlocks = [];
       var degradedToTextOnly = false;
+      var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
 
       if (payload.images && payload.images.length) {
         if (!modelCanSeeImages && !payload.text) {
@@ -7228,6 +7830,28 @@
             } else {
               requestMode = 'content';
             }
+          }
+        }
+      }
+      var kbState = await runKnowledgeBasePipelineForGeneration(
+        contract,
+        visibleContext,
+        moduleEntry,
+        model,
+        reasoning,
+        temperature,
+        taskWorkspaceId,
+        opts.knowledgeBaseActionKey
+      );
+      if (kbState && kbState.injectedContextText) {
+        requestText = String(requestText || '').trim()
+          ? (String(requestText || '') + '\n\n' + kbState.injectedContextText)
+          : kbState.injectedContextText;
+        if (requestMode === 'content') {
+          if (Array.isArray(contentBlocks) && contentBlocks.length && contentBlocks[0] && contentBlocks[0].type === 'text') {
+            contentBlocks[0].text = requestText;
+          } else {
+            contentBlocks.unshift({ type: 'text', text: requestText });
           }
         }
       }
@@ -9659,13 +10283,9 @@
           } else {
             centerRootNodeView({ persist: true });
           }
-        } else if (restorableViewState) {
-          applyCurrentMindViewState(restorableViewState);
-          if (restorableViewState.skipAnchorAlign !== true && restorableViewState.anchorState) {
-            applyCurrentMindAnchorState(restorableViewState.anchorState);
-          }
         }
-        if (options.restoreViewStateAfterRender === true && restorableViewState) {
+        if (options.centerRootAfterRender !== true && restorableViewState && options.restoreViewStateAfterRender !== false) {
+          // 刷新恢复与跨 workspace 视口接力都要等首帧布局稳定后再回放，避免同步改画布把页面卡死。
           scheduleWorkspaceViewRestore(restorableViewState, getActiveWorkspaceId());
         }
       } catch (err) {
@@ -10057,6 +10677,7 @@
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
       var restoreContext = buildManagedTaskRestoreContext({
         workspaceId: taskWorkspaceId,
+        compact: true,
       });
       return {
         workspaceId: taskWorkspaceId,
@@ -10091,6 +10712,7 @@
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
       var restoreContext = buildManagedTaskRestoreContext({
         workspaceId: taskWorkspaceId,
+        compact: true,
       });
       return {
         workspaceId: taskWorkspaceId,
@@ -10126,6 +10748,7 @@
       var opts = options || {};
       var targetWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
       var activeWorkspaceId = String(getActiveWorkspaceId() || '');
+      var compact = opts.compact === true;
       var hasOverrideViewState = Boolean(
         opts.viewState
         && typeof opts.viewState === 'object'
@@ -10134,7 +10757,7 @@
         var targetRecord = getWorkspaceRecord(targetWorkspaceId);
         if (targetRecord && targetRecord.snapshot) {
           return buildRestoreContextFromWorkspaceSnapshot(targetRecord.snapshot, targetWorkspaceId, {
-            compact: true,
+            compact: compact,
           });
         }
       }
@@ -10163,7 +10786,7 @@
       } else if (!requirementLabelSource && requirementSource.mode === 'document' && requirementLabel) {
         requirementLabelSource = state.lastRawImportName ? 'import' : 'document';
       }
-      return {
+      var result = {
         workspaceId: targetWorkspaceId,
         requirementLabel: requirementLabel,
         requirementLabelSource: requirementLabelSource,
@@ -10171,8 +10794,6 @@
         rawText: shadowBase
           ? String(shadowBase.rawText || '')
           : (rawTextEl && rawTextEl.value ? String(rawTextEl.value || '') : ''),
-        caseGenModules: cloneModulesWithoutCases(state.caseGenModules),
-        rootPipeline: buildCompactRootPipelineRestoreSnapshot(getRootPipelineState()),
         prep: prep,
         viewState: hasOverrideViewState
           ? cloneJson(overrideViewState, createDefaultViewState())
@@ -10181,6 +10802,22 @@
             fullscreen: viewState.fullscreen === true || Boolean(drawerEl && drawerEl.classList && drawerEl.classList.contains('xmind-drawer-fullscreen')),
           }),
       };
+      if (compact === true) {
+        result.caseGenModules = cloneModulesWithoutCases(state.caseGenModules);
+        result.rootPipeline = buildCompactRootPipelineRestoreSnapshot(getRootPipelineState());
+      } else {
+        result.caseText = shadowBase
+          ? String(shadowBase.caseText || '')
+          : (caseTextEl && caseTextEl.value ? String(caseTextEl.value || '') : '');
+        result.importedCases = cloneJson(state.importedCases, []);
+        result.caseGenModules = cloneJson(state.caseGenModules, []);
+        result.caseGenResults = cloneJson(state.caseGenResults, {});
+        result.operationSnapshots = cloneJson(ensureState().operationSnapshots, []);
+        result.nextSnapshotId = Number(ensureState().nextSnapshotId || 1);
+        result.history = cloneJson(ensureState().history, []);
+        result.rootPipeline = cloneRootPipelineSnapshot(getRootPipelineState());
+      }
+      return result;
     }
 
     function isMeaningfulRestoreResult(raw) {
@@ -10348,6 +10985,7 @@
       var restoreContext = buildManagedTaskRestoreContext({
         workspaceId: targetWorkspaceId,
         viewState: opts.viewState && typeof opts.viewState === 'object' ? opts.viewState : null,
+        compact: false,
       });
       return Number(manager.updateTasksContext(function(nextContext) {
         var merged = mergeTaskRestoreContext(nextContext, restoreContext);
@@ -10377,6 +11015,7 @@
       var opts = options || {};
       var restoreContext = buildManagedTaskRestoreContext({
         workspaceId: opts.workspaceId ? opts.workspaceId : '',
+        compact: opts.compact === true,
       });
       return Number(manager.updateTasksContext(function(nextContext) {
         var merged = mergeTaskRestoreContext(nextContext, restoreContext);
@@ -10400,6 +11039,7 @@
         onlyRunning: false,
         action: 'context',
         workspaceId: getTaskWorkspaceId(task),
+        compact: false,
       });
     }
 
@@ -10553,15 +11193,15 @@
       var restoreContext = buildMergedManagedTaskRestoreContext(scopedTasks);
       var latestTask = pickLatestManagedTaskRestoreContext(scopedTasks);
       if (!restoreContext) return false;
+      var currentRecordChanged = applyRestoreContextToWorkspaceRecord(currentWorkspaceId, restoreContext);
       if (!shouldApplyLiveRestore) {
-        var recordChanged = applyRestoreContextToWorkspaceRecord(currentWorkspaceId, restoreContext);
-        if (recordChanged) {
+        if (currentRecordChanged) {
           renderWorkspaceTabs();
           updateSummary();
           renderCaseGenProgressBoard();
           scheduleRecoveredStatePersist();
         }
-        return recordChanged;
+        return currentRecordChanged;
       }
       var changed = false;
       var rawTextEl = document.getElementById('rawText');
@@ -10718,10 +11358,10 @@
       if (changed && casesCoreApi && typeof casesCoreApi.syncCaseTextWithImports === 'function') {
         casesCoreApi.syncCaseTextWithImports();
       }
-      if (changed) {
+      if (changed || currentRecordChanged) {
         scheduleRecoveredStatePersist();
       }
-      return changed;
+      return changed || currentRecordChanged;
     }
 
     function startManagedXmindTask(taskPayload) {
@@ -11778,6 +12418,7 @@
       var promise = runInWorkspaceContext(getTaskWorkspaceId(task), function() {
         return Promise.resolve()
           .then(function() {
+            restoreWorkflowContextFromManagedTasks([task]);
             if (task.status === 'done') {
               if (task.scope === 'root') return completeRootTaskSuccess(task);
               return completeModuleTaskSuccess(task);
@@ -12065,7 +12706,13 @@
         moduleTaskMeta.moduleTitle = historyModuleTitle;
         moduleTaskMeta.moduleKey = String(resolvedEntry && resolvedEntry.moduleKey ? resolvedEntry.moduleKey : moduleEntry.moduleKey || '');
         moduleTaskMeta.moduleId = String(resolvedEntry && resolvedEntry.aiModuleId ? resolvedEntry.aiModuleId : moduleEntry.aiModuleId || moduleId || '');
-        var moduleTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, resolvedEntry);
+        var knowledgeBaseActionKey = options.knowledgeBaseActionKey
+          ? String(options.knowledgeBaseActionKey || '')
+          : String(options.rootPipelineId || '');
+        var moduleTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, resolvedEntry, {
+          workspaceId: taskWorkspaceId,
+          knowledgeBaseActionKey: knowledgeBaseActionKey,
+        });
         var moduleTask = startManagedXmindTask(buildModuleTaskPayload(resolvedEntry, actionId, moduleTaskInput, moduleTaskMeta));
         moduleState.taskId = String(moduleTask && moduleTask.id ? moduleTask.id : '');
         moduleState.updatedAt = Date.now();
@@ -12205,7 +12852,10 @@
       var contract = rootTaskMeta && rootTaskMeta.contract
         ? cloneJson(rootTaskMeta.contract, {})
         : createOperationContract(actionId, null);
-      var rootTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, null);
+      var rootTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, null, {
+        workspaceId: taskWorkspaceId,
+        knowledgeBaseActionKey: String(pipeline && pipeline.id ? pipeline.id : ''),
+      });
       var rootTask = startManagedXmindTask(buildRootTaskPayload(actionId, rootTaskInput, {
         workspaceId: taskWorkspaceId,
         scope: 'root',
@@ -12272,6 +12922,7 @@
       ) && hasAnyAiCases();
       var historyActionLabel = getRootHistoryActionLabel(actionId, hadAiContentBeforeAction);
       var taskWorkspaceId = String(getActiveWorkspaceId() || '');
+      var knowledgeBaseActionKey = generateLocalId('kb-action');
       if (casesGenApi && typeof casesGenApi.snapshotAllCaseGenState === 'function') {
         currentSnapshotId = String(casesGenApi.snapshotAllCaseGenState() || '');
       }
@@ -12306,7 +12957,10 @@
         if (shouldUseRootPipeline(actionId)) {
           return await startRootPipeline(actionId, rootTaskMeta, visibleContext);
         }
-        var rootTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, null);
+        var rootTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, null, {
+          workspaceId: taskWorkspaceId,
+          knowledgeBaseActionKey: knowledgeBaseActionKey,
+        });
         var rootTask = startManagedXmindTask(buildRootTaskPayload(actionId, rootTaskInput, rootTaskMeta));
         rootState.taskId = String(rootTask && rootTask.id ? rootTask.id : '');
         rootState.updatedAt = Date.now();
@@ -12355,6 +13009,7 @@
       var started = await startManagedModuleTask(moduleEntry, actionId, {
         renderReason: 'module-running',
         anchorNodeId: options.anchorNodeId || getModuleNodeId(moduleEntry),
+        knowledgeBaseActionKey: generateLocalId('kb-action'),
       });
       return Boolean(started && started.task && started.task.id);
     }
@@ -13108,6 +13763,18 @@
           else openHistoryDialog();
         });
       }
+      if (knowledgeRuleBtn) {
+        knowledgeRuleBtn.addEventListener('click', function() {
+          if (summaryDialogOpen === true && summaryDialogMode === 'knowledge-base') closeSummaryDialog();
+          else openKnowledgeBaseDialog();
+        });
+      }
+      if (knowledgeAiBtn) {
+        knowledgeAiBtn.addEventListener('click', function() {
+          if (summaryDialogOpen === true && summaryDialogMode === 'knowledge-base') closeSummaryDialog();
+          else openKnowledgeBaseDialog();
+        });
+      }
       if (storeBtn) {
         storeBtn.addEventListener('click', function() {
           handleStoreToLibrary();
@@ -13329,6 +13996,7 @@
         }, true);
       }
       syncDeleteHistoryButtons();
+      syncKnowledgeBaseToolbarState();
     }
 
     function bindRenderListeners() {
@@ -13415,6 +14083,14 @@
 
     function hasManagedTaskDrawerRestoreIntent() {
       return Boolean(getManagedTaskRestoreWorkspaceId());
+    }
+
+    function hasManagedTaskRestoreContextForWorkspace(workspaceId) {
+      var targetId = String(workspaceId || getActiveWorkspaceId() || '');
+      if (!targetId) return false;
+      return filterTasksByWorkspace(listManagedXmindTasks(), targetId).some(function(task) {
+        return Boolean(task && task.restoreContext && typeof task.restoreContext === 'object');
+      });
     }
 
     function shouldRestoreDrawerAfterRefresh() {
@@ -13508,35 +14184,17 @@
         return;
       }
       if (!isDrawerOpen()) {
-        try {
-          setDebugState({
-            phase: 'drawer-restore-open-attempt',
-            activeWorkspaceId: String(getActiveWorkspaceId() || ''),
-          });
-          open({
-            restoreOpening: true,
-            instant: true,
-          });
-        } catch (restoreErr) {
-          setDebugState({
-            phase: 'drawer-restore-open-error',
-            activeWorkspaceId: String(getActiveWorkspaceId() || ''),
-            error: restoreErr && restoreErr.message ? String(restoreErr.message) : '未知错误',
-          });
-        }
-      }
-      if (isDrawerOpen()) {
         setDebugState({
-          phase: 'drawer-restore-opened',
+          phase: 'drawer-restore-scheduled-open',
           activeWorkspaceId: String(getActiveWorkspaceId() || ''),
         });
+        scheduleDrawerRestoreRetry(120);
         return;
       }
       setDebugState({
-        phase: 'drawer-restore-scheduled',
+        phase: 'drawer-restore-opened',
         activeWorkspaceId: String(getActiveWorkspaceId() || ''),
       });
-      scheduleDrawerRestoreRetry(isDrawerOpen() ? 220 : 320);
     }
 
     ensureDrawer();
