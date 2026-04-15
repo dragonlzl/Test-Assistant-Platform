@@ -1341,37 +1341,43 @@
         };
       }
 
+      function applySearchInputFocus(selection) {
+        if (!searchInputEl || typeof searchInputEl.focus !== 'function') return;
+        var ownerDoc = searchInputEl.ownerDocument || document;
+        if (!ownerDoc || !ownerDoc.body || !ownerDoc.body.contains || !ownerDoc.body.contains(searchInputEl)) return;
+        try {
+          searchInputEl.focus({ preventScroll: true });
+        } catch (err) {
+          try {
+            searchInputEl.focus();
+          } catch (err2) {
+            return;
+          }
+        }
+        if (typeof searchInputEl.setSelectionRange !== 'function') return;
+        var range = selection && typeof selection === 'object' ? selection : null;
+        var length = String(searchInputEl.value || '').length;
+        var start = range && isFinite(Number(range.start)) ? Number(range.start) : length;
+        var end = range && isFinite(Number(range.end)) ? Number(range.end) : start;
+        if (start < 0) start = 0;
+        if (end < 0) end = 0;
+        if (start > length) start = length;
+        if (end > length) end = length;
+        try {
+          searchInputEl.setSelectionRange(start, end);
+        } catch (err3) {
+          // ignore
+        }
+      }
+
       function scheduleSearchInputFocus(selection) {
         if (!searchInputEl || typeof searchInputEl.focus !== 'function') return;
         clearSearchFocusRestoreTimer();
         var range = selection && typeof selection === 'object' ? selection : null;
+        applySearchInputFocus(range);
         searchFocusRestoreTimer = setTimeout(function() {
           searchFocusRestoreTimer = 0;
-          if (!searchInputEl) return;
-          var ownerDoc = searchInputEl.ownerDocument || document;
-          if (!ownerDoc || !ownerDoc.body || !ownerDoc.body.contains || !ownerDoc.body.contains(searchInputEl)) return;
-          try {
-            searchInputEl.focus({ preventScroll: true });
-          } catch (err) {
-            try {
-              searchInputEl.focus();
-            } catch (err2) {
-              return;
-            }
-          }
-          if (typeof searchInputEl.setSelectionRange !== 'function') return;
-          var length = String(searchInputEl.value || '').length;
-          var start = range && isFinite(Number(range.start)) ? Number(range.start) : length;
-          var end = range && isFinite(Number(range.end)) ? Number(range.end) : start;
-          if (start < 0) start = 0;
-          if (end < 0) end = 0;
-          if (start > length) start = length;
-          if (end > length) end = length;
-          try {
-            searchInputEl.setSelectionRange(start, end);
-          } catch (err3) {
-            // ignore
-          }
+          applySearchInputFocus(range);
         }, 0);
       }
 

@@ -6824,15 +6824,9 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await searchInput.click();
     await searchInput.fill('登录模块-完整-1');
-    await expect(searchCount).toHaveText(/1\s*\/\s*[1-9]\d*/);
-    await expect.poll(async () => {
-      return await page.evaluate(() => {
-        var input = document.querySelector('#xmindCaseGenMindContainer [data-mind-search-input]');
-        return Boolean(input && document.activeElement === input);
-      });
-    }).toBe(true);
     await page.keyboard.press('Backspace');
     await expect(searchInput).toHaveValue('登录模块-完整-');
+    await expect(searchCount).toHaveText(/1\s*\/\s*[1-9]\d*/);
     await expect.poll(async () => {
       return await page.evaluate(() => {
         var input = document.querySelector('#xmindCaseGenMindContainer [data-mind-search-input]');
