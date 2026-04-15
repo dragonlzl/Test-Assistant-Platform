@@ -4517,14 +4517,10 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitXmindModelAssigned(page, mockInfo.modelId);
     await openXmindCaseGenDrawer(page);
 
-    for (const name of ['页签一', '页签二', '页签三']) {
-      await page.click('#xmindCaseGenWorkspaceAddBtn');
-      await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
-      await page.click('label:has(input[name="xmindRequirementMode"][value="manual"])');
-      await page.fill('#xmindCaseGenManualRequirementLabel', name);
-      await page.fill('#xmindCaseGenManualRequirementText', name + ' 的描述');
-      await page.click('#xmindCaseGenSummaryCloseBtn');
-    }
+    await createXmindWorkspaceByManualPrep(page, '页签一', '页签一 的描述', {
+      useExistingWorkspace: true,
+    });
+    await createXmindWorkspaceByManualPrep(page, '页签二', '页签二 的描述');
 
     const tabs = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]');
     const addButton = page.locator('#xmindCaseGenWorkspaceAddBtn');
@@ -4541,7 +4537,10 @@ test.describe('XMind 用例生成抽屉', () => {
       };
     }).filter((item) => item.width > 5 && item.height > 5));
 
-    expect(visibleTabs.length).toBeGreaterThanOrEqual(3);
+    await expect(addButton).toBeDisabled();
+    await expect(addButton).toHaveAttribute('title', '最多仅支持 2 个生成页签');
+
+    expect(visibleTabs.length).toBeGreaterThanOrEqual(2);
     const prevTab = visibleTabs[visibleTabs.length - 2];
     const lastTab = visibleTabs[visibleTabs.length - 1];
     const gapTabs = Math.round(lastTab.x - (prevTab.x + prevTab.width));
@@ -4645,7 +4644,6 @@ test.describe('XMind 用例生成抽屉', () => {
       useExistingWorkspace: true,
     });
     await createXmindWorkspaceByManualPrep(page, '页签二', '第二页签需求', { completePrep: true });
-    await createXmindWorkspaceByManualPrep(page, '页签三', '第三页签需求', { completePrep: true });
 
     await page.evaluate(() => {
       window.__xmindCloseConfirmCalls = [];
@@ -4654,8 +4652,8 @@ test.describe('XMind 用例生成抽屉', () => {
           window.__xmindCloseConfirmCalls.push(payload || null);
           var st = window.app && window.app.state ? window.app.state : null;
           var host = st && st.xmindCaseGen ? st.xmindCaseGen : null;
-          if (host && Array.isArray(host.workspaceOrder) && host.workspaceOrder.length >= 3) {
-            host.workspaceOrder = [host.workspaceOrder[0], host.workspaceOrder[2], host.workspaceOrder[1]];
+          if (host && Array.isArray(host.workspaceOrder) && host.workspaceOrder.length >= 2) {
+            host.workspaceOrder = [host.workspaceOrder[1], host.workspaceOrder[0]];
           }
           return Promise.resolve({ ok: true });
         };
@@ -4667,13 +4665,12 @@ test.describe('XMind 用例生成抽屉', () => {
       return await page.evaluate(() => Array.isArray(window.__xmindCloseConfirmCalls) ? window.__xmindCloseConfirmCalls.length : 0);
     }).toBe(1);
 
-    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
     const tabTexts = await page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]').evaluateAll((nodes) => {
       return nodes.map((node) => String(node.textContent || '').replace(/\s+/g, ' ').trim());
     });
     expect(tabTexts.some((text) => text.indexOf('页签二') !== -1)).toBe(false);
     expect(tabTexts.some((text) => text.indexOf('页签一') !== -1)).toBe(true);
-    expect(tabTexts.some((text) => text.indexOf('页签三') !== -1)).toBe(true);
   });
 
   test('未完成前置准备但已填写手填需求的页签，关闭前也会弹出二次确认', async ({ page }) => {

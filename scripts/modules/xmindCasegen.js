@@ -160,7 +160,7 @@
     var HISTORY_LIMIT = 80;
     var DRAWER_RESTORE_RETRY_LIMIT = 18;
     var SUSPEND_VIEW_STATE_CACHE_KEY = 'tap-xmind-casegen-suspend-view-v1';
-    var WORKSPACE_MAX = 5;
+    var WORKSPACE_MAX = 2;
     var multimodalMaxImages = 20;
     var multimodalMaxEdge = 1600;
     var multimodalMaxBytes = 4 * 1024 * 1024;
@@ -186,6 +186,10 @@
       'specialWeakNetwork',
       'specialInterruptResume',
     ];
+
+    function getWorkspaceLimitText() {
+      return '最多仅支持 ' + String(WORKSPACE_MAX) + ' 个生成页签';
+    }
 
     var ROOT_ACTIONS = {
       FULL_CASES: 'root-full-cases',
@@ -6057,7 +6061,7 @@
       workspaceAddBtn.classList.toggle('is-disabled', isFull);
       workspaceAddBtn.disabled = isFull;
       workspaceAddBtn.textContent = '新建生成';
-      workspaceAddBtn.title = isFull ? '最多仅支持 5 个生成页签' : '新建一个独立的 XMind 用例生成页签';
+      workspaceAddBtn.title = isFull ? getWorkspaceLimitText() : '新建一个独立的 XMind 用例生成页签';
       syncCasegenProgressSidebar();
       syncCasesGenPageRender();
       return true;
@@ -12688,7 +12692,7 @@
     function createWorkspaceAndOpenPrep() {
       var host = ensureWorkspaceHostState();
       if (host.workspaceOrder.length >= WORKSPACE_MAX) {
-        notifyFloatingStatus('最多仅支持 5 个生成页签', 'warn', 3000);
+        notifyFloatingStatus(getWorkspaceLimitText(), 'warn', 3000);
         return false;
       }
       var adoptCurrentSnapshot = host.workspaceOrder.length === 0 && currentActiveWorkspaceHasContent();
