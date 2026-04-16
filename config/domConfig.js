@@ -27,7 +27,7 @@
       'xmindCaseGenRequirementBadge', 'xmindCaseGenRequirementSummary', 'xmindCaseGenRequirementMeta',
       'xmindCaseGenCasesBadge', 'xmindCaseGenCasesSummary', 'xmindCaseGenCasesMeta',
       'xmindCaseGenImportRequirementBtn', 'xmindCaseGenImportCasesBtn', 'xmindCaseGenSelectCasesBtn',
-      'xmindCaseGenGenerateModulesBtn', 'xmindCaseGenGenerateFullBtn', 'xmindCaseGenExportBtn', 'xmindCaseGenPromptBtn',
+      'xmindCaseGenGenerateModulesBtn', 'xmindCaseGenGenerateFullBtn', 'xmindCaseGenExportBtn', 'xmindCaseGenExportMarkdownBtn', 'xmindCaseGenPromptBtn',
       'xmindCaseGenStatus', 'xmindCaseGenMindContainer',
       'knowledgeBaseBaseUrlInput', 'saveKnowledgeBaseBaseUrl', 'validateKnowledgeBaseBaseUrl', 'knowledgeBaseBaseUrlStatus',
       'caseGenViewDrawer', 'caseGenViewDrawerBody', 'caseGenViewDrawerTitle', 'caseGenAllSelectBtn', 'closeCaseGenViewDrawerBtn',

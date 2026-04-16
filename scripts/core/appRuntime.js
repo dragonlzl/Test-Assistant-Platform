@@ -2549,6 +2549,7 @@
         hasCaseSource: hasCaseSource,
       },
       xmindCoreApi: window.app.xmindCoreApi || null,
+      xmindMarkdownExportCoreApi: window.app.xmindMarkdownExportCoreApi || null,
       mindElixirCoreApi: window.app.mindElixirCoreApi || null,
       casesCoreApi: window.app.casesCoreApi || null,
       xmindKnowledgeBaseApi: window.app.xmindKnowledgeBase && typeof window.app.xmindKnowledgeBase.init === 'function'

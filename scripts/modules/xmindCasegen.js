@@ -81,6 +81,7 @@
     var summaryDialogBodyEl = document.getElementById('xmindCaseGenSummaryDialogBody');
     var summaryCloseBtn = document.getElementById('xmindCaseGenSummaryCloseBtn');
     var exportBtn = document.getElementById('xmindCaseGenExportBtn');
+    var exportMarkdownBtn = document.getElementById('xmindCaseGenExportMarkdownBtn');
     var statusEl = document.getElementById('xmindCaseGenStatus');
     var mindContainer = document.getElementById('xmindCaseGenMindContainer');
 
@@ -1029,6 +1030,11 @@
       return window.app && window.app.mindElixirCoreApi ? window.app.mindElixirCoreApi : null;
     }
 
+    function getXmindMarkdownExportCoreApi() {
+      if (ctx.xmindMarkdownExportCoreApi) return ctx.xmindMarkdownExportCoreApi;
+      return window.app && window.app.xmindMarkdownExportCoreApi ? window.app.xmindMarkdownExportCoreApi : null;
+    }
+
     function hasMindElixirCtorReady() {
       var globalObj = null;
       if (typeof MindElixir !== 'undefined') {
@@ -1092,6 +1098,7 @@
         deleteUndoBtn,
         deleteRedoBtn,
         exportBtn,
+        exportMarkdownBtn,
       ].filter(Boolean);
     }
 
@@ -1398,6 +1405,10 @@
       if (exportBtn && persistenceGroup.appendChild) {
         applyInlineButtonStyle(exportBtn);
         persistenceGroup.appendChild(exportBtn);
+      }
+      if (exportMarkdownBtn && persistenceGroup.appendChild) {
+        applyInlineButtonStyle(exportMarkdownBtn);
+        persistenceGroup.appendChild(exportMarkdownBtn);
       }
       if (deleteUndoBtn && deleteGroup.appendChild) {
         applyInlineButtonStyle(deleteUndoBtn);
@@ -13268,6 +13279,44 @@
       }
     }
 
+    function exportCurrentMarkdown() {
+      var markdownCoreApi = getXmindMarkdownExportCoreApi();
+      if (!markdownCoreApi || typeof markdownCoreApi.buildMarkdownExportFromSnapshot !== 'function') {
+        notifyStatus('当前 Markdown 导出能力未就绪', 'warn', { forceInline: true });
+        return false;
+      }
+      var visibleModules = buildVisibleModuleSnapshot(buildVisibleModuleContext());
+      if (!visibleModules.length) {
+        notifyStatus('当前没有可导出的模块，请先完成生成', 'warn', { forceInline: true });
+        return false;
+      }
+      var exported = null;
+      try {
+        exported = markdownCoreApi.buildMarkdownExportFromSnapshot({
+          requirementLabel: getRequirementLabelText(),
+          modules: visibleModules,
+          exportedAt: Date.now(),
+        });
+      } catch (err) {
+        notifyStatus('Markdown 导出失败：' + (err && err.message ? err.message : '未知错误'), 'err', { forceInline: true });
+        return false;
+      }
+      if (!exported || !exported.fileName || !exported.content) {
+        notifyStatus('Markdown 导出失败：导出结果无效', 'err', { forceInline: true });
+        return false;
+      }
+      if (utils && typeof utils.downloadText === 'function') {
+        utils.downloadText(exported.fileName, exported.content);
+      } else if (core && typeof core.downloadBlob === 'function') {
+        core.downloadBlob(exported.fileName, new Blob([exported.content], { type: 'text/markdown;charset=utf-8' }));
+      } else {
+        notifyStatus('当前 Markdown 下载能力未就绪', 'warn', { forceInline: true });
+        return false;
+      }
+      notifyStatus('已导出 AI Markdown：' + exported.fileName, 'ok');
+      return true;
+    }
+
     function buildWorkspaceId(seq) {
       return 'xmind-workspace-' + String(seq || 1);
     }
@@ -13913,6 +13962,11 @@
           exportCurrentXmind();
         });
       }
+      if (exportMarkdownBtn) {
+        exportMarkdownBtn.addEventListener('click', function() {
+          exportCurrentMarkdown();
+        });
+      }
       if (summaryDialogBodyEl) {
         summaryDialogBodyEl.addEventListener('click', function(event) {
           var choiceTarget = event && event.target && event.target.closest
@@ -14326,6 +14380,7 @@
       queueCasesGenPageRender: queueCasesGenPageRender,
       render: render,
       exportCurrentXmind: exportCurrentXmind,
+      exportCurrentMarkdown: exportCurrentMarkdown,
       switchTab: switchTab,
       isOpen: isDrawerOpen,
       restoreAfterWorkflowReady: restoreDrawerAfterRefreshIfNeeded,

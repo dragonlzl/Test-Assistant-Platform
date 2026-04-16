@@ -3392,6 +3392,15 @@
         JSZip: window.JSZip,
       })
       : null;
+    const xmindMarkdownExportCore = window.app && window.app.xmindMarkdownExportCore && typeof window.app.xmindMarkdownExportCore.init === 'function'
+      ? window.app.xmindMarkdownExportCore.init({
+        formatCompactTimestamp,
+        normalizeRequirementName,
+        getSafeFileBaseName: xmindCore && xmindCore.getSafeFileBaseName
+          ? xmindCore.getSafeFileBaseName
+          : null,
+      })
+      : null;
     const mindElixirCore = window.app && window.app.mindElixirCore && typeof window.app.mindElixirCore.init === 'function'
       ? window.app.mindElixirCore.init({
         xmindApi: xmindCore,
@@ -3410,6 +3419,9 @@
       : null;
     if (xmindCore) {
       window.app.xmindCoreApi = xmindCore;
+    }
+    if (xmindMarkdownExportCore) {
+      window.app.xmindMarkdownExportCoreApi = xmindMarkdownExportCore;
     }
     if (mindElixirCore) {
       window.app.mindElixirCoreApi = mindElixirCore;

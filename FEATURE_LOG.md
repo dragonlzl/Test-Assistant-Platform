@@ -19,6 +19,38 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind AI Markdown 导出
+- 功能描述：在 `XMind 用例生成` 抽屉新增 `导出为Markdown` 按钮，把当前活动 workspace 的可见 XMind 模块与用例导出为面向 AI 审核的 Markdown。当前导出已升级为 AI 强结构版：顶部提供结构化导出元数据与 AI 审核骨架，模块视图与全局索引保留稳定摘要表，模块详情改为每个模块一段结构化 JSON 记录，明确 `module_id / case_id / depends_on_modules / suggested_check_targets / preconditions / steps / expected / source_scope` 等字段，便于 Codex / GPT-5.4 直接解析并映射到项目实现核对任务。
+- 操作方式：
+  - 进入 `用例生成 -> XMind 用例生成`，完成前置准备并生成模块或用例；
+  - 在 XMind 抽屉顶部工具栏点击 `导出为Markdown`；
+  - 系统会直接下载 `.md` 文件，无需预览、复制或二次确认。
+- 使用效果：
+  - 仅导出当前活动 workspace 当前可见的模块与用例，不包含已删除或隐藏节点；
+  - 单个模块即使暂未生成用例，也会保留模块摘要，并明确写出“当前模块暂无用例”；
+  - 全局用例索引会生成稳定 case id（如 `M01-C01`），方便 AI 在分析结果中直接引用；
+  - 结构化 JSON 记录统一用数组、布尔值和稳定英文键名表达字段边界，减少 AI 把“无 / 空字段 / 缺失字段”混为一谈的概率；
+  - 导出会基于模块名、场景、测试点、步骤与预期结果补充 `suggested_check_targets` 提示，帮助 AI 更快定位应核对的实现维度；
+  - 现有 `导出当前XMind` 保持原行为不变，可与 Markdown 导出并行使用。
+- 新增内容/接口/组件：
+  - XMind 抽屉工具栏新增按钮：`导出为Markdown`；
+  - 新增前端导出核心：`buildMarkdownExportFromSnapshot({ requirementLabel, modules, exportedAt }, options)`，返回 `fileName`、`content`、`moduleCount`、`caseCount`；
+  - 导出文件名规则：`<需求标识>_ai_usecases_<14位时间戳>.md`；
+  - 新增字段归一化与 Markdown 拼装逻辑：统一处理前置条件、步骤、预期结果、空字段、中文序号前缀与稳定 case id；
+  - 新增 AI 强结构 schema：`导出元数据`、`AI 审核骨架`、摘要表，以及按模块输出的结构化 JSON 详情；
+  - 新增 `suggested_check_targets` 推断逻辑，为每个模块和用例补充建议核对维度；
+  - 新增 UI 自动化回归，覆盖 Markdown 下载、章节结构、空模块摘要保留，以及现有 XMind 导出不受影响；
+  - 本次未新增后端接口，未修改数据库或持久化结构。
+- 复用说明：复用现有 XMind 可见模块快照、需求名清洗、时间戳格式化、前端下载能力、XMind 工具栏按钮挂载与现有 `导出当前XMind` 的下载链路；新增独立 Markdown 导出核心，而未把文本拼装继续堆入 `xmindCasegen`，是为了保持编排层只负责快照提取与下载触发，降低后续扩展和回归成本。
+- 测试与验证：
+  - `node --check scripts/core/xmindMarkdownExportCore.js config/domConfig.js scripts/modules/app.js scripts/core/appRuntime.js scripts/modules/xmindCasegen.js tests/ui/casegen_export_xmind.spec.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1；确认未新增后端端点）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "工具栏支持查看生成记录，并展示根节点与模块节点的生成摘要|XMind 工具栏支持导出 AI Markdown，并保持 XMind 导出可用|XMind AI Markdown 在无用例模块下仍保留模块摘要" --reporter=line`（通过，3/3）
+- 更新记录：
+  - 2026-04-16 新增 XMind AI Markdown 导出能力：补充独立导出核心、抽屉工具栏按钮、文件名规则、AI 审核骨架与模块/用例双视图结构，确保导出结果优先服务大模型理解与实现核对。
+  - 2026-04-16 补充 UI 与 API 回归：验证 Markdown 下载、章节结构、空模块摘要保留、现有 XMind 导出可用，以及“XMind 不新增后端端点”守卫继续通过。
+  - 2026-04-16 将导出升级为 AI 强结构版 Markdown：新增结构化导出元数据、JSON 审核契约、模块级 JSON 详情记录，以及 `suggested_check_targets` 推断，降低 Codex / GPT-5.4 在大项目核对时的字段歧义与解析成本。
+
 - 功能名称：XMind 共享知识库上下文接入与页签隔离
 - 功能描述：为 `XMind 用例生成` 接入可选的共享知识库能力。用户在“通用设置”保存合法的知识库地址后，系统会按“整份需求 + 当前 workspace”先读取后端代理知识库目录，再复用当前 XMind 生成模型执行“AI 目录检索 -> AI 正文精筛”，只把最终筛选出的知识片段注入后续生成上下文；同一 workspace 下的模块生成、补全、重生成功能都会复用这份筛选结果，不再按模块重复检索或重复 AI 筛选；同时将知识检索状态、AI 筛选状态、筛选结果、是否实际注入、弹窗内容全部按 workspace 隔离，避免不同 XMind 页签之间互相串写。
 - 操作方式：

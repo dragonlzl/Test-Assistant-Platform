@@ -1,3 +1,4 @@
+const fs = require('fs');
 const { test, expect } = require('@playwright/test');
 
 const ONE_PIXEL_PNG = Buffer.from(
@@ -6598,6 +6599,7 @@ test.describe('XMind 用例生成抽屉', () => {
         deleteUndoVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDeleteUndoBtn')),
         deleteRedoVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDeleteRedoBtn')),
         exportVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenExportBtn')),
+        exportMarkdownVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenExportMarkdownBtn')),
       };
     })).toEqual({
       summaryInLeading: true,
@@ -6607,6 +6609,7 @@ test.describe('XMind 用例生成抽屉', () => {
       deleteUndoVisible: true,
       deleteRedoVisible: true,
       exportVisible: true,
+      exportMarkdownVisible: true,
     });
 
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
@@ -6642,6 +6645,120 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(previousCard).toContainText('登录模块');
     await expect(previousCard).toContainText('支付模块');
     await expect(previousCard).toContainText('0 条用例');
+  });
+
+  test('XMind 工具栏支持导出 AI Markdown，并保持 XMind 导出可用', async ({ page }) => {
+    const token = 'token-xmind-markdown-export';
+    const user = { id: 221, username: 'demo_user_markdown_export', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 160);
+    await seedDocumentRequirement(page, {
+      text: '需求：生成模块和用例后，需要导出适合 AI 阅读和实现核对的 Markdown。',
+      requirementLabel: 'XMindMarkdown导出需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMindMarkdown导出需求');
+    await openNodeContextMenu(page, 'XMindMarkdown导出需求');
+    await clickContextMenuAction(page, '生成全量模块');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+
+    await openNodeContextMenu(page, '登录模块');
+    await clickContextMenuAction(page, '生成全量用例');
+    await waitForNodeText(page, '登录模块-完整-1');
+
+    const [xmindDownload] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }),
+      clickElementById(page, 'xmindCaseGenExportBtn'),
+    ]);
+    const xmindName = await xmindDownload.suggestedFilename();
+    expect(xmindName).toMatch(/^XMindMarkdown导出需求_\d{14}\.xmind$/);
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }),
+      clickElementById(page, 'xmindCaseGenExportMarkdownBtn'),
+    ]);
+    const name = await download.suggestedFilename();
+    expect(name).toMatch(/^XMindMarkdown导出需求_ai_usecases_\d{14}\.md$/);
+    const filePath = await download.path();
+    expect(filePath).toBeTruthy();
+    const content = fs.readFileSync(filePath, 'utf8');
+    expect(content).toContain('# XMind AI 测试用例导出');
+    expect(content).toContain('## 导出元数据');
+    expect(content).toContain('## AI 审核骨架');
+    expect(content).toContain('## 模块视图');
+    expect(content).toContain('## 全局用例索引视图');
+    expect(content).toContain('## 模块详情视图');
+    expect(content).toContain('"schema_version": "2.0"');
+    expect(content).toContain('"structured_payload_format": "json_code_blocks"');
+    expect(content).toContain('| Case ID | 模块 | 优先级 | 标题 | 预期摘要 | 建议核对目标 |');
+    expect(content).toContain('### M01 登录模块');
+    expect(content).toContain('"module_record": {');
+    expect(content).toContain('"case_id": "M01-C01"');
+    expect(content).toContain('"module_id": "M01"');
+    expect(content).toContain('"suggested_check_targets": [');
+    expect(content).toContain('"permission_or_auth"');
+    expect(content).toContain('"validation_or_error"');
+    expect(content).toContain('"state_or_flow"');
+    expect(content).toContain('"depends_on_modules": [');
+    expect(content).toContain('"source_scope": "current_active_workspace_visible_nodes"');
+    expect(content).toContain('| M01-C01 | 登录模块 | P1 | 登录模块-完整-1 | 登录模块-完整-1执行成功 | permission_or_auth, validation_or_error, state_or_flow |');
+    await expect(page.locator('.temp-center-toast.ok', { hasText: '已导出 AI Markdown' })).toBeVisible();
+  });
+
+  test('XMind AI Markdown 在无用例模块下仍保留模块摘要', async ({ page }) => {
+    const token = 'token-xmind-markdown-empty-modules';
+    const user = { id: 222, username: 'demo_user_markdown_empty', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 120);
+    await seedDocumentRequirement(page, {
+      text: '需求：即使模块下还没有生成任何用例，Markdown 导出也需要保留模块摘要。',
+      requirementLabel: 'XMindMarkdown空模块需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMindMarkdown空模块需求');
+    await openNodeContextMenu(page, 'XMindMarkdown空模块需求');
+    await clickContextMenuAction(page, '生成全量模块');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }),
+      clickElementById(page, 'xmindCaseGenExportMarkdownBtn'),
+    ]);
+    const name = await download.suggestedFilename();
+    expect(name).toMatch(/^XMindMarkdown空模块需求_ai_usecases_\d{14}\.md$/);
+    const filePath = await download.path();
+    expect(filePath).toBeTruthy();
+    const content = fs.readFileSync(filePath, 'utf8');
+    expect(content).toContain('### M01 登录模块');
+    expect(content).toContain('### M02 支付模块');
+    expect(content).toContain('| M01 | 登录模块 | 0 |');
+    expect(content).toContain('| M02 | 支付模块 | 0 |');
+    expect(content).toContain('当前没有可导出的用例。');
+    expect(content).toContain('当前模块暂无用例。');
+    expect(content).toContain('"cases": []');
+    expect(content).toContain('"empty_case_records": true');
   });
 
   test('工具栏在生成前置准备和生成记录之间展示总体状态与当前模块用例总数，并随新增删除实时刷新', async ({ page }) => {
