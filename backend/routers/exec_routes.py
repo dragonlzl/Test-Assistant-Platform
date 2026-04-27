@@ -652,41 +652,96 @@ def delete_exec_set(
     return {"status": "ok"}
 
 
+def _load_json_list(value):
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return []
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            return []
+        return parsed if isinstance(parsed, list) else []
+    return []
+
+
+def _normalize_exec_status(value) -> str:
+    text = str(value or "").strip()
+    if text in ("pending", "未执行", "变更重跑", "有改动"):
+        return "未执行"
+    if text == "passed":
+        return "通过"
+    if text == "failed":
+        return "失败"
+    if text == "blocked":
+        return "阻塞"
+    if text == "not_applicable":
+        return "不适用"
+    return text or "未执行"
+
+
+def _resolve_reuse_archive_status(reuse_details_value) -> str:
+    details = [
+        item
+        for item in _load_json_list(reuse_details_value)
+        if isinstance(item, dict) and not bool(item.get("removed"))
+    ]
+    if not details:
+        return "未执行"
+
+    stats = {"pending": 0, "passed": 0, "failed": 0, "blocked": 0, "unspecified": 0}
+    for detail in details:
+        status_text = _normalize_exec_status(detail.get("status"))
+        if status_text == "通过":
+            stats["passed"] += 1
+        elif status_text == "失败":
+            stats["failed"] += 1
+        elif status_text == "阻塞":
+            stats["blocked"] += 1
+        elif status_text == "不适用":
+            stats["unspecified"] += 1
+        else:
+            stats["pending"] += 1
+
+    if stats["failed"]:
+        return "失败"
+    if stats["blocked"]:
+        return "阻塞"
+    if stats["pending"]:
+        return "未执行"
+    if stats["passed"]:
+        return "通过"
+    if stats["unspecified"]:
+        return "不适用"
+    return "未执行"
+
+
 def _get_exec_set_case_status_counts(db: Session, exec_set_id: int):
-    pending_statuses = ["pending", "未执行", "变更重跑", "有改动", ""]
-    failed_statuses = ["failed", "失败"]
-    blocked_statuses = ["blocked", "阻塞"]
-    row = (
-        db.query(
-            func.count(models.ExecCase.id).label("total"),
-            func.sum(
-                case(
-                    (
-                        (models.ExecCase.status.is_(None))
-                        | (models.ExecCase.status.in_(pending_statuses)),
-                        1,
-                    ),
-                    else_=0,
-                )
-            ).label("pending"),
-            func.sum(case((models.ExecCase.status.in_(failed_statuses), 1), else_=0)).label(
-                "failed"
-            ),
-            func.sum(
-                case((models.ExecCase.status.in_(blocked_statuses), 1), else_=0)
-            ).label("blocked"),
-        )
-        .filter(models.ExecCase.exec_set_id == exec_set_id)
-        .first()
-    )
-    if not row:
+    exec_set = db.query(models.ExecSet).filter(models.ExecSet.id == exec_set_id).first()
+    if not exec_set:
         return {"total": 0, "pending": 0, "failed": 0, "blocked": 0}
-    return {
-        "total": int(row.total or 0),
-        "pending": int(row.pending or 0),
-        "failed": int(row.failed or 0),
-        "blocked": int(row.blocked or 0),
-    }
+    rows = (
+        db.query(models.ExecCase.status, models.ExecCase.reuse_details)
+        .filter(models.ExecCase.exec_set_id == exec_set_id)
+        .all()
+    )
+    counts = {"total": len(rows), "pending": 0, "failed": 0, "blocked": 0}
+    for row in rows:
+        if bool(getattr(exec_set, "reuse_enabled", False)):
+            status_text = _resolve_reuse_archive_status(row.reuse_details)
+        else:
+            status_text = _normalize_exec_status(row.status)
+        if status_text == "失败":
+            counts["failed"] += 1
+        elif status_text == "阻塞":
+            counts["blocked"] += 1
+        elif status_text not in ("通过", "不适用"):
+            counts["pending"] += 1
+    return counts
 
 
 def _build_archive_restore_subquery(db: Session):
