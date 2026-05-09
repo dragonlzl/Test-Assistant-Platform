@@ -1208,6 +1208,13 @@
           errorCount: Number(source.errorCount || 0) || 0,
           createdModules: Number(source.createdModules || 0) || 0,
           addedCases: Number(source.addedCases || 0) || 0,
+          dedupeStatus: String(source.dedupeStatus || ''),
+          dedupeTaskId: String(source.dedupeTaskId || ''),
+          dedupeBeforeCount: Number(source.dedupeBeforeCount || 0) || 0,
+          dedupeAfterCount: Number(source.dedupeAfterCount || 0) || 0,
+          dedupeRemovedCount: Number(source.dedupeRemovedCount || 0) || 0,
+          dedupeError: String(source.dedupeError || ''),
+          dedupeRecords: Array.isArray(source.dedupeRecords) ? cloneJson(source.dedupeRecords, []) || [] : [],
           detailMap: cloneJson(source.detailMap, {}) || {},
           diagnostics: Array.isArray(source.diagnostics) ? source.diagnostics.slice() : [],
           pendingQueue: Array.isArray(source.pendingQueue) ? cloneJson(source.pendingQueue, []) : [],
@@ -3401,6 +3408,9 @@
           : null,
       })
       : null;
+    const xmindCaseDedupeCore = window.app && window.app.xmindCaseDedupeCore && typeof window.app.xmindCaseDedupeCore.init === 'function'
+      ? window.app.xmindCaseDedupeCore.init({})
+      : null;
     const mindElixirCore = window.app && window.app.mindElixirCore && typeof window.app.mindElixirCore.init === 'function'
       ? window.app.mindElixirCore.init({
         xmindApi: xmindCore,
@@ -3422,6 +3432,9 @@
     }
     if (xmindMarkdownExportCore) {
       window.app.xmindMarkdownExportCoreApi = xmindMarkdownExportCore;
+    }
+    if (xmindCaseDedupeCore) {
+      window.app.xmindCaseDedupeCoreApi = xmindCaseDedupeCore;
     }
     if (mindElixirCore) {
       window.app.mindElixirCoreApi = mindElixirCore;
@@ -4584,6 +4597,7 @@
         formatCompactTimestamp,
         callModelWithConfig,
         callModelWithContent,
+        xmindCaseDedupeCore,
         getAssignedModel,
         getReasoningForType,
         getTemperatureForType,

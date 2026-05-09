@@ -23,7 +23,7 @@
       'xmindStructureCard', 'caseFileInput', 'caseDropZone', 'caseStatus', 'caseViewBtn', 'caseViewContainer', 'caseViewHint',
       'xmindCaseGenOpenBtn', 'xmindCaseGenDrawer', 'xmindCaseGenDrawerTitle', 'xmindCaseGenDrawerBody', 'closeXmindCaseGenDrawerBtn',
       'xmindCaseGenWorkspaceLayer', 'xmindCaseGenWorkspaceList', 'xmindCaseGenWorkspaceAddBtn',
-      'xmindCaseGenToolbar', 'xmindCaseGenSummaryBtn', 'xmindCaseGenKnowledgeRuleBtn', 'xmindCaseGenKnowledgeAiBtn', 'xmindCaseGenSummaryOverlay', 'xmindCaseGenSummaryDialog', 'xmindCaseGenSummaryDialogBody', 'xmindCaseGenSummaryCloseBtn',
+      'xmindCaseGenToolbar', 'xmindCaseGenSummaryBtn', 'xmindCaseGenKnowledgeRuleBtn', 'xmindCaseGenKnowledgeAiBtn', 'xmindCaseGenDedupeBtn', 'xmindCaseGenSummaryOverlay', 'xmindCaseGenSummaryDialog', 'xmindCaseGenSummaryDialogBody', 'xmindCaseGenSummaryCloseBtn',
       'xmindCaseGenRequirementBadge', 'xmindCaseGenRequirementSummary', 'xmindCaseGenRequirementMeta',
       'xmindCaseGenCasesBadge', 'xmindCaseGenCasesSummary', 'xmindCaseGenCasesMeta',
       'xmindCaseGenImportRequirementBtn', 'xmindCaseGenImportCasesBtn', 'xmindCaseGenSelectCasesBtn',

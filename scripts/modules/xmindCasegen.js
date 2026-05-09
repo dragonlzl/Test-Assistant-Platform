@@ -70,6 +70,7 @@
     var historyBtn = document.getElementById('xmindCaseGenHistoryBtn');
     var knowledgeRuleBtn = document.getElementById('xmindCaseGenKnowledgeRuleBtn');
     var knowledgeAiBtn = document.getElementById('xmindCaseGenKnowledgeAiBtn');
+    var dedupeBtn = document.getElementById('xmindCaseGenDedupeBtn');
     var storeBtn = document.getElementById('xmindCaseGenStoreBtn');
     var interruptBtn = document.getElementById('xmindCaseGenInterruptBtn');
     var deleteUndoBtn = document.getElementById('xmindCaseGenDeleteUndoBtn');
@@ -138,15 +139,16 @@
     var recoveredStatePersistTimer = 0;
     var pendingOpenCenterRoot = false;
     var pendingOpenInstant = false;
+    var pendingOpenSkipRestorableViewState = false;
     var pendingDrawerOpenWorkspaceId = '';
     var drawerOpenedViaDomRestore = false;
     var knowledgeBasePipelinePromiseMap = {};
     var knowledgeBaseActionResultMap = {};
-    var pendingDrawerFullscreenRestore = false;
     var restoreDrawerOpenInFlight = false;
     var drawerLegacyRestoreSnapshot = null;
     var pageSuspending = false;
     var pageSuspendPersistAt = 0;
+    var pendingManualDedupeConfirm = false;
     var storeValidationClearTimer = 0;
     var xmindTaskListenerBound = false;
     var xmindTaskProcessingMap = {};
@@ -216,6 +218,8 @@
     var COMMON_ACTIONS = {
       DELETE: 'xmind-delete-selection',
     };
+    var DEDUPE_ACTION_ID = 'xmind-ai-dedupe';
+    var DEDUPE_STRENGTH = 'conservative';
 
     function createDefaultPrepState() {
       return {
@@ -241,6 +245,17 @@
         error: '',
         updatedAt: 0,
         pipeline: null,
+      };
+    }
+
+    function createDefaultDedupeState() {
+      return {
+        running: false,
+        taskId: '',
+        status: '',
+        error: '',
+        lastResult: null,
+        updatedAt: 0,
       };
     }
 
@@ -1035,6 +1050,12 @@
       return window.app && window.app.xmindMarkdownExportCoreApi ? window.app.xmindMarkdownExportCoreApi : null;
     }
 
+    function getXmindCaseDedupeCoreApi() {
+      if (ctx.xmindCaseDedupeCore) return ctx.xmindCaseDedupeCore;
+      if (ctx.xmindCaseDedupeCoreApi) return ctx.xmindCaseDedupeCoreApi;
+      return window.app && window.app.xmindCaseDedupeCoreApi ? window.app.xmindCaseDedupeCoreApi : null;
+    }
+
     function hasMindElixirCtorReady() {
       var globalObj = null;
       if (typeof MindElixir !== 'undefined') {
@@ -1328,13 +1349,21 @@
       (context && Array.isArray(context.list) ? context.list : []).forEach(function(entry) {
         caseCount += getVisibleCasesForModuleEntry(entry).length;
       });
-      var runningCount = collectRunningGenerationOperations().length;
+      var runningOperations = collectRunningGenerationOperations();
+      var runningCount = runningOperations.length;
+      var dedupeRunning = runningOperations.some(function(item) {
+        return item && item.scope === 'dedupe';
+      });
       return {
         runningCount: runningCount,
         runningState: runningCount > 0 ? 'running' : 'idle',
-        runningLabel: runningCount > 0 ? '正在执行生成任务' : '当前没有生成任务',
+        runningLabel: runningCount > 0
+          ? (dedupeRunning ? 'AI 去重精简中' : '正在执行生成任务')
+          : '当前没有生成任务',
         runningHint: runningCount > 0
-          ? ('当前共有 ' + String(runningCount) + ' 个生成任务在执行')
+          ? (dedupeRunning
+            ? '正在对当前页签 AI 生成用例执行去重精简'
+            : ('当前共有 ' + String(runningCount) + ' 个生成任务在执行'))
           : '当前可继续发起生成、补全或删除操作',
         moduleCount: moduleCount,
         caseCount: caseCount,
@@ -1398,6 +1427,10 @@
         applyInlineButtonStyle(knowledgeAiBtn);
         knowledgeGroup.appendChild(knowledgeAiBtn);
       }
+      if (dedupeBtn && persistenceGroup.appendChild) {
+        applyInlineButtonStyle(dedupeBtn);
+        persistenceGroup.appendChild(dedupeBtn);
+      }
       if (storeBtn && persistenceGroup.appendChild) {
         applyInlineButtonStyle(storeBtn, 'xmind-casegen-inline-btn-success');
         persistenceGroup.appendChild(storeBtn);
@@ -1428,6 +1461,7 @@
       }
       syncDeleteHistoryButtons();
       syncInterruptButton();
+      syncDedupeToolbarButton();
       syncKnowledgeBaseToolbarState();
       syncInlineModelPicker();
       return true;
@@ -1440,7 +1474,44 @@
       interruptBtn.title = runningCount > 0
         ? ('中断当前 XMind 生成中的 ' + String(runningCount) + ' 个任务')
         : '当前没有进行中的 XMind 生成任务';
+      syncPersistenceActionToolbarButtons();
+      syncDedupeToolbarButton();
       syncInlineToolbarOverview();
+    }
+
+    function syncPersistenceActionToolbarButtons() {
+      var running = hasAnyRunningGenerationOperation();
+      var message = '当前有 XMind 任务进行中，请等待完成后再操作';
+      function syncButton(btn) {
+        if (!btn) return;
+        if (!btn.getAttribute('data-xmind-default-title')) {
+          btn.setAttribute('data-xmind-default-title', String(btn.title || ''));
+        }
+        btn.disabled = running;
+        btn.title = running
+          ? message
+          : String(btn.getAttribute('data-xmind-default-title') || '');
+      }
+      syncButton(storeBtn);
+      syncButton(exportBtn);
+      syncButton(exportMarkdownBtn);
+    }
+
+    function syncDedupeToolbarButton() {
+      if (!dedupeBtn) return;
+      var running = hasAnyRunningGenerationOperation();
+      var hasCases = hasVisibleAiCasesForDedupe();
+      var confirming = pendingManualDedupeConfirm === true;
+      dedupeBtn.disabled = running || !hasCases || confirming;
+      if (running) {
+        dedupeBtn.title = '当前有 XMind 任务进行中，请等待完成后再去重';
+      } else if (confirming) {
+        dedupeBtn.title = 'AI 用例去重确认中，请先在弹窗中确认或取消';
+      } else if (!hasCases) {
+        dedupeBtn.title = '当前页签没有可去重的 AI 生成用例';
+      } else {
+        dedupeBtn.title = '对当前页签 AI 生成用例执行去重精简';
+      }
     }
 
     function cleanupViewStateBindings() {
@@ -1687,21 +1758,26 @@
         closeButtons: ['closeXmindCaseGenDrawerBtn'],
         onOpen: function() {
           var shouldCenterRootAfterOpen = pendingOpenCenterRoot === true;
+          var shouldSkipRestorableAfterOpen = pendingOpenSkipRestorableViewState === true;
           var openInstant = pendingOpenInstant === true;
           var restoreOpening = restoreDrawerOpenInFlight === true;
           var openWorkspaceId = pendingDrawerOpenWorkspaceId
             ? String(pendingDrawerOpenWorkspaceId || '')
             : String(getActiveWorkspaceId() || '');
           pendingOpenCenterRoot = false;
+          pendingOpenSkipRestorableViewState = false;
           pendingOpenInstant = false;
           pendingDrawerOpenWorkspaceId = '';
           getViewState().drawerOpen = true;
+          if (restoreOpening === true) {
+            getViewState().fullscreen = false;
+          }
           getViewState().updatedAt = Date.now();
           clearOpenButtonCompletionNotice({ persist: restoreOpening !== true });
           if (drawerEl && drawerEl.classList) {
             drawerEl.classList.toggle(
               'xmind-drawer-fullscreen',
-              getViewState().fullscreen === true && pendingDrawerFullscreenRestore !== true
+              getViewState().fullscreen === true && restoreOpening !== true
             );
           }
           setDebugState({ phase: 'drawer-open' });
@@ -1772,30 +1848,32 @@
               clearTimeout(drawerOpenRenderTimer);
               drawerOpenRenderTimer = 0;
             }
-            if (restoreOpening === true) {
-              setDebugState({ phase: 'drawer-open-render-inline' });
-              render({
-                reason: 'drawer-open-restore-inline',
-                persist: false,
-                centerRootAfterRender: shouldCenterRootAfterOpen,
-                skipRestorableViewState: shouldCenterRootAfterOpen,
-              });
-              return;
-            }
+            var renderOptions = {
+              reason: restoreOpening === true ? 'drawer-open-restore-async' : 'drawer-open',
+              persist: false,
+              centerRootAfterRender: shouldCenterRootAfterOpen,
+              skipRestorableViewState: shouldCenterRootAfterOpen || shouldSkipRestorableAfterOpen,
+            };
+            var renderDelayMs = restoreOpening === true
+              ? (shouldSkipRestorableAfterOpen ? 120 : 0)
+              : (openInstant ? 0 : 380);
             drawerOpenRenderTimer = setTimeout(function() {
               drawerOpenRenderTimer = 0;
               if (!isDrawerOpen()) {
                 setDebugState({ phase: 'drawer-open-render-skipped-closed' });
                 return;
               }
-              setDebugState({ phase: 'drawer-open-render-callback' });
-              render({
-                reason: 'drawer-open',
-                persist: false,
-                centerRootAfterRender: shouldCenterRootAfterOpen,
-                skipRestorableViewState: shouldCenterRootAfterOpen,
+              setDebugState({
+                phase: restoreOpening === true ? 'drawer-open-restore-render-callback' : 'drawer-open-render-callback',
+                skipRestorableViewState: shouldSkipRestorableAfterOpen === true,
               });
-            }, openInstant ? 0 : 380);
+              render({
+                reason: renderOptions.reason,
+                persist: renderOptions.persist,
+                centerRootAfterRender: renderOptions.centerRootAfterRender,
+                skipRestorableViewState: renderOptions.skipRestorableViewState,
+              });
+            }, renderDelayMs);
           } catch (errRender) {
             setDebugState({
               phase: 'drawer-open-schedule-render-error',
@@ -1826,6 +1904,7 @@
         hasImportedBaseline: false,
         openButtonDotVisible: false,
         knowledgeBase: createDefaultKnowledgeBaseState(),
+        dedupe: createDefaultDedupeState(),
         viewState: createDefaultViewState(),
           history: [],
           operationSnapshots: [],
@@ -1872,6 +1951,14 @@
       if (!state.xmindCaseGen.prep || typeof state.xmindCaseGen.prep !== 'object') {
         state.xmindCaseGen.prep = createDefaultPrepState();
       }
+      if (!state.xmindCaseGen.dedupe || typeof state.xmindCaseGen.dedupe !== 'object') {
+        state.xmindCaseGen.dedupe = createDefaultDedupeState();
+      }
+      state.xmindCaseGen.dedupe.running = state.xmindCaseGen.dedupe.running === true;
+      state.xmindCaseGen.dedupe.taskId = String(state.xmindCaseGen.dedupe.taskId || '');
+      state.xmindCaseGen.dedupe.status = String(state.xmindCaseGen.dedupe.status || '');
+      state.xmindCaseGen.dedupe.error = String(state.xmindCaseGen.dedupe.error || '');
+      state.xmindCaseGen.dedupe.updatedAt = Number(state.xmindCaseGen.dedupe.updatedAt || 0) || 0;
       if (!Number.isFinite(Number(state.xmindCaseGen.nextSnapshotId))) {
         state.xmindCaseGen.nextSnapshotId = 1;
       }
@@ -2089,6 +2176,13 @@
         errorCount: Number(input.errorCount || 0),
         createdModules: Number(input.createdModules || 0),
         addedCases: Number(input.addedCases || 0),
+        dedupeStatus: input.dedupeStatus ? String(input.dedupeStatus || '') : '',
+        dedupeTaskId: input.dedupeTaskId ? String(input.dedupeTaskId || '') : '',
+        dedupeBeforeCount: Number(input.dedupeBeforeCount || 0),
+        dedupeAfterCount: Number(input.dedupeAfterCount || 0),
+        dedupeRemovedCount: Number(input.dedupeRemovedCount || 0),
+        dedupeError: input.dedupeError ? String(input.dedupeError || '') : '',
+        dedupeRecords: normalizeHistoryDedupeRecords(input.dedupeRecords || input.removedCases || []),
         detailMap: cloneJson(input.detailMap, {}) || {},
         diagnostics: Array.isArray(input.diagnostics) ? input.diagnostics.slice() : [],
         pendingQueue: Array.isArray(input.pendingQueue) ? cloneJson(input.pendingQueue, []) || [] : [],
@@ -2113,6 +2207,13 @@
         errorCount: snapshot.errorCount,
         createdModules: snapshot.createdModules,
         addedCases: snapshot.addedCases,
+        dedupeStatus: snapshot.dedupeStatus,
+        dedupeTaskId: snapshot.dedupeTaskId,
+        dedupeBeforeCount: snapshot.dedupeBeforeCount,
+        dedupeAfterCount: snapshot.dedupeAfterCount,
+        dedupeRemovedCount: snapshot.dedupeRemovedCount,
+        dedupeError: snapshot.dedupeError,
+        dedupeRecords: snapshot.dedupeRecords,
         detailMap: snapshot.detailMap,
         diagnostics: snapshot.diagnostics,
         pendingQueue: snapshot.pendingQueue,
@@ -2142,6 +2243,13 @@
         errorCount: Number(cloned.errorCount || 0) || 0,
         createdModules: Number(cloned.createdModules || 0) || 0,
         addedCases: Number(cloned.addedCases || 0) || 0,
+        dedupeStatus: String(cloned.dedupeStatus || ''),
+        dedupeTaskId: String(cloned.dedupeTaskId || ''),
+        dedupeBeforeCount: Number(cloned.dedupeBeforeCount || 0) || 0,
+        dedupeAfterCount: Number(cloned.dedupeAfterCount || 0) || 0,
+        dedupeRemovedCount: Number(cloned.dedupeRemovedCount || 0) || 0,
+        dedupeError: String(cloned.dedupeError || ''),
+        dedupeRecords: normalizeHistoryDedupeRecords(cloned.dedupeRecords || []),
         detailMap: cloneJson(cloned.detailMap, {}) || {},
         diagnostics: Array.isArray(cloned.diagnostics) ? cloned.diagnostics.slice() : [],
         pendingQueue: Array.isArray(cloned.pendingQueue) ? cloneJson(cloned.pendingQueue, []) || [] : [],
@@ -2155,12 +2263,14 @@
         : {};
       var detailCount = Object.keys(detailMap).length;
       var diagnosticsCount = Array.isArray(pipeline && pipeline.diagnostics) ? pipeline.diagnostics.length : 0;
+      var dedupeRecordCount = Array.isArray(pipeline && pipeline.dedupeRecords) ? pipeline.dedupeRecords.length : 0;
       var pendingCount = Array.isArray(pipeline && pipeline.pendingQueue) ? pipeline.pendingQueue.length : 0;
       return (
         Number(pipeline && pipeline.createdModules || 0) * 1000
         + Number(pipeline && pipeline.addedCases || 0) * 10
         + detailCount * 100
         + diagnosticsCount * 10
+        + dedupeRecordCount * 10
         + pendingCount
       );
     }
@@ -2191,6 +2301,9 @@
       base.stage = pickString(base.stage, incoming.stage);
       base.discoveryStatus = pickString(base.discoveryStatus, incoming.discoveryStatus);
       base.cancelReason = pickString(base.cancelReason, incoming.cancelReason);
+      base.dedupeStatus = pickString(base.dedupeStatus, incoming.dedupeStatus);
+      base.dedupeTaskId = pickString(base.dedupeTaskId, incoming.dedupeTaskId);
+      base.dedupeError = pickString(base.dedupeError, incoming.dedupeError);
       base.hadAiContentBeforeAction = base.hadAiContentBeforeAction === true || incoming.hadAiContentBeforeAction === true;
       base.hadAiLayerBeforeAction = base.hadAiLayerBeforeAction === true || incoming.hadAiLayerBeforeAction === true;
       base.hadAiCasesBeforeAction = base.hadAiCasesBeforeAction === true || incoming.hadAiCasesBeforeAction === true;
@@ -2198,6 +2311,9 @@
       base.errorCount = Math.max(Number(base.errorCount || 0), Number(incoming.errorCount || 0));
       base.createdModules = Math.max(Number(base.createdModules || 0), Number(incoming.createdModules || 0));
       base.addedCases = Math.max(Number(base.addedCases || 0), Number(incoming.addedCases || 0));
+      base.dedupeBeforeCount = Math.max(Number(base.dedupeBeforeCount || 0), Number(incoming.dedupeBeforeCount || 0));
+      base.dedupeAfterCount = Math.max(Number(base.dedupeAfterCount || 0), Number(incoming.dedupeAfterCount || 0));
+      base.dedupeRemovedCount = Math.max(Number(base.dedupeRemovedCount || 0), Number(incoming.dedupeRemovedCount || 0));
       base.updatedAt = Math.max(Number(base.updatedAt || 0), Number(incoming.updatedAt || 0));
 
       var mergedDetailMap = {};
@@ -2218,6 +2334,7 @@
       });
       base.detailMap = mergedDetailMap;
       base.diagnostics = normalizeHistoryDiagnostics((base.diagnostics || []).concat(incoming.diagnostics || []));
+      base.dedupeRecords = normalizeHistoryDedupeRecords((base.dedupeRecords || []).concat(incoming.dedupeRecords || []));
       if (Array.isArray(incoming.pendingQueue) && incoming.pendingQueue.length >= (Array.isArray(base.pendingQueue) ? base.pendingQueue.length : 0)) {
         base.pendingQueue = cloneJson(incoming.pendingQueue, []) || [];
       }
@@ -2419,22 +2536,30 @@
       return rootState.modules[key];
     }
 
-    function getDeletedBaselineModuleMap() {
+    function buildDeletedBaselineModuleMapFromList(list) {
       var map = Object.create(null);
-      ensureState().deletedBaselineModuleKeys.forEach(function(item) {
+      (Array.isArray(list) ? list : []).forEach(function(item) {
         var key = buildBaselineModuleDeleteKey(item);
         if (key) map[key] = true;
       });
       return map;
     }
 
-    function getDeletedBaselineCaseMap() {
+    function buildDeletedBaselineCaseMapFromList(list) {
       var map = Object.create(null);
-      ensureState().deletedBaselineCaseKeys.forEach(function(item) {
+      (Array.isArray(list) ? list : []).forEach(function(item) {
         var key = String(item || '').trim();
         if (key) map[key] = true;
       });
       return map;
+    }
+
+    function getDeletedBaselineModuleMap() {
+      return buildDeletedBaselineModuleMapFromList(ensureState().deletedBaselineModuleKeys);
+    }
+
+    function getDeletedBaselineCaseMap() {
+      return buildDeletedBaselineCaseMapFromList(ensureState().deletedBaselineCaseKeys);
     }
 
     function rememberDeletedBaselineModule(moduleTitle) {
@@ -2525,6 +2650,7 @@
         inlineStatusType: '',
         openButtonDotVisible: false,
         knowledgeBase: createDefaultKnowledgeBaseState(),
+        dedupe: createDefaultDedupeState(),
         viewState: nextViewState,
         history: [],
         operationSnapshots: [],
@@ -2732,6 +2858,9 @@
         ? cloneJson(source.xmind, createInitialXmindState())
         : createInitialXmindState();
       xmindSnapshot.knowledgeBase = normalizeKnowledgeBaseState(xmindSnapshot.knowledgeBase);
+      if (!xmindSnapshot.dedupe || typeof xmindSnapshot.dedupe !== 'object') {
+        xmindSnapshot.dedupe = createDefaultDedupeState();
+      }
       if (!xmindSnapshot.viewState || typeof xmindSnapshot.viewState !== 'object') {
         xmindSnapshot.viewState = createDefaultViewState();
       }
@@ -3438,6 +3567,27 @@
 
     function captureSuspendFriendlyViewState() {
       var baseViewState = cloneJson(getViewState(), createDefaultViewState()) || createDefaultViewState();
+      var drawerFullscreen = drawerEl && drawerEl.classList
+        ? drawerEl.classList.contains('xmind-drawer-fullscreen')
+        : (baseViewState.fullscreen === true);
+      if (drawerFullscreen === true) {
+        var lightView = cloneJson(baseViewState, createDefaultViewState()) || createDefaultViewState();
+        lightView.drawerOpen = isDrawerOpen();
+        lightView.fullscreen = false;
+        lightView.transform = '';
+        lightView.scaleVal = 1;
+        lightView.scrollLeft = 0;
+        lightView.scrollTop = 0;
+        lightView.hasManualViewport = false;
+        lightView.anchorState = null;
+        lightView.collapsedNodeKeys = normalizeUniqueStringList(baseViewState.collapsedNodeKeys);
+        lightView.treeSourceSignature = String(ensureState().treeSourceSignature || baseViewState.treeSourceSignature || '');
+        lightView.updatedAt = Date.now();
+        return normalizeStoredViewState(lightView, {
+          drawerOpen: lightView.drawerOpen === true,
+          fullscreen: false,
+        });
+      }
       var mindData = currentMindData || buildCurrentMindDataSnapshot();
       var nextView = captureVisibleMindViewStateFromDom({
         baseViewState: baseViewState,
@@ -3489,6 +3639,12 @@
         baseView.updatedAt = now;
         record.snapshot.xmind.viewState = cloneJson(baseView, createDefaultViewState());
         record.updatedAt = now;
+      });
+      saveActiveWorkspaceSnapshot({
+        forceShared: true,
+        skipSummaryDraftSync: true,
+        skipViewStateCapture: true,
+        overrideViewState: nextView,
       });
       if (useImmediate === true) {
         persistWorkflowStateNow();
@@ -3867,6 +4023,30 @@
         return normalizeStoredViewState(getViewState());
       }
       return createDefaultViewState();
+    }
+
+    function clearWorkspaceFullscreenRestoreIntent(workspaceId) {
+      var stableId = String(workspaceId || getActiveWorkspaceId() || '');
+      var storedView = getWorkspaceStoredViewState(stableId);
+      var hadFullscreen = storedView && storedView.drawerOpen === true && storedView.fullscreen === true;
+      if (!hadFullscreen) return false;
+      storedView.fullscreen = false;
+      storedView.updatedAt = Date.now();
+      if (stableId === String(getActiveWorkspaceId() || '')) {
+        state.xmindCaseGen.viewState = cloneJson(storedView, createDefaultViewState());
+      }
+      var record = getWorkspaceRecord(stableId);
+      if (record) {
+        if (!record.snapshot || typeof record.snapshot !== 'object') {
+          record.snapshot = createWorkspaceSnapshot();
+        }
+        if (!record.snapshot.xmind || typeof record.snapshot.xmind !== 'object') {
+          record.snapshot.xmind = createInitialXmindState();
+        }
+        record.snapshot.xmind.viewState = cloneJson(storedView, createDefaultViewState());
+        record.updatedAt = Date.now();
+      }
+      return true;
     }
 
     function shouldRestoreWorkspaceViewport(workspaceId, viewState) {
@@ -5123,6 +5303,43 @@
       return result;
     }
 
+    function normalizeHistoryDedupeRecords(items) {
+      var result = [];
+      var seen = {};
+      (Array.isArray(items) ? items : []).forEach(function(item) {
+        if (!item || typeof item !== 'object') return;
+        var moduleTitle = normalizeModuleTitle(item.module || item.moduleTitle || '');
+        var title = String(item.title || item.caseTitle || item.case_title || '').replace(/\s+/g, ' ').trim();
+        if (!moduleTitle || !title) return;
+        var reason = normalizeHistoryDedupeReason(item.reason || item.removeReason || item.remove_reason || '');
+        var mergedInto = String(item.mergedInto || item.merged_into || item.keepTitle || item.keep_title || '').replace(/\s+/g, ' ').trim();
+        var key = normalizeModuleKey(moduleTitle) + '::' + title.toLowerCase() + '::' + reason + '::' + mergedInto;
+        if (seen[key]) return;
+        seen[key] = true;
+        result.push({
+          module: moduleTitle,
+          title: title,
+          reason: reason,
+          mergedInto: mergedInto,
+        });
+      });
+      return result;
+    }
+
+    function normalizeHistoryDedupeReason(value) {
+      var text = String(value || '').replace(/\s+/g, ' ').trim();
+      text = text.replace(/^原因[：:]\s*/, '').replace(/^因为\s*/, '').trim();
+      if (!text) return '覆盖高度重叠';
+      var cutAt = -1;
+      ['，', '。', '；', ';', '.', '、'].forEach(function(mark) {
+        var index = text.indexOf(mark);
+        if (index > 0 && (cutAt === -1 || index < cutAt)) cutAt = index;
+      });
+      if (cutAt > 0) text = text.slice(0, cutAt).trim();
+      if (text.length > 24) text = text.slice(0, 24).trim() + '…';
+      return text || '覆盖高度重叠';
+    }
+
     function normalizeHistoryPreviewText(value) {
       var text = String(value || '').replace(/\s+/g, ' ').trim();
       if (!text) return '';
@@ -5135,6 +5352,7 @@
       var history = Array.isArray(xmindState.history) ? xmindState.history : [];
       var details = normalizeHistoryDetails(payload && payload.details);
       var diagnostics = normalizeHistoryDiagnostics(payload && payload.diagnostics);
+      var dedupeRecords = normalizeHistoryDedupeRecords(payload && payload.dedupeRecords);
       var scope = payload && payload.scope === 'module' ? 'module' : 'root';
       var moduleCount = Number(payload && payload.moduleCount);
       var resultKind = payload && (
@@ -5155,6 +5373,7 @@
         resultKind: resultKind,
         reasonText: payload && payload.reasonText ? String(payload.reasonText) : '',
         diagnostics: diagnostics,
+        dedupeRecords: dedupeRecords,
         previewText: normalizeHistoryPreviewText(payload && payload.previewText),
         createdAt: Date.now(),
       });
@@ -5207,6 +5426,53 @@
       return sections.join('');
     }
 
+    function buildHistoryDedupeRecordsHtml(records) {
+      var list = normalizeHistoryDedupeRecords(records);
+      if (!list.length) return '';
+      var groups = [];
+      var groupMap = {};
+      list.forEach(function(item) {
+        var moduleName = item.module || '未命名模块';
+        var key = normalizeModuleKey(moduleName) || moduleName;
+        if (!groupMap[key]) {
+          groupMap[key] = {
+            module: moduleName,
+            items: [],
+          };
+          groups.push(groupMap[key]);
+        }
+        groupMap[key].items.push(item);
+      });
+      return '<div class="xmind-casegen-history-dedupe-records">'
+        + '<div class="xmind-casegen-history-dedupe-head">'
+          + '<strong class="xmind-casegen-history-dedupe-title">去重记录</strong>'
+          + '<span class="xmind-casegen-history-dedupe-summary">已去重 ' + escapeHtml(String(list.length)) + ' 条用例</span>'
+        + '</div>'
+        + '<div class="xmind-casegen-history-dedupe-module-list">'
+          + groups.map(function(group) {
+            return '<section class="xmind-casegen-history-dedupe-module-block">'
+              + '<div class="xmind-casegen-history-dedupe-module-head">'
+                + '<span class="xmind-casegen-history-dedupe-module">' + escapeHtml(group.module || '未命名模块') + '</span>'
+                + '<span class="xmind-casegen-history-dedupe-module-count">' + escapeHtml(String(group.items.length)) + ' 条</span>'
+              + '</div>'
+              + '<div class="xmind-casegen-history-dedupe-table" role="table" aria-label="' + escapeHtml(group.module || '未命名模块') + '去重明细">'
+                + '<div class="xmind-casegen-history-dedupe-row xmind-casegen-history-dedupe-row-head" role="row">'
+                  + '<span role="columnheader">被去掉的用例</span>'
+                  + '<span role="columnheader">去掉原因</span>'
+                + '</div>'
+                + group.items.map(function(item) {
+                  return '<div class="xmind-casegen-history-dedupe-row" role="row">'
+                    + '<span class="xmind-casegen-history-dedupe-case" role="cell" title="' + escapeHtml(item.title || '未命名用例') + '">' + escapeHtml(item.title || '未命名用例') + '</span>'
+                    + '<span class="xmind-casegen-history-dedupe-reason" role="cell" title="' + escapeHtml(item.reason || '覆盖高度重叠') + '">' + escapeHtml(item.reason || '覆盖高度重叠') + '</span>'
+                  + '</div>';
+                }).join('')
+              + '</div>'
+            + '</section>';
+          }).join('')
+        + '</div>'
+      + '</div>';
+    }
+
     function renderHistoryDialog() {
       if (!summaryDialogBodyEl) return;
       var history = ensureState().history || [];
@@ -5218,6 +5484,7 @@
         + history.map(function(entry) {
           var details = Array.isArray(entry.details) ? entry.details : [];
           var diagnostics = normalizeHistoryDiagnostics(entry && entry.diagnostics);
+          var dedupeRecords = normalizeHistoryDedupeRecords(entry && entry.dedupeRecords);
           var resultKind = entry && entry.resultKind ? String(entry.resultKind) : 'changed';
           var summaryText = entry && entry.summaryText ? String(entry.summaryText) : '';
           if (!summaryText) {
@@ -5253,6 +5520,7 @@
               + '</div>'
             : '';
           var diagnosticsHtml = buildHistoryDiagnosticSectionsHtml(diagnostics);
+          var dedupeRecordsHtml = buildHistoryDedupeRecordsHtml(dedupeRecords);
           return '<article class="xmind-casegen-history-card">'
             + '<div class="xmind-casegen-history-head">'
             +   '<div class="xmind-casegen-history-copy">'
@@ -5265,6 +5533,7 @@
             + detailHtml
             + reasonHtml
             + previewHtml
+            + dedupeRecordsHtml
             + diagnosticsHtml
             + '</article>';
         }).join('')
@@ -6194,7 +6463,7 @@
         || shouldRestoreViewportState
       ) {
         if (shouldPreserveSnapshotDrawerIntent) {
-          hydrateWorkspaceSnapshot(activeId);
+          hydrateWorkspaceSnapshot(activeId, { keepDrawerOpen: false });
         } else {
           hydrateWorkspaceSnapshot(activeId, { keepDrawerOpen: isDrawerOpen() });
         }
@@ -6275,24 +6544,177 @@
       if (parsed.length) return parsed;
       try {
         var data = JSON.parse(stripCodeFence(raw) || '[]');
-        return Array.isArray(data) ? data : [];
+        if (Array.isArray(data)) return data;
       } catch (err) {
-        return [];
+        // fall through to text parser
       }
+      if (xmindGenApi && typeof xmindGenApi.deriveCaseListFromText === 'function') {
+        var derived = xmindGenApi.deriveCaseListFromText(raw);
+        return Array.isArray(derived) ? derived : [];
+      }
+      return [];
     }
 
-    function countWorkspaceGeneratedCases(snapshot) {
-      var source = snapshot && snapshot.shared && typeof snapshot.shared === 'object'
-        ? snapshot.shared
+    function getSnapshotBaselineCaseList(snapshot) {
+      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      var shared = source.shared && typeof source.shared === 'object'
+        ? source.shared
         : {};
-      var results = source.caseGenResults && typeof source.caseGenResults === 'object'
-        ? source.caseGenResults
+      var xmind = source.xmind && typeof source.xmind === 'object'
+        ? source.xmind
         : {};
-      var total = 0;
-      Object.keys(results).forEach(function(moduleId) {
-        total += safeParseWorkspaceCaseList(results[moduleId]).length;
+      var prep = xmind.prep && typeof xmind.prep === 'object' ? xmind.prep : null;
+      var importedCases = Array.isArray(shared.importedCases) ? shared.importedCases : [];
+      var rawList = [];
+      if (!prep || prep.caseImportMode !== 'import') return rawList;
+      if (importedCases.length) {
+        importedCases.forEach(function(item) {
+          if (!item || typeof item !== 'object') return;
+          if (Array.isArray(item.list) && item.list.length) {
+            rawList = rawList.concat(item.list.filter(Boolean));
+            return;
+          }
+          if (item.text && String(item.text || '').trim()) {
+            rawList = rawList.concat(safeParseWorkspaceCaseList(item.text));
+          }
+        });
+      } else if (shared.caseText && String(shared.caseText || '').trim()) {
+        rawList = safeParseWorkspaceCaseList(shared.caseText);
+      }
+      var deletedBaselineModules = buildDeletedBaselineModuleMapFromList(xmind.deletedBaselineModuleKeys);
+      var deletedBaselineCases = buildDeletedBaselineCaseMapFromList(xmind.deletedBaselineCaseKeys);
+      return rawList.filter(function(item) {
+        if (!item || typeof item !== 'object') return false;
+        var moduleTitle = normalizeModuleTitle(item.module || item.module_name || item['模块'] || '未命名模块');
+        var moduleKey = normalizeModuleKey(moduleTitle);
+        if (!moduleKey) return false;
+        if (deletedBaselineModules[moduleKey]) return false;
+        var caseDeleteKey = buildBaselineCaseDeleteKey(moduleTitle, buildCaseSignature(item, moduleTitle));
+        if (caseDeleteKey && deletedBaselineCases[caseDeleteKey]) return false;
+        return true;
       });
-      return total;
+    }
+
+    function buildWorkspaceVisibleModuleContextFromSnapshot(snapshot) {
+      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      var shared = source.shared && typeof source.shared === 'object'
+        ? source.shared
+        : {};
+      var xmind = source.xmind && typeof source.xmind === 'object'
+        ? source.xmind
+        : {};
+      var modules = Array.isArray(shared.caseGenModules) ? shared.caseGenModules : [];
+      var results = shared.caseGenResults && typeof shared.caseGenResults === 'object'
+        ? shared.caseGenResults
+        : {};
+      var xmindRoot = xmind.root && typeof xmind.root === 'object' ? xmind.root : {};
+      var moduleStates = xmind.modules && typeof xmind.modules === 'object' ? xmind.modules : {};
+      var includeAiLayer = xmindRoot.hideAiLayer !== true;
+      var baselineGrouped = groupCasesByModule(getSnapshotBaselineCaseList(snapshot));
+      var order = baselineGrouped.order.slice();
+      var map = {};
+
+      order.forEach(function(key) {
+        var info = baselineGrouped.map[key];
+        map[key] = {
+          moduleKey: key,
+          title: info.title,
+          baselineCases: info.cases.slice(),
+          aiCases: [],
+          aiModule: null,
+          aiModuleId: '',
+        };
+      });
+
+      if (includeAiLayer !== false) modules.forEach(function(mod, index) {
+        if (!mod) return;
+        var title = normalizeModuleTitle(mod.title || mod.module || ('模块' + (index + 1)));
+        var key = normalizeModuleKey(title);
+        var moduleId = String(mod.id || '');
+        if (!key) return;
+        if (!map[key]) {
+          map[key] = {
+            moduleKey: key,
+            title: title,
+            baselineCases: [],
+            aiCases: [],
+            aiModule: null,
+            aiModuleId: '',
+          };
+          order.push(key);
+        }
+        map[key].aiModule = mod;
+        map[key].aiModuleId = moduleId;
+        map[key].title = title;
+        var moduleState = moduleId && moduleStates[moduleId] && typeof moduleStates[moduleId] === 'object'
+          ? moduleStates[moduleId]
+          : null;
+        map[key].aiCases = moduleState && moduleState.hideResults === true
+          ? []
+          : safeParseWorkspaceCaseList(moduleId ? results[moduleId] : '');
+      });
+      return {
+        order: order,
+        map: map,
+        list: order.map(function(key) { return map[key]; }),
+      };
+    }
+
+    function summarizeVisibleModuleContext(context) {
+      var list = context && Array.isArray(context.list) ? context.list : [];
+      var caseCount = 0;
+      list.forEach(function(entry) {
+        caseCount += getVisibleCasesForModuleEntry(entry).length;
+      });
+      return {
+        moduleCount: list.length,
+        caseCount: caseCount,
+      };
+    }
+
+    function ensureDedupeUiState() {
+      var xmindState = ensureState();
+      if (!xmindState.dedupe || typeof xmindState.dedupe !== 'object') {
+        xmindState.dedupe = createDefaultDedupeState();
+      }
+      return xmindState.dedupe;
+    }
+
+    function getRunningDedupeTaskCount(workspaceId) {
+      var targetId = String(workspaceId || getActiveWorkspaceId() || '');
+      return filterTasksByWorkspace(listManagedXmindTasks(), targetId).filter(function(task) {
+        return task && task.status === 'running' && task.scope === 'dedupe';
+      }).length;
+    }
+
+    function collectAiDedupeModulesFromContext(context) {
+      var modules = [];
+      (context && Array.isArray(context.list) ? context.list : []).forEach(function(entry) {
+        if (!entry || !entry.aiModuleId) return;
+        var cases = Array.isArray(entry.aiCases) ? entry.aiCases : [];
+        var normalizedCases = cases.map(function(item) {
+          return normalizeCaseItem(item, entry.title);
+        }).filter(Boolean);
+        if (!normalizedCases.length) return;
+        modules.push({
+          moduleId: String(entry.aiModuleId || ''),
+          moduleKey: String(entry.moduleKey || normalizeModuleKey(entry.title || '')),
+          module: normalizeModuleTitle(entry.title || ''),
+          key_scenarios: entry.aiModule && Array.isArray(entry.aiModule.scenarios) ? entry.aiModule.scenarios.slice() : [],
+          test_points: entry.aiModule && Array.isArray(entry.aiModule.points) ? entry.aiModule.points.slice() : [],
+          coupled_modules: entry.aiModule && Array.isArray(entry.aiModule.coupled) ? entry.aiModule.coupled.slice() : [],
+          cases: normalizedCases,
+        });
+      });
+      return modules;
+    }
+
+    function collectCurrentAiDedupeModules() {
+      return collectAiDedupeModulesFromContext(buildVisibleModuleContext());
+    }
+
+    function hasVisibleAiCasesForDedupe() {
+      return collectCurrentAiDedupeModules().length > 0;
     }
 
     function hasWorkspaceFailedState(snapshot) {
@@ -6305,6 +6727,8 @@
     function listWorkspaceProgressItems() {
       var host = ensureWorkspaceHostState();
       var activeId = String(getWorkspaceUiSelectedId() || '');
+      var liveWorkspaceId = String(host.activeWorkspaceId || '');
+      var canUseLiveSummary = shouldXmindOwnLiveWorkspaceState();
       return host.workspaceOrder.slice(0, WORKSPACE_MAX).map(function(id) {
         var record = host.workspaces[id];
         if (!record) return null;
@@ -6313,6 +6737,7 @@
         var summary = buildWorkspaceTabSummary(record, {
           running: running,
           dirty: dirty,
+          live: canUseLiveSummary && String(id || '') === liveWorkspaceId,
         });
         return {
           id: id,
@@ -6343,6 +6768,7 @@
       var summary = record ? buildWorkspaceTabSummary(record, {
         running: hasWorkspaceRunningTasks(activeId),
         dirty: !hasWorkspaceRunningTasks(activeId) && isWorkspaceDirty(activeId),
+        live: shouldXmindOwnLiveWorkspaceState() && String(activeId || '') === String(ensureWorkspaceHostState().activeWorkspaceId || ''),
       }) : {
         moduleCount: 0,
         caseCount: 0,
@@ -6372,20 +6798,20 @@
     function buildWorkspaceTabSummary(record, options) {
       var opts = options || {};
       var snapshot = record && record.snapshot ? record.snapshot : null;
-      var shared = snapshot && snapshot.shared && typeof snapshot.shared === 'object'
-        ? snapshot.shared
-        : {};
       var xmind = snapshot && snapshot.xmind && typeof snapshot.xmind === 'object'
         ? snapshot.xmind
         : {};
-      var moduleCount = Array.isArray(shared.caseGenModules) ? shared.caseGenModules.length : 0;
-      var caseCount = countWorkspaceGeneratedCases(snapshot);
+      var visibleSummary = opts.live === true && workspaceShadowDepth <= 0
+        ? summarizeVisibleModuleContext(buildVisibleModuleContext())
+        : summarizeVisibleModuleContext(buildWorkspaceVisibleModuleContextFromSnapshot(snapshot));
+      var moduleCount = visibleSummary.moduleCount;
+      var caseCount = visibleSummary.caseCount;
       var prep = xmind.prep && typeof xmind.prep === 'object' ? xmind.prep : null;
       var failed = hasWorkspaceFailedState(snapshot);
       var statusText = '待准备';
       var statusCls = 'is-idle';
       if (opts.running === true) {
-        statusText = '生成中';
+        statusText = getRunningDedupeTaskCount(record && record.id ? record.id : '') > 0 ? '去重中' : '生成中';
         statusCls = 'is-running';
       } else if (failed === true) {
         statusText = '失败';
@@ -7960,6 +8386,62 @@
       };
     }
 
+    function buildDedupeRequirementSource() {
+      var source = getSelectedRequirementSource();
+      var prep = getPrepState();
+      return {
+        label: getRequirementLabelText(),
+        text: source && source.text ? String(source.text || '') : '',
+        supplement: source && source.supplement
+          ? String(source.supplement || '')
+          : String(prep && prep.requirementSupplement ? prep.requirementSupplement : ''),
+      };
+    }
+
+    function buildXmindDedupeTaskInput(modules, options) {
+      var opts = options || {};
+      var dedupeCoreApi = getXmindCaseDedupeCoreApi();
+      if (!dedupeCoreApi || typeof dedupeCoreApi.buildDedupeRequest !== 'function') {
+        throw new Error('AI 用例去重能力未就绪，请刷新后重试');
+      }
+      var model = xmindGenApi && typeof xmindGenApi.getAssignedModel === 'function'
+        ? xmindGenApi.getAssignedModel('xmindcasegen')
+        : null;
+      if (!model || !model.baseUrl || !model.model) {
+        throw new Error('未找到 XMind 用例生成模型');
+      }
+      var requirement = buildDedupeRequirementSource();
+      var built = dedupeCoreApi.buildDedupeRequest({
+        requirementLabel: requirement.label,
+        requirementText: requirement.text,
+        requirementSupplement: requirement.supplement,
+        modules: modules,
+        strength: DEDUPE_STRENGTH,
+        source: opts.source || 'manual-toolbar',
+      });
+      var requestText = String(built && built.requestText ? built.requestText : '');
+      var payloadLimit = getXmindRequestPayloadLimit();
+      if (requestText.length > payloadLimit) {
+        throw buildXmindPayloadLimitError(requestText.length, payloadLimit);
+      }
+      return {
+        prompt: String(built && built.prompt ? built.prompt : ''),
+        requestMode: 'text',
+        requestText: requestText,
+        contentBlocks: [],
+        degradedToTextOnly: false,
+        model: cloneJson(model, null),
+        reasoning: xmindGenApi && typeof xmindGenApi.getReasoningForType === 'function'
+          ? xmindGenApi.getReasoningForType('xmindcasegen')
+          : '',
+        temperature: xmindGenApi && typeof xmindGenApi.getTemperatureForType === 'function'
+          ? xmindGenApi.getTemperatureForType('xmindcasegen')
+          : 0.2,
+        modules: cloneJson(built && built.modules, []),
+        beforeCaseCount: Number(built && built.beforeCaseCount || 0),
+      };
+    }
+
     function createFilterDiagnostics() {
       return {
         inputModuleCount: 0,
@@ -9215,16 +9697,31 @@
                 : '模块',
             };
           }
+          if (task.scope === 'dedupe') {
+            return {
+              scope: 'dedupe',
+              actionId: DEDUPE_ACTION_ID,
+              label: 'AI用例去重',
+            };
+          }
           return null;
         }).filter(Boolean);
       }
       var operations = [];
       var rootState = ensureRootUiState();
-      if (rootState && rootState.running && rootState.lastAction) {
+      if (rootState && rootState.running && rootState.lastAction && rootState.lastAction !== DEDUPE_ACTION_ID) {
         operations.push({
           scope: 'root',
           actionId: String(rootState.lastAction || ''),
           label: '根节点',
+        });
+      }
+      var dedupeState = ensureDedupeUiState();
+      if (dedupeState.running === true) {
+        operations.push({
+          scope: 'dedupe',
+          actionId: DEDUPE_ACTION_ID,
+          label: 'AI用例去重',
         });
       }
       var modulesState = ensureState().modules || {};
@@ -9288,6 +9785,9 @@
             return operation;
           }
         }
+        if (operation.scope === 'dedupe') {
+          return operation;
+        }
       }
       return null;
     }
@@ -9334,6 +9834,9 @@
         return blocker.label
           ? ('当前有模块生成任务进行中：' + blocker.label)
           : '当前有模块生成任务进行中，请等待完成后再试';
+      }
+      if (blocker.scope === 'dedupe') {
+        return 'AI 用例去重精简中，请等待完成后再试';
       }
       return '当前动作不可执行';
     }
@@ -9951,6 +10454,7 @@
           type: 'root',
           nodeId: getRootNodeId(),
           status: rootState.running ? 'running' : (rootState.status === 'error' ? 'error' : ''),
+          statusLabel: rootState.running && rootState.lastAction === DEDUPE_ACTION_ID ? '去重中' : '',
           statusText: rootState.error || '',
         }, children, {
           expanded: resolveNodeExpandedState({ type: 'root', nodeId: getRootNodeId() }, collapsedNodeMap, getRequirementLabelText(), [getRequirementLabelText()]),
@@ -10185,7 +10689,9 @@
             badge.appendChild(spinner);
           }
           var textSpan = document.createElement('span');
-          textSpan.textContent = meta.status === 'running' ? '生成中' : '失败';
+          textSpan.textContent = meta.statusLabel
+            ? String(meta.statusLabel || '')
+            : (meta.status === 'running' ? '生成中' : '失败');
           if (meta.status !== 'running' && meta.statusText) badge.title = String(meta.statusText);
           badge.appendChild(textSpan);
           nodeEl.appendChild(badge);
@@ -10284,6 +10790,7 @@
         : (normalizeWorkspaceRenderViewState(options.restoreViewState)
           || getRestorableViewState(ensureState().treeSourceSignature));
       var restorableDrawerState = getRestorableDrawerState(ensureState().treeSourceSignature);
+      var deferInitialRestoreState = restoreDrawerOpenInFlight === true;
       var freshRender = !mindInstance;
       var useStableFreshRootCenter = options.centerRootAfterRender === true && freshRender && !restorableViewState;
       workspaceViewRestoreToken += 1;
@@ -10333,8 +10840,8 @@
           allowEdit: false,
           enableCustomBoxSelection: true,
           preserveViewState: Boolean(mindInstance),
-          initialViewState: mindInstance ? null : restorableViewState,
-          initialDrawerState: mindInstance ? null : restorableDrawerState,
+          initialViewState: (mindInstance || deferInitialRestoreState) ? null : restorableViewState,
+          initialDrawerState: (mindInstance || deferInitialRestoreState) ? null : restorableDrawerState,
           preserveAnchorNodeId: options.anchorNodeId || '',
           initialCenterNodeId: initialCenterNodeId,
           eagerInitialCenter: Boolean(initialCenterNodeId && freshRender),
@@ -10360,11 +10867,6 @@
           },
         });
         mountInlineControls();
-        if (pendingDrawerFullscreenRestore === true && drawerEl && drawerEl.classList) {
-          pendingDrawerFullscreenRestore = false;
-          drawerEl.classList.add('xmind-drawer-fullscreen');
-          getViewState().fullscreen = true;
-        }
         if (restoreDrawerOpenInFlight === true) {
           restoreDrawerOpenInFlight = false;
         }
@@ -10603,6 +11105,10 @@
       rootState.running = false;
       rootState.taskId = '';
       rootState.hideAiLayer = false;
+      var dedupeState = ensureDedupeUiState();
+      dedupeState.running = false;
+      dedupeState.taskId = '';
+      dedupeState.status = '';
       clearRootPendingModules();
       setAllModuleResultsVisibility(true);
       Object.keys(ensureState().modules || {}).forEach(function(key) {
@@ -10627,14 +11133,21 @@
       if (!pipeline || !pipeline.id) return;
       var relatedTasks = collectRootPipelineRunningTasks(pipeline.id, runningTasks);
       if (!relatedTasks.length) return;
+      var dedupeTask = relatedTasks.filter(function(task) {
+        return task && task.scope === 'dedupe';
+      })[0] || null;
       var rootState = ensureRootUiState();
       rootState.running = true;
-      rootState.taskId = relatedTasks[0] && relatedTasks[0].scope === 'root'
+      rootState.taskId = dedupeTask
+        ? String(dedupeTask.id || '')
+        : (relatedTasks[0] && relatedTasks[0].scope === 'root'
         ? String(relatedTasks[0].id || '')
-        : String(pipeline.id || '');
-      rootState.lastAction = String(pipeline.actionId || rootState.lastAction || '');
+        : String(pipeline.id || ''));
+      rootState.lastAction = dedupeTask || pipeline.stage === 'deduping'
+        ? DEDUPE_ACTION_ID
+        : String(pipeline.actionId || rootState.lastAction || '');
       rootState.snapshotId = String(pipeline.snapshotId || rootState.snapshotId || '');
-      rootState.hideAiLayer = pipeline.stage === 'discovering' && pipeline.hadAiLayerBeforeAction === true;
+      rootState.hideAiLayer = !dedupeTask && pipeline.stage === 'discovering' && pipeline.hadAiLayerBeforeAction === true;
       rootState.updatedAt = Date.now();
       if (pipeline.stage === 'discovering' && pipeline.hadAiCasesBeforeAction === true) {
         setAllModuleResultsVisibility(false);
@@ -10696,6 +11209,20 @@
           if (String(task.actionId || '') === ROOT_ACTIONS.EXISTING_CASES) {
             markRootPendingModules(buildVisibleModuleContext().list, ROOT_ACTIONS.EXISTING_CASES);
           }
+          return;
+        }
+        if (task.scope === 'dedupe') {
+          var dedupeState = ensureDedupeUiState();
+          dedupeState.running = true;
+          dedupeState.taskId = String(task.id || '');
+          dedupeState.status = 'running';
+          dedupeState.error = '';
+          dedupeState.updatedAt = Date.now();
+          var dedupeRootState = ensureRootUiState();
+          dedupeRootState.running = true;
+          dedupeRootState.taskId = String(task.id || '');
+          dedupeRootState.lastAction = DEDUPE_ACTION_ID;
+          dedupeRootState.updatedAt = Date.now();
           return;
         }
         if (task.scope === 'module' && task.moduleId) {
@@ -10845,6 +11372,42 @@
         rootPipelineId: String(opts.rootPipelineId || ''),
         rootPipelineActionId: String(opts.rootPipelineActionId || ''),
         rootPipelineNewModule: opts.rootPipelineNewModule === true,
+        historySuppressed: opts.historySuppressed === true,
+        notifySuppressed: opts.notifySuppressed === true,
+      };
+    }
+
+    function buildDedupeTaskPayload(taskInput, options) {
+      var opts = options || {};
+      var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
+      return {
+        workspaceId: taskWorkspaceId,
+        scope: 'dedupe',
+        actionId: DEDUPE_ACTION_ID,
+        dedupeSource: String(opts.dedupeSource || 'manual-toolbar'),
+        dedupeStrength: DEDUPE_STRENGTH,
+        dedupeModules: cloneJson(taskInput && taskInput.modules, []),
+        dedupeBeforeCount: Number(taskInput && taskInput.beforeCaseCount || 0),
+        contract: {
+          scope: 'xmind_ai_cases',
+          mode: 'ai_dedupe_simplify',
+          strength: DEDUPE_STRENGTH,
+          editableScope: 'ai_generated_cases_only',
+        },
+        prompt: String(taskInput && taskInput.prompt ? taskInput.prompt : ''),
+        requestMode: 'text',
+        requestText: String(taskInput && taskInput.requestText ? taskInput.requestText : ''),
+        contentBlocks: [],
+        degradedToTextOnly: false,
+        model: cloneJson(taskInput && taskInput.model, null),
+        reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
+        temperature: Number(taskInput && taskInput.temperature),
+        restoreContext: buildManagedTaskRestoreContext({
+          workspaceId: taskWorkspaceId,
+          compact: true,
+        }),
+        rootPipelineId: String(opts.rootPipelineId || ''),
+        rootPipelineActionId: String(opts.rootPipelineActionId || ''),
         historySuppressed: opts.historySuppressed === true,
         notifySuppressed: opts.notifySuppressed === true,
       };
@@ -11505,6 +12068,116 @@
       });
     }
 
+    function setDedupeRunningState(task, source) {
+      var dedupeState = ensureDedupeUiState();
+      dedupeState.running = true;
+      dedupeState.taskId = String(task && task.id ? task.id : '');
+      dedupeState.status = 'running';
+      dedupeState.error = '';
+      dedupeState.updatedAt = Date.now();
+      var rootState = ensureRootUiState();
+      rootState.running = true;
+      rootState.taskId = dedupeState.taskId;
+      rootState.lastAction = DEDUPE_ACTION_ID;
+      rootState.status = '';
+      rootState.error = source === 'auto-full' ? '去重中' : '';
+      rootState.updatedAt = dedupeState.updatedAt;
+      syncInterruptButton();
+    }
+
+    function clearDedupeRunningState(errorText) {
+      var dedupeState = ensureDedupeUiState();
+      dedupeState.running = false;
+      dedupeState.taskId = '';
+      dedupeState.status = errorText ? 'error' : '';
+      dedupeState.error = errorText ? String(errorText || '') : '';
+      dedupeState.updatedAt = Date.now();
+      var rootState = ensureRootUiState();
+      if (rootState.lastAction === DEDUPE_ACTION_ID) {
+        rootState.running = false;
+        rootState.taskId = '';
+        rootState.status = errorText ? 'error' : '';
+        rootState.error = errorText ? String(errorText || '') : '';
+        rootState.updatedAt = Date.now();
+      }
+      syncInterruptButton();
+    }
+
+    function startAiDedupeTask(options) {
+      var opts = options || {};
+      var source = opts.source || 'manual-toolbar';
+      var modules = Array.isArray(opts.modules) ? opts.modules : collectCurrentAiDedupeModules();
+      if (!modules.length) {
+        if (source !== 'auto-full') notifyStatus('当前页签没有可去重的 AI 生成用例', 'warn', { forceInline: true });
+        return null;
+      }
+      var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
+      var taskInput = buildXmindDedupeTaskInput(modules, { source: source });
+      var task = startManagedXmindTask(buildDedupeTaskPayload(taskInput, {
+        workspaceId: taskWorkspaceId,
+        dedupeSource: source,
+        rootPipelineId: opts.rootPipelineId || '',
+        rootPipelineActionId: opts.rootPipelineActionId || '',
+        historySuppressed: source === 'auto-full',
+        notifySuppressed: source === 'auto-full',
+      }));
+      setDedupeRunningState(task, source);
+      if (opts.rootPipelineId) {
+        updateRootPipelineState(function(current) {
+          current.stage = 'deduping';
+          current.dedupeStatus = 'running';
+          current.dedupeTaskId = String(task && task.id ? task.id : '');
+          current.dedupeBeforeCount = Number(taskInput.beforeCaseCount || 0);
+        });
+      }
+      if (isDrawerOpen()) {
+        renderWithViewportCarryover({
+          reason: source === 'auto-full' ? 'root-pipeline-dedupe-running' : 'manual-dedupe-running',
+          persist: false,
+          anchorNodeId: getRootNodeId(),
+        });
+      }
+      persistManagedTaskWorkspaceState(true);
+      return task;
+    }
+
+    async function startManualAiDedupe() {
+      if (hasAnyRunningGenerationOperation()) {
+        notifyStatus('当前有 XMind 任务进行中，请等待完成后再去重', 'warn', { forceInline: true });
+        return false;
+      }
+      var modules = collectCurrentAiDedupeModules();
+      if (!modules.length) {
+        notifyStatus('当前页签没有可去重的 AI 生成用例', 'warn', { forceInline: true });
+        return false;
+      }
+      var caseCount = 0;
+      modules.forEach(function(item) {
+        caseCount += Array.isArray(item && item.cases) ? item.cases.length : 0;
+      });
+      pendingManualDedupeConfirm = true;
+      syncDedupeToolbarButton();
+      try {
+        var confirmed = await openStoreConfirmDialog({
+          title: '确认 AI 用例去重',
+          message: '即将对当前页签 ' + String(modules.length) + ' 个模块、' + String(caseCount) + ' 条 AI 生成用例执行去重精简。该操作会优先保留覆盖全面、高质量的用例，并仅处理当前页签的 AI 生成层结果。是否继续？',
+          confirmText: '确认去重',
+          cancelText: '取消',
+        });
+        if (!confirmed) return false;
+        return Boolean(startAiDedupeTask({
+          source: 'manual-toolbar',
+          modules: cloneJson(modules, []),
+        }));
+      } catch (err) {
+        notifyStatus('AI 用例去重启动失败：' + (err && err.message ? err.message : '未知错误'), 'err', { forceInline: true });
+        return false;
+      } finally {
+        pendingManualDedupeConfirm = false;
+        syncDedupeToolbarButton();
+      }
+    }
+
     function mergeRootPipelineDetails(pipeline, details) {
       (Array.isArray(details) ? details : []).forEach(function(item) {
         if (!item) return;
@@ -11531,8 +12204,16 @@
         if (createdModules <= 0) {
           createdModules = getRootPipelineDetailList(pipeline).length;
         }
-        return (pipeline && pipeline.hadAiContentBeforeAction === true ? '已重新生成 ' : '已生成 ')
+        var baseText = (pipeline && pipeline.hadAiContentBeforeAction === true ? '已重新生成 ' : '已生成 ')
           + String(createdModules) + ' 个模块，' + String(addedCases) + ' 条用例';
+        if (pipeline && pipeline.dedupeStatus === 'done' && Number(pipeline.dedupeRemovedCount || 0) > 0) {
+          baseText += '，已去重精简 ' + String(Number(pipeline.dedupeRemovedCount || 0)) + ' 条';
+        } else if (pipeline && pipeline.dedupeStatus === 'error') {
+          baseText += '，AI 去重精简失败，已保留原结果';
+        } else if (pipeline && pipeline.dedupeStatus === 'cancelled') {
+          baseText += '，AI 去重精简已中断，已保留当前结果';
+        }
+        return baseText;
       }
       if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
         return '已为已有模块补充 ' + String(addedCases) + ' 条用例';
@@ -11582,6 +12263,43 @@
       var resultKind = 'changed';
       var notifyText = '';
       var notifyType = 'ok';
+
+      if (
+        changed
+        && actionId === ROOT_ACTIONS.FULL_CASES
+        && pipeline.cancelled !== true
+        && !pipeline.dedupeStatus
+      ) {
+        var dedupeModules = collectCurrentAiDedupeModules();
+        if (dedupeModules.length) {
+          try {
+            startAiDedupeTask({
+              source: 'auto-full',
+              modules: dedupeModules,
+              workspaceId: getActiveWorkspaceId(),
+              rootPipelineId: targetId,
+              rootPipelineActionId: actionId,
+            });
+            notifyStatus('全量用例已生成，正在进行 AI 去重精简', 'warn', { forceInline: true });
+            return false;
+          } catch (dedupeStartErr) {
+            updateRootPipelineState(function(current) {
+              current.dedupeStatus = 'error';
+              current.dedupeError = dedupeStartErr && dedupeStartErr.message ? String(dedupeStartErr.message) : 'AI 去重精简启动失败';
+              appendRootPipelineDiagnostics(current, 'AI 去重精简启动失败：' + current.dedupeError);
+            });
+            pipeline = getRootPipelineState() || pipeline;
+            diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat('AI 去重精简启动失败，已保留原结果'));
+          }
+        } else {
+          updateRootPipelineState(function(current) {
+            current.dedupeStatus = 'skipped';
+            appendRootPipelineDiagnostics(current, '当前没有可去重的 AI 生成用例，已跳过去重精简');
+          });
+          pipeline = getRootPipelineState() || pipeline;
+          diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat('当前没有可去重的 AI 生成用例，已跳过去重精简'));
+        }
+      }
 
       rootState.running = false;
       rootState.taskId = '';
@@ -11656,6 +12374,16 @@
           summaryText = '部分模块未成功完成';
           notifyText = buildRootPipelineSuccessMessage(pipeline) + '，另有 ' + String(Number(pipeline.errorCount || 0)) + ' 个模块失败';
           notifyType = 'warn';
+        } else if (pipeline.dedupeStatus === 'error') {
+          diagnostics = normalizeHistoryDiagnostics(diagnostics.concat('AI 去重精简失败，已保留原结果'));
+          summaryText = 'AI 去重精简失败，已保留原结果';
+          notifyText = buildRootPipelineSuccessMessage(pipeline);
+          notifyType = 'warn';
+        } else if (pipeline.dedupeStatus === 'cancelled') {
+          diagnostics = normalizeHistoryDiagnostics(diagnostics.concat('AI 去重精简已中断，已保留当前结果'));
+          summaryText = 'AI 去重精简已中断，已保留当前结果';
+          notifyText = buildRootPipelineSuccessMessage(pipeline);
+          notifyType = 'warn';
         } else {
           notifyText = buildRootPipelineSuccessMessage(pipeline);
           notifyType = 'ok';
@@ -11668,6 +12396,7 @@
           moduleCount: detailList.length,
           details: detailList,
           diagnostics: diagnostics,
+          dedupeRecords: pipeline.dedupeRecords || [],
         });
         clearDeleteHistoryStacks();
         syncCasesGenPageRender();
@@ -12397,6 +13126,210 @@
       return false;
     }
 
+    function buildDedupeHistoryDetails(result) {
+      return (result && Array.isArray(result.modules) ? result.modules : []).map(function(item) {
+        return {
+          module: normalizeModuleTitle(item && item.module ? item.module : ''),
+          caseCount: Number(item && item.afterCount || 0) || 0,
+        };
+      }).filter(function(item) {
+        return Boolean(item && item.module);
+      });
+    }
+
+    function buildDedupeDetailMap(result) {
+      var map = {};
+      buildDedupeHistoryDetails(result).forEach(function(item) {
+        var key = normalizeModuleKey(item.module || '') || ('module-' + String(Object.keys(map).length + 1));
+        map[key] = {
+          module: item.module || '未命名模块',
+          caseCount: Number(item.caseCount || 0) || 0,
+        };
+      });
+      return map;
+    }
+
+    function completeDedupeTaskSuccess(task) {
+      var dedupeCoreApi = getXmindCaseDedupeCoreApi();
+      if (!dedupeCoreApi || typeof dedupeCoreApi.normalizeDedupeResult !== 'function') {
+        throw new Error('AI 用例去重能力未就绪，请刷新后重试');
+      }
+      var result = dedupeCoreApi.normalizeDedupeResult(
+        task && task.resultRaw ? task.resultRaw : '',
+        task && Array.isArray(task.dedupeModules) ? task.dedupeModules : []
+      );
+      var diagnostics = normalizeHistoryDiagnostics(result && result.diagnostics ? result.diagnostics : []);
+      (result && Array.isArray(result.modules) ? result.modules : []).forEach(function(item) {
+        var moduleId = item && item.moduleId ? String(item.moduleId || '') : '';
+        if (!moduleId) {
+          diagnostics.push('模块「' + normalizeModuleTitle(item && item.module ? item.module : '') + '」缺少模块标识，已跳过回写');
+          return;
+        }
+        var moduleTitle = normalizeModuleTitle(item && item.module ? item.module : '');
+        var nextCases = (Array.isArray(item && item.cases) ? item.cases : []).map(function(caseItem) {
+          return normalizeCaseItem(caseItem, moduleTitle);
+        }).filter(Boolean);
+        commitCaseList(moduleId, nextCases, Number(task && task.durationMs || 0), '', '');
+        var moduleState = ensureModuleUiState(moduleId);
+        if (moduleState) {
+          moduleState.running = false;
+          moduleState.taskId = '';
+          moduleState.status = '';
+          moduleState.error = '';
+          moduleState.hideResults = false;
+          clearModuleTopupHighlight(moduleState);
+          moduleState.updatedAt = Date.now();
+        }
+      });
+      diagnostics = normalizeHistoryDiagnostics(diagnostics);
+      var dedupeRecords = normalizeHistoryDedupeRecords(result && result.removedCases ? result.removedCases : []);
+
+      var dedupeState = ensureDedupeUiState();
+      dedupeState.lastResult = {
+        status: 'done',
+        source: task && task.dedupeSource ? String(task.dedupeSource || '') : 'manual-toolbar',
+        beforeCount: Number(result && result.beforeCount || 0) || 0,
+        afterCount: Number(result && result.afterCount || 0) || 0,
+        removedCount: Number(result && result.removedCount || 0) || 0,
+        moduleCount: result && Array.isArray(result.modules) ? result.modules.length : 0,
+        diagnostics: diagnostics,
+        dedupeRecords: dedupeRecords,
+        updatedAt: Date.now(),
+      };
+      clearDedupeRunningState('');
+      clearDeleteHistoryStacks();
+      saveActiveWorkspaceSnapshot({
+        forceShared: true,
+        skipSummaryDraftSync: true,
+        skipViewStateCapture: true,
+      });
+      renderWorkspaceTabs();
+      syncCasesGenPageRender();
+
+      if (task && task.rootPipelineId) {
+        updateRootPipelineState(function(current) {
+          current.stage = 'modules';
+          current.dedupeStatus = 'done';
+          current.dedupeTaskId = String(task.id || '');
+          current.dedupeBeforeCount = Number(result && result.beforeCount || 0) || 0;
+          current.dedupeAfterCount = Number(result && result.afterCount || 0) || 0;
+          current.dedupeRemovedCount = Number(result && result.removedCount || 0) || 0;
+          current.dedupeError = '';
+          current.dedupeRecords = dedupeRecords;
+          current.addedCases = Number(result && result.afterCount || current.addedCases || 0) || 0;
+          current.detailMap = buildDedupeDetailMap(result);
+          appendRootPipelineDiagnostics(current, diagnostics);
+        });
+      } else if (!(task && task.historySuppressed === true)) {
+        var removedCount = Number(result && result.removedCount || 0) || 0;
+        recordGenerationHistory({
+          scope: 'root',
+          actionId: DEDUPE_ACTION_ID,
+          actionLabel: 'AI用例去重',
+          summaryText: removedCount > 0
+            ? ('已去重精简 ' + String(removedCount) + ' 条用例')
+            : '未发现可精简用例',
+          moduleCount: result && Array.isArray(result.modules) ? result.modules.length : 0,
+          details: buildDedupeHistoryDetails(result),
+          resultKind: removedCount > 0 ? 'changed' : 'no-change',
+          reasonText: removedCount > 0 ? '' : '模型未发现明显重复或高度重叠用例',
+          diagnostics: diagnostics,
+          dedupeRecords: dedupeRecords,
+        });
+        if (!(task && task.notifySuppressed === true)) {
+          notifyStatus(
+            removedCount > 0
+              ? ('AI 用例去重精简完成，已减少 ' + String(removedCount) + ' 条用例')
+              : 'AI 用例去重精简完成，未发现可精简用例',
+            removedCount > 0 ? 'ok' : 'warn',
+            { forceInline: true }
+          );
+        }
+      }
+
+      if (isDrawerOpen()) {
+        renderWithViewportCarryover({
+          reason: task && task.rootPipelineId ? 'root-pipeline-dedupe-committed' : 'manual-dedupe-committed',
+          persist: false,
+          anchorNodeId: getRootNodeId(),
+        });
+      }
+      syncTerminalTaskRestoreContext(task);
+      persistManagedTaskWorkspaceState(true);
+      return true;
+    }
+
+    function completeDedupeTaskError(task, err, options) {
+      var opts = options || {};
+      var resultKind = opts.resultKind === 'cancelled' ? 'cancelled' : 'error';
+      var errorInfo = resultKind === 'cancelled'
+        ? buildGenerationCancelledInfo(task)
+        : buildGenerationErrorInfo(new Error(getTaskErrorMessage(task, err)));
+      var errorText = resultKind === 'cancelled' ? errorInfo.reasonText : errorInfo.reasonText;
+      var diagnostics = normalizeHistoryDiagnostics(errorInfo.diagnostics || []);
+      var stateMessage = resultKind === 'cancelled' ? '' : errorText;
+      var dedupeState = ensureDedupeUiState();
+      dedupeState.lastResult = {
+        status: resultKind,
+        source: task && task.dedupeSource ? String(task.dedupeSource || '') : 'manual-toolbar',
+        beforeCount: Number(task && task.dedupeBeforeCount || 0) || 0,
+        afterCount: Number(task && task.dedupeBeforeCount || 0) || 0,
+        removedCount: 0,
+        moduleCount: task && Array.isArray(task.dedupeModules) ? task.dedupeModules.length : 0,
+        diagnostics: diagnostics,
+        error: errorText,
+        updatedAt: Date.now(),
+      };
+      clearDedupeRunningState(stateMessage);
+
+      if (task && task.rootPipelineId) {
+        updateRootPipelineState(function(current) {
+          current.stage = 'modules';
+          current.dedupeStatus = resultKind;
+          current.dedupeTaskId = String(task.id || '');
+          current.dedupeBeforeCount = Number(task && task.dedupeBeforeCount || current.dedupeBeforeCount || 0) || 0;
+          current.dedupeAfterCount = current.dedupeBeforeCount;
+          current.dedupeRemovedCount = 0;
+          current.dedupeError = errorText;
+          appendRootPipelineDiagnostics(current, (resultKind === 'cancelled'
+            ? ['AI 去重精简已中断，已保留原结果']
+            : ['AI 去重精简失败：' + errorText, 'AI 去重精简失败，已保留原结果']
+          ).concat(diagnostics));
+        });
+      } else if (!(task && task.historySuppressed === true)) {
+        recordGenerationHistory({
+          scope: 'root',
+          actionId: DEDUPE_ACTION_ID,
+          actionLabel: 'AI用例去重',
+          summaryText: resultKind === 'cancelled' ? 'AI 去重精简已中断' : 'AI 去重精简失败',
+          moduleCount: 0,
+          details: [],
+          resultKind: resultKind,
+          reasonText: errorText,
+          diagnostics: diagnostics,
+          previewText: errorInfo.previewText,
+        });
+        if (resultKind === 'cancelled') {
+          if (!shouldSuppressTaskCancelToast(task)) {
+            notifyFloatingStatus('AI 用例去重精简已中断，已保留原结果', 'warn', 3000);
+          }
+        } else if (!(task && task.notifySuppressed === true)) {
+          notifyStatus('AI 用例去重精简失败，已保留原结果', 'err', { forceInline: true });
+        }
+      }
+
+      if (isDrawerOpen()) {
+        renderWithViewportCarryover({
+          reason: resultKind === 'cancelled' ? 'dedupe-task-cancelled' : 'dedupe-task-error',
+          persist: false,
+          anchorNodeId: getRootNodeId(),
+        });
+      }
+      syncTerminalTaskRestoreContext(task);
+      persistManagedTaskWorkspaceState(true);
+      return false;
+    }
+
     function runInWorkspaceContextNow(workspaceId, handler) {
       var targetId = String(workspaceId || '');
       var shouldUseShadow = shouldUseShadowWorkspaceContext(targetId);
@@ -12529,13 +13462,16 @@
           .then(function() {
             restoreWorkflowContextFromManagedTasks([task]);
             if (task.status === 'done') {
+              if (task.scope === 'dedupe') return completeDedupeTaskSuccess(task);
               if (task.scope === 'root') return completeRootTaskSuccess(task);
               return completeModuleTaskSuccess(task);
             }
             if (task.status === 'cancelled') {
+              if (task.scope === 'dedupe') return completeDedupeTaskError(task, null, { resultKind: 'cancelled', renderReason: 'dedupe-task-cancelled' });
               if (task.scope === 'root') return completeRootTaskError(task, null, { resultKind: 'cancelled', renderReason: 'root-task-cancelled' });
               return completeModuleTaskError(task, null, { resultKind: 'cancelled', renderReason: 'module-task-cancelled' });
             }
+            if (task.scope === 'dedupe') return completeDedupeTaskError(task, null, { renderReason: 'dedupe-task-error' });
             if (task.scope === 'root') return completeRootTaskError(task, null, { renderReason: 'root-task-error' });
             return completeModuleTaskError(task, null, { renderReason: 'module-task-error' });
           })
@@ -12549,6 +13485,7 @@
                 error: err && err.stack ? String(err.stack || '') : String(err && err.message ? err.message : err || ''),
               });
             }
+            if (task.scope === 'dedupe') return completeDedupeTaskError(task, err, { renderReason: 'dedupe-task-consume-error' });
             if (task.scope === 'root') return completeRootTaskError(task, err, { renderReason: 'root-task-consume-error' });
             return completeModuleTaskError(task, err, { renderReason: 'module-task-consume-error' });
           });
@@ -13501,6 +14438,22 @@
       });
     }
 
+    function syncActiveWorkspaceSnapshot(options) {
+      var opts = options || {};
+      var saved = saveActiveWorkspaceSnapshot({
+        forceShared: opts.forceShared !== false,
+        skipSummaryDraftSync: opts.skipSummaryDraftSync === true,
+        skipViewStateCapture: opts.skipViewStateCapture === true,
+        overrideViewState: opts.overrideViewState && typeof opts.overrideViewState === 'object'
+          ? opts.overrideViewState
+          : null,
+      });
+      if (opts.render !== false) {
+        renderWorkspaceTabs();
+      }
+      return saved;
+    }
+
     function createWorkspaceAndOpenPrep() {
       var host = ensureWorkspaceHostState();
       if (host.workspaceOrder.length >= WORKSPACE_MAX) {
@@ -13774,6 +14727,14 @@
       var openWorkspaceId = !wasOpen
         ? String(opts.workspaceId || getMirrorWorkspaceId() || getActiveWorkspaceId() || '')
         : '';
+      var restoreViewStateBeforeOpen = useRestoreFastPath
+        ? getWorkspaceStoredViewState(openWorkspaceId || getActiveWorkspaceId())
+        : null;
+      var restoreWasFullscreen = Boolean(
+        restoreViewStateBeforeOpen
+        && restoreViewStateBeforeOpen.drawerOpen === true
+        && restoreViewStateBeforeOpen.fullscreen === true
+      );
       if (useRestoreFastPath && allowManualCloseOverride !== true && isDrawerManualCloseSuppressed()) {
         setDebugState({
           phase: 'drawer-restore-skipped-manual-close',
@@ -13802,7 +14763,13 @@
           centerRootAfterRender: false,
         });
       }
-      pendingOpenCenterRoot = !wasOpen && !shouldRestoreWorkspaceViewport(getActiveWorkspaceId());
+      if (useRestoreFastPath && restoreWasFullscreen) {
+        clearWorkspaceFullscreenRestoreIntent(openWorkspaceId || getActiveWorkspaceId());
+        pendingOpenSkipRestorableViewState = true;
+      } else if (!wasOpen) {
+        pendingOpenSkipRestorableViewState = false;
+      }
+      pendingOpenCenterRoot = !wasOpen && (restoreWasFullscreen || !shouldRestoreWorkspaceViewport(getActiveWorkspaceId()));
       pendingOpenInstant = opts.instant === true || useRestoreFastPath === true;
       clearOpenButtonCompletionNotice({ persist: false });
       switchTab('casesgen');
@@ -13818,7 +14785,6 @@
         state.caseGenSettings.activeTab = 'xmind-modules';
         hydrateActiveWorkspaceSnapshot({ keepDrawerOpen: false });
       }
-      pendingDrawerFullscreenRestore = useRestoreFastPath === true && getViewState().fullscreen === true;
       return openDrawerShell({
         instant: pendingOpenInstant === true,
         centerRootAfterRender: pendingOpenCenterRoot === true,
@@ -13828,7 +14794,6 @@
 
     function close() {
       markDrawerManualCloseSuppressed(1800);
-      pendingDrawerFullscreenRestore = false;
       restoreDrawerOpenInFlight = false;
       if (drawerOpenRenderTimer) {
         clearTimeout(drawerOpenRenderTimer);
@@ -13930,6 +14895,11 @@
         knowledgeAiBtn.addEventListener('click', function() {
           if (summaryDialogOpen === true && summaryDialogMode === 'knowledge-base') closeSummaryDialog();
           else openKnowledgeBaseDialog();
+        });
+      }
+      if (dedupeBtn) {
+        dedupeBtn.addEventListener('click', function() {
+          startManualAiDedupe();
         });
       }
       if (storeBtn) {
@@ -14376,6 +15346,7 @@
       getWorkspaceModuleMirrorPayload: getWorkspaceModuleMirrorPayload,
       selectWorkspaceForMirror: selectWorkspaceForMirror,
       hydrateActiveWorkspaceSnapshot: hydrateActiveWorkspaceSnapshot,
+      syncActiveWorkspaceSnapshot: syncActiveWorkspaceSnapshot,
       shouldDeferCasesGenPageRender: shouldDeferCasesGenPageRender,
       queueCasesGenPageRender: queueCasesGenPageRender,
       render: render,

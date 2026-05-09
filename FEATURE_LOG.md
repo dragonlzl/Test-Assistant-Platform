@@ -19,6 +19,94 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 全屏刷新恢复防卡死
+- 功能描述：修复 `XMind 用例生成` 已生成用例后，抽屉处于全屏展示并刷新页面时可能卡死的问题。刷新恢复时不再恢复全屏状态，页面会自动回到非全屏抽屉，只恢复 XMind 页、抽屉打开状态和已生成内容。
+- 操作方式：
+  - 在 `用例生成 -> XMind 用例生成` 中生成模块/用例；
+  - 点击画布工具栏 `全屏`；
+  - 刷新页面后，系统会自动恢复到 XMind 页并打开抽屉，但抽屉会回到非全屏展示，同时保持已生成内容。
+- 使用效果：
+  - 全屏刷新后自动降级为非全屏恢复，避开全屏布局恢复带来的同步重布局高峰；
+  - 非全屏刷新恢复、全屏按钮手动切换、页签切换、关闭抽屉和重置流程保持原行为；
+  - 刷新恢复完成后仍可手动点击 `全屏` 重新进入全屏展示。
+- 新增内容/接口/组件：
+  - 调整抽屉刷新恢复逻辑：检测到刷新恢复打开时清掉 fullscreen 状态，避免重新套用全屏 class；
+  - 刷新恢复时不再把旧视口作为 MindElixir 首轮初始化参数同步传入，改为画布先渲染、布局稳定后再回放视口；
+  - 全屏刷新恢复时跳过旧视口回放，按非全屏抽屉重新居中渲染，避免全屏下保存的缩放/位移在非全屏恢复阶段继续触发布局重排；
+  - 页面刷新/关闭前如果 XMind 抽屉处于全屏，改用轻量状态保存：只记录抽屉打开、非全屏恢复和已有折叠缓存，不再同步读取大画布 DOM 与节点结构；
+  - 刷新自动打开抽屉时不再在抽屉 open 回调内同步渲染大画布，改为异步调度首轮渲染，降低初始化阶段卡死风险；
+  - 更新大结构全屏刷新 UI 回归，断言刷新后抽屉已打开但处于非全屏状态，并可继续手动切换全屏；
+  - 本次未新增后端接口，未修改数据库结构。
+- 复用说明：复用既有 XMind 抽屉恢复、workspace 快照、视口恢复、MindElixir 渲染和 UI 自动化框架；仅调整刷新恢复时的 fullscreen 状态策略，没有新增后端能力或独立组件。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js`（通过）
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `node --check scripts/core/xmindCaseDedupeCore.js scripts/modules/app.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `node --check scripts/core/casesGenCore.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `git diff --check`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8092 npx playwright test --config /private/tmp/tap-playwright-8092.config.js /Users/linzhenlong/work/casetool/Test-Assistant-Platform/tests/ui/xmind_casegen_flow.spec.js -g "全屏展示抽屉在较大 XMind 结构下刷新页面，会恢复为非全屏且不会无响应" --reporter=line --workers=1`（未完成：当前 macOS 沙箱启动 Chromium headless 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出，未进入业务断言）
+- 更新记录：2026-05-09 调整 XMind 全屏刷新恢复策略：刷新前如果是全屏，刷新前轻量保存恢复意图，刷新后自动恢复为非全屏抽屉，跳过全屏旧视口回放，并将自动打开抽屉后的首轮大画布渲染改为异步调度，避免恢复阶段重新触发布局重排。
+
+- 功能名称：XMind 全屏工具栏伸展换层优化
+- 功能描述：修复 `XMind 用例生成` 在全屏展示且屏幕宽度不大时，画布内工具栏按钮、搜索区和模型选择器挤在同一行的问题。全屏后复用非全屏抽屉下已经验证过的伸展换层布局，让主操作区、状态/统计区、搜索区和缩放/模型区分层排布。
+- 操作方式：
+  - 进入 `用例生成 -> XMind 用例生成`；
+  - 打开已有生成页签或完成前置准备后进入画布；
+  - 点击画布工具栏 `全屏`，工具栏会按非全屏模式的伸展布局自动换层，不再把 `清空`、`中断生成`、导出和模型选择等控件挤压到一起。
+- 使用效果：
+  - 全屏和非全屏下的 XMind 生成工具栏使用同一套分层布局；
+  - 工具栏允许换行，主操作按钮与统计区占满顶部一行，搜索区与缩放/模型区在下方伸展；
+  - 搜索 `清空` 按钮保持横排展示，避免被压成窄条或文字竖排；
+  - 未改动 XMind 结构解析、生成任务、去重、导出、入库或后端接口。
+- 新增内容/接口/组件：
+  - 调整 XMind 生成画布工具栏 CSS 作用范围，将原本只限非全屏抽屉的伸展换层规则复用到全屏状态；
+  - 更新工具栏布局 UI 回归，覆盖 1366 宽度下非全屏与全屏两种状态的横向溢出、搜索区换层和按钮尺寸。
+- 复用说明：复用既有 XMind 画布工具栏 DOM、非全屏响应式布局规则、全屏切换逻辑和已有工具栏 UI 回归；未新增后端 API、数据库结构或新的前端组件。
+- 测试与验证：
+  - `node --check tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `node --check scripts/core/xmindCaseDedupeCore.js scripts/modules/app.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `git diff --check`（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8092 npx playwright test --config /private/tmp/tap-playwright-8092.config.js tests/ui/xmind_casegen_flow.spec.js -g "XMind 工具栏在全屏和非全屏下都会自动换层排布" --reporter=line --workers=1`（未完成：当前 macOS 沙箱启动 Chromium headless 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段退出，未进入业务断言）
+- 更新记录：2026-05-09 将 XMind 用例生成画布的非全屏工具栏伸展换层布局同步应用到全屏状态，并补充全屏/非全屏布局回归断言。
+
+- 功能名称：XMind AI 用例去重精简
+- 功能描述：为 `XMind 用例生成` 新增 AI 用例去重精简能力。用户执行 `生成全量用例` 后，系统会在模块用例全部生成完成后自动进入 `去重中` 阶段，把当前页签已生成的完整 AI 用例、原始需求正文/手填需求描述和需求补充一起提供给当前 XMind 用例生成模型进行保守去重与精简；单模块生成保持原逻辑，不自动去重。工具栏新增 `AI用例去重`，可手动对当前页签画布上可见的 AI 生成层用例执行同样的去重精简。
+- 操作方式：
+  - 进入 `用例生成 -> XMind 用例生成`，完成前置准备后点击根节点 `生成全量用例`，模块生成完成后自动进入 `去重中`；
+  - 若只想手动处理当前页签结果，可在当前页签已有可见 AI 用例且没有运行中任务时点击工具栏 `AI用例去重`；
+  - 去重中可继续使用 `中断生成` 取消当前去重调用，系统会保留已生成结果。
+- 使用效果：
+  - 去重精简只覆盖 AI 生成层用例，不删除、不改写导入/基线用例；
+  - 无用例模块不会进入去重请求，模型遗漏模块或返回空用例时会保留该模块原 AI 用例并记录诊断；
+  - 全量生成自动去重期间，根节点显示 `去重中`，工具栏显示 `AI 去重精简中`，左下角页签摘要显示 `去重中`；
+  - 去重期间会禁用新的去重、保存入库、XMind 导出和 Markdown 导出，避免回写前用户修改同一份 AI 结果；
+  - 去重成功后，画布用例数、工具栏统计、页签进度摘要和生成记录都以精简后的当前可见用例为准；
+  - 去重失败时保留原生成结果，状态提示和生成记录展示失败原因。
+- 新增内容/接口/组件：
+  - 新增纯前端核心 `xmindCaseDedupeCore`，负责去重请求构建、保守精简提示词、输入模块归一化、模型 JSON 响应解析和回写前校验；
+  - XMind 托管任务新增 `dedupe` scope 与 `xmind-ai-dedupe` action，沿用现有模型代理、任务中断、恢复上下文、workspace 隔离和后台任务机制；
+  - workspace 状态新增 `dedupe` 片段，根流程 pipeline 新增 `deduping` 阶段和去重前后统计；
+  - XMind 工具栏新增 `AI用例去重` 按钮，并接入去重中状态、操作阻塞、完成/失败历史；
+  - 新增 UI 自动化覆盖：全量生成后自动去重状态与请求内容、手动去重只发送 AI 用例且保留导入基线、去重失败保留原用例；
+  - 本次未新增后端接口，未修改数据库结构。
+- 复用说明：复用现有 XMind 用例生成模型配置、模型代理、托管任务、中断按钮、workspace 快照/恢复、生成历史、画布渲染、工具栏挂载和 XMind/Markdown 导出阻塞逻辑；新增独立去重核心，是为了避免把提示词、输入快照和响应校验继续堆入 XMind 主编排模块。
+- 测试与验证：
+  - `node --check scripts/core/xmindCaseDedupeCore.js scripts/modules/app.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `git diff --check`（通过）
+  - `node` + `vm` 直连 `xmindCaseDedupeCore`，验证请求包含原始需求与补充、响应归一化统计 `before=2/after=1/removed=1`（通过）
+  - `APP_DB_FILE=apitest.db npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1；确认未新增后端端点）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "全量生成完成后会进入 AI 去重精简中|工具栏 AI 用例去重只发送当前可见 AI 用例|AI 用例去重失败时保留原用例|工具栏支持查看生成记录" --reporter=line`（未完成：默认 8090 端口被本机 uvicorn 占用并返回 404，Playwright webServer 等待超时）
+  - 使用临时 8091 静态服务重跑上述 UI 用例（未完成：当前桌面环境启动 Chromium/Chrome 时触发 `MachPortRendezvous` 权限错误；未能稳定进入业务断言，新增断言已补入用例文件）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8092 npx playwright test --config /private/tmp/tap-playwright-8092.config.js tests/ui/xmind_casegen_flow.spec.js -g "工具栏 AI 用例去重只发送当前可见 AI 用例" --reporter=line --workers=1`（未完成：当前 macOS 沙箱启动 Chromium headless 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出；本次已补充收起/重新打开 XMind 抽屉、切到设置页再切回 XMind 页面后进度条数保持精简结果的断言）
+- 更新记录：
+  - 2026-05-09 新增 XMind AI 用例去重精简能力：全量生成后自动去重、工具栏手动去重、去重中状态展示、失败保留原结果、需求上下文随请求提供，以及仅 AI 层回写的保守精简规则。
+  - 2026-05-09 强化去重精简提示词：明确用例最终目标是保障项目产品质量、提升缺陷发现与回归验证价值；要求质量优先于数量压缩，不确定是否冗余时保留用例。
+  - 2026-05-09 修复 `去重中` / `AI 去重精简中` 左侧执行中图标旋转观感：为工具栏运行态 spinner 补齐稳定盒模型、边框盒尺寸、旋转中心和渲染提示，避免小尺寸奇数像素旋转时表现为原地抖动。
+  - 2026-05-09 优化生成记录中的去重记录展示：改为“已去重 N 条用例”的摘要 + 按模块分组的结构化明细，明细左侧展示被去掉的用例名、右侧展示简短原因；同时约束模型返回的去重原因保持短句，前端也会对过长原因做收敛。
+  - 2026-05-09 修复手动触发 AI 去重后收起 XMind 抽屉，左下角 XMind 用例生成进度条数回退到去重前的问题：去重提交成功后立即强制同步当前 workspace 共享用例快照，收起抽屉时也会带着最新可见用例结果刷新快照，避免主页面镜像读取旧结果。
+  - 2026-05-09 继续修复开关 XMind 页面后左下角进度数量跳变的问题：页签进度只有在 XMind 画布实际接管当前共享状态时才读取实时画布数据，切到设置/旧流程视图时改读 workspace 快照；从 XMind 页面切出前会先同步一次当前快照，避免旧流程数据被误当作 XMind 用例统计来源。
+  - 2026-05-09 手动点击工具栏 `AI用例去重` 时新增二次确认弹窗：弹窗展示将处理的模块数和 AI 用例数，用户点击 `确认去重` 后才会发起模型调用，取消则不执行；全量生成后的自动去重保持原自动流程，不弹窗打断。
+
 - 功能名称：XMind AI Markdown 导出
 - 功能描述：在 `XMind 用例生成` 抽屉新增 `导出为Markdown` 按钮，把当前活动 workspace 的可见 XMind 模块与用例导出为面向 AI 审核的 Markdown。当前导出已升级为 AI 强结构版：顶部提供结构化导出元数据与 AI 审核骨架，模块视图与全局索引保留稳定摘要表，模块详情改为每个模块一段结构化 JSON 记录，明确 `module_id / case_id / depends_on_modules / suggested_check_targets / preconditions / steps / expected / source_scope` 等字段，便于 Codex / GPT-5.4 直接解析并映射到项目实现核对任务。
 - 操作方式：

@@ -1761,6 +1761,19 @@
       if (casegenModulesPanel && casegenModulesPanel.classList) {
         casegenModulesPanel.classList.toggle('is-active', next === 'xmind-modules');
       }
+      if (
+        previous === 'xmind-modules'
+        && (next === 'settings' || next === 'legacy-modules')
+        && xmindApi
+        && typeof xmindApi.syncActiveWorkspaceSnapshot === 'function'
+      ) {
+        xmindApi.syncActiveWorkspaceSnapshot({
+          forceShared: true,
+          skipSummaryDraftSync: true,
+          skipViewStateCapture: true,
+          render: false,
+        });
+      }
       if (next === 'settings' || next === 'legacy-modules') {
         if (!xmindDrawerOpen) {
           restoreLegacyCaseGenState({

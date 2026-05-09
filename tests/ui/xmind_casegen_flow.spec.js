@@ -330,6 +330,40 @@ async function installXmindModelStub(page, delayMs) {
       };
     }
 
+    function buildDedupeResponseModules(userText) {
+      var dedupeModules = parseJsonText(extractSection(userText, '【需要去重精简的 AI 生成用例(JSON)】'));
+      var sourceList = Array.isArray(dedupeModules) ? dedupeModules : [];
+      var shouldTrim = window.__xmindCasegenDedupeTrim === true;
+      return sourceList.map(function(item, index) {
+        var moduleName = item && item.module ? String(item.module) : ('模块' + String(index + 1));
+        var cases = Array.isArray(item && item.cases) ? item.cases.slice() : [];
+        var nextCases = shouldTrim && cases.length > 1 ? cases.slice(0, 1) : cases;
+        return makeModule(moduleName, nextCases);
+      });
+    }
+
+    function buildDedupeRemovedCases(userText) {
+      var dedupeModules = parseJsonText(extractSection(userText, '【需要去重精简的 AI 生成用例(JSON)】'));
+      var sourceList = Array.isArray(dedupeModules) ? dedupeModules : [];
+      if (window.__xmindCasegenDedupeTrim !== true) return [];
+      var result = [];
+      sourceList.forEach(function(item, index) {
+        var moduleName = item && item.module ? String(item.module) : ('模块' + String(index + 1));
+        var cases = Array.isArray(item && item.cases) ? item.cases : [];
+        var keptTitle = cases[0] && cases[0].title ? String(cases[0].title || '') : '';
+        cases.slice(1).forEach(function(caseItem) {
+          var title = caseItem && caseItem.title ? String(caseItem.title || '') : '未命名用例';
+          result.push({
+            module: moduleName,
+            title: title,
+            reason: '与保留用例覆盖目标高度重叠，合并后仍可覆盖需求',
+            merged_into: keptTitle,
+          });
+        });
+      });
+      return result;
+    }
+
     client.proxyModelRequest = function(payload, signal) {
       var modelPayload = payload && payload.payload ? payload.payload : {};
       var messages = Array.isArray(modelPayload.messages) ? modelPayload.messages : [];
@@ -345,7 +379,9 @@ async function installXmindModelStub(page, delayMs) {
       var mode = String(contract.mode || '');
       var responseModules = [];
 
-      if (mode === 'full_modules' || mode === 'regenerate_modules') {
+      if (mode === 'ai_dedupe_simplify') {
+        responseModules = buildDedupeResponseModules(userText);
+      } else if (mode === 'full_modules' || mode === 'regenerate_modules') {
         responseModules = [
           makeModule('登录模块'),
           makeModule('支付模块'),
@@ -421,6 +457,21 @@ async function installXmindModelStub(page, delayMs) {
       });
 
       var content = JSON.stringify({ modules: responseModules });
+      if (mode === 'ai_dedupe_simplify') {
+        var removedCases = buildDedupeRemovedCases(userText);
+        content = JSON.stringify({
+          modules: responseModules,
+          removed_cases: removedCases,
+          summary: {
+            removed: removedCases.length,
+            reason: removedCases.length ? '删除明显重复和高度重叠用例' : '未发现明显重复用例',
+          },
+        });
+      }
+      var responseDelay = Number(delay) || 120;
+      if (mode === 'ai_dedupe_simplify' && window.__xmindCasegenDedupeDelayMs !== undefined) {
+        responseDelay = Number(window.__xmindCasegenDedupeDelayMs) || responseDelay;
+      }
       return new Promise(function(resolve, reject) {
         var timer = setTimeout(function() {
           resolve({
@@ -432,7 +483,7 @@ async function installXmindModelStub(page, delayMs) {
               }));
             },
           });
-        }, Number(delay) || 120);
+        }, responseDelay);
         if (signal && typeof signal.addEventListener === 'function') {
           signal.addEventListener('abort', function() {
             clearTimeout(timer);
@@ -515,6 +566,16 @@ async function installXmindModelRouteStub(page, delayMs) {
     };
   }
 
+  function buildDedupeResponseModules(userText) {
+    const dedupeModules = parseJsonText(extractSection(userText, '【需要去重精简的 AI 生成用例(JSON)】'));
+    const sourceList = Array.isArray(dedupeModules) ? dedupeModules : [];
+    return sourceList.map((item, index) => {
+      const moduleName = item && item.module ? String(item.module) : `模块${index + 1}`;
+      const cases = Array.isArray(item && item.cases) ? item.cases.slice() : [];
+      return makeModule(moduleName, cases);
+    });
+  }
+
   await page.route('**/api/model-proxy', async (route) => {
     const request = route.request();
     const body = request.postDataJSON ? request.postDataJSON() : {};
@@ -534,7 +595,9 @@ async function installXmindModelRouteStub(page, delayMs) {
     const mode = String(contract.mode || '');
     let responseModules = [];
 
-    if (mode === 'full_modules' || mode === 'regenerate_modules') {
+    if (mode === 'ai_dedupe_simplify') {
+      responseModules = buildDedupeResponseModules(userText);
+    } else if (mode === 'full_modules' || mode === 'regenerate_modules') {
       responseModules = [
         makeModule('登录模块'),
         makeModule('支付模块'),
@@ -666,6 +729,15 @@ async function installRootPipelineStaggeredStub(page) {
       };
     }
 
+    function buildDedupeResponseModules(userText) {
+      var dedupeModules = parseJsonText(extractSection(userText, '【需要去重精简的 AI 生成用例(JSON)】'));
+      var sourceList = Array.isArray(dedupeModules) ? dedupeModules : [];
+      return sourceList.map(function(item, index) {
+        var moduleName = item && item.module ? String(item.module) : ('模块' + String(index + 1));
+        return makeModule(moduleName, Array.isArray(item && item.cases) ? item.cases.slice() : []);
+      });
+    }
+
     window.__xmindPipelineCalls = [];
     client.proxyModelRequest = function(payload, signal) {
       var modelPayload = payload && payload.payload ? payload.payload : {};
@@ -680,7 +752,10 @@ async function installRootPipelineStaggeredStub(page) {
       var delayMs = 120;
       var responseModules = [];
 
-      if (mode === 'full_cases') {
+      if (mode === 'ai_dedupe_simplify') {
+        delayMs = 120;
+        responseModules = buildDedupeResponseModules(userText);
+      } else if (mode === 'full_cases') {
         delayMs = 120;
         responseModules = [
           makeModule('登录模块', [makeCase('登录模块', '登录模块-首批用例')]),
@@ -779,6 +854,14 @@ async function installRootPipelineStaggeredRoute(page) {
       expected: title + '执行成功',
     };
   }
+  function buildDedupeResponseModules(userText) {
+    const dedupeModules = parseJsonText(extractSection(userText, '【需要去重精简的 AI 生成用例(JSON)】'));
+    const sourceList = Array.isArray(dedupeModules) ? dedupeModules : [];
+    return sourceList.map((item, index) => {
+      const moduleName = item && item.module ? String(item.module) : `模块${index + 1}`;
+      return makeModule(moduleName, Array.isArray(item && item.cases) ? item.cases.slice() : []);
+    });
+  }
 
   await page.route('**/api/model-proxy', async (route) => {
     const request = route.request();
@@ -795,7 +878,10 @@ async function installRootPipelineStaggeredRoute(page) {
     let delayMs = 120;
     let responseModules = [];
 
-    if (mode === 'full_cases') {
+    if (mode === 'ai_dedupe_simplify') {
+      delayMs = 120;
+      responseModules = buildDedupeResponseModules(userText);
+    } else if (mode === 'full_cases') {
       delayMs = 120;
       responseModules = [
         makeModule('登录模块', [makeCase('登录模块', '登录模块-首批用例')]),
@@ -2217,6 +2303,29 @@ async function readXmindToolbarOverview(page) {
       label: taskEl ? String(taskEl.textContent || '').replace(/\s+/g, ' ').trim() : '',
       modules: moduleEl ? Number(moduleEl.textContent || 0) : -1,
       cases: caseEl ? Number(caseEl.textContent || 0) : -1,
+    };
+  });
+}
+
+async function readActiveXmindWorkspaceProgress(page) {
+  return page.evaluate(() => {
+    var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+    var items = api && typeof api.getWorkspaceProgressItems === 'function'
+      ? api.getWorkspaceProgressItems()
+      : [];
+    var active = null;
+    (Array.isArray(items) ? items : []).some(function(item) {
+      if (item && item.active) {
+        active = item;
+        return true;
+      }
+      return false;
+    });
+    active = active || (Array.isArray(items) && items.length ? items[0] : null);
+    return {
+      modules: active ? Number(active.moduleCount || 0) : -1,
+      cases: active ? Number(active.caseCount || 0) : -1,
+      statusText: active ? String(active.statusText || '') : '',
     };
   });
 }
@@ -6071,7 +6180,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '支付模块');
   });
 
-  test('页面刷新后保持在 XMind 用例生成页面，并恢复抽屉、全屏、缩放、位置与已记录折叠状态', async ({ page }) => {
+  test('页面刷新后保持在 XMind 用例生成页面，全屏刷新会恢复为非全屏并保留折叠状态', async ({ page }) => {
     test.setTimeout(60000);
     const token = 'token-xmind-refresh-viewstate';
     const user = { id: 61, username: 'demo_user_refresh_view', role: 'user', level: 'member' };
@@ -6191,7 +6300,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
     await page.waitForTimeout(1000);
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
     await expect.poll(async () => {
       return await page.evaluate(() => {
         return {
@@ -6220,26 +6329,24 @@ test.describe('XMind 用例生成抽屉', () => {
         : null;
     }).toEqual({
       drawerOpen: true,
-      drawerFullscreen: true,
+      drawerFullscreen: false,
       viewDrawerOpen: true,
-      viewFullscreen: true,
-      viewTransform: beforeReload.transform,
+      viewFullscreen: false,
+      viewTransform: expect.any(String),
     });
     const afterReload = await readXmindCasegenViewSnapshot(page);
     expect(afterReload.activeTab).toBe('casesgen');
     expect(afterReload.drawerOpen).toBe(true);
-    expect(afterReload.drawerFullscreen).toBe(true);
-    expect(afterReload.transform).toBe(beforeReload.transform);
+    expect(afterReload.drawerFullscreen).toBe(false);
+    expect(afterReload.transform).not.toBe(beforeReload.transform);
     expect(afterReload.viewState).toBeTruthy();
     expect(afterReload.viewState.drawerOpen).toBe(true);
-    expect(afterReload.viewState.fullscreen).toBe(true);
-    expect(afterReload.viewState.transform).toBe(beforeReload.transform);
-    expect(Number(afterReload.viewState.scaleVal || 0)).toBeGreaterThan(beforeZoomTransform.scale);
-    expect(Number(afterReload.viewState.scaleVal || 0)).toBeCloseTo(parseMindTransformText(beforeReload.transform || '').scale, 4);
+    expect(afterReload.viewState.fullscreen).toBe(false);
+    expect(afterReload.viewState.transform).not.toBe(beforeReload.transform);
     expect(afterReload.viewState.collapsedNodeKeys).toContain('module::登录模块');
   });
 
-  test('全屏展示抽屉在较大 XMind 结构下刷新页面，不会导致页面恢复无响应', async ({ page }) => {
+  test('全屏展示抽屉在较大 XMind 结构下刷新页面，会恢复为非全屏且不会无响应', async ({ page }) => {
     test.setTimeout(60000);
     const token = 'token-xmind-refresh-fullscreen-large-tree';
     const user = { id: 612, username: 'demo_user_refresh_fullscreen_large', role: 'user', level: 'member' };
@@ -6312,13 +6419,21 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
     await page.waitForTimeout(1200);
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var state = window.app && window.app.state && window.app.state.xmindCaseGen
+          ? window.app.state.xmindCaseGen
+          : null;
+        return Boolean(state && state.viewState && state.viewState.fullscreen === true);
+      });
+    }).toBe(false);
     await waitForNodeText(page, '大型模块-1');
     await waitForNodeText(page, '大型模块-12');
     await page.click('#xmindCaseGenMindContainer [data-mind-action="drawer-fullscreen"]');
-    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
-    await page.click('#xmindCaseGenMindContainer [data-mind-action="drawer-fullscreen"]');
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    await page.click('#xmindCaseGenMindContainer [data-mind-action="drawer-fullscreen"]');
+    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
   });
 
   test('非全屏恢复后的 XMind 抽屉可以正常关闭且不会自动重开', async ({ page }) => {
@@ -6595,6 +6710,7 @@ test.describe('XMind 用例生成抽屉', () => {
         summaryInLeading: Boolean(document.querySelector('#xmindCaseGenMindContainer .xmind-controls-leading-host #xmindCaseGenSummaryBtn')),
         overviewVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-inline-overview]')),
         historyVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenHistoryBtn')),
+        dedupeVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDedupeBtn')),
         storeVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenStoreBtn')),
         deleteUndoVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDeleteUndoBtn')),
         deleteRedoVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDeleteRedoBtn')),
@@ -6605,6 +6721,7 @@ test.describe('XMind 用例生成抽屉', () => {
       summaryInLeading: true,
       overviewVisible: true,
       historyVisible: true,
+      dedupeVisible: true,
       storeVisible: true,
       deleteUndoVisible: true,
       deleteRedoVisible: true,
@@ -6645,6 +6762,390 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(previousCard).toContainText('登录模块');
     await expect(previousCard).toContainText('支付模块');
     await expect(previousCard).toContainText('0 条用例');
+  });
+
+  test('全量生成完成后会进入 AI 去重精简中，并按精简后的可见用例数刷新状态', async ({ page }) => {
+    const token = 'token-xmind-auto-dedupe';
+    const user = { id: 223, username: 'demo_user_auto_dedupe', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 80);
+    await page.evaluate(() => {
+      window.__xmindCasegenDedupeTrim = true;
+      window.__xmindCasegenDedupeDelayMs = 900;
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：登录和支付需要完整覆盖，自动去重时必须参考原始需求。',
+      requirementLabel: 'XMind自动去重需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      requirementSupplement: '补充：保留关键异常提示覆盖。',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await openNodeContextMenu(page, 'XMind自动去重需求');
+    await clickContextMenuAction(page, '生成全量用例');
+    await waitForNodeStatus(page, 'XMind自动去重需求', '去重中');
+
+    await expect.poll(async () => await readXmindToolbarOverview(page)).toMatchObject({
+      state: 'running',
+      modules: 2,
+      cases: 4,
+    });
+    await expect.poll(async () => {
+      return (await readXmindToolbarOverview(page)).label;
+    }).toContain('AI 去重精简中');
+    await expect.poll(async () => page.evaluate(() => {
+      var dot = document.querySelector('#xmindCaseGenMindContainer .xmind-casegen-inline-task-indicator.is-running .xmind-casegen-inline-task-dot');
+      var style = dot ? window.getComputedStyle(dot) : null;
+      var rect = dot && dot.getBoundingClientRect ? dot.getBoundingClientRect() : null;
+      return {
+        transformableDisplay: style ? String(style.display || '') !== 'inline' : false,
+        boxSizing: style ? String(style.boxSizing || '') : '',
+        animationName: style ? String(style.animationName || '') : '',
+        width: rect ? Math.round(rect.width) : 0,
+        height: rect ? Math.round(rect.height) : 0,
+      };
+    })).toEqual({
+      transformableDisplay: true,
+      boxSizing: 'border-box',
+      animationName: 'xmindCasegenToolbarSpin',
+      width: 14,
+      height: 14,
+    });
+    await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
+      modules: 2,
+      cases: 4,
+      statusText: '去重中',
+    });
+    await expect(page.locator('#xmindCaseGenInterruptBtn')).toBeEnabled();
+    await expect(page.locator('#xmindCaseGenStoreBtn')).toBeDisabled();
+    await expect(page.locator('#xmindCaseGenExportBtn')).toBeDisabled();
+    await expect(page.locator('#xmindCaseGenExportMarkdownBtn')).toBeDisabled();
+
+    await waitForNodeTextAbsent(page, '登录失败提示');
+    await waitForNodeTextAbsent(page, '支付失败提示');
+    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '支付成功校验');
+    await waitForNodeStatusAbsent(page, 'XMind自动去重需求');
+    await expect(page.locator('#xmindCaseGenStatus')).toHaveText('已生成 2 个模块，2 条用例，已去重精简 2 条');
+    await expect.poll(async () => await readXmindToolbarOverview(page)).toMatchObject({
+      state: 'idle',
+      label: '当前没有生成任务',
+      modules: 2,
+      cases: 2,
+    });
+
+    const dedupeCall = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+      var matches = calls.filter(function(item) {
+        return item && item.contract && String(item.contract.mode || '') === 'ai_dedupe_simplify';
+      });
+      var latest = matches[matches.length - 1] || null;
+      function parseJsonText(text) {
+        var raw = String(text || '').trim();
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw);
+        } catch (err) {}
+        return null;
+      }
+      function extractSection(text, marker) {
+        var source = String(text || '');
+        var index = source.indexOf(marker);
+        if (index === -1) return '';
+        var rest = source.slice(index + marker.length);
+        var next = rest.indexOf('\n\n【');
+        if (next !== -1) rest = rest.slice(0, next);
+        return String(rest || '').trim();
+      }
+      return latest ? {
+        count: matches.length,
+        user: String(latest.user || ''),
+        modules: parseJsonText(extractSection(latest.user, '【需要去重精简的 AI 生成用例(JSON)】')) || [],
+      } : null;
+    });
+    expect(dedupeCall).toBeTruthy();
+    expect(dedupeCall.count).toBe(1);
+    expect(dedupeCall.user).toContain('需求：登录和支付需要完整覆盖');
+    expect(dedupeCall.user).toContain('补充：保留关键异常提示覆盖。');
+    expect(dedupeCall.modules).toHaveLength(2);
+    expect(dedupeCall.modules[0].cases).toHaveLength(2);
+    expect(dedupeCall.modules[1].cases).toHaveLength(2);
+
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestAutoHistoryCard = page.locator('.xmind-casegen-history-card').nth(0);
+    await expect(latestAutoHistoryCard).toContainText('去重记录');
+    await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-summary')).toHaveText('已去重 2 条用例');
+    await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-module-block')).toHaveCount(2);
+    await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-case')).toContainText([
+      '登录失败提示',
+      '支付失败提示',
+    ]);
+    await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-reason').nth(0)).toHaveText('与保留用例覆盖目标高度重叠');
+  });
+
+  test('工具栏 AI 用例去重只发送当前可见 AI 用例，并保留导入基线用例', async ({ page }) => {
+    const token = 'token-xmind-manual-dedupe';
+    const user = { id: 224, username: 'demo_user_manual_dedupe', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 90);
+    await page.evaluate(() => {
+      window.__xmindCasegenDedupeTrim = true;
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：登录模块需要覆盖成功、失败和基线导入用例。',
+      requirementLabel: 'XMind手动去重需求',
+    });
+    await seedImportedBaseline(page, [{
+      module: '登录模块',
+      title: '登录模块-基线用例',
+      priority: 'P1',
+      preconditions: '存在导入基线',
+      steps: ['1、查看基线'],
+      expected: '基线用例保留',
+    }]);
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }, {
+      id: 'xmind-mod-empty',
+      title: '空模块',
+      scenarios: ['暂无用例'],
+      points: ['无'],
+      coupled: [],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入正确账号密码'],
+        expected: '登录成功',
+      }, {
+        module: '登录模块',
+        title: '登录成功冗余校验',
+        priority: 'P2',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、再次输入正确账号密码'],
+        expected: '登录成功',
+      }, {
+        module: '登录模块',
+        title: '登录失败冗余校验',
+        priority: 'P2',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入错误密码'],
+        expected: '提示密码错误',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      requirementSupplement: '补充：基线用例不能被改写。',
+      caseImportMode: 'import',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录模块-基线用例');
+    await waitForNodeText(page, '登录成功冗余校验');
+    await expect(page.locator('#xmindCaseGenDedupeBtn')).toBeEnabled();
+    const dedupeCallCountBeforeConfirm = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+      return calls.filter(function(item) {
+        return item && item.contract && String(item.contract.mode || '') === 'ai_dedupe_simplify';
+      }).length;
+    });
+    await clickElementById(page, 'xmindCaseGenDedupeBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerTitle')).toHaveText('确认 AI 用例去重');
+    await expect(page.locator('#appConfirmDrawerConfirmBtn')).toHaveText('确认去重');
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('1 个模块、3 条 AI 生成用例');
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('仅处理当前页签的 AI 生成层结果');
+    await clickElementById(page, 'appConfirmDrawerCancelBtn');
+    await expect(page.locator('#appConfirmDrawer')).not.toHaveClass(/open/);
+    expect(await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+      return calls.filter(function(item) {
+        return item && item.contract && String(item.contract.mode || '') === 'ai_dedupe_simplify';
+      }).length;
+    })).toBe(dedupeCallCountBeforeConfirm);
+    await waitForNodeText(page, '登录成功冗余校验');
+    await clickElementById(page, 'xmindCaseGenDedupeBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await clickElementById(page, 'appConfirmDrawerConfirmBtn');
+    await waitForNodeStatus(page, 'XMind手动去重需求', '去重中');
+    await waitForNodeTextAbsent(page, '登录成功冗余校验');
+    await waitForNodeTextAbsent(page, '登录失败冗余校验');
+    await waitForNodeText(page, '登录模块-基线用例');
+    await waitForNodeText(page, '登录成功校验');
+    await expect.poll(async () => await readXmindToolbarOverview(page)).toMatchObject({
+      state: 'idle',
+      label: '当前没有生成任务',
+      modules: 2,
+      cases: 2,
+    });
+    await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
+      modules: 2,
+      cases: 2,
+    });
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await waitXmindDrawerClosedStable(page);
+    await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
+      modules: 2,
+      cases: 2,
+    });
+    await expect(page.locator('#caseGenXmindModulesContainer')).toContainText('登录成功校验');
+    await expect(page.locator('#caseGenXmindModulesContainer')).not.toContainText('登录成功冗余校验');
+    await expect(page.locator('#caseGenXmindModulesContainer')).not.toContainText('登录失败冗余校验');
+    await clickElementById(page, 'caseGenSettingsTabBtn');
+    await expect(page.locator('#casegenSettingsPanel')).toHaveClass(/is-active/);
+    await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
+      modules: 2,
+      cases: 2,
+    });
+    await clickElementById(page, 'caseGenModulesTabBtn');
+    await expect(page.locator('#casegenModulesPanel')).toHaveClass(/is-active/);
+    await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
+      modules: 2,
+      cases: 2,
+    });
+    await openXmindCaseGenDrawer(page);
+    await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
+      modules: 2,
+      cases: 2,
+    });
+    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
+    await waitXmindDrawerClosedStable(page);
+    await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
+      modules: 2,
+      cases: 2,
+    });
+    await openXmindCaseGenDrawer(page);
+
+    const requestInfo = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+      var latest = null;
+      for (var i = calls.length - 1; i >= 0; i -= 1) {
+        if (calls[i] && calls[i].contract && String(calls[i].contract.mode || '') === 'ai_dedupe_simplify') {
+          latest = calls[i];
+          break;
+        }
+      }
+      function parseJsonText(text) {
+        var raw = String(text || '').trim();
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw);
+        } catch (err) {}
+        return null;
+      }
+      function extractSection(text, marker) {
+        var source = String(text || '');
+        var index = source.indexOf(marker);
+        if (index === -1) return '';
+        var rest = source.slice(index + marker.length);
+        var next = rest.indexOf('\n\n【');
+        if (next !== -1) rest = rest.slice(0, next);
+        return String(rest || '').trim();
+      }
+      return latest ? {
+        user: String(latest.user || ''),
+        modules: parseJsonText(extractSection(latest.user, '【需要去重精简的 AI 生成用例(JSON)】')) || [],
+      } : null;
+    });
+    expect(requestInfo).toBeTruthy();
+    expect(requestInfo.user).toContain('需求：登录模块需要覆盖成功、失败和基线导入用例。');
+    expect(requestInfo.user).toContain('补充：基线用例不能被改写。');
+    expect(requestInfo.user).not.toContain('登录模块-基线用例');
+    expect(requestInfo.modules).toHaveLength(1);
+    expect(requestInfo.modules[0].module).toBe('登录模块');
+    expect(requestInfo.modules[0].cases).toHaveLength(3);
+
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
+    await expect(latestCard).toContainText('AI用例去重');
+    await expect(latestCard).toContainText('已去重精简 2 条用例');
+    await expect(latestCard).toContainText('去重记录');
+    await expect(latestCard.locator('.xmind-casegen-history-dedupe-summary')).toHaveText('已去重 2 条用例');
+    await expect(latestCard.locator('.xmind-casegen-history-dedupe-module-block')).toHaveCount(1);
+    await expect(latestCard.locator('.xmind-casegen-history-dedupe-case')).toContainText([
+      '登录成功冗余校验',
+      '登录失败冗余校验',
+    ]);
+    await expect(latestCard.locator('.xmind-casegen-history-dedupe-reason').nth(0)).toHaveText('与保留用例覆盖目标高度重叠');
+  });
+
+  test('AI 用例去重失败时保留原用例并写入失败记录', async ({ page }) => {
+    const token = 'token-xmind-dedupe-failure';
+    const user = { id: 225, username: 'demo_user_dedupe_failure', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installRejectedXmindModelResponse(page, 'dedupe unavailable', 100);
+    await seedDocumentRequirement(page, {
+      text: '需求：去重失败时不能删除已有 AI 用例。',
+      requirementLabel: 'XMind去重失败需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入正确账号密码'],
+        expected: '登录成功',
+      }, {
+        module: '登录模块',
+        title: '登录失败提示',
+        priority: 'P2',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入错误密码'],
+        expected: '提示密码错误',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenDedupeBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await clickElementById(page, 'appConfirmDrawerConfirmBtn');
+    await waitForNodeStatus(page, 'XMind去重失败需求', '去重中');
+    await expect(page.locator('#xmindCaseGenStatus')).toHaveText('AI 用例去重精简失败，已保留原结果');
+    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '登录失败提示');
+
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
+    await expect(latestCard).toContainText('AI用例去重');
+    await expect(latestCard).toContainText('AI 去重精简失败');
+    await expect(latestCard).toContainText('dedupe unavailable');
   });
 
   test('XMind 工具栏支持导出 AI Markdown，并保持 XMind 导出可用', async ({ page }) => {
@@ -6822,6 +7323,27 @@ test.describe('XMind 用例生成抽屉', () => {
     });
 
     await autoAcceptXmindConfirm(page);
+    await openNodeContextMenu(page, '登录模块-完整-1');
+    await clickContextMenuAction(page, '删除');
+    await page.waitForFunction(() => Boolean(window.__xmindConfirmPayload), {}, { timeout: 5000 });
+    await waitForNodeTextAbsent(page, '登录模块-完整-1');
+    await expect.poll(async () => {
+      return await readXmindToolbarOverview(page);
+    }).toEqual({
+      state: 'idle',
+      label: '当前没有生成任务',
+      modules: 2,
+      cases: 1,
+    });
+    await expect.poll(async () => {
+      return await readActiveXmindWorkspaceProgress(page);
+    }).toEqual({
+      modules: 2,
+      cases: 1,
+      statusText: '未入库',
+    });
+
+    await autoAcceptXmindConfirm(page);
     await openNodeContextMenu(page, '支付模块');
     await clickContextMenuAction(page, '删除');
     await page.waitForFunction(() => Boolean(window.__xmindConfirmPayload), {}, { timeout: 5000 });
@@ -6832,21 +7354,21 @@ test.describe('XMind 用例生成抽屉', () => {
       state: 'idle',
       label: '当前没有生成任务',
       modules: 1,
-      cases: 2,
+      cases: 1,
     });
   });
 
-  test('非全屏抽屉下工具栏会自动换层排布，避免搜索清空按钮被压坏', async ({ page }) => {
+  test('XMind 工具栏在全屏和非全屏下都会自动换层排布，避免搜索清空按钮被压坏', async ({ page }) => {
     const token = 'token-xmind-toolbar-nonfullscreen-layout';
     const user = { id: 212, username: 'demo_user_toolbar_layout', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
 
-    await page.setViewportSize({ width: 1800, height: 980 });
+    await page.setViewportSize({ width: 1366, height: 820 });
     await gotoCasesgenWorkflow(page);
     await waitXmindModelAssigned(page, mockInfo.modelId);
     await seedDocumentRequirement(page, {
-      text: '需求：验证非全屏 XMind 工具栏在大屏抽屉宽度下也能合理排版，不会把清空按钮压坏。',
-      requirementLabel: 'XMind非全屏工具栏布局需求',
+      text: '需求：验证 XMind 工具栏在非全屏和全屏下都能合理排版，不会把清空按钮压坏。',
+      requirementLabel: 'XMind工具栏布局需求',
     });
     await seedPrepState(page, {
       step: 3,
@@ -6863,7 +7385,7 @@ test.describe('XMind 用例生成抽屉', () => {
       }
     });
 
-    const layout = await page.evaluate(() => {
+    const readToolbarLayout = async () => page.evaluate(() => {
       var drawer = document.getElementById('xmindCaseGenDrawer');
       var controls = document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]');
       var utilityHost = controls ? controls.querySelector('[data-mind-utility-host]') : null;
@@ -6895,18 +7417,31 @@ test.describe('XMind 用例生成抽屉', () => {
       };
     });
 
+    const assertToolbarExpanded = (layout, expectedFullscreen) => {
+      expect(layout.drawerFullscreen).toBe(expectedFullscreen);
+      expect(layout.controlsWidth).toBeGreaterThan(900);
+      expect(layout.controlsOverflowX).toBeLessThanOrEqual(4);
+      expect(layout.searchTop).toBeGreaterThanOrEqual(layout.utilityBottom - 2);
+      expect(layout.clearText).toBe('清空');
+      expect(layout.clearWidth).toBeGreaterThan(46);
+      expect(layout.clearHeight).toBeLessThan(layout.clearWidth);
+      expect(layout.clearOverflowX).toBeLessThanOrEqual(1);
+      expect(layout.clearWritingMode).toBe('horizontal-tb');
+      expect(layout.clearWhiteSpace).toBe('nowrap');
+      expect(layout.interruptWidth).toBeGreaterThan(80);
+      expect(layout.interruptRight).toBeLessThanOrEqual(layout.utilityRight + 1);
+    };
+
+    const layout = await readToolbarLayout();
     expect(layout.drawerFullscreen).toBeFalsy();
-    expect(layout.controlsWidth).toBeGreaterThan(900);
-    expect(layout.controlsOverflowX).toBeLessThanOrEqual(4);
-    expect(layout.searchTop).toBeGreaterThanOrEqual(layout.utilityBottom - 2);
-    expect(layout.clearText).toBe('清空');
-    expect(layout.clearWidth).toBeGreaterThan(46);
-    expect(layout.clearHeight).toBeLessThan(layout.clearWidth);
-    expect(layout.clearOverflowX).toBeLessThanOrEqual(1);
-    expect(layout.clearWritingMode).toBe('horizontal-tb');
-    expect(layout.clearWhiteSpace).toBe('nowrap');
-    expect(layout.interruptWidth).toBeGreaterThan(80);
-    expect(layout.interruptRight).toBeLessThanOrEqual(layout.utilityRight + 1);
+    assertToolbarExpanded(layout, false);
+
+    await page.click('#xmindCaseGenMindContainer [data-mind-action="drawer-fullscreen"]');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+    await page.waitForTimeout(100);
+    const fullscreenLayout = await readToolbarLayout();
+    assertToolbarExpanded(fullscreenLayout, true);
+    expect(fullscreenLayout.controlsWidth).toBeGreaterThan(layout.controlsWidth + 120);
   });
 
   test('XMind 节点搜索保持输入焦点，回退与清空后不会误删已生成节点', async ({ page }) => {
@@ -8456,6 +8991,12 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeStatus(page, '登录模块', '生成中');
     await waitForNodeText(page, '登录模块-完整-1');
     await waitForNodeStatusAbsent(page, '登录模块');
+    expect(await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+      return calls.filter(function(item) {
+        return item && item.contract && String(item.contract.mode || '') === 'ai_dedupe_simplify';
+      }).length;
+    })).toBe(0);
 
     await openNodeContextMenu(page, '登录模块');
     const fullCaseItems = await getContextMenuItems(page);
