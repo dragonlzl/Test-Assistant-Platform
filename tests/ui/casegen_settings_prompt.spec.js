@@ -928,6 +928,9 @@ test.describe('用例生成-设置项与跳转', () => {
     expect(String(lastPrompt.prompt || '')).toContain('生成时需要考虑边界场景');
     expect(String(lastPrompt.prompt || '')).toContain('特殊场景需包含弱网环境');
     expect(String(lastPrompt.prompt || '')).toContain('用例标题 title 必须简洁明了');
+    expect(String(lastPrompt.prompt || '')).toContain('AI_CASE_WRITING_STYLE_GUIDE.md');
+    expect(String(lastPrompt.prompt || '')).toContain('title 写短检查点');
+    expect(String(lastPrompt.prompt || '')).toContain('priority 只能填写 P0、P1、P2');
     expect(String(lastPrompt.prompt || '')).toContain('steps 必须是数组');
     expect(String(lastPrompt.prompt || '')).toContain('1、xxx');
     expect(String(lastPrompt.prompt || '')).toContain('已开启的生成选项属于本轮输出的硬性覆盖要求');

@@ -19,6 +19,33 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：AI 用例生成风格指南接入
+- 功能描述：沉淀正式入库用例的人工编写风格，新增统一的 AI 用例编写风格指南，并把该风格要求接入普通用例生成、XMind 用例生成、用例库 AI 补充生成和执行页 AI 补充生成所共用的默认提示词。生成时在保持高质量、字段完整、语义去重和优先级合规的基础上，更贴近测试人员从 XMind/表格整理检查点的写法。
+- 操作方式：
+  - 在 AI 功能指派页查看或恢复默认提示词时，用例生成相关提示词会包含风格指南要求；
+  - 使用普通用例生成、XMind 用例生成、用例库 AI 生成或执行页 AI 生成时，模型会按统一风格约束输出用例；
+  - 若历史指派配置仍是旧默认提示词，加载时会自动迁移到新的默认提示词；用户自定义提示词不会被覆盖。
+- 使用效果：
+  - 生成用例的模块、标题、前置、步骤和预期更接近人工检查点风格；
+  - priority 仍强制只允许 P0/P1/P2，不会模仿历史脏数据中的非标准值；
+  - 多个用例生成入口共用同一份风格要求，避免输出风格割裂。
+- 新增内容/接口/组件：
+  - 新增 Markdown 风格指南，记录字段写法、人工感要求和质量底线；
+  - 默认提示词新增统一风格参考片段，并挂载到普通用例生成、XMind 用例生成、用例库/执行页补充生成；
+  - 功能指派配置补充旧默认提示词精确迁移，覆盖普通用例生成、XMind 用例生成和用例库补充生成；
+  - 更新 UI 自动化断言，校验默认提示词和 XMind 实际拼装提示词都包含风格指南要求；
+  - 本次未新增后端接口，未修改数据库结构。
+- 复用说明：复用既有默认提示词配置、功能指派保存/迁移逻辑、XMind 提示词拼装逻辑、用例库/执行页 AI 生成共用的 caselibrarygen 提示词；未新增运行时读取链路或后端能力。
+- 测试与验证：
+  - `node --check config/constants.js scripts/modules/models.js tests/ui/models_settings.spec.js tests/ui/casegen_settings_prompt.spec.js`（通过）
+  - `node` 直连加载前端默认配置，验证 `casegen`、`xmindcasegen`、`caselibrarygen` 均包含 `AI_CASE_WRITING_STYLE_GUIDE.md`、短标题规则和 P0/P1/P2 规则（通过）
+  - `git diff --check`（通过）
+  - `APP_DB_FILE=apitest.db npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line --workers=1`（通过，1/1；确认本次未新增 XMind 后端端点）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/models_settings.spec.js -g "功能指派页的用例生成默认提示词使用最新基础文案" --reporter=line --workers=1`（未完成：默认 8090 端口被本机 uvicorn 占用并返回 404，Playwright webServer 等待超时）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8098 npx playwright test --config /private/tmp/tap-playwright-8098.config.js models_settings.spec.js -g "功能指派页的用例生成默认提示词使用最新基础文案" --reporter=line --workers=1`（未完成：临时静态服务可用，但当前 macOS 沙箱启动 Chromium headless 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出，未进入业务断言）
+  - `python3 notify_feishu.py`（通过，飞书返回 HTTP 200 / success）
+- 更新记录：2026-05-11 新增 AI 用例编写风格指南，并接入全部用例生成默认提示词。
+
 - 功能名称：XMind 全屏刷新恢复防卡死
 - 功能描述：修复 `XMind 用例生成` 已生成用例后，抽屉处于全屏展示并刷新页面时可能卡死的问题。刷新恢复时不再恢复全屏状态，页面会自动回到非全屏抽屉，只恢复 XMind 页、抽屉打开状态和已生成内容。
 - 操作方式：

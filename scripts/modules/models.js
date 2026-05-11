@@ -22,6 +22,9 @@
       ? window.app.utils.showCenterToast
       : null;
     const previousDefaultCaseGenPrompt = '你是游戏测试用例专家，针对单个测试模块生成 JSON 用例列表，需严格遵循以下要求，生成高质量用例：\n1、每条用例字段：{module, title, priority（仅从P0、P1、P2中选择）, preconditions, steps, expected}，steps 为数组。\n2、生成时需要结合模块的测试场景/测试要点/耦合模块。\n3、生成的用例需要具备可读性，语句要清晰明确简洁。\n3、其中用例标题title需保持言简意赅，不要过于详细，详细的内容应该分配到前提条件preconditions、操作步骤steps、和预期结果expected中。\n4、操作步骤需要分步展示，比如以1、2、3的形式分步展示。';
+    const previousDefaultCaseGenPromptV2 = '你是资深游戏测试工程师，善于用例设计。请你针对单个测试模块生成 JSON 用例列表，需严格遵循以下要求，生成高质量用例：\n1、每条用例字段：{module, title, priority（仅从P0、P1、P2中选择）, preconditions, steps, expected}。\n2、优先生成需求主流程的核心用例，再生成其他操作分支的用例。\n3、生成时需要结合模块的测试场景/测试要点/耦合模块。\n4、生成的用例需要具备可读性，语句要清晰明确简洁。\n5、其中用例标题title，需保持言简意赅，不能过于详细。\n6、前提条件preconditions、操作步骤steps，预期结果expected，均需保持言简意赅。\n7、前提条件preconditions，如果有多条，则需要以1、2、3的形式分步展示。\n8、操作步骤steps，如果有多条，需要以1、2、3的形式分步展示。';
+    const previousDefaultXmindCaseGenPrompt = '你是资深测试设计专家，负责 XMind 用例生成页面的结构化结果输出。你必须严格遵循以下规则：\n1、只输出合法 JSON，不要输出任何解释、备注、Markdown 或代码块围栏。\n2、输出结构固定为：{modules:[{module,key_scenarios,test_points,coupled_modules,cases}]}。\n3、每个模块字段要求：module 为模块名；key_scenarios/test_points/coupled_modules 均为数组；cases 可为空数组或省略。\n4、每条用例字段固定为：{module,title,priority,preconditions,steps,expected}，priority 仅允许 P0、P1、P2。\n5、用例标题 title 必须简洁明了，只表达测试意图，不要写成长句，不要把步骤或预期塞进标题。\n6、steps 必须是数组，数组中每一项都必须自带中文序号前缀，格式严格为“1、xxx”“2、xxx”。\n7、不得重复输出已有模块，也不得重复输出与已有用例语义重复的用例；模块命名要稳定、清晰、避免同义重复。\n8、是否允许新增模块、是否给新模块生成用例、是否给已有模块生成用例，必须严格遵守传入的 operation_contract。\n9、当 operation_contract 指定只补模块时，不要为模块生成 cases；当没有可补充内容时返回 {\"modules\":[]}。';
+    const previousDefaultCaseLibraryGenPrompt = '你是资深测试用例设计专家，请基于输入 JSON 中的 requirement_text、module_list、existing_cases、coverage_threshold 生成补充用例。要求：1) 分析需求覆盖模块，若需求包含的模块多于 module_list，先在 missing_modules 中补齐缺失模块；若 module_list 多于需求模块可忽略多出模块。2) 对 module_list 中每个模块评估 existing_cases 在当前需求下的覆盖率 coverage(0-100)，覆盖率>=coverage_threshold 的模块可不生成用例。3) 对覆盖率低于阈值的模块生成用例，并与 existing_cases 做语义去重，测试点相似的用例不要输出。4) 缺失模块 coverage 必然为 0，必须生成用例。严格输出 JSON：{missing_modules:[{module,coverage,cases:[{module,title,priority,precondition,steps,expected,remark}]}], existing_modules:[{module,coverage,cases:[{module,title,priority,precondition,steps,expected,remark}]}]}。priority 仅允许 P0/P1/P2，steps 为字符串(可换行)，其他字段为空用空字符串，仅输出 JSON。';
 
     const domRefs = dom || {};
     const pickEl = function(key, id) { return domRefs[key] || document.getElementById(id); };
@@ -551,13 +554,25 @@
       merged.splitPrompt = merged.splitPrompt || defaultPrompts.split;
       merged.caseGenPrompt = merged.caseGenPrompt || defaultPrompts.casegen;
       merged.xmindCaseGenPrompt = merged.xmindCaseGenPrompt || defaultPrompts.xmindcasegen;
-      if (merged.caseGenPrompt === legacyCaseGenPrompt || merged.caseGenPrompt === previousDefaultCaseGenPrompt) {
+      if (
+        merged.caseGenPrompt === legacyCaseGenPrompt
+        || merged.caseGenPrompt === previousDefaultCaseGenPrompt
+        || merged.caseGenPrompt === previousDefaultCaseGenPromptV2
+      ) {
         merged.caseGenPrompt = defaultPrompts.casegen;
+        migrated = true;
+      }
+      if (merged.xmindCaseGenPrompt === previousDefaultXmindCaseGenPrompt) {
+        merged.xmindCaseGenPrompt = defaultPrompts.xmindcasegen;
         migrated = true;
       }
       merged.caseFilterPrompt = merged.caseFilterPrompt || defaultPrompts.casefilter;
       merged.missingReminderPrompt = merged.missingReminderPrompt || defaultPrompts.missingreminder;
       merged.caseLibraryGenPrompt = merged.caseLibraryGenPrompt || defaultPrompts.caselibrarygen;
+      if (merged.caseLibraryGenPrompt === previousDefaultCaseLibraryGenPrompt) {
+        merged.caseLibraryGenPrompt = defaultPrompts.caselibrarygen;
+        migrated = true;
+      }
 
       merged.cleanReasoning = merged.cleanReasoning || '';
       merged.reviewReasoning = merged.reviewReasoning || '';

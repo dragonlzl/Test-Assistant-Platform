@@ -169,10 +169,19 @@ test.describe('模型管理与全局设置', () => {
   test('功能指派页的用例生成默认提示词使用最新基础文案', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
     const caseGenPrompt = page.locator('#caseGenPrompt');
+    const xmindCaseGenPrompt = page.locator('#xmindCaseGenPrompt');
+    const caseLibraryGenPrompt = page.locator('#caseLibraryGenPrompt');
     await expect(caseGenPrompt).toHaveValue(/你是资深游戏测试工程师，善于用例设计。/);
     await expect(caseGenPrompt).toHaveValue(/优先生成需求主流程的核心用例/);
     await expect(caseGenPrompt).toHaveValue(/前提条件preconditions，如果有多条，则需要以1、2、3的形式分步展示。/);
     await expect(caseGenPrompt).toHaveValue(/操作步骤steps，如果有多条，需要以1、2、3的形式分步展示。/);
+    await expect(caseGenPrompt).toHaveValue(/AI_CASE_WRITING_STYLE_GUIDE\.md/);
+    await expect(caseGenPrompt).toHaveValue(/title 写短检查点/);
+    await expect(caseGenPrompt).toHaveValue(/priority 只能填写 P0、P1、P2/);
+    await expect(xmindCaseGenPrompt).toHaveValue(/AI_CASE_WRITING_STYLE_GUIDE\.md/);
+    await expect(xmindCaseGenPrompt).toHaveValue(/title 写短检查点/);
+    await expect(caseLibraryGenPrompt).toHaveValue(/AI_CASE_WRITING_STYLE_GUIDE\.md/);
+    await expect(caseLibraryGenPrompt).toHaveValue(/title 写短检查点/);
   });
 
   test('功能指派页点击保存指派后显示 3 秒悬浮提示', async ({ page }) => {
