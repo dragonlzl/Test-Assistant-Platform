@@ -123,6 +123,7 @@
       caseGenSettings: {
         activeTab: 'settings',
         customRequirement: '',
+        dedupeSimplify: false,
         needFunctionCondition: true,
         needNumericValidation: true,
         needBoundary: false,

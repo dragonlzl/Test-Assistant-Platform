@@ -1436,6 +1436,7 @@
         activeTab: 'settings',
         storeMode: 'new',
         customRequirement: '',
+        dedupeSimplify: false,
         needFunctionCondition: true,
         needNumericValidation: true,
         needBoundary: false,
@@ -1542,6 +1543,9 @@
         customRequirement: source.customRequirement === undefined || source.customRequirement === null
           ? String(defaults.customRequirement || '')
           : String(source.customRequirement || ''),
+        dedupeSimplify: source.dedupeSimplify === undefined
+          ? defaults.dedupeSimplify === true
+          : source.dedupeSimplify === true,
         needFunctionCondition: source.needFunctionCondition === undefined
           ? defaults.needFunctionCondition === true
           : source.needFunctionCondition === true,
@@ -1593,6 +1597,7 @@
           : 'settings');
       state.caseGenSettings.storeMode = state.caseGenSettings.storeMode === 'append' ? 'append' : 'new';
       state.caseGenSettings.customRequirement = String(state.caseGenSettings.customRequirement || '');
+      state.caseGenSettings.dedupeSimplify = state.caseGenSettings.dedupeSimplify === true;
       state.caseGenSettings.needFunctionCondition = state.caseGenSettings.needFunctionCondition === true;
       state.caseGenSettings.needNumericValidation = state.caseGenSettings.needNumericValidation === true;
       state.caseGenSettings.needBoundary = state.caseGenSettings.needBoundary === true;
@@ -1634,6 +1639,7 @@
       var settings = ensureCaseGenSettings();
       var normalized = normalizeCaseGenPromptSettings(settingsSource);
       settings.customRequirement = normalized.customRequirement;
+      settings.dedupeSimplify = normalized.dedupeSimplify;
       settings.needFunctionCondition = normalized.needFunctionCondition;
       settings.needNumericValidation = normalized.needNumericValidation;
       settings.needBoundary = normalized.needBoundary;
@@ -1663,6 +1669,7 @@
         return settings;
       }
       if (
+        key === 'dedupeSimplify' ||
         key === 'needFunctionCondition' ||
         key === 'needNumericValidation' ||
         key === 'needBoundary' ||

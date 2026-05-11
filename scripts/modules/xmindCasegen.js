@@ -184,6 +184,7 @@
     var SHARED_WORKSPACE_CASEGEN_SETTING_KEYS = [
       'activeTab',
       'customRequirement',
+      'dedupeSimplify',
       'needFunctionCondition',
       'needNumericValidation',
       'needBoundary',
@@ -220,6 +221,8 @@
     };
     var DEDUPE_ACTION_ID = 'xmind-ai-dedupe';
     var DEDUPE_STRENGTH = 'conservative';
+    var DEDUPE_MODE_ONLY = 'dedupe_only';
+    var DEDUPE_MODE_SIMPLIFY = 'dedupe_simplify';
 
     function createDefaultPrepState() {
       return {
@@ -254,6 +257,7 @@
         taskId: '',
         status: '',
         error: '',
+        dedupeMode: DEDUPE_MODE_ONLY,
         lastResult: null,
         updatedAt: 0,
       };
@@ -476,6 +480,7 @@
       return {
         activeTab: 'settings',
         customRequirement: '',
+        dedupeSimplify: false,
         needFunctionCondition: true,
         needNumericValidation: true,
         needBoundary: false,
@@ -520,6 +525,7 @@
       });
       next.activeTab = next.activeTab === 'settings' ? 'settings' : 'settings';
       next.customRequirement = String(next.customRequirement || '');
+      next.dedupeSimplify = next.dedupeSimplify === true;
       next.needFunctionCondition = next.needFunctionCondition !== false;
       next.needNumericValidation = next.needNumericValidation !== false;
       next.needBoundary = next.needBoundary === true;
@@ -1351,18 +1357,27 @@
       });
       var runningOperations = collectRunningGenerationOperations();
       var runningCount = runningOperations.length;
+      var dedupeOperation = null;
+      runningOperations.some(function(item) {
+        if (item && item.scope === 'dedupe') {
+          dedupeOperation = item;
+          return true;
+        }
+        return false;
+      });
       var dedupeRunning = runningOperations.some(function(item) {
         return item && item.scope === 'dedupe';
       });
+      var dedupeMode = dedupeOperation ? normalizeDedupeMode(dedupeOperation.dedupeMode) : getDedupeModeFromSettings();
       return {
         runningCount: runningCount,
         runningState: runningCount > 0 ? 'running' : 'idle',
         runningLabel: runningCount > 0
-          ? (dedupeRunning ? 'AI 去重精简中' : '正在执行生成任务')
+          ? (dedupeRunning ? getDedupeRunningLabel(dedupeMode) : '正在执行生成任务')
           : '当前没有生成任务',
         runningHint: runningCount > 0
           ? (dedupeRunning
-            ? '正在对当前页签 AI 生成用例执行去重精简'
+            ? getDedupeRunningHint(dedupeMode)
             : ('当前共有 ' + String(runningCount) + ' 个生成任务在执行'))
           : '当前可继续发起生成、补全或删除操作',
         moduleCount: moduleCount,
@@ -1510,7 +1525,7 @@
       } else if (!hasCases) {
         dedupeBtn.title = '当前页签没有可去重的 AI 生成用例';
       } else {
-        dedupeBtn.title = '对当前页签 AI 生成用例执行去重精简';
+        dedupeBtn.title = '对当前页签 AI 生成用例执行' + getDedupeModeActionText(getDedupeModeFromSettings());
       }
     }
 
@@ -2008,6 +2023,14 @@
         if (!Number.isFinite(state.xmindCaseGen.root.pipeline.addedCases) || state.xmindCaseGen.root.pipeline.addedCases < 0) {
           state.xmindCaseGen.root.pipeline.addedCases = 0;
         }
+        state.xmindCaseGen.root.pipeline.moduleTaskTotal = Number(state.xmindCaseGen.root.pipeline.moduleTaskTotal || 0);
+        if (!Number.isFinite(state.xmindCaseGen.root.pipeline.moduleTaskTotal) || state.xmindCaseGen.root.pipeline.moduleTaskTotal < 0) {
+          state.xmindCaseGen.root.pipeline.moduleTaskTotal = 0;
+        }
+        state.xmindCaseGen.root.pipeline.moduleTaskCompleted = Number(state.xmindCaseGen.root.pipeline.moduleTaskCompleted || 0);
+        if (!Number.isFinite(state.xmindCaseGen.root.pipeline.moduleTaskCompleted) || state.xmindCaseGen.root.pipeline.moduleTaskCompleted < 0) {
+          state.xmindCaseGen.root.pipeline.moduleTaskCompleted = 0;
+        }
         state.xmindCaseGen.root.pipeline.updatedAt = Number(state.xmindCaseGen.root.pipeline.updatedAt || 0);
         if (!Number.isFinite(state.xmindCaseGen.root.pipeline.updatedAt) || state.xmindCaseGen.root.pipeline.updatedAt < 0) {
           state.xmindCaseGen.root.pipeline.updatedAt = 0;
@@ -2017,6 +2040,15 @@
         }
         if (!Array.isArray(state.xmindCaseGen.root.pipeline.diagnostics)) {
           state.xmindCaseGen.root.pipeline.diagnostics = [];
+        }
+        state.xmindCaseGen.root.pipeline.generatedDedupeModules = normalizeRootPipelineDedupeModules(state.xmindCaseGen.root.pipeline.generatedDedupeModules || []);
+        if (!Array.isArray(state.xmindCaseGen.root.pipeline.moduleTaskCompletedKeys)) {
+          state.xmindCaseGen.root.pipeline.moduleTaskCompletedKeys = [];
+        } else {
+          state.xmindCaseGen.root.pipeline.moduleTaskCompletedKeys = normalizeUniqueStringList(state.xmindCaseGen.root.pipeline.moduleTaskCompletedKeys);
+        }
+        if (state.xmindCaseGen.root.pipeline.moduleTaskCompletedKeys.length > state.xmindCaseGen.root.pipeline.moduleTaskCompleted) {
+          state.xmindCaseGen.root.pipeline.moduleTaskCompleted = state.xmindCaseGen.root.pipeline.moduleTaskCompletedKeys.length;
         }
         if (!Array.isArray(state.xmindCaseGen.root.pipeline.pendingQueue)) {
           state.xmindCaseGen.root.pipeline.pendingQueue = [];
@@ -2176,13 +2208,18 @@
         errorCount: Number(input.errorCount || 0),
         createdModules: Number(input.createdModules || 0),
         addedCases: Number(input.addedCases || 0),
+        moduleTaskTotal: Number(input.moduleTaskTotal || 0),
+        moduleTaskCompleted: Number(input.moduleTaskCompleted || 0),
+        moduleTaskCompletedKeys: normalizeUniqueStringList(input.moduleTaskCompletedKeys || []),
         dedupeStatus: input.dedupeStatus ? String(input.dedupeStatus || '') : '',
         dedupeTaskId: input.dedupeTaskId ? String(input.dedupeTaskId || '') : '',
+        dedupeMode: input.dedupeMode ? normalizeDedupeMode(input.dedupeMode) : '',
         dedupeBeforeCount: Number(input.dedupeBeforeCount || 0),
         dedupeAfterCount: Number(input.dedupeAfterCount || 0),
         dedupeRemovedCount: Number(input.dedupeRemovedCount || 0),
         dedupeError: input.dedupeError ? String(input.dedupeError || '') : '',
         dedupeRecords: normalizeHistoryDedupeRecords(input.dedupeRecords || input.removedCases || []),
+        generatedDedupeModules: normalizeRootPipelineDedupeModules(input.generatedDedupeModules || []),
         detailMap: cloneJson(input.detailMap, {}) || {},
         diagnostics: Array.isArray(input.diagnostics) ? input.diagnostics.slice() : [],
         pendingQueue: Array.isArray(input.pendingQueue) ? cloneJson(input.pendingQueue, []) || [] : [],
@@ -2207,13 +2244,18 @@
         errorCount: snapshot.errorCount,
         createdModules: snapshot.createdModules,
         addedCases: snapshot.addedCases,
+        moduleTaskTotal: snapshot.moduleTaskTotal,
+        moduleTaskCompleted: snapshot.moduleTaskCompleted,
+        moduleTaskCompletedKeys: snapshot.moduleTaskCompletedKeys,
         dedupeStatus: snapshot.dedupeStatus,
         dedupeTaskId: snapshot.dedupeTaskId,
+        dedupeMode: snapshot.dedupeMode,
         dedupeBeforeCount: snapshot.dedupeBeforeCount,
         dedupeAfterCount: snapshot.dedupeAfterCount,
         dedupeRemovedCount: snapshot.dedupeRemovedCount,
         dedupeError: snapshot.dedupeError,
         dedupeRecords: snapshot.dedupeRecords,
+        generatedDedupeModules: snapshot.generatedDedupeModules,
         detailMap: snapshot.detailMap,
         diagnostics: snapshot.diagnostics,
         pendingQueue: snapshot.pendingQueue,
@@ -2243,13 +2285,18 @@
         errorCount: Number(cloned.errorCount || 0) || 0,
         createdModules: Number(cloned.createdModules || 0) || 0,
         addedCases: Number(cloned.addedCases || 0) || 0,
+        moduleTaskTotal: Number(cloned.moduleTaskTotal || 0) || 0,
+        moduleTaskCompleted: Number(cloned.moduleTaskCompleted || 0) || 0,
+        moduleTaskCompletedKeys: normalizeUniqueStringList(cloned.moduleTaskCompletedKeys || []),
         dedupeStatus: String(cloned.dedupeStatus || ''),
         dedupeTaskId: String(cloned.dedupeTaskId || ''),
+        dedupeMode: cloned.dedupeMode ? normalizeDedupeMode(cloned.dedupeMode) : '',
         dedupeBeforeCount: Number(cloned.dedupeBeforeCount || 0) || 0,
         dedupeAfterCount: Number(cloned.dedupeAfterCount || 0) || 0,
         dedupeRemovedCount: Number(cloned.dedupeRemovedCount || 0) || 0,
         dedupeError: String(cloned.dedupeError || ''),
         dedupeRecords: normalizeHistoryDedupeRecords(cloned.dedupeRecords || []),
+        generatedDedupeModules: normalizeRootPipelineDedupeModules(cloned.generatedDedupeModules || []),
         detailMap: cloneJson(cloned.detailMap, {}) || {},
         diagnostics: Array.isArray(cloned.diagnostics) ? cloned.diagnostics.slice() : [],
         pendingQueue: Array.isArray(cloned.pendingQueue) ? cloneJson(cloned.pendingQueue, []) || [] : [],
@@ -2264,13 +2311,17 @@
       var detailCount = Object.keys(detailMap).length;
       var diagnosticsCount = Array.isArray(pipeline && pipeline.diagnostics) ? pipeline.diagnostics.length : 0;
       var dedupeRecordCount = Array.isArray(pipeline && pipeline.dedupeRecords) ? pipeline.dedupeRecords.length : 0;
+      var generatedDedupeCount = Array.isArray(pipeline && pipeline.generatedDedupeModules) ? pipeline.generatedDedupeModules.length : 0;
       var pendingCount = Array.isArray(pipeline && pipeline.pendingQueue) ? pipeline.pendingQueue.length : 0;
       return (
         Number(pipeline && pipeline.createdModules || 0) * 1000
         + Number(pipeline && pipeline.addedCases || 0) * 10
+        + Number(pipeline && pipeline.moduleTaskTotal || 0) * 5
+        + Number(pipeline && pipeline.moduleTaskCompleted || 0) * 20
         + detailCount * 100
         + diagnosticsCount * 10
         + dedupeRecordCount * 10
+        + generatedDedupeCount * 100
         + pendingCount
       );
     }
@@ -2303,6 +2354,13 @@
       base.cancelReason = pickString(base.cancelReason, incoming.cancelReason);
       base.dedupeStatus = pickString(base.dedupeStatus, incoming.dedupeStatus);
       base.dedupeTaskId = pickString(base.dedupeTaskId, incoming.dedupeTaskId);
+      if (incoming.dedupeMode && (incoming.dedupeStatus || incoming.dedupeTaskId || !base.dedupeMode)) {
+        base.dedupeMode = normalizeDedupeMode(incoming.dedupeMode);
+      } else if (base.dedupeMode) {
+        base.dedupeMode = normalizeDedupeMode(base.dedupeMode);
+      } else {
+        base.dedupeMode = '';
+      }
       base.dedupeError = pickString(base.dedupeError, incoming.dedupeError);
       base.hadAiContentBeforeAction = base.hadAiContentBeforeAction === true || incoming.hadAiContentBeforeAction === true;
       base.hadAiLayerBeforeAction = base.hadAiLayerBeforeAction === true || incoming.hadAiLayerBeforeAction === true;
@@ -2311,6 +2369,12 @@
       base.errorCount = Math.max(Number(base.errorCount || 0), Number(incoming.errorCount || 0));
       base.createdModules = Math.max(Number(base.createdModules || 0), Number(incoming.createdModules || 0));
       base.addedCases = Math.max(Number(base.addedCases || 0), Number(incoming.addedCases || 0));
+      base.moduleTaskTotal = Math.max(Number(base.moduleTaskTotal || 0), Number(incoming.moduleTaskTotal || 0));
+      base.moduleTaskCompleted = Math.max(Number(base.moduleTaskCompleted || 0), Number(incoming.moduleTaskCompleted || 0));
+      base.moduleTaskCompletedKeys = normalizeUniqueStringList((base.moduleTaskCompletedKeys || []).concat(incoming.moduleTaskCompletedKeys || []));
+      if (base.moduleTaskCompletedKeys.length > base.moduleTaskCompleted) {
+        base.moduleTaskCompleted = base.moduleTaskCompletedKeys.length;
+      }
       base.dedupeBeforeCount = Math.max(Number(base.dedupeBeforeCount || 0), Number(incoming.dedupeBeforeCount || 0));
       base.dedupeAfterCount = Math.max(Number(base.dedupeAfterCount || 0), Number(incoming.dedupeAfterCount || 0));
       base.dedupeRemovedCount = Math.max(Number(base.dedupeRemovedCount || 0), Number(incoming.dedupeRemovedCount || 0));
@@ -2335,6 +2399,7 @@
       base.detailMap = mergedDetailMap;
       base.diagnostics = normalizeHistoryDiagnostics((base.diagnostics || []).concat(incoming.diagnostics || []));
       base.dedupeRecords = normalizeHistoryDedupeRecords((base.dedupeRecords || []).concat(incoming.dedupeRecords || []));
+      base.generatedDedupeModules = normalizeRootPipelineDedupeModules((base.generatedDedupeModules || []).concat(incoming.generatedDedupeModules || []));
       if (Array.isArray(incoming.pendingQueue) && incoming.pendingQueue.length >= (Array.isArray(base.pendingQueue) ? base.pendingQueue.length : 0)) {
         base.pendingQueue = cloneJson(incoming.pendingQueue, []) || [];
       }
@@ -2384,6 +2449,62 @@
     function isTaskInRootPipeline(task, pipelineId) {
       if (!task || !pipelineId) return false;
       return String(task.rootPipelineId || '') === String(pipelineId || '');
+    }
+
+    function normalizeRootPipelineTaskCount(value) {
+      var total = Number(value || 0);
+      if (!Number.isFinite(total) || total < 0) total = 0;
+      return Math.floor(total);
+    }
+
+    function getRootPipelineModuleTaskCompletionKey(task) {
+      if (!task || typeof task !== 'object') return '';
+      var taskId = String(task.id || '').trim();
+      if (taskId) return 'task:' + taskId;
+      var moduleId = String(task.moduleId || '').trim();
+      var moduleKey = String(task.moduleKey || '').trim();
+      var moduleTitle = normalizeModuleTitle(task.moduleTitle || '');
+      var actionId = String(task.actionId || '').trim();
+      var rootActionId = String(task.rootPipelineActionId || '').trim();
+      var keySeed = moduleId || moduleKey || moduleTitle;
+      if (!keySeed) return '';
+      return [
+        'module',
+        keySeed,
+        actionId || 'unknown-action',
+        rootActionId || 'unknown-root',
+      ].join(':');
+    }
+
+    function markRootPipelineModuleTaskCompleted(task) {
+      var pipelineId = task && task.rootPipelineId ? String(task.rootPipelineId || '') : '';
+      if (!pipelineId) return null;
+      var completionKey = getRootPipelineModuleTaskCompletionKey(task);
+      return updateRootPipelineState(function(current) {
+        if (String(current.id || '') !== pipelineId) return;
+        if (!Array.isArray(current.moduleTaskCompletedKeys)) {
+          current.moduleTaskCompletedKeys = [];
+        }
+        if (completionKey && current.moduleTaskCompletedKeys.indexOf(completionKey) !== -1) {
+          return;
+        }
+        if (completionKey) {
+          current.moduleTaskCompletedKeys.push(completionKey);
+        }
+        current.moduleTaskCompleted = normalizeRootPipelineTaskCount(current.moduleTaskCompleted) + 1;
+      });
+    }
+
+    function isRootPipelineModulePhaseComplete(pipeline) {
+      if (!pipeline) return true;
+      if (pipeline.cancelled === true) return true;
+      var total = normalizeRootPipelineTaskCount(pipeline.moduleTaskTotal);
+      if (total <= 0) return true;
+      var completed = normalizeRootPipelineTaskCount(pipeline.moduleTaskCompleted);
+      if (Array.isArray(pipeline.moduleTaskCompletedKeys)) {
+        completed = Math.max(completed, pipeline.moduleTaskCompletedKeys.length);
+      }
+      return completed >= total;
     }
 
     function collectRootPipelineRunningTasks(pipelineId, tasks) {
@@ -2512,6 +2633,64 @@
       if (!pipeline || typeof pipeline !== 'object') return;
       var next = Array.isArray(items) ? items : [items];
       pipeline.diagnostics = normalizeHistoryDiagnostics((pipeline.diagnostics || []).concat(next));
+    }
+
+    function normalizeRootPipelineDedupeModule(item) {
+      if (!item || typeof item !== 'object') return null;
+      var moduleTitle = normalizeModuleTitle(item.module || item.moduleTitle || item.title || '');
+      var moduleId = item.moduleId || item.module_id ? String(item.moduleId || item.module_id || '') : '';
+      var moduleKey = String(item.moduleKey || item.module_key || normalizeModuleKey(moduleTitle || moduleId || ''));
+      var cases = normalizeFallbackCaseList(item.cases || [], moduleTitle);
+      if (!moduleTitle || !cases.length) return null;
+      return {
+        moduleId: moduleId,
+        moduleKey: moduleKey || normalizeModuleKey(moduleTitle),
+        module: moduleTitle,
+        key_scenarios: normalizeArrayField(item.key_scenarios || item.scenarios),
+        test_points: normalizeArrayField(item.test_points || item.points),
+        coupled_modules: normalizeArrayField(item.coupled_modules || item.coupled),
+        cases: cases,
+      };
+    }
+
+    function normalizeRootPipelineDedupeModules(list) {
+      var result = [];
+      var indexMap = {};
+      (Array.isArray(list) ? list : []).forEach(function(item) {
+        var normalized = normalizeRootPipelineDedupeModule(item);
+        if (!normalized) return;
+        var key = normalized.moduleId
+          ? ('id:' + normalized.moduleId)
+          : ('key:' + (normalized.moduleKey || normalizeModuleKey(normalized.module)));
+        if (indexMap[key] === undefined) {
+          indexMap[key] = result.length;
+          result.push(normalized);
+          return;
+        }
+        var existing = result[indexMap[key]];
+        if (!existing || normalized.cases.length >= existing.cases.length) {
+          result[indexMap[key]] = normalized;
+        }
+      });
+      return result;
+    }
+
+    function upsertRootPipelineDedupeModule(pipeline, item) {
+      if (!pipeline || typeof pipeline !== 'object') return;
+      var normalized = normalizeRootPipelineDedupeModule(item);
+      if (!normalized) return;
+      var list = normalizeRootPipelineDedupeModules(pipeline.generatedDedupeModules || []);
+      var replaced = false;
+      list.forEach(function(existing, index) {
+        if (replaced) return;
+        var sameId = normalized.moduleId && existing.moduleId && normalized.moduleId === existing.moduleId;
+        var sameKey = normalized.moduleKey && existing.moduleKey && normalized.moduleKey === existing.moduleKey;
+        if (!sameId && !sameKey) return;
+        list[index] = normalized;
+        replaced = true;
+      });
+      if (!replaced) list.push(normalized);
+      pipeline.generatedDedupeModules = list;
     }
 
     function ensureModuleUiState(moduleId) {
@@ -5310,20 +5489,61 @@
         if (!item || typeof item !== 'object') return;
         var moduleTitle = normalizeModuleTitle(item.module || item.moduleTitle || '');
         var title = String(item.title || item.caseTitle || item.case_title || '').replace(/\s+/g, ' ').trim();
-        if (!moduleTitle || !title) return;
         var reason = normalizeHistoryDedupeReason(item.reason || item.removeReason || item.remove_reason || '');
         var mergedInto = String(item.mergedInto || item.merged_into || item.keepTitle || item.keep_title || '').replace(/\s+/g, ' ').trim();
-        var key = normalizeModuleKey(moduleTitle) + '::' + title.toLowerCase() + '::' + reason + '::' + mergedInto;
+        var duplicateOf = String(item.duplicateOf || item.duplicate_of || item.duplicateWith || item.duplicate_with || item.sameAs || item.same_as || '').replace(/\s+/g, ' ').trim();
+        var duplicatePoint = normalizeHistoryDedupeOptionalReason(item.duplicatePoint || item.duplicate_point || item.overlapPoint || item.overlap_point || item.samePoint || item.same_point || item.overlap || '');
+        var mergedFrom = normalizeHistoryDedupeStringList(item.mergedFrom || item.merged_from || item.sourceTitles || item.source_titles || item.beforeTitles || item.before_titles || []);
+        if (!title && mergedFrom.length) title = mergedFrom[0];
+        if (!moduleTitle || !title) return;
+        var actionType = normalizeHistoryDedupeActionType(item.type || item.action || item.actionType || item.action_type || item.kind || '', {
+          duplicateOf: duplicateOf,
+          mergedInto: mergedInto,
+          mergedFrom: mergedFrom,
+        });
+        var key = normalizeModuleKey(moduleTitle) + '::' + title.toLowerCase() + '::' + reason + '::'
+          + actionType + '::' + duplicateOf + '::' + duplicatePoint + '::' + mergedInto + '::' + mergedFrom.join('|');
         if (seen[key]) return;
         seen[key] = true;
         result.push({
           module: moduleTitle,
           title: title,
           reason: reason,
+          actionType: actionType,
+          duplicateOf: duplicateOf,
+          duplicatePoint: duplicatePoint,
           mergedInto: mergedInto,
+          mergedFrom: mergedFrom,
         });
       });
       return result;
+    }
+
+    function normalizeHistoryDedupeStringList(value) {
+      var source = Array.isArray(value)
+        ? value
+        : (value === null || value === undefined ? [] : [value]);
+      var seen = {};
+      return source.map(function(item) {
+        if (item && typeof item === 'object') {
+          return String(item.title || item.caseTitle || item.case_title || item.name || '').replace(/\s+/g, ' ').trim();
+        }
+        return String(item || '').replace(/\s+/g, ' ').trim();
+      }).filter(function(item) {
+        if (!item || seen[item]) return false;
+        seen[item] = true;
+        return true;
+      });
+    }
+
+    function normalizeHistoryDedupeActionType(value, detail) {
+      var raw = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (raw === 'merge' || raw === 'merged' || raw === 'combine' || raw.indexOf('合并') !== -1) return 'merge';
+      if (raw === 'duplicate' || raw === 'dup' || raw.indexOf('重复') !== -1) return 'duplicate';
+      if (detail && Array.isArray(detail.mergedFrom) && detail.mergedFrom.length) return 'merge';
+      if (detail && detail.duplicateOf) return 'duplicate';
+      if (detail && detail.mergedInto) return 'merge';
+      return 'removed';
     }
 
     function normalizeHistoryDedupeReason(value) {
@@ -5338,6 +5558,12 @@
       if (cutAt > 0) text = text.slice(0, cutAt).trim();
       if (text.length > 24) text = text.slice(0, 24).trim() + '…';
       return text || '覆盖高度重叠';
+    }
+
+    function normalizeHistoryDedupeOptionalReason(value) {
+      var text = String(value || '').replace(/\s+/g, ' ').trim();
+      if (!text) return '';
+      return normalizeHistoryDedupeReason(text);
     }
 
     function normalizeHistoryPreviewText(value) {
@@ -5426,6 +5652,99 @@
       return sections.join('');
     }
 
+    function appendUniqueHistoryDedupeTitle(list, title) {
+      var text = String(title || '').replace(/\s+/g, ' ').trim();
+      if (!text) return;
+      if (list.indexOf(text) === -1) list.push(text);
+    }
+
+    function buildHistoryDedupeDisplayItems(items) {
+      var result = [];
+      var mergeMap = {};
+      (Array.isArray(items) ? items : []).forEach(function(item) {
+        if (!item) return;
+        if (item.actionType === 'merge') {
+          var mergedFromSeed = Array.isArray(item.mergedFrom) && item.mergedFrom.length
+            ? item.mergedFrom.slice()
+            : [item.title];
+          appendUniqueHistoryDedupeTitle(mergedFromSeed, item.title);
+          var mergeKey = [
+            'merge',
+            normalizeModuleKey(item.module || ''),
+            String(item.mergedInto || '').toLowerCase(),
+            mergedFromSeed.join('|').toLowerCase(),
+          ].join('::');
+          if (!mergeMap[mergeKey]) {
+            mergeMap[mergeKey] = {
+              module: item.module,
+              title: '',
+              reason: item.reason,
+              actionType: 'merge',
+              duplicateOf: '',
+              duplicatePoint: '',
+              mergedInto: item.mergedInto,
+              mergedFrom: [],
+            };
+            result.push(mergeMap[mergeKey]);
+          }
+          mergedFromSeed.forEach(function(title) {
+            appendUniqueHistoryDedupeTitle(mergeMap[mergeKey].mergedFrom, title);
+          });
+          if (!mergeMap[mergeKey].mergedInto && item.mergedInto) {
+            mergeMap[mergeKey].mergedInto = item.mergedInto;
+          }
+          return;
+        }
+        result.push(item);
+      });
+      result.forEach(function(item) {
+        if (item && item.actionType === 'merge') {
+          var count = Array.isArray(item.mergedFrom) ? item.mergedFrom.length : 0;
+          item.title = count > 1 ? ('合并前 ' + String(count) + ' 条用例') : (item.mergedFrom[0] || item.title || '合并用例');
+        }
+      });
+      return result;
+    }
+
+    function buildHistoryDedupeTitleListHtml(titles) {
+      var list = normalizeHistoryDedupeStringList(titles);
+      if (!list.length) return '<span class="xmind-casegen-history-dedupe-muted">未提供</span>';
+      return '<span class="xmind-casegen-history-dedupe-title-list">'
+        + list.map(function(title) {
+          return '<span class="xmind-casegen-history-dedupe-title-chip" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</span>';
+        }).join('')
+      + '</span>';
+    }
+
+    function buildHistoryDedupeDetailHtml(item) {
+      var actionType = item && item.actionType ? String(item.actionType || '') : 'removed';
+      var reason = item && item.reason ? String(item.reason || '') : '覆盖高度重叠';
+      if (actionType === 'duplicate') {
+        return '<span class="xmind-casegen-history-dedupe-badge is-duplicate">重复</span>'
+          + '<span class="xmind-casegen-history-dedupe-detail-main">'
+            + (item.duplicateOf
+              ? ('与「' + escapeHtml(item.duplicateOf) + '」重复')
+              : escapeHtml(reason))
+          + '</span>'
+          + (item.duplicatePoint
+            ? '<span class="xmind-casegen-history-dedupe-detail-sub">重复点：' + escapeHtml(item.duplicatePoint) + '</span>'
+            : '');
+      }
+      if (actionType === 'merge') {
+        var mergeSourceTitles = Array.isArray(item.mergedFrom) && item.mergedFrom.length ? item.mergedFrom : [item.title];
+        return '<span class="xmind-casegen-history-dedupe-badge is-merge">合并</span>'
+          + '<span class="xmind-casegen-history-dedupe-merge-flow">'
+            + '<span class="xmind-casegen-history-dedupe-merge-label">合并前</span>'
+            + buildHistoryDedupeTitleListHtml(mergeSourceTitles)
+            + '<span class="xmind-casegen-history-dedupe-merge-label">合并后</span>'
+            + '<strong class="xmind-casegen-history-dedupe-merge-target" title="' + escapeHtml(item.mergedInto || '') + '">' + escapeHtml(item.mergedInto || '未提供') + '</strong>'
+          + '</span>'
+          + '<span class="xmind-casegen-history-dedupe-detail-sub">' + escapeHtml(reason) + '</span>';
+      }
+      return '<span class="xmind-casegen-history-dedupe-badge is-removed">删除</span>'
+        + '<span class="xmind-casegen-history-dedupe-detail-main">' + escapeHtml(reason) + '</span>';
+    }
+
     function buildHistoryDedupeRecordsHtml(records) {
       var list = normalizeHistoryDedupeRecords(records);
       if (!list.length) return '';
@@ -5457,13 +5776,18 @@
               + '</div>'
               + '<div class="xmind-casegen-history-dedupe-table" role="table" aria-label="' + escapeHtml(group.module || '未命名模块') + '去重明细">'
                 + '<div class="xmind-casegen-history-dedupe-row xmind-casegen-history-dedupe-row-head" role="row">'
-                  + '<span role="columnheader">被去掉的用例</span>'
-                  + '<span role="columnheader">去掉原因</span>'
+                  + '<span role="columnheader">处理的用例</span>'
+                  + '<span role="columnheader">处理关系</span>'
                 + '</div>'
-                + group.items.map(function(item) {
+                + buildHistoryDedupeDisplayItems(group.items).map(function(item) {
+                  var detailText = item.actionType === 'duplicate'
+                    ? ((item.duplicateOf ? ('与「' + item.duplicateOf + '」重复') : item.reason) + (item.duplicatePoint ? ('，重复点：' + item.duplicatePoint) : ''))
+                    : (item.actionType === 'merge'
+                      ? ('合并前：' + normalizeHistoryDedupeStringList(Array.isArray(item.mergedFrom) && item.mergedFrom.length ? item.mergedFrom : [item.title]).join('、') + '；合并后：' + (item.mergedInto || '未提供'))
+                      : item.reason);
                   return '<div class="xmind-casegen-history-dedupe-row" role="row">'
                     + '<span class="xmind-casegen-history-dedupe-case" role="cell" title="' + escapeHtml(item.title || '未命名用例') + '">' + escapeHtml(item.title || '未命名用例') + '</span>'
-                    + '<span class="xmind-casegen-history-dedupe-reason" role="cell" title="' + escapeHtml(item.reason || '覆盖高度重叠') + '">' + escapeHtml(item.reason || '覆盖高度重叠') + '</span>'
+                    + '<span class="xmind-casegen-history-dedupe-reason" role="cell" title="' + escapeHtml(detailText) + '">' + buildHistoryDedupeDetailHtml(item) + '</span>'
                   + '</div>';
                 }).join('')
               + '</div>'
@@ -5639,6 +5963,56 @@
         specialWeakNetwork: settings.needSpecial === true && settings.specialWeakNetwork === true,
         specialInterruptResume: settings.needSpecial === true && settings.specialInterruptResume === true,
       };
+    }
+
+    function normalizeDedupeMode(value) {
+      return String(value || '') === DEDUPE_MODE_SIMPLIFY ? DEDUPE_MODE_SIMPLIFY : DEDUPE_MODE_ONLY;
+    }
+
+    function isDedupeSimplifyMode(value) {
+      return normalizeDedupeMode(value) === DEDUPE_MODE_SIMPLIFY;
+    }
+
+    function getDedupeModeFromSettings() {
+      var settings = getCaseGenSettingsSnapshot() || {};
+      return settings.dedupeSimplify === true ? DEDUPE_MODE_SIMPLIFY : DEDUPE_MODE_ONLY;
+    }
+
+    function getDedupeModeActionText(mode) {
+      return isDedupeSimplifyMode(mode) ? '去重并精简' : '仅去重';
+    }
+
+    function getDedupeRunningLabel(mode) {
+      return isDedupeSimplifyMode(mode) ? 'AI 去重精简中' : 'AI 用例去重中';
+    }
+
+    function getDedupeRunningHint(mode) {
+      return isDedupeSimplifyMode(mode)
+        ? '正在对当前页签 AI 生成用例执行去重并精简'
+        : '正在对当前页签 AI 生成用例执行仅去重';
+    }
+
+    function getDedupeRemovedSummaryText(count, mode) {
+      var total = Number(count || 0) || 0;
+      return isDedupeSimplifyMode(mode)
+        ? ('已去重精简 ' + String(total) + ' 条用例')
+        : ('已去重 ' + String(total) + ' 条用例');
+    }
+
+    function getDedupeNoChangeSummaryText(mode) {
+      return isDedupeSimplifyMode(mode)
+        ? 'AI 用例去重精简完成，未发现可去重用例'
+        : 'AI 用例去重完成，未发现可去重用例';
+    }
+
+    function getDedupeExecutionDiagnosticText(count, mode) {
+      var total = Number(count || 0) || 0;
+      if (total > 0) {
+        return isDedupeSimplifyMode(mode)
+          ? ('AI 用例去重精简完成，' + getDedupeRemovedSummaryText(total, mode))
+          : ('AI 用例去重完成，' + getDedupeRemovedSummaryText(total, mode));
+      }
+      return getDedupeNoChangeSummaryText(mode);
     }
 
     function buildXmindGenerationOptionsSummary(settingsSnapshot) {
@@ -5954,6 +6328,13 @@
       var prep = getPrepState();
       var settings = getCaseGenSettingsSnapshot();
       var locked = isPrepBaseLocked();
+      var dedupeHtml = ''
+        + renderOptionToggleCard({
+          key: 'dedupeSimplify',
+          title: '去重并精简',
+          desc: '关闭时仅去除重复或高度重叠用例；开启后在保证覆盖质量前提下压缩冗余。',
+          checked: settings.dedupeSimplify === true
+        });
       var primaryHtml = ''
         + renderOptionToggleCard({
           key: 'needFunctionCondition',
@@ -6038,6 +6419,13 @@
         +     '<textarea id="xmindCaseGenOptionCustomRequirement" data-casegen-setting="customRequirement" placeholder="非必填，用于补充生成要求。">' + escapeHtml(settings.customRequirement || '') + '</textarea>'
         +   '</div>'
         +   '<div class="xmind-casegen-prep-option-stack">'
+        +     '<div class="xmind-casegen-prep-option-group">'
+        +       '<div class="xmind-casegen-prep-option-group-head">'
+        +         '<strong class="xmind-casegen-prep-option-group-title">去重设置</strong>'
+        +         '<span class="xmind-casegen-prep-option-group-desc">控制全量生成后的自动 AI 去重和工具栏手动 AI 去重。</span>'
+        +       '</div>'
+        +       '<div class="xmind-casegen-prep-toggle-grid">' + dedupeHtml + '</div>'
+        +     '</div>'
         +     '<div class="xmind-casegen-prep-option-group">'
         +       '<div class="xmind-casegen-prep-option-group-head">'
         +         '<strong class="xmind-casegen-prep-option-group-title">基础生成开关</strong>'
@@ -6709,8 +7097,23 @@
       return modules;
     }
 
-    function collectCurrentAiDedupeModules() {
-      return collectAiDedupeModulesFromContext(buildVisibleModuleContext());
+    function collectCurrentAiDedupeModules(options) {
+      return collectAiDedupeModulesFromContext(buildVisibleModuleContext(options));
+    }
+
+    function collectAiModulesWithoutCasesFromContext(context) {
+      var result = [];
+      (context && Array.isArray(context.list) ? context.list : []).forEach(function(entry) {
+        if (!entry || !entry.aiModuleId) return;
+        var cases = Array.isArray(entry.aiCases) ? entry.aiCases : [];
+        if (cases.length > 0) return;
+        result.push({
+          moduleId: String(entry.aiModuleId || ''),
+          moduleKey: String(entry.moduleKey || normalizeModuleKey(entry.title || '')),
+          module: normalizeModuleTitle(entry.title || ''),
+        });
+      });
+      return result;
     }
 
     function hasVisibleAiCasesForDedupe() {
@@ -6915,7 +7318,9 @@
     function buildVisibleModuleContext(options) {
       var opts = options || {};
       var rootState = ensureRootUiState();
-      var includeAiLayer = opts.includeAiLayer !== false && !(rootState && rootState.hideAiLayer === true);
+      var includeAiLayer = opts.includeAiLayer === true
+        ? true
+        : (opts.includeAiLayer !== false && !(rootState && rootState.hideAiLayer === true));
       var baselineList = getVisibleBaselineCaseList();
       var baselineGrouped = groupCasesByModule(baselineList);
       var order = baselineGrouped.order.slice();
@@ -8411,12 +8816,14 @@
         throw new Error('未找到 XMind 用例生成模型');
       }
       var requirement = buildDedupeRequirementSource();
+      var dedupeMode = normalizeDedupeMode(opts.dedupeMode || getDedupeModeFromSettings());
       var built = dedupeCoreApi.buildDedupeRequest({
         requirementLabel: requirement.label,
         requirementText: requirement.text,
         requirementSupplement: requirement.supplement,
         modules: modules,
         strength: DEDUPE_STRENGTH,
+        dedupeMode: dedupeMode,
         source: opts.source || 'manual-toolbar',
       });
       var requestText = String(built && built.requestText ? built.requestText : '');
@@ -8438,6 +8845,7 @@
           ? xmindGenApi.getTemperatureForType('xmindcasegen')
           : 0.2,
         modules: cloneJson(built && built.modules, []),
+        dedupeMode: normalizeDedupeMode(built && built.dedupeMode ? built.dedupeMode : dedupeMode),
         beforeCaseCount: Number(built && built.beforeCaseCount || 0),
       };
     }
@@ -9701,6 +10109,7 @@
             return {
               scope: 'dedupe',
               actionId: DEDUPE_ACTION_ID,
+              dedupeMode: normalizeDedupeMode(task.dedupeMode),
               label: 'AI用例去重',
             };
           }
@@ -9721,6 +10130,7 @@
         operations.push({
           scope: 'dedupe',
           actionId: DEDUPE_ACTION_ID,
+          dedupeMode: normalizeDedupeMode(dedupeState.dedupeMode),
           label: 'AI用例去重',
         });
       }
@@ -9836,7 +10246,7 @@
           : '当前有模块生成任务进行中，请等待完成后再试';
       }
       if (blocker.scope === 'dedupe') {
-        return 'AI 用例去重精简中，请等待完成后再试';
+        return getDedupeRunningLabel(blocker.dedupeMode) + '，请等待完成后再试';
       }
       return '当前动作不可执行';
     }
@@ -11380,19 +11790,43 @@
     function buildDedupeTaskPayload(taskInput, options) {
       var opts = options || {};
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
+      var dedupeMode = normalizeDedupeMode(taskInput && taskInput.dedupeMode ? taskInput.dedupeMode : opts.dedupeMode);
       return {
         workspaceId: taskWorkspaceId,
         scope: 'dedupe',
         actionId: DEDUPE_ACTION_ID,
         dedupeSource: String(opts.dedupeSource || 'manual-toolbar'),
         dedupeStrength: DEDUPE_STRENGTH,
+        dedupeMode: dedupeMode,
         dedupeModules: cloneJson(taskInput && taskInput.modules, []),
         dedupeBeforeCount: Number(taskInput && taskInput.beforeCaseCount || 0),
         contract: {
           scope: 'xmind_ai_cases',
           mode: 'ai_dedupe_simplify',
+          dedupeMode: dedupeMode,
+          dedupe_mode: dedupeMode,
+          simplify: isDedupeSimplifyMode(dedupeMode),
           strength: DEDUPE_STRENGTH,
           editableScope: 'ai_generated_cases_only',
+          dedupeScope: 'all_input_modules_global',
+          crossModuleDedupe: true,
+          moduleReturnPolicy: {
+            returnAllInputModules: true,
+            preserveModuleIdAndKey: true,
+            unchangedModulesMustBeReturned: true,
+            partialModulesResponseAllowed: false,
+          },
+          reviewMethod: 'exhaustive_global_pairwise_scan',
+          duplicateDetectionPolicy: {
+            compareFields: ['module', 'title', 'preconditions', 'steps', 'expected', 'test_purpose', 'test_point', 'validation_goal'],
+            requireFullModuleScan: true,
+            requireGlobalCaseScan: true,
+            stopAfterFirstDuplicate: false,
+            treatSynonymsAsDuplicateCandidates: true,
+            preferSameModuleDedupe: false,
+            crossModuleDedupe: true,
+            duplicateWhenSameTestPurposeAndPoint: true,
+          },
         },
         prompt: String(taskInput && taskInput.prompt ? taskInput.prompt : ''),
         requestMode: 'text',
@@ -12074,6 +12508,7 @@
       dedupeState.taskId = String(task && task.id ? task.id : '');
       dedupeState.status = 'running';
       dedupeState.error = '';
+      dedupeState.dedupeMode = normalizeDedupeMode(task && task.dedupeMode);
       dedupeState.updatedAt = Date.now();
       var rootState = ensureRootUiState();
       rootState.running = true;
@@ -12091,6 +12526,7 @@
       dedupeState.taskId = '';
       dedupeState.status = errorText ? 'error' : '';
       dedupeState.error = errorText ? String(errorText || '') : '';
+      dedupeState.dedupeMode = DEDUPE_MODE_ONLY;
       dedupeState.updatedAt = Date.now();
       var rootState = ensureRootUiState();
       if (rootState.lastAction === DEDUPE_ACTION_ID) {
@@ -12112,10 +12548,12 @@
         return null;
       }
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
-      var taskInput = buildXmindDedupeTaskInput(modules, { source: source });
+      var dedupeMode = normalizeDedupeMode(opts.dedupeMode || getDedupeModeFromSettings());
+      var taskInput = buildXmindDedupeTaskInput(modules, { source: source, dedupeMode: dedupeMode });
       var task = startManagedXmindTask(buildDedupeTaskPayload(taskInput, {
         workspaceId: taskWorkspaceId,
         dedupeSource: source,
+        dedupeMode: dedupeMode,
         rootPipelineId: opts.rootPipelineId || '',
         rootPipelineActionId: opts.rootPipelineActionId || '',
         historySuppressed: source === 'auto-full',
@@ -12127,6 +12565,7 @@
           current.stage = 'deduping';
           current.dedupeStatus = 'running';
           current.dedupeTaskId = String(task && task.id ? task.id : '');
+          current.dedupeMode = dedupeMode;
           current.dedupeBeforeCount = Number(taskInput.beforeCaseCount || 0);
         });
       }
@@ -12155,12 +12594,17 @@
       modules.forEach(function(item) {
         caseCount += Array.isArray(item && item.cases) ? item.cases.length : 0;
       });
+      var dedupeMode = getDedupeModeFromSettings();
+      var modeText = getDedupeModeActionText(dedupeMode);
+      var modeMessage = isDedupeSimplifyMode(dedupeMode)
+        ? '该操作会优先保留覆盖全面、高质量的用例，并在不降低缺陷发现能力的前提下减少冗余。'
+        : '该操作只删除或合并明显重复、高度重叠的用例，不主动压缩有独立覆盖价值的场景。';
       pendingManualDedupeConfirm = true;
       syncDedupeToolbarButton();
       try {
         var confirmed = await openStoreConfirmDialog({
           title: '确认 AI 用例去重',
-          message: '即将对当前页签 ' + String(modules.length) + ' 个模块、' + String(caseCount) + ' 条 AI 生成用例执行去重精简。该操作会优先保留覆盖全面、高质量的用例，并仅处理当前页签的 AI 生成层结果。是否继续？',
+          message: '即将对当前页签 ' + String(modules.length) + ' 个模块、' + String(caseCount) + ' 条 AI 生成用例执行' + modeText + '。' + modeMessage + '仅处理当前页签的 AI 生成层结果。是否继续？',
           confirmText: '确认去重',
           cancelText: '取消',
         });
@@ -12168,6 +12612,7 @@
         return Boolean(startAiDedupeTask({
           source: 'manual-toolbar',
           modules: cloneJson(modules, []),
+          dedupeMode: dedupeMode,
         }));
       } catch (err) {
         notifyStatus('AI 用例去重启动失败：' + (err && err.message ? err.message : '未知错误'), 'err', { forceInline: true });
@@ -12206,12 +12651,18 @@
         }
         var baseText = (pipeline && pipeline.hadAiContentBeforeAction === true ? '已重新生成 ' : '已生成 ')
           + String(createdModules) + ' 个模块，' + String(addedCases) + ' 条用例';
-        if (pipeline && pipeline.dedupeStatus === 'done' && Number(pipeline.dedupeRemovedCount || 0) > 0) {
-          baseText += '，已去重精简 ' + String(Number(pipeline.dedupeRemovedCount || 0)) + ' 条';
+        var dedupeMode = normalizeDedupeMode(pipeline && pipeline.dedupeMode ? pipeline.dedupeMode : '');
+        if (pipeline && pipeline.dedupeStatus === 'done') {
+          var removedCount = Number(pipeline.dedupeRemovedCount || 0) || 0;
+          if (removedCount > 0) {
+            baseText += '，' + getDedupeRemovedSummaryText(removedCount, dedupeMode).replace(/用例$/, '').trim();
+          } else {
+            baseText += '，' + getDedupeNoChangeSummaryText(dedupeMode);
+          }
         } else if (pipeline && pipeline.dedupeStatus === 'error') {
-          baseText += '，AI 去重精简失败，已保留原结果';
+          baseText += '，AI 用例去重失败，已保留原结果';
         } else if (pipeline && pipeline.dedupeStatus === 'cancelled') {
-          baseText += '，AI 去重精简已中断，已保留当前结果';
+          baseText += '，AI 用例去重已中断，已保留当前结果';
         }
         return baseText;
       }
@@ -12248,6 +12699,7 @@
         return isTaskInRootPipeline(task, targetId);
       });
       if (relatedTasks.length > 0) return false;
+      if (!isRootPipelineModulePhaseComplete(pipeline)) return false;
 
       var opts = options || {};
       var actionId = String(pipeline.actionId || '');
@@ -12270,34 +12722,64 @@
         && pipeline.cancelled !== true
         && !pipeline.dedupeStatus
       ) {
-        var dedupeModules = collectCurrentAiDedupeModules();
+        rootState.hideAiLayer = false;
+        rootState.updatedAt = Date.now();
+        var dedupeContext = buildVisibleModuleContext({ includeAiLayer: true });
+        var incompleteDedupeModules = collectAiModulesWithoutCasesFromContext(dedupeContext);
+        var contextDedupeModules = collectAiDedupeModulesFromContext(dedupeContext);
+        var pipelineDedupeModules = normalizeRootPipelineDedupeModules(pipeline.generatedDedupeModules || []);
+        var dedupeModules = contextDedupeModules;
+        if (pipelineDedupeModules.length > dedupeModules.length) {
+          dedupeModules = pipelineDedupeModules;
+          diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat(
+            '自动去重使用本轮生成快照：' + String(pipelineDedupeModules.length) + ' 个模块'
+          ));
+        }
         if (dedupeModules.length) {
+          if (incompleteDedupeModules.length) {
+            var incompleteNames = incompleteDedupeModules.map(function(item) {
+              return item && item.module ? String(item.module || '') : '';
+            }).filter(Boolean).slice(0, 5).join('、');
+            var incompleteText = '仅处理已生成用例的模块；' + String(incompleteDedupeModules.length) + ' 个模块暂无 AI 用例未参与去重'
+              + (incompleteNames ? '：' + incompleteNames : '');
+            updateRootPipelineState(function(current) {
+              appendRootPipelineDiagnostics(current, incompleteText);
+            });
+            pipeline = getRootPipelineState() || pipeline;
+            diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat(incompleteText));
+          }
           try {
+            var autoDedupeMode = getDedupeModeFromSettings();
             startAiDedupeTask({
               source: 'auto-full',
               modules: dedupeModules,
               workspaceId: getActiveWorkspaceId(),
               rootPipelineId: targetId,
               rootPipelineActionId: actionId,
+              dedupeMode: autoDedupeMode,
             });
-            notifyStatus('全量用例已生成，正在进行 AI 去重精简', 'warn', { forceInline: true });
+            notifyStatus('全量用例已生成，正在进行 AI ' + getDedupeModeActionText(autoDedupeMode), 'warn', { forceInline: true });
             return false;
           } catch (dedupeStartErr) {
             updateRootPipelineState(function(current) {
               current.dedupeStatus = 'error';
-              current.dedupeError = dedupeStartErr && dedupeStartErr.message ? String(dedupeStartErr.message) : 'AI 去重精简启动失败';
-              appendRootPipelineDiagnostics(current, 'AI 去重精简启动失败：' + current.dedupeError);
+              current.dedupeError = dedupeStartErr && dedupeStartErr.message ? String(dedupeStartErr.message) : 'AI 用例去重启动失败';
+              appendRootPipelineDiagnostics(current, 'AI 用例去重启动失败：' + current.dedupeError);
             });
             pipeline = getRootPipelineState() || pipeline;
-            diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat('AI 去重精简启动失败，已保留原结果'));
+            diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat('AI 用例去重启动失败，已保留原结果'));
           }
         } else {
+          var emptyDedupeNames = incompleteDedupeModules.map(function(item) {
+            return item && item.module ? String(item.module || '') : '';
+          }).filter(Boolean).slice(0, 5).join('、');
           updateRootPipelineState(function(current) {
             current.dedupeStatus = 'skipped';
-            appendRootPipelineDiagnostics(current, '当前没有可去重的 AI 生成用例，已跳过去重精简');
+            appendRootPipelineDiagnostics(current, '当前没有可去重的 AI 生成用例，已跳过去重'
+              + (emptyDedupeNames ? '；暂无 AI 用例模块：' + emptyDedupeNames : ''));
           });
           pipeline = getRootPipelineState() || pipeline;
-          diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat('当前没有可去重的 AI 生成用例，已跳过去重精简'));
+          diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat('当前没有可去重的 AI 生成用例，已跳过去重'));
         }
       }
 
@@ -12375,15 +12857,19 @@
           notifyText = buildRootPipelineSuccessMessage(pipeline) + '，另有 ' + String(Number(pipeline.errorCount || 0)) + ' 个模块失败';
           notifyType = 'warn';
         } else if (pipeline.dedupeStatus === 'error') {
-          diagnostics = normalizeHistoryDiagnostics(diagnostics.concat('AI 去重精简失败，已保留原结果'));
-          summaryText = 'AI 去重精简失败，已保留原结果';
+          diagnostics = normalizeHistoryDiagnostics(diagnostics.concat('AI 用例去重失败，已保留原结果'));
+          summaryText = 'AI 用例去重失败，已保留原结果';
           notifyText = buildRootPipelineSuccessMessage(pipeline);
           notifyType = 'warn';
         } else if (pipeline.dedupeStatus === 'cancelled') {
-          diagnostics = normalizeHistoryDiagnostics(diagnostics.concat('AI 去重精简已中断，已保留当前结果'));
-          summaryText = 'AI 去重精简已中断，已保留当前结果';
+          diagnostics = normalizeHistoryDiagnostics(diagnostics.concat('AI 用例去重已中断，已保留当前结果'));
+          summaryText = 'AI 用例去重已中断，已保留当前结果';
           notifyText = buildRootPipelineSuccessMessage(pipeline);
           notifyType = 'warn';
+        } else if (pipeline.dedupeStatus === 'done') {
+          summaryText = buildRootPipelineSuccessMessage(pipeline);
+          notifyText = summaryText;
+          notifyType = 'ok';
         } else {
           notifyText = buildRootPipelineSuccessMessage(pipeline);
           notifyType = 'ok';
@@ -12710,12 +13196,22 @@
           current.addedCases += addedCount;
           if (String(task && task.rootPipelineActionId ? task.rootPipelineActionId : '') === ROOT_ACTIONS.FULL_CASES) {
             current.createdModules += 1;
+            upsertRootPipelineDedupeModule(current, {
+              moduleId: moduleId,
+              moduleKey: String(task && task.moduleKey ? task.moduleKey : (resolvedEntry && resolvedEntry.moduleKey ? resolvedEntry.moduleKey : '')),
+              module: historyModuleTitle,
+              key_scenarios: resolvedEntry && resolvedEntry.aiModule && Array.isArray(resolvedEntry.aiModule.scenarios) ? resolvedEntry.aiModule.scenarios.slice() : [],
+              test_points: resolvedEntry && resolvedEntry.aiModule && Array.isArray(resolvedEntry.aiModule.points) ? resolvedEntry.aiModule.points.slice() : [],
+              coupled_modules: resolvedEntry && resolvedEntry.aiModule && Array.isArray(resolvedEntry.aiModule.coupled) ? resolvedEntry.aiModule.coupled.slice() : [],
+              cases: nextList,
+            });
           }
           appendRootPipelineModuleDetail(current, historyModuleTitle, addedCount);
         });
         clearDeleteHistoryStacks();
         syncCasesGenPageRender();
       }
+      markRootPipelineModuleTaskCompleted(task);
       if (isDrawerOpen()) {
         renderWithViewportCarryover({ reason: changed ? 'root-pipeline-module-committed' : 'root-pipeline-module-no-change', persist: false, anchorNodeId: anchorNodeId });
       }
@@ -12761,6 +13257,7 @@
           : ['模块「' + (moduleTitle || '当前模块') + '」失败：' + errorInfo.reasonText]
         ).concat(errorInfo.diagnostics || []));
       });
+      markRootPipelineModuleTaskCompleted(task);
       if (isDrawerOpen()) {
         renderWithViewportCarryover({ reason: opts.renderReason || 'root-pipeline-module-error', persist: false, anchorNodeId: anchorNodeId });
       }
@@ -13154,11 +13651,16 @@
       if (!dedupeCoreApi || typeof dedupeCoreApi.normalizeDedupeResult !== 'function') {
         throw new Error('AI 用例去重能力未就绪，请刷新后重试');
       }
+      var dedupeMode = normalizeDedupeMode(task && task.dedupeMode);
       var result = dedupeCoreApi.normalizeDedupeResult(
         task && task.resultRaw ? task.resultRaw : '',
-        task && Array.isArray(task.dedupeModules) ? task.dedupeModules : []
+        task && Array.isArray(task.dedupeModules) ? task.dedupeModules : [],
+        { dedupeMode: dedupeMode }
       );
       var diagnostics = normalizeHistoryDiagnostics(result && result.diagnostics ? result.diagnostics : []);
+      var removedCount = Number(result && result.removedCount || 0) || 0;
+      var executionSummary = getDedupeExecutionDiagnosticText(removedCount, dedupeMode);
+      diagnostics = normalizeHistoryDiagnostics(diagnostics.concat(executionSummary));
       (result && Array.isArray(result.modules) ? result.modules : []).forEach(function(item) {
         var moduleId = item && item.moduleId ? String(item.moduleId || '') : '';
         if (!moduleId) {
@@ -13188,6 +13690,7 @@
       dedupeState.lastResult = {
         status: 'done',
         source: task && task.dedupeSource ? String(task.dedupeSource || '') : 'manual-toolbar',
+        dedupeMode: dedupeMode,
         beforeCount: Number(result && result.beforeCount || 0) || 0,
         afterCount: Number(result && result.afterCount || 0) || 0,
         removedCount: Number(result && result.removedCount || 0) || 0,
@@ -13211,6 +13714,7 @@
           current.stage = 'modules';
           current.dedupeStatus = 'done';
           current.dedupeTaskId = String(task.id || '');
+          current.dedupeMode = dedupeMode;
           current.dedupeBeforeCount = Number(result && result.beforeCount || 0) || 0;
           current.dedupeAfterCount = Number(result && result.afterCount || 0) || 0;
           current.dedupeRemovedCount = Number(result && result.removedCount || 0) || 0;
@@ -13221,14 +13725,11 @@
           appendRootPipelineDiagnostics(current, diagnostics);
         });
       } else if (!(task && task.historySuppressed === true)) {
-        var removedCount = Number(result && result.removedCount || 0) || 0;
         recordGenerationHistory({
           scope: 'root',
           actionId: DEDUPE_ACTION_ID,
           actionLabel: 'AI用例去重',
-          summaryText: removedCount > 0
-            ? ('已去重精简 ' + String(removedCount) + ' 条用例')
-            : '未发现可精简用例',
+          summaryText: executionSummary,
           moduleCount: result && Array.isArray(result.modules) ? result.modules.length : 0,
           details: buildDedupeHistoryDetails(result),
           resultKind: removedCount > 0 ? 'changed' : 'no-change',
@@ -13238,9 +13739,7 @@
         });
         if (!(task && task.notifySuppressed === true)) {
           notifyStatus(
-            removedCount > 0
-              ? ('AI 用例去重精简完成，已减少 ' + String(removedCount) + ' 条用例')
-              : 'AI 用例去重精简完成，未发现可精简用例',
+            executionSummary,
             removedCount > 0 ? 'ok' : 'warn',
             { forceInline: true }
           );
@@ -13268,10 +13767,12 @@
       var errorText = resultKind === 'cancelled' ? errorInfo.reasonText : errorInfo.reasonText;
       var diagnostics = normalizeHistoryDiagnostics(errorInfo.diagnostics || []);
       var stateMessage = resultKind === 'cancelled' ? '' : errorText;
+      var dedupeMode = normalizeDedupeMode(task && task.dedupeMode);
       var dedupeState = ensureDedupeUiState();
       dedupeState.lastResult = {
         status: resultKind,
         source: task && task.dedupeSource ? String(task.dedupeSource || '') : 'manual-toolbar',
+        dedupeMode: dedupeMode,
         beforeCount: Number(task && task.dedupeBeforeCount || 0) || 0,
         afterCount: Number(task && task.dedupeBeforeCount || 0) || 0,
         removedCount: 0,
@@ -13287,13 +13788,14 @@
           current.stage = 'modules';
           current.dedupeStatus = resultKind;
           current.dedupeTaskId = String(task.id || '');
+          current.dedupeMode = dedupeMode;
           current.dedupeBeforeCount = Number(task && task.dedupeBeforeCount || current.dedupeBeforeCount || 0) || 0;
           current.dedupeAfterCount = current.dedupeBeforeCount;
           current.dedupeRemovedCount = 0;
           current.dedupeError = errorText;
           appendRootPipelineDiagnostics(current, (resultKind === 'cancelled'
-            ? ['AI 去重精简已中断，已保留原结果']
-            : ['AI 去重精简失败：' + errorText, 'AI 去重精简失败，已保留原结果']
+            ? ['AI 用例去重已中断，已保留原结果']
+            : ['AI 用例去重失败：' + errorText, 'AI 用例去重失败，已保留原结果']
           ).concat(diagnostics));
         });
       } else if (!(task && task.historySuppressed === true)) {
@@ -13301,7 +13803,7 @@
           scope: 'root',
           actionId: DEDUPE_ACTION_ID,
           actionLabel: 'AI用例去重',
-          summaryText: resultKind === 'cancelled' ? 'AI 去重精简已中断' : 'AI 去重精简失败',
+          summaryText: resultKind === 'cancelled' ? 'AI 用例去重已中断' : 'AI 用例去重失败',
           moduleCount: 0,
           details: [],
           resultKind: resultKind,
@@ -13311,10 +13813,10 @@
         });
         if (resultKind === 'cancelled') {
           if (!shouldSuppressTaskCancelToast(task)) {
-            notifyFloatingStatus('AI 用例去重精简已中断，已保留原结果', 'warn', 3000);
+            notifyFloatingStatus('AI 用例去重已中断，已保留原结果', 'warn', 3000);
           }
         } else if (!(task && task.notifySuppressed === true)) {
-          notifyStatus('AI 用例去重精简失败，已保留原结果', 'err', { forceInline: true });
+          notifyStatus('AI 用例去重失败，已保留原结果', 'err', { forceInline: true });
         }
       }
 
@@ -13849,9 +14351,17 @@
       );
       if (!targetId) return 0;
       replaceRootPipelinePendingQueue(targetId, []);
-      if (!list.length) return 0;
-      var startedResults = await runConcurrentTasks(list, list.length || 1, async function(descriptor) {
-        if (!descriptor || !descriptor.moduleEntry || !descriptor.actionId) return null;
+      var validList = list.filter(function(descriptor) {
+        return Boolean(descriptor && descriptor.moduleEntry && descriptor.actionId);
+      });
+      if (!validList.length) return 0;
+      updateRootPipelineState(function(current) {
+        if (String(current.id || '') !== targetId) return;
+        current.moduleTaskTotal = Math.max(normalizeRootPipelineTaskCount(current.moduleTaskTotal), validList.length);
+        current.moduleTaskCompletedKeys = normalizeUniqueStringList(current.moduleTaskCompletedKeys || []);
+        current.moduleTaskCompleted = Math.max(normalizeRootPipelineTaskCount(current.moduleTaskCompleted), current.moduleTaskCompletedKeys.length);
+      });
+      var startedResults = await runConcurrentTasks(validList, validList.length || 1, async function(descriptor) {
         return await startManagedModuleTask(descriptor.moduleEntry, descriptor.actionId, {
           workspaceId: taskWorkspaceId,
           skipSnapshot: true,

@@ -70,15 +70,17 @@
 - 更新记录：2026-05-09 将 XMind 用例生成画布的非全屏工具栏伸展换层布局同步应用到全屏状态，并补充全屏/非全屏布局回归断言。
 
 - 功能名称：XMind AI 用例去重精简
-- 功能描述：为 `XMind 用例生成` 新增 AI 用例去重精简能力。用户执行 `生成全量用例` 后，系统会在模块用例全部生成完成后自动进入 `去重中` 阶段，把当前页签已生成的完整 AI 用例、原始需求正文/手填需求描述和需求补充一起提供给当前 XMind 用例生成模型进行保守去重与精简；单模块生成保持原逻辑，不自动去重。工具栏新增 `AI用例去重`，可手动对当前页签画布上可见的 AI 生成层用例执行同样的去重精简。
+- 功能描述：为 `XMind 用例生成` 新增 AI 用例去重/去重并精简能力。用户执行 `生成全量用例` 后，系统会在模块用例全部生成完成后自动进入 `去重中` 阶段，把当前页签已生成的完整 AI 用例、原始需求正文/手填需求描述和需求补充一起提供给当前 XMind 用例生成模型进行保守处理；单模块生成保持原逻辑，不自动去重。工具栏新增 `AI用例去重`，可手动对当前页签画布上可见的 AI 生成层用例执行同样的去重策略。
 - 操作方式：
   - 进入 `用例生成 -> XMind 用例生成`，完成前置准备后点击根节点 `生成全量用例`，模块生成完成后自动进入 `去重中`；
+  - 在前置准备 step3 的 `去重设置` 中控制策略：默认关闭 `去重并精简`，表示仅去重；开启后才要求模型在保证覆盖质量前提下进一步精简冗余；
   - 若只想手动处理当前页签结果，可在当前页签已有可见 AI 用例且没有运行中任务时点击工具栏 `AI用例去重`；
   - 去重中可继续使用 `中断生成` 取消当前去重调用，系统会保留已生成结果。
 - 使用效果：
-  - 去重精简只覆盖 AI 生成层用例，不删除、不改写导入/基线用例；
+  - 去重只覆盖 AI 生成层用例，不删除、不改写导入/基线用例；
+  - 默认仅删除或合并明显重复、高度重叠用例；开启 `去重并精简` 后才允许模型在覆盖全面、高质量优先的前提下压缩冗余；
   - 无用例模块不会进入去重请求，模型遗漏模块或返回空用例时会保留该模块原 AI 用例并记录诊断；
-  - 全量生成自动去重期间，根节点显示 `去重中`，工具栏显示 `AI 去重精简中`，左下角页签摘要显示 `去重中`；
+  - 全量生成自动去重期间，根节点显示 `去重中`，工具栏按策略显示 `AI 用例去重中` 或 `AI 去重精简中`，左下角页签摘要显示 `去重中`；
   - 去重期间会禁用新的去重、保存入库、XMind 导出和 Markdown 导出，避免回写前用户修改同一份 AI 结果；
   - 去重成功后，画布用例数、工具栏统计、页签进度摘要和生成记录都以精简后的当前可见用例为准；
   - 去重失败时保留原生成结果，状态提示和生成记录展示失败原因。
@@ -87,17 +89,28 @@
   - XMind 托管任务新增 `dedupe` scope 与 `xmind-ai-dedupe` action，沿用现有模型代理、任务中断、恢复上下文、workspace 隔离和后台任务机制；
   - workspace 状态新增 `dedupe` 片段，根流程 pipeline 新增 `deduping` 阶段和去重前后统计；
   - XMind 工具栏新增 `AI用例去重` 按钮，并接入去重中状态、操作阻塞、完成/失败历史；
-  - 新增 UI 自动化覆盖：全量生成后自动去重状态与请求内容、手动去重只发送 AI 用例且保留导入基线、去重失败保留原用例；
+  - step3 新增 `去重设置` 单开关，并在任务契约中新增 `dedupe_mode` / `simplify` 标识，自动去重和手动去重共用；
+  - 新增 UI 自动化覆盖：step3 去重开关默认关闭与开启保存、全量生成后自动去重状态与请求内容、手动去重只发送 AI 用例且保留导入基线、默认仅去重不主动精简、去重失败保留原用例；
   - 本次未新增后端接口，未修改数据库结构。
 - 复用说明：复用现有 XMind 用例生成模型配置、模型代理、托管任务、中断按钮、workspace 快照/恢复、生成历史、画布渲染、工具栏挂载和 XMind/Markdown 导出阻塞逻辑；新增独立去重核心，是为了避免把提示词、输入快照和响应校验继续堆入 XMind 主编排模块。
 - 测试与验证：
-  - `node --check scripts/core/xmindCaseDedupeCore.js scripts/modules/app.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `node --check scripts/base/state.js scripts/core/xmindCaseDedupeCore.js scripts/core/casesGenCore.js scripts/modules/app.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
   - `git diff --check`（通过）
+  - `node` + `vm` 直连 `xmindCaseDedupeCore`，验证默认 `dedupe_only/simplify=false` 与开启后 `dedupe_simplify/simplify=true` 的契约和提示词（通过）
   - `node` + `vm` 直连 `xmindCaseDedupeCore`，验证请求包含原始需求与补充、响应归一化统计 `before=2/after=1/removed=1`（通过）
   - `APP_DB_FILE=apitest.db npx playwright test --config tests/api/playwright.api.config.js tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1；确认未新增后端端点）
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "全量生成完成后会进入 AI 去重精简中|工具栏 AI 用例去重只发送当前可见 AI 用例|AI 用例去重失败时保留原用例|工具栏支持查看生成记录" --reporter=line`（未完成：默认 8090 端口被本机 uvicorn 占用并返回 404，Playwright webServer 等待超时）
   - 使用临时 8091 静态服务重跑上述 UI 用例（未完成：当前桌面环境启动 Chromium/Chrome 时触发 `MachPortRendezvous` 权限错误；未能稳定进入业务断言，新增断言已补入用例文件）
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8092 npx playwright test --config /private/tmp/tap-playwright-8092.config.js tests/ui/xmind_casegen_flow.spec.js -g "工具栏 AI 用例去重只发送当前可见 AI 用例" --reporter=line --workers=1`（未完成：当前 macOS 沙箱启动 Chromium headless 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出；本次已补充收起/重新打开 XMind 抽屉、切到设置页再切回 XMind 页面后进度条数保持精简结果的断言）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8094 npx playwright test --config /private/tmp/tap-playwright-8094.config.js xmind_casegen_flow.spec.js -g "前置准备改为单步 3 步流程|全量生成完成后会进入 AI 去重精简中|工具栏 AI 用例去重只发送当前可见 AI 用例|工具栏 AI 用例去重默认仅去重|AI 用例去重失败时保留原用例" --reporter=line --workers=1`（未完成：临时静态服务可返回 200，但当前 macOS 沙箱启动 Chromium headless 时仍触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出）
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `git diff --check`（通过）
+  - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1；确认未新增后端端点）
+  - `node --check scripts/core/xmindCaseDedupeCore.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过；覆盖本轮全局跨模块去重提示词与 UI 断言更新）
+  - `node` + `vm` 直连 `xmindCaseDedupeCore`，验证 `dedupe_scope=all_input_modules_global`、`cross_module_dedupe=true`、`review_method=exhaustive_global_pairwise_scan`、`require_global_case_scan=true`、`prefer_same_module_dedupe=false`，并确认提示词包含“完整用例集 / 跨模块 / 具体测试目的和测试点基本一致”及请求包含原始需求（通过）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8099 npx playwright test --config /private/tmp/tap-playwright-8099.config.js tests/ui/xmind_casegen_flow.spec.js -g "工具栏 AI 用例去重默认仅去重|工具栏 AI 用例去重只发送当前可见 AI 用例" --reporter=line --workers=1`（未完成：临时静态服务可返回 200，但当前 macOS 沙箱启动 Chromium headless 时仍触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出，未进入业务断言）
+  - `npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js -g "全量生成自动去重未删除任何用例时，仍会留下去重完成痕迹" --reporter=line --workers=1`（未完成：默认 8090 被本机其他服务占用并返回 404，Playwright webServer 等待超时）
+  - `npx playwright test --config /private/tmp/tap-playwright-8097.config.js tests/ui/xmind_casegen_flow.spec.js -g "全量生成自动去重未删除任何用例时，仍会留下去重完成痕迹" --reporter=line --workers=1`（未完成：临时 8097 静态服务可返回 200，但当前 macOS 沙箱启动 Chromium headless 时仍触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出）
 - 更新记录：
   - 2026-05-09 新增 XMind AI 用例去重精简能力：全量生成后自动去重、工具栏手动去重、去重中状态展示、失败保留原结果、需求上下文随请求提供，以及仅 AI 层回写的保守精简规则。
   - 2026-05-09 强化去重精简提示词：明确用例最终目标是保障项目产品质量、提升缺陷发现与回归验证价值；要求质量优先于数量压缩，不确定是否冗余时保留用例。
@@ -106,6 +119,15 @@
   - 2026-05-09 修复手动触发 AI 去重后收起 XMind 抽屉，左下角 XMind 用例生成进度条数回退到去重前的问题：去重提交成功后立即强制同步当前 workspace 共享用例快照，收起抽屉时也会带着最新可见用例结果刷新快照，避免主页面镜像读取旧结果。
   - 2026-05-09 继续修复开关 XMind 页面后左下角进度数量跳变的问题：页签进度只有在 XMind 画布实际接管当前共享状态时才读取实时画布数据，切到设置/旧流程视图时改读 workspace 快照；从 XMind 页面切出前会先同步一次当前快照，避免旧流程数据被误当作 XMind 用例统计来源。
   - 2026-05-09 手动点击工具栏 `AI用例去重` 时新增二次确认弹窗：弹窗展示将处理的模块数和 AI 用例数，用户点击 `确认去重` 后才会发起模型调用，取消则不执行；全量生成后的自动去重保持原自动流程，不弹窗打断。
+  - 2026-05-09 在前置准备 step3 的基础生成开关上方新增 `去重设置`：`去重并精简` 默认关闭时仅执行去重，开启后才执行去重并精简；全量生成后的自动 AI 去重和工具栏手动 AI 去重都会按该设置传递 `dedupe_mode` / `simplify` 契约，并切换对应提示词。
+  - 2026-05-11 修复全量/重新全量生成后未进入自动 AI 去重的问题：根流程覆盖生成时会临时隐藏旧 AI 层，自动去重现在会在触发前恢复本轮 AI 层并强制从已生成结果收集用例，避免误判“当前没有可去重的 AI 生成用例”而跳过去重；同步补充重新全量生成场景的自动去重回归断言。
+  - 2026-05-11 修复全量生成自动 AI 去重过早触发的问题：根流水线现在会记录本次全量生成预计模块任务数与已完成模块任务数，只有所有模块任务成功、失败或取消都处理完毕后才允许进入自动去重；若部分模块完成后仍无 AI 用例，仅在生成记录中诊断“未参与去重”，不会让去重提前启动或直接跳过已有用例模块；同步补充分批生成场景的回归断言，确保一个模块仍在生成时不会发起 AI 去重调用。
+  - 2026-05-11 优化生成记录中的 AI 去重明细：提示词要求模型按 `duplicate` / `merge` 返回结构化处理关系；重复删除会展示“与哪条用例重复”和简短重复点，合并记录会展示合并前用例列表与合并后的用例标题；前端兼容旧的 `reason` / `merged_into` 输出，并将新字段归一化后用于模块化记录展示。
+  - 2026-05-11 强化 XMind AI 去重首轮检出稳定性：去重契约新增 `exhaustive_per_module_pairwise_scan` 审查策略，提示词要求模型逐模块完成标题、前置、步骤、预期和校验目标的两两比对，不能发现少量重复后提前停止；同时对“禁用/禁止/不可用”“可发射/可使用”等同义表达提升为重复候选。去重模型调用继续使用 XMind 用例生成模型当前指派的默认 temperature，不单独覆盖温度配置。
+  - 2026-05-11 修复 AI 去重模型只返回部分模块时的记录与回写问题：去重契约新增完整模块返回策略，要求 `modules` 必须与输入模块数量一致并原样带回 `moduleId/moduleKey/module`，未变化模块也要返回原 cases；若模型仍返回部分模块，前端会保留缺失模块原用例并改为汇总诊断，且不会把未实际回写的 `removed_cases` 计入去重记录，避免出现“历史显示已去重但画布未删除”的不一致。
+  - 2026-05-11 修复全量生成后仍未自动去重的问题：根流水线在每个模块用例提交成功时同步记录本轮生成的 AI 模块与完整用例快照，最终触发自动去重时优先使用该流水线快照；即使画布可见上下文恢复/同步时暂时读不到 AI 层，也不会误判为无可去重用例而直接写入普通生成记录。
+  - 2026-05-11 修复全量生成自动 AI 去重在“未删减任何用例”时没有可见痕迹的问题：终态历史与状态摘要现在会明确展示去重已执行/未发现可去重用例，并把去重执行诊断写入生成记录，避免只在发生删减时才留下痕迹。
+  - 2026-05-11 优化 XMind AI 去重提示词与契约：去重范围从“同模块优先”调整为“整份用例全局审查”，要求模型把所有输入模块下的用例作为完整用例集进行模块内与跨模块两两比对；只要具体测试目的和测试点基本一致，即使归属模块、标题或表达方式不同，也应判为重复候选。契约同步新增 `dedupe_scope=all_input_modules_global`、`cross_module_dedupe=true`、`require_global_case_scan=true`，并关闭 `prefer_same_module_dedupe`。
 
 - 功能名称：XMind AI Markdown 导出
 - 功能描述：在 `XMind 用例生成` 抽屉新增 `导出为Markdown` 按钮，把当前活动 workspace 的可见 XMind 模块与用例导出为面向 AI 审核的 Markdown。当前导出已升级为 AI 强结构版：顶部提供结构化导出元数据与 AI 审核骨架，模块视图与全局索引保留稳定摘要表，模块详情改为每个模块一段结构化 JSON 记录，明确 `module_id / case_id / depends_on_modules / suggested_check_targets / preconditions / steps / expected / source_scope` 等字段，便于 Codex / GPT-5.4 直接解析并映射到项目实现核对任务。

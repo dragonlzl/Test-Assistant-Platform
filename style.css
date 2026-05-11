@@ -4511,7 +4511,7 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 }
 .xmind-casegen-history-dedupe-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(150px, 0.85fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   padding: 8px 10px;
   border-top: 1px solid rgba(148,163,184,0.14);
 }
@@ -4527,19 +4527,90 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .xmind-casegen-history-dedupe-case,
 .xmind-casegen-history-dedupe-reason {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   line-height: 1.5;
 }
 .xmind-casegen-history-dedupe-case {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text);
   font-size: 12px;
   font-weight: 700;
 }
 .xmind-casegen-history-dedupe-reason {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
   color: var(--muted);
   font-size: 12px;
+}
+.xmind-casegen-history-dedupe-badge {
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,0.24);
+  background: rgba(248,250,252,0.92);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+}
+.xmind-casegen-history-dedupe-badge.is-duplicate {
+  border-color: rgba(245,158,11,0.26);
+  background: rgba(254,243,199,0.82);
+  color: #92400e;
+}
+.xmind-casegen-history-dedupe-badge.is-merge {
+  border-color: rgba(16,185,129,0.24);
+  background: rgba(209,250,229,0.82);
+  color: #047857;
+}
+.xmind-casegen-history-dedupe-detail-main {
+  min-width: 0;
+  color: var(--text);
+  font-weight: 700;
+}
+.xmind-casegen-history-dedupe-detail-sub {
+  min-width: 0;
+  color: var(--muted);
+}
+.xmind-casegen-history-dedupe-merge-flow,
+.xmind-casegen-history-dedupe-title-list {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+.xmind-casegen-history-dedupe-merge-label,
+.xmind-casegen-history-dedupe-muted {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+.xmind-casegen-history-dedupe-title-chip,
+.xmind-casegen-history-dedupe-merge-target {
+  max-width: 180px;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,0.22);
+  background: rgba(248,250,252,0.92);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xmind-casegen-history-dedupe-merge-target {
+  border-color: rgba(37,99,235,0.18);
+  background: rgba(219,234,254,0.72);
+  color: #1d4ed8;
 }
 .xmind-casegen-prep-start {
   display: block;
@@ -11329,7 +11400,11 @@ tr.import-invalid-locate-active td {
     display: none;
   }
   .xmind-casegen-history-dedupe-reason {
-    white-space: normal;
+    align-items: flex-start;
+  }
+  .xmind-casegen-history-dedupe-title-chip,
+  .xmind-casegen-history-dedupe-merge-target {
+    max-width: 100%;
   }
   .xmind-casegen-model-select {
     min-width: 132px;
@@ -12854,6 +12929,31 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-casegen-history-dedupe-row-head {
   background: rgba(15,23,42,0.76);
   color: #cbd5e1;
+}
+:root[data-theme="dark"] .xmind-casegen-history-dedupe-badge {
+  border-color: rgba(71,85,105,0.42);
+  background: rgba(15,23,42,0.72);
+  color: #cbd5e1;
+}
+:root[data-theme="dark"] .xmind-casegen-history-dedupe-badge.is-duplicate {
+  border-color: rgba(251,191,36,0.3);
+  background: rgba(120,53,15,0.36);
+  color: #fde68a;
+}
+:root[data-theme="dark"] .xmind-casegen-history-dedupe-badge.is-merge {
+  border-color: rgba(52,211,153,0.28);
+  background: rgba(6,78,59,0.36);
+  color: #a7f3d0;
+}
+:root[data-theme="dark"] .xmind-casegen-history-dedupe-title-chip {
+  border-color: rgba(71,85,105,0.42);
+  background: rgba(15,23,42,0.72);
+  color: #e2e8f0;
+}
+:root[data-theme="dark"] .xmind-casegen-history-dedupe-merge-target {
+  border-color: rgba(96,165,250,0.26);
+  background: rgba(30,64,175,0.34);
+  color: #dbeafe;
 }
 :root[data-theme="dark"] .xmind-casegen-history-detail-count,
 :root[data-theme="dark"] .xmind-casegen-history-time {
