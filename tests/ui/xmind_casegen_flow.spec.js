@@ -7736,6 +7736,95 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(fullscreenLayout.controlsWidth).toBeGreaterThan(layout.controlsWidth + 120);
   });
 
+  test('XMind 工具栏支持收起与展开，收起后只保留展开入口', async ({ page }) => {
+    const token = 'token-xmind-toolbar-collapse';
+    const user = { id: 214, username: 'demo_user_toolbar_collapse', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await page.setViewportSize({ width: 1366, height: 820 });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：XMind 用例生成工具栏可以收起，收起后画布顶部只保留展开入口。',
+      requirementLabel: 'XMind工具栏收起需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind工具栏收起需求');
+
+    const readToolbarCollapseState = async () => page.evaluate(() => {
+      function isVisible(el) {
+        if (!el || !el.getBoundingClientRect) return false;
+        var rect = el.getBoundingClientRect();
+        var style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+        return Boolean(
+          rect.width > 0
+          && rect.height > 0
+          && (!style || (style.display !== 'none' && style.visibility !== 'hidden'))
+        );
+      }
+      var controls = document.querySelector('#xmindCaseGenMindContainer [data-mind-controls]');
+      var leading = controls ? controls.querySelector('.xmind-controls-leading') : null;
+      var trailing = controls ? controls.querySelector('.xmind-controls-trailing') : null;
+      var summaryBtn = controls ? controls.querySelector('#xmindCaseGenSummaryBtn') : null;
+      var searchInput = controls ? controls.querySelector('[data-mind-search-input]') : null;
+      var toggleButtons = controls ? controls.querySelectorAll('[data-xmind-casegen-toolbar-toggle]') : [];
+      var toggleBtn = toggleButtons && toggleButtons.length ? toggleButtons[0] : null;
+      var rect = controls && controls.getBoundingClientRect ? controls.getBoundingClientRect() : null;
+      return {
+        collapsed: Boolean(controls && controls.classList && controls.classList.contains('is-collapsed')),
+        toggleCount: toggleButtons ? toggleButtons.length : 0,
+        buttonText: toggleBtn ? String(toggleBtn.textContent || '').trim() : '',
+        buttonExpanded: toggleBtn ? String(toggleBtn.getAttribute('aria-expanded') || '') : '',
+        leadingVisible: isVisible(leading),
+        trailingVisible: isVisible(trailing),
+        summaryVisible: isVisible(summaryBtn),
+        searchVisible: isVisible(searchInput),
+        controlsHeight: rect ? rect.height : 0,
+      };
+    });
+
+    const expanded = await readToolbarCollapseState();
+    expect(expanded.collapsed).toBe(false);
+    expect(expanded.toggleCount).toBe(1);
+    expect(expanded.buttonText).toBe('收起工具栏');
+    expect(expanded.buttonExpanded).toBe('true');
+    expect(expanded.leadingVisible).toBe(true);
+    expect(expanded.trailingVisible).toBe(true);
+    expect(expanded.summaryVisible).toBe(true);
+    expect(expanded.searchVisible).toBe(true);
+
+    await page.click('#xmindCaseGenMindContainer [data-xmind-casegen-toolbar-toggle]');
+    const collapsed = await readToolbarCollapseState();
+    expect(collapsed.collapsed).toBe(true);
+    expect(collapsed.toggleCount).toBe(1);
+    expect(collapsed.buttonText).toBe('展开工具栏');
+    expect(collapsed.buttonExpanded).toBe('false');
+    expect(collapsed.leadingVisible).toBe(false);
+    expect(collapsed.trailingVisible).toBe(false);
+    expect(collapsed.summaryVisible).toBe(false);
+    expect(collapsed.searchVisible).toBe(false);
+    expect(collapsed.controlsHeight).toBeLessThan(expanded.controlsHeight);
+    await waitForNodeText(page, 'XMind工具栏收起需求');
+
+    await page.click('#xmindCaseGenMindContainer [data-xmind-casegen-toolbar-toggle]');
+    const restored = await readToolbarCollapseState();
+    expect(restored.collapsed).toBe(false);
+    expect(restored.toggleCount).toBe(1);
+    expect(restored.buttonText).toBe('收起工具栏');
+    expect(restored.buttonExpanded).toBe('true');
+    expect(restored.leadingVisible).toBe(true);
+    expect(restored.trailingVisible).toBe(true);
+    expect(restored.summaryVisible).toBe(true);
+    expect(restored.searchVisible).toBe(true);
+  });
+
   test('XMind 节点搜索保持输入焦点，回退与清空后不会误删已生成节点', async ({ page }) => {
     const token = 'token-xmind-search-focus-guard';
     const user = { id: 213, username: 'demo_user_search_focus_guard', role: 'user', level: 'member' };
@@ -7765,12 +7854,43 @@ test.describe('XMind 用例生成抽屉', () => {
     const searchInput = page.locator('#xmindCaseGenMindContainer [data-mind-search-input]');
     const searchCount = page.locator('#xmindCaseGenMindContainer [data-mind-search-count]');
     const clearBtn = page.locator('#xmindCaseGenMindContainer [data-mind-action="search-clear"]');
+    const nextBtn = page.locator('#xmindCaseGenMindContainer [data-mind-action="search-next"]');
+
+    const readSearchMarkState = async () => page.evaluate(() => {
+      var root = document.getElementById('xmindCaseGenMindContainer');
+      var canvas = root ? root.querySelector('[data-mind-canvas]') : null;
+      var active = root ? root.querySelector('me-tpc.xmind-search-active') : null;
+      var hits = root ? root.querySelectorAll('me-tpc.xmind-search-hit') : [];
+      var activeTextEl = active && active.querySelector ? (active.querySelector('.text') || active.querySelector('.box') || active) : active;
+      var activeRect = activeTextEl && activeTextEl.getBoundingClientRect ? activeTextEl.getBoundingClientRect() : null;
+      var canvasRect = canvas && canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+      var dx = activeRect && canvasRect
+        ? Math.abs((activeRect.left + activeRect.width / 2) - (canvasRect.left + canvasRect.width / 2))
+        : null;
+      var dy = activeRect && canvasRect
+        ? Math.abs((activeRect.top + activeRect.height / 2) - (canvasRect.top + canvasRect.height / 2))
+        : null;
+      return {
+        activeText: activeTextEl ? String(activeTextEl.textContent || '').replace(/\s+/g, ' ').trim() : '',
+        hitCount: hits ? hits.length : 0,
+        activeHasClass: Boolean(active),
+        centerDx: dx,
+        centerDy: dy,
+      };
+    });
 
     await searchInput.click();
     await searchInput.fill('登录模块-完整-1');
     await page.keyboard.press('Backspace');
     await expect(searchInput).toHaveValue('登录模块-完整-');
     await expect(searchCount).toHaveText(/1\s*\/\s*[1-9]\d*/);
+    await expect.poll(async () => {
+      return await readSearchMarkState();
+    }).toMatchObject({
+      activeHasClass: true,
+      hitCount: 1,
+      activeText: '登录模块-完整-1',
+    });
     await expect.poll(async () => {
       return await page.evaluate(() => {
         var input = document.querySelector('#xmindCaseGenMindContainer [data-mind-search-input]');
@@ -7779,6 +7899,51 @@ test.describe('XMind 用例生成抽屉', () => {
     }).toBe(true);
     await waitForNodeText(page, '登录模块-完整-1');
     await waitForNodeText(page, '支付模块-完整-1');
+
+    await searchInput.fill('模块-完整-1');
+    await expect(searchCount).toHaveText(/1\s*\/\s*2/);
+    await expect.poll(async () => {
+      const state = await readSearchMarkState();
+      return {
+        activeText: state.activeText,
+        hitCount: state.hitCount,
+        centerDxOk: state.centerDx !== null && state.centerDx < 120,
+        centerDyOk: state.centerDy !== null && state.centerDy < 120,
+      };
+    }).toEqual({
+      activeText: '登录模块-完整-1',
+      hitCount: 2,
+      centerDxOk: true,
+      centerDyOk: true,
+    });
+    await nextBtn.click();
+    await expect(searchCount).toHaveText(/2\s*\/\s*2/);
+    await expect.poll(async () => {
+      const state = await readSearchMarkState();
+      return {
+        activeText: state.activeText,
+        centerDxOk: state.centerDx !== null && state.centerDx < 120,
+        centerDyOk: state.centerDy !== null && state.centerDy < 120,
+      };
+    }).toEqual({
+      activeText: '支付模块-完整-1',
+      centerDxOk: true,
+      centerDyOk: true,
+    });
+    await nextBtn.click();
+    await expect(searchCount).toHaveText(/1\s*\/\s*2/);
+    await expect.poll(async () => {
+      const state = await readSearchMarkState();
+      return {
+        activeText: state.activeText,
+        centerDxOk: state.centerDx !== null && state.centerDx < 120,
+        centerDyOk: state.centerDy !== null && state.centerDy < 120,
+      };
+    }).toEqual({
+      activeText: '登录模块-完整-1',
+      centerDxOk: true,
+      centerDyOk: true,
+    });
 
     await searchInput.fill('完全不存在的节点');
     await expect(searchCount).toHaveText(/0\s*\/\s*0/);

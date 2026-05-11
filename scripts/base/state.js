@@ -182,6 +182,7 @@
           scaleVal: 1,
           scrollLeft: 0,
           scrollTop: 0,
+          toolbarCollapsed: false,
           collapsedNodeKeys: [],
           treeSourceSignature: '',
           updatedAt: 0,

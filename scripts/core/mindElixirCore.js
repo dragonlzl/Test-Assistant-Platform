@@ -1410,6 +1410,73 @@
         setSearchCount();
       }
 
+      function filterRenderedSearchNodeIds(inst, ids) {
+        var result = [];
+        var seen = {};
+        (Array.isArray(ids) ? ids : []).forEach(function(id) {
+          var stableId = String(id || '');
+          if (!stableId || seen[stableId]) return;
+          var nodeEl = findMindNodeElement(inst, stableId);
+          if (!nodeEl || !nodeEl.getBoundingClientRect) return;
+          var rect = nodeEl.getBoundingClientRect();
+          if (!rect || rect.width <= 0 || rect.height <= 0) return;
+          seen[stableId] = true;
+          result.push(stableId);
+        });
+        return result;
+      }
+
+      function centerSearchResultNode(nodeId) {
+        var inst = getInstance();
+        if (!inst || !nodeId || !inst.map) return false;
+        var nodeEl = findMindNodeElement(inst, nodeId);
+        var anchorEl = resolveMindAnchorElement(nodeEl);
+        var viewportEl = canvasEl && canvasEl.getBoundingClientRect
+          ? canvasEl
+          : (inst.container && inst.container.getBoundingClientRect ? inst.container : null);
+        if (!anchorEl || !anchorEl.getBoundingClientRect || !viewportEl) return false;
+        var nodeRect = anchorEl.getBoundingClientRect();
+        var viewportRect = viewportEl.getBoundingClientRect();
+        var currentCenterX = Number(nodeRect.left + (nodeRect.width / 2));
+        var currentCenterY = Number(nodeRect.top + (nodeRect.height / 2));
+        var desiredCenterX = Number(viewportRect.left + (viewportRect.width / 2));
+        var desiredCenterY = Number(viewportRect.top + (viewportRect.height / 2));
+        if (
+          !isFinite(currentCenterX)
+          || !isFinite(currentCenterY)
+          || !isFinite(desiredCenterX)
+          || !isFinite(desiredCenterY)
+        ) {
+          return false;
+        }
+        var deltaX = desiredCenterX - currentCenterX;
+        var deltaY = desiredCenterY - currentCenterY;
+        if (Math.abs(deltaX) < 0.5 && Math.abs(deltaY) < 0.5) return true;
+        var transformState = parseMindTransformState(inst.map && inst.map.style ? inst.map.style.transform : '');
+        transformState.x += deltaX;
+        transformState.y += deltaY;
+        if (writeMindTransformState(inst, transformState)) {
+          inst.__tapViewportInteracted = true;
+          return true;
+        }
+        return false;
+      }
+
+      function scheduleSearchResultCenter(nodeId) {
+        var stableId = String(nodeId || '');
+        if (!stableId) return;
+        var run = function() {
+          centerSearchResultNode(stableId);
+        };
+        run();
+        if (typeof window !== 'undefined' && window && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(run);
+        }
+        [16, 64, 140].forEach(function(delayMs) {
+          setTimeout(run, delayMs);
+        });
+      }
+
       function focusSearchIndex(index, options) {
         var opts2 = options || {};
         var ids = Array.isArray(searchState.ids) ? searchState.ids : [];
@@ -1430,16 +1497,8 @@
         }
         searchState.index = nextIndex;
         applySearchClasses();
-        var inst = getInstance();
         var activeId = ids[nextIndex];
-        var activeEl = findMindNodeElement(inst, activeId);
-        if (activeEl && inst && typeof inst.selectNode === 'function') {
-          try {
-            inst.selectNode(activeEl);
-          } catch (err) {
-            // ignore
-          }
-        }
+        scheduleSearchResultCenter(activeId);
         if (opts2.preserveInputFocus) {
           scheduleSearchInputFocus(opts2.selection);
         }
@@ -1463,8 +1522,9 @@
         var matchedIds = [];
         var inst = getInstance();
         collectSearchNodeIds(inst ? inst.nodeData : null, keyword, matchedIds);
-        searchState.ids = matchedIds;
-        if (!matchedIds.length) {
+        var renderedIds = filterRenderedSearchNodeIds(inst, matchedIds);
+        searchState.ids = renderedIds;
+        if (!renderedIds.length) {
           searchState.index = -1;
           applySearchClasses();
           if (opts2.preserveInputFocus) {
@@ -1472,7 +1532,7 @@
           }
           return;
         }
-        if (keepIndex && searchState.index >= 0 && searchState.index < matchedIds.length) {
+        if (keepIndex && searchState.index >= 0 && searchState.index < renderedIds.length) {
           focusSearchIndex(searchState.index, {
             preserveInputFocus: opts2.preserveInputFocus,
             selection: selection,

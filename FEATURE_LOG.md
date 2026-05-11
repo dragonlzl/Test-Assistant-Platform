@@ -19,6 +19,63 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 用例生成工具栏搜索标识与定位修复
+- 功能描述：修复 `XMind 用例生成` 画布顶部工具栏搜索异常：输入关键字后命中节点没有稳定标识，点击 `上一个` / `下一个` 时画布会被 MindElixir 选中逻辑带偏，无法把当前命中节点定位到预期位置。
+- 操作方式：
+  - 进入 `用例生成 -> XMind 用例生成`，完成前置准备并打开 XMind 生成抽屉；
+  - 在画布顶部工具栏搜索框输入节点关键字；
+  - 点击 `上一个` / `下一个` 在多个命中节点间切换。
+- 使用效果：
+  - 搜索仅统计当前已渲染、可标识的节点，避免命中隐藏节点后无法在画布上展示标识；
+  - 所有命中节点都会添加搜索命中标识，当前命中节点使用更明显的激活标识；
+  - 切换上一个/下一个时不再调用 MindElixir 的节点选中滚动画布逻辑，改为复用当前画布 transform 计算节点中心与画布中心的位移并居中；
+  - 搜索输入、清空、焦点恢复、已有节点保留和 XMind 生成数据不受影响；
+  - 本次未新增后端接口，未修改数据库结构。
+- 新增内容/接口/组件：
+  - 搜索流程新增渲染节点过滤，搜索状态只保留可在 DOM 中标识的命中节点；
+  - 新增当前搜索命中节点居中调度，使用已有 MindElixir transform 解析/写入工具；
+  - 扩展搜索命中与激活态 CSS，覆盖 `me-tpc`、节点 `.box` 和 `.text` 等实际渲染结构，并补充暗色主题样式；
+  - 更新 XMind 搜索 UI 回归，新增命中 class、命中数量、当前节点文本以及上/下一个切换后居中距离断言；
+  - 本次未新增后端接口或数据库迁移。
+- 复用说明：复用既有 XMind 搜索状态、节点查找、画布 transform 解析/写入、搜索计数、输入焦点恢复和 UI 自动化框架；未新增独立组件，未改动 MindElixir 数据结构和模型生成链路。
+- 测试与验证：
+  - `node --check scripts/core/mindElixirCore.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `git diff --check -- scripts/core/mindElixirCore.js style.css tests/ui/xmind_casegen_flow.spec.js FEATURE_LOG.md scripts/base/state.js scripts/modules/xmindCasegen.js`（通过）
+  - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1；确认本次未新增 XMind 后端端点）
+  - `npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js -g "XMind 节点搜索保持输入焦点" --reporter=line --workers=1`（未完成：默认 8090 端口已有 uvicorn 服务返回 404，Playwright webServer 等待 `index.html` 超时，未进入业务断言）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8097 npx playwright test --config tests/playwright.xmind-search.tmp.config.js xmind_casegen_flow.spec.js -g "XMind 节点搜索保持输入焦点" --reporter=line --workers=1`（未完成：临时静态服务可返回 200，但当前 macOS 沙箱启动 Chromium headless 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出，未进入业务断言；临时配置文件已删除）
+  - Codex 内置浏览器尝试访问本地静态服务验证页面（未完成：浏览器安全策略拒绝访问该本地地址，未进入页面）
+- 更新记录：2026-05-11 修复 XMind 用例生成工具栏搜索标识与上/下一个定位逻辑，并补充搜索命中标识和居中定位回归断言。
+
+- 功能名称：XMind 用例生成工具栏收起展开
+- 功能描述：在 `XMind 用例生成` 画布顶部工具栏新增收起/展开能力。用户收起后，工具栏仅保留 `展开工具栏` 入口，隐藏生成前置准备、生成记录、知识库状态、去重、入库、导出、搜索、缩放与模型选择等工具区，减少画布顶部遮挡；再次展开后恢复原工具栏布局与按钮状态。
+- 操作方式：
+  - 进入 `用例生成 -> XMind 用例生成` 并打开生成抽屉；
+  - 点击画布顶部工具栏右上角 `收起工具栏`，工具栏折叠为单个 `展开工具栏` 按钮；
+  - 点击 `展开工具栏`，恢复完整工具栏。
+- 使用效果：
+  - 收起时不销毁 XMind 画布、模块、用例或当前生成状态；
+  - 展开后沿用原有分层布局，搜索区、缩放区、模型选择器和 XMind 生成操作按钮继续可用；
+  - 折叠状态随当前 XMind workspace 的视图状态保存，页签切换或重渲染时不会丢失；
+  - 未改动生成、去重、知识库检索、导出或入库接口契约。
+- 新增内容/接口/组件：
+  - XMind 生成画布控制条新增 `收起工具栏` / `展开工具栏` 切换按钮；
+  - 视图状态新增 `toolbarCollapsed`，复用现有 workspace 快照与恢复链路持久化；
+  - CSS 新增折叠态布局：折叠时隐藏工具栏主区域并收敛控制条尺寸；
+  - 新增 UI 自动化用例覆盖收起、展开、唯一切换入口、搜索/主操作隐藏与画布内容保留；
+  - 本次未新增后端接口，未修改数据库结构。
+- 复用说明：复用既有 XMind 画布控制条、inline toolbar 挂载、workspace 视图快照、持久化和工具栏分层布局；只新增一个轻量折叠开关与状态字段，没有新增独立组件或后端能力。
+- 测试与验证：
+  - `node --check scripts/base/state.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `git diff --check`（通过）
+  - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1；确认本次未新增 XMind 后端端点）
+  - `npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js -g "XMind 工具栏支持收起与展开，收起后只保留展开入口|XMind 工具栏在全屏和非全屏下都会自动换层排布" --reporter=line --workers=1`（未完成：默认 8090 webServer 等待超时，未进入业务断言）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8097 npm run test:ui -- --config tests/playwright.tmp.config.js tests/ui/xmind_casegen_flow.spec.js -g "XMind 工具栏支持收起与展开，收起后只保留展开入口|XMind 工具栏在全屏和非全屏下都会自动换层排布" --reporter=line --workers=1`（未完成：临时静态服务可用，但当前 macOS 沙箱启动 Chromium headless 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段退出）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8097 npx playwright test --config tests/playwright.tmp.config.js tests/ui/xmind_casegen_flow.spec.js -g "XMind 工具栏支持收起与展开，收起后只保留展开入口" --reporter=line --workers=1`（未完成：headed Chromium 启动时被 macOS 沙箱拒绝 Crashpad/Mach bootstrap 权限，未进入业务断言；临时配置文件已删除）
+  - Codex 内置浏览器尝试访问测试后端验证页面（未完成：浏览器安全策略拒绝访问本地测试地址，未进入页面）
+  - `python3 notify_feishu.py`（通过，飞书返回 HTTP 200 / success）
+- 更新记录：2026-05-11 新增 XMind 用例生成画布工具栏收起/展开能力，并补充对应 UI 回归断言与无新增接口守卫。
+
 - 功能名称：AI 用例生成风格指南接入
 - 功能描述：沉淀正式入库用例的人工编写风格，新增统一的 AI 用例编写风格指南，并把该风格要求接入普通用例生成、XMind 用例生成、用例库 AI 补充生成和执行页 AI 补充生成所共用的默认提示词。生成时在保持高质量、字段完整、语义去重和优先级合规的基础上，更贴近测试人员从 XMind/表格整理检查点的写法。
 - 操作方式：

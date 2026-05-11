@@ -100,6 +100,7 @@
     var inlineControlsHost = null;
     var inlineStatusHost = null;
     var inlineModelHost = null;
+    var toolbarCollapseBtn = null;
     var inlineGroupHosts = {};
     var manualImageInputEl = null;
     var topupHighlightSyncTimer = 0;
@@ -273,6 +274,7 @@
         scrollTop: 0,
         hasManualViewport: false,
         anchorState: null,
+        toolbarCollapsed: false,
         collapsedNodeKeys: [],
         treeSourceSignature: '',
         updatedAt: 0,
@@ -300,6 +302,7 @@
           centerY: Number(input.anchorState.centerY || 0),
         }
         : null;
+      next.toolbarCollapsed = input.toolbarCollapsed === true;
       next.collapsedNodeKeys = normalizeUniqueStringList(input.collapsedNodeKeys);
       next.treeSourceSignature = String(input.treeSourceSignature || '');
       next.updatedAt = Number(input.updatedAt || 0);
@@ -1155,11 +1158,15 @@
       if (inlineModelHost && inlineModelHost.parentNode) {
         inlineModelHost.parentNode.removeChild(inlineModelHost);
       }
+      if (toolbarCollapseBtn && toolbarCollapseBtn.parentNode) {
+        toolbarCollapseBtn.parentNode.removeChild(toolbarCollapseBtn);
+      }
       inlinePrimaryHost = null;
       inlineOverviewHost = null;
       inlineControlsHost = null;
       inlineStatusHost = null;
       inlineModelHost = null;
+      toolbarCollapseBtn = null;
       inlineGroupHosts = {};
     }
 
@@ -1348,6 +1355,62 @@
       }
     }
 
+    function isInlineToolbarCollapsed() {
+      return getViewState().toolbarCollapsed === true;
+    }
+
+    function getInlineToolbarCollapseButton() {
+      var controlsRoot = getMindControlsRoot();
+      if (!controlsRoot || !controlsRoot.querySelector) return null;
+      var btn = controlsRoot.querySelector('[data-xmind-casegen-toolbar-toggle]');
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'secondary xmind-toolbar-collapse-btn';
+        btn.setAttribute('data-xmind-casegen-toolbar-toggle', '1');
+        btn.addEventListener('click', function(event) {
+          if (event && typeof event.preventDefault === 'function') event.preventDefault();
+          if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+          setInlineToolbarCollapsed(!isInlineToolbarCollapsed(), { persist: true });
+        });
+        controlsRoot.appendChild(btn);
+      } else if (btn.parentNode !== controlsRoot && controlsRoot.appendChild) {
+        controlsRoot.appendChild(btn);
+      }
+      toolbarCollapseBtn = btn;
+      return btn;
+    }
+
+    function syncInlineToolbarCollapseState() {
+      var controlsRoot = getMindControlsRoot();
+      if (!controlsRoot) return false;
+      var collapsed = isInlineToolbarCollapsed();
+      var btn = getInlineToolbarCollapseButton();
+      if (controlsRoot.classList) {
+        if (collapsed) controlsRoot.classList.add('is-collapsed');
+        else controlsRoot.classList.remove('is-collapsed');
+      }
+      controlsRoot.setAttribute('data-xmind-casegen-toolbar-collapsed', collapsed ? 'true' : 'false');
+      controlsRoot.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      if (btn) {
+        btn.textContent = collapsed ? '展开工具栏' : '收起工具栏';
+        btn.title = collapsed ? '展开 XMind 生成工具栏' : '收起 XMind 生成工具栏';
+        btn.setAttribute('aria-label', btn.title);
+        btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      }
+      return true;
+    }
+
+    function setInlineToolbarCollapsed(collapsed, options) {
+      var viewState = getViewState();
+      viewState.toolbarCollapsed = collapsed === true;
+      viewState.updatedAt = Date.now();
+      syncInlineToolbarCollapseState();
+      if (!(options && options.persist === false)) {
+        persistXmindState(true);
+      }
+    }
+
     function getInlineToolbarOverviewSummary() {
       var context = buildVisibleModuleContext();
       var moduleCount = Array.isArray(context && context.list) ? context.list.length : 0;
@@ -1479,6 +1542,7 @@
       syncDedupeToolbarButton();
       syncKnowledgeBaseToolbarState();
       syncInlineModelPicker();
+      syncInlineToolbarCollapseState();
       return true;
     }
 

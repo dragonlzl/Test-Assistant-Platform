@@ -10713,11 +10713,46 @@ tr.import-invalid-locate-active td {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.xmind-casegen-viewer .xmind-toolbar-collapse-btn {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 2;
+  height: 30px;
+  min-width: 86px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 28px;
+  white-space: nowrap;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+.xmind-casegen-viewer .xmind-structure-controls.is-collapsed {
+  left: auto;
+  width: auto;
+  min-width: 0;
+  padding: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+}
+.xmind-casegen-viewer .xmind-structure-controls.is-collapsed .xmind-controls-leading,
+.xmind-casegen-viewer .xmind-structure-controls.is-collapsed .xmind-controls-trailing {
+  display: none !important;
+}
+.xmind-casegen-viewer .xmind-structure-controls.is-collapsed .xmind-toolbar-collapse-btn {
+  position: static;
+  min-width: 92px;
+}
 
 #xmindCaseGenDrawer .xmind-casegen-viewer .xmind-structure-controls {
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 8px 12px;
+}
+#xmindCaseGenDrawer .xmind-casegen-viewer .xmind-structure-controls:not(.is-collapsed) {
+  padding-right: 108px;
 }
 #xmindCaseGenDrawer .xmind-casegen-viewer .xmind-controls-leading,
 #xmindCaseGenDrawer .xmind-casegen-viewer .xmind-controls-trailing {
@@ -10864,6 +10899,21 @@ tr.import-invalid-locate-active td {
 .xmind-structure-viewer me-tpc.xmind-box-selected,
 .xmind-structure-viewer me-tpc.selected {
   filter: drop-shadow(0 0 0.35rem rgba(37, 99, 235, 0.22));
+}
+
+.xmind-structure-viewer me-tpc.xmind-search-hit,
+.xmind-structure-viewer me-tpc.xmind-search-hit .box,
+.xmind-structure-viewer me-tpc.xmind-search-hit .text {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.34);
+}
+
+.xmind-structure-viewer me-tpc.xmind-search-active,
+.xmind-structure-viewer me-tpc.xmind-search-active .box,
+.xmind-structure-viewer me-tpc.xmind-search-active .text {
+  color: #fff;
+  background: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.38);
 }
 
 .xmind-structure-viewer .xmind-box-select-rect {
@@ -13196,6 +13246,16 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-casegen-viewer .xmind-casegen-inline-count-pill strong {
   color: #f8fafc;
 }
+:root[data-theme="dark"] .xmind-casegen-viewer .xmind-toolbar-collapse-btn {
+  border-color: rgba(96, 165, 250, 0.42);
+  background: rgba(15, 23, 42, 0.9);
+  color: #bfdbfe;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.32);
+}
+:root[data-theme="dark"] .xmind-casegen-viewer .xmind-toolbar-collapse-btn:hover:not(:disabled) {
+  border-color: #60a5fa;
+  background: rgba(30, 64, 175, 0.34);
+}
 :root[data-theme="dark"] .xmind-structure-viewer .xmind-edit-btn[data-mind-action="edit-save"] {
   color: #bfdbfe;
 }
@@ -13233,6 +13293,18 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-box-selected,
 :root[data-theme="dark"] .xmind-structure-viewer me-tpc.selected {
   filter: drop-shadow(0 0 0.42rem rgba(96, 165, 250, 0.26));
+}
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-search-hit,
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-search-hit .box,
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-search-hit .text {
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.58);
+}
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-search-active,
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-search-active .box,
+:root[data-theme="dark"] .xmind-structure-viewer me-tpc.xmind-search-active .text {
+  color: #fff;
+  background: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.56);
 }
 :root[data-theme="dark"] .xmind-node-context-menu {
   border-color: #475569;
