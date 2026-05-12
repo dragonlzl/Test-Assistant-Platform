@@ -25,6 +25,17 @@
     return window.app && window.app.core ? window.app.core : {};
   }
 
+  function appendCaseWritingGuidePrompt(promptText) {
+    var prompt = promptText === undefined || promptText === null ? '' : String(promptText).trim();
+    var config = window.app && window.app.config ? window.app.config : {};
+    var guide = config && config.caseWritingStyleGuidePrompt
+      ? String(config.caseWritingStyleGuidePrompt || '').trim()
+      : '';
+    if (!guide) return prompt;
+    if (prompt.indexOf('AI_CASE_WRITING_STYLE_GUIDE.md') !== -1) return prompt;
+    return [prompt, guide].filter(Boolean).join('\n\n');
+  }
+
   function openConfirmDrawer(options) {
     if (utils && typeof utils.openConfirmDrawer === 'function') {
       return utils.openConfirmDrawer(options || {});
@@ -11566,6 +11577,7 @@
       || (window.app && window.app.config && window.app.config.defaultPrompts
         ? window.app.config.defaultPrompts.caselibrarygen
         : '');
+    prompt = appendCaseWritingGuidePrompt(prompt);
     var reasoning = state.assignments && state.assignments.caseLibraryGenReasoning
       ? state.assignments.caseLibraryGenReasoning
       : '';

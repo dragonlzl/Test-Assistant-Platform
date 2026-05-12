@@ -1910,8 +1910,18 @@
       return parts;
     }
 
+    function appendCaseWritingGuidePrompt(promptText) {
+      var prompt = stringifyCaseField(promptText || '');
+      var guide = config && config.caseWritingStyleGuidePrompt
+        ? stringifyCaseField(config.caseWritingStyleGuidePrompt)
+        : '';
+      if (!guide) return prompt;
+      if (prompt.indexOf('AI_CASE_WRITING_STYLE_GUIDE.md') !== -1) return prompt;
+      return [prompt, guide].filter(Boolean).join('\n\n');
+    }
+
     function buildCaseGenPrompt(basePrompt, settingsOverride) {
-      var prompt = stringifyCaseField(basePrompt || '');
+      var prompt = appendCaseWritingGuidePrompt(basePrompt || '');
       var parts = getCaseGenPromptComponents(settingsOverride);
       return [prompt].concat(parts).filter(Boolean).join('\n\n');
     }

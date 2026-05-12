@@ -24,6 +24,16 @@
     var normalizeRequirementName = core.normalizeRequirementName || function(name) { return name || ''; };
     var defaultTempExecPageSize = config.defaultTempExecPageSize || 20;
 
+    function appendCaseWritingGuidePrompt(promptText) {
+      var prompt = promptText === undefined || promptText === null ? '' : String(promptText).trim();
+      var guide = config && config.caseWritingStyleGuidePrompt
+        ? String(config.caseWritingStyleGuidePrompt || '').trim()
+        : '';
+      if (!guide) return prompt;
+      if (prompt.indexOf('AI_CASE_WRITING_STYLE_GUIDE.md') !== -1) return prompt;
+      return [prompt, guide].filter(Boolean).join('\n\n');
+    }
+
     var tempExecDropZone = document.getElementById('tempExecDropZone');
     var tempExecInput = document.getElementById('tempExecInput');
     var tempExecImportFileHint = document.getElementById('tempExecImportFileHint');
@@ -2356,6 +2366,7 @@
         || (window.app && window.app.config && window.app.config.defaultPrompts
           ? window.app.config.defaultPrompts.caselibrarygen
           : '');
+      prompt = appendCaseWritingGuidePrompt(prompt);
       var reasoning = state.assignments && state.assignments.caseLibraryGenReasoning
         ? state.assignments.caseLibraryGenReasoning
         : '';
