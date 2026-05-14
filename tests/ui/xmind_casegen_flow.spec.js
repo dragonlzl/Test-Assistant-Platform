@@ -7184,6 +7184,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.locator('[data-coverage-summary] [data-coverage-jump="partial"]').click();
     await expect(page.locator('.xmind-casegen-coverage-selected-card')).toContainText('退出登录');
     await expect(page.locator('.xmind-casegen-coverage-case-list')).toContainText('登录会话清理关联检查');
+    await expect(page.locator('.xmind-casegen-coverage-case').filter({ hasText: '登录会话清理关联检查' }).locator('.xmind-casegen-coverage-case-priority')).toHaveText('P2');
     await expect(page.locator('.xmind-casegen-coverage-case.is-related')).toContainText('关联');
     await page.locator('.xmind-casegen-coverage-case.is-related').click();
     await expect(page.locator('.xmind-casegen-coverage-segment.is-case-highlighted')).toContainText('退出登录');
@@ -7193,6 +7194,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.locator('.xmind-casegen-coverage-segment').filter({ hasText: '用户登录成功后进入首页' }).click();
     await expect(page.locator('.xmind-casegen-coverage-case-list')).toContainText('登录模块');
     await expect(page.locator('.xmind-casegen-coverage-case-list')).toContainText('登录成功校验');
+    await expect(page.locator('.xmind-casegen-coverage-case').filter({ hasText: '登录成功校验' }).locator('.xmind-casegen-coverage-case-priority')).toHaveText('P1');
     await expect(page.locator('.xmind-casegen-coverage-case-list')).not.toContainText('登录失败提示');
     await page.locator('.xmind-casegen-coverage-case').filter({ hasText: '登录成功校验' }).click();
     await expect(page.locator('.xmind-casegen-coverage-selected-card')).toContainText('用例关联片段');

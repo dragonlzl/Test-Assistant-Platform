@@ -5694,6 +5694,38 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   font-weight: 800;
   line-height: 1.2;
 }
+.xmind-casegen-coverage-case-priority {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+.xmind-casegen-coverage-case-priority.is-p0 {
+  border-color: rgba(220,38,38,0.2);
+  background: rgba(254,226,226,0.98);
+  color: #b91c1c;
+}
+.xmind-casegen-coverage-case-priority.is-p1 {
+  border-color: rgba(217,119,6,0.22);
+  background: rgba(254,243,199,0.98);
+  color: #92400e;
+}
+.xmind-casegen-coverage-case-priority.is-p2 {
+  border-color: rgba(37,99,235,0.18);
+  background: rgba(219,234,254,0.96);
+  color: #1d4ed8;
+}
+.xmind-casegen-coverage-case-priority.is-unknown {
+  border-color: rgba(100,116,139,0.22);
+  background: rgba(226,232,240,0.92);
+  color: #475569;
+}
 .xmind-casegen-coverage-case-relation.is-direct {
   background: rgba(219,234,254,0.96);
   color: #1d4ed8;
@@ -13624,6 +13656,26 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-casegen-coverage-case.is-active {
   border-color: rgba(56,189,248,0.52);
   background: rgba(8,47,73,0.58);
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-priority.is-p0 {
+  border-color: rgba(248,113,113,0.36);
+  background: rgba(127,29,29,0.48);
+  color: #fecaca;
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-priority.is-p1 {
+  border-color: rgba(251,191,36,0.36);
+  background: rgba(113,63,18,0.46);
+  color: #fde68a;
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-priority.is-p2 {
+  border-color: rgba(96,165,250,0.34);
+  background: rgba(30,64,175,0.42);
+  color: #bfdbfe;
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-priority.is-unknown {
+  border-color: rgba(148,163,184,0.28);
+  background: rgba(51,65,85,0.58);
+  color: #cbd5e1;
 }
 :root[data-theme="dark"] .xmind-casegen-coverage-case-relation.is-direct {
   background: rgba(30,64,175,0.46);

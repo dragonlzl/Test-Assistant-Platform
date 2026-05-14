@@ -63,6 +63,7 @@
 - 更新记录：2026-05-14 增强 XMind 需求覆盖状态色区分：顶部覆盖统计、正文状态图例和需求原文片段统一使用更明显的已覆盖绿、部分覆盖黄、未覆盖红、上下文灰；暗色主题同步使用高对比色，hover/选中只补充描边，避免盖掉片段自身状态色。
 - 更新记录：2026-05-14 优化 XMind 需求覆盖点击定位语义：点击需求原文片段时只选中当前片段并保持被点击内容停留在当前位置，不再推进到同类下一条；只有点击顶部统计或正文图例的分类按钮时，才按该分类循环定位下一处片段。
 - 更新记录：2026-05-14 优化 XMind 需求覆盖右侧用例反查体验：右侧顶部片段展示区改为可滚动片段列表；点击某条用例后，列表展示该用例直接/关联到的所有需求片段并自动选中当前相关片段，点击列表中的任一片段可定位到左侧原文对应位置，同时保持该用例的反向高亮。
+- 更新记录：2026-05-14 在 XMind 需求覆盖右侧对应用例列表中展示用例优先级：每条用例在模块、用例名、直接/关联标记之外增加优先级标签，P0/P1/P2 和缺失优先级使用不同 chip 样式区分，便于评估覆盖缺口时同步判断用例重要程度。
 - 测试与验证（本次体验优化）：
   - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
   - `node --check scripts/modules/xmindCasegen.js scripts/modules/upload.js scripts/modules/app.js scripts/core/xmindRequirementCoverageCore.js tests/ui/xmind_casegen_flow.spec.js`（通过）
@@ -74,6 +75,7 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例" --reporter=line --workers=1`（通过，1/1；覆盖状态统计、正文图例和正文片段状态色区分断言）
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例" --reporter=line --workers=1`（通过，1/1；原文片段点击不循环、分类按钮循环定位、点击后锚点保持断言）
   - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例" --reporter=line --workers=1`（通过，1/1；右侧用例对应多片段时顶部滚动片段列表、片段点击定位和用例反向高亮断言）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例" --reporter=line --workers=1`（通过，1/1；右侧对应用例优先级展示断言）
   - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1）
   - `curl -I http://127.0.0.1:19002/ai-workflow.html`（通过，临时静态页返回 200）
   - Codex 内置浏览器尝试打开本地静态页（未完成：Chrome DevTools MCP 当前已有同 profile 浏览器进程占用，无法新建页面）

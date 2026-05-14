@@ -6766,6 +6766,18 @@
       return 'direct';
     }
 
+    function getCoverageCasePriorityMeta(item) {
+      var raw = item && typeof item === 'object'
+        ? String(item.priority || item.level || item['优先级'] || '').trim()
+        : '';
+      var label = raw ? raw.toUpperCase() : '未定';
+      var key = label === 'P0' || label === 'P1' || label === 'P2' ? label.toLowerCase() : 'unknown';
+      return {
+        label: label,
+        className: 'is-' + key,
+      };
+    }
+
     function getCoverageCurrentRequestInfo() {
       try {
         return {
@@ -7220,10 +7232,12 @@
         var active = coverageHighlightedCaseId && String(coverageHighlightedCaseId || '') === String(id || '');
         var relation = getCoverageCaseRelation(selected, id);
         var relationLabel = relation === 'related' ? '关联' : '直接';
+        var priority = getCoverageCasePriorityMeta(item);
         return '<button type="button" class="xmind-casegen-coverage-case ' + (active ? 'is-active ' : '') + (relation === 'related' ? 'is-related' : 'is-direct') + '" data-coverage-case="' + escapeHtml(id) + '">'
           + '<span class="xmind-casegen-coverage-case-module">' + escapeHtml(item.module || '未命名模块') + '</span>'
           + '<span class="xmind-casegen-coverage-case-title-wrap">'
           +   '<span class="xmind-casegen-coverage-case-title">' + escapeHtml(item.title || '未命名用例') + '</span>'
+          +   '<span class="xmind-casegen-coverage-case-priority ' + escapeHtml(priority.className) + '">' + escapeHtml(priority.label) + '</span>'
           +   '<span class="xmind-casegen-coverage-case-relation ' + (relation === 'related' ? 'is-related' : 'is-direct') + '">' + escapeHtml(relationLabel) + '</span>'
           + '</span>'
         + '</button>';
