@@ -84,8 +84,13 @@
     function setDocxRequirementImages(segments) {
       var media = ensureRequirementMediaState();
       var images = [];
+      var textOffset = 0;
       if (Array.isArray(segments)) {
         segments.forEach(function(seg) {
+          if (seg && seg.kind === 'text') {
+            textOffset += String(seg.text || '').length;
+            return;
+          }
           if (!seg || seg.kind !== 'image') return;
           var blob = seg.blob || seg.file || null;
           if (!blob) return;
@@ -94,6 +99,7 @@
             blob: blob,
             rid: seg.rid || '',
             mediaPath: seg.mediaPath || '',
+            textOffset: textOffset,
           });
         });
       }

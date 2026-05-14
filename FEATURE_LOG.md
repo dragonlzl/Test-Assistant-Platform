@@ -19,6 +19,66 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 需求覆盖可视化
+- 功能描述：在 `XMind 用例生成` 工具栏新增 `需求覆盖` 能力，针对当前页签的需求原文本身与当前可见用例建立覆盖映射。系统先在本地保持原文顺序切分稳定片段，再通过当前 XMind 用例生成模型只返回片段 ID 与用例 ID 的关系，前端校验后以可视化分栏展示覆盖、部分覆盖、未覆盖和上下文状态。
+- 操作方式：
+  - 进入 `用例生成 -> XMind 用例生成`，当前页签已有需求原文和可见用例且没有生成/去重/覆盖任务运行时，点击工具栏 `需求覆盖`；
+  - 首次点击会发起覆盖分析；分析完成后，弹窗左侧按原文顺序展示需求片段覆盖状态，右侧展示当前选中片段对应的 `模块 + 用例名`；
+  - 点击左侧片段可切换右侧用例列表，点击右侧用例可反向高亮其覆盖的原文片段；
+  - 若需求原文或当前可见用例发生变化，再次打开会提示旧结果已过期，并提供 `重新分析`。
+- 使用效果：
+  - 用户可以直接从需求原文视角看到哪些描述已经被用例覆盖、哪些只被部分覆盖、哪些没有直接覆盖；
+  - 未覆盖片段使用浅红提示，部分覆盖使用浅黄，已覆盖使用低干扰绿色，上下文/非测试需求使用灰色；
+  - 默认优先选中第一个未覆盖片段，方便快速定位缺口；
+  - 未直接覆盖且与需求原文没有明确关联的经验扩展用例保留为未映射集合，不参与需求本身覆盖率；
+  - 覆盖结果按 `需求原文 + 当前可见用例` 签名缓存到当前 workspace，页签之间互不共享；
+  - 本次未新增后端接口，未修改数据库结构。
+- 新增内容/接口/组件：
+  - 新增纯前端覆盖核心，负责需求原文分段、可见用例 ID 归一化、覆盖请求契约、模型 JSON 响应校验、覆盖统计和缓存签名；
+  - XMind 托管任务新增 `coverage` scope 与 `xmind-requirement-coverage` action，复用现有模型配置、模型代理、超时/取消、刷新恢复和任务事件机制；
+  - workspace 状态新增 `coverage` 片段，保存运行态、错误、覆盖结果、签名、选中片段和更新时间；
+  - XMind 工具栏新增 `需求覆盖` 按钮，接入按钮启用条件、任务阻塞、覆盖弹窗和重新分析流程；
+  - 覆盖弹窗复用现有 XMind 大弹窗容器，新增左右分栏、片段状态色、右侧用例列表、反向高亮、缓存过期和暗色主题样式；
+  - 新增 UI 自动化断言覆盖首次分析、覆盖契约、片段/用例联动、反向高亮、签名缓存和用例变化后的重新分析提示。
+- 复用说明：复用现有 XMind workspace 快照、当前可见模块/用例上下文、模型指派与代理、托管任务、中断按钮、弹窗容器、状态持久化和接口守卫；新增覆盖核心是为了避免把分段、模型契约、响应校验和覆盖统计继续堆入 XMind 主编排模块。
+- 测试与验证：
+  - `node --check scripts/modules/xmindCasegen.js scripts/modules/app.js scripts/core/xmindRequirementCoverageCore.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `node` 直连加载 `xmindRequirementCoverageCore`，验证需求分段、用例 ID 生成、未知/重复 ID 归一化、上下文片段不计入用例映射和覆盖率统计（通过）
+  - `git diff --check`（通过）
+  - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1；确认本次未新增 XMind 后端端点）
+  - `npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例|需求覆盖结果按签名缓存，用例变化后提示重新分析" --reporter=line --workers=1`（未完成：默认 8090 webServer 等待 `index.html` 超时，未进入业务断言）
+  - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:19000 npx playwright test --config /private/tmp/tap-playwright-coverage.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例|需求覆盖结果按签名缓存，用例变化后提示重新分析" --reporter=line --workers=1`（未完成：临时静态服务可返回页面，但当前 macOS 沙箱启动 Chromium headless 时触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出，未进入业务断言；临时配置文件已删除）
+  - `curl -I http://127.0.0.1:19001/ai-workflow.html && curl -s http://127.0.0.1:19001/ai-workflow.html | rg "xmindCaseGenCoverageBtn|xmindRequirementCoverageCore"`（通过，页面返回 200，按钮和覆盖核心脚本存在）
+  - Codex 内置浏览器尝试打开本地静态页（未完成：Chrome DevTools MCP 当前已有同 profile 浏览器进程占用，无法新建页面）
+  - `python3 notify_feishu.py`（通过，飞书返回 HTTP 200 / success）
+- 更新记录：2026-05-12 新增 XMind 需求覆盖可视化能力，先覆盖“需求本身内容覆盖”场景，经验扩展用例只保留为未映射集合。
+- 更新记录：2026-05-12 优化 XMind 需求覆盖原文阅读体验：左侧需求原文由卡片式片段列表改为连续文档流展示，仅用低干扰状态底色和左侧色条表达覆盖状态；点击原文片段或右侧用例导致覆盖弹窗局部重绘时，保留左侧原文滚动位置，避免自动回到顶部。同步补充 UI 回归断言覆盖文档式容器和滚动位置保持。
+- 更新记录：2026-05-12 继续收敛 XMind 需求覆盖原文阅读样式：左侧覆盖片段改为行内正文批注形态，压缩正文行高和片段间距，不再用整块背景、阴影或左侧色条分割原文；未覆盖文案默认按普通正文展示，仅 hover/选中/右侧用例反查时显示轻量高亮，减少模块化拼接感。同步更新 UI 断言，覆盖行内展示与未覆盖文案无特殊底色。
+- 更新记录：2026-05-13 在 XMind 需求覆盖原文栏补充“正文状态图例”：将统计数字直接映射到正文表现，绿实线表示已覆盖、黄虚线表示部分覆盖、普通正文表示未覆盖、灰色正文表示上下文；每个正文片段同步写入状态标识，便于从正文阅读区理解“已覆盖/部分/未覆盖/上下文”分别对应哪些片段，同时保持未覆盖文案不做红底或块状强调。
+- 更新记录：2026-05-13 增加覆盖统计定位能力：顶部覆盖统计与正文图例中的状态数字均可点击，点击后自动选中并滚动到正文中对应状态的下一处片段；同一状态存在多处时，重复点击会按正文顺序循环定位，右侧同步切换对应用例列表，兼顾快速定位和多命中浏览体验。
+- 更新记录：2026-05-14 在 XMind 需求覆盖原文阅读流中补充需求图片展示：文档导入时记录图片在纯文本中的偏移位置，覆盖弹窗左侧按原文顺序插入图片；手填需求图片和旧数据中无位置的图片作为原文末尾附图展示。覆盖分析模型契约仍只发送文本片段与用例映射，不把图片纳入覆盖率统计；workspace 内存快照改为浅拷贝需求媒体，避免 Blob/File 在页签状态流转时丢失。
+- 更新记录：2026-05-14 扩展 XMind 需求覆盖分析语义：模型契约从仅直接映射调整为“直接覆盖 + 关联对应”，直接验证片段关键约束的用例返回 `caseIds`，与片段存在明确业务、流程、数据、状态、异常或系统联动关联的用例返回 `relatedCaseIds`；右侧用例列表合并展示并标记“直接/关联”，关联用例也支持反向高亮原文。只有关联用例的片段归为部分覆盖，纯经验扩展且与原文没有明确关系的用例仍保留在未映射集合。
+- 更新记录：2026-05-14 增强 XMind 需求覆盖运行态反馈：覆盖分析执行中，工具栏 `需求覆盖` 按钮切换为 `分析中` 并展示旋转图标；覆盖弹窗顶部运行提示和禁用的分析按钮同步展示旋转图标，便于用户明确识别覆盖分析正在执行。
+- 更新记录：2026-05-14 在 XMind 生成前置准备 step1 的 `导入需求文档` 状态中展示需求图片数量：导入后上传区文案从仅展示正文长度，扩展为 `正文 X 字，图片 N 张`，无图片时也显示 `图片 0 张`，帮助用户在生成前确认文档图片是否被识别。
+- 更新记录：2026-05-14 增强 XMind 需求覆盖状态色区分：顶部覆盖统计、正文状态图例和需求原文片段统一使用更明显的已覆盖绿、部分覆盖黄、未覆盖红、上下文灰；暗色主题同步使用高对比色，hover/选中只补充描边，避免盖掉片段自身状态色。
+- 更新记录：2026-05-14 优化 XMind 需求覆盖点击定位语义：点击需求原文片段时只选中当前片段并保持被点击内容停留在当前位置，不再推进到同类下一条；只有点击顶部统计或正文图例的分类按钮时，才按该分类循环定位下一处片段。
+- 更新记录：2026-05-14 优化 XMind 需求覆盖右侧用例反查体验：右侧顶部片段展示区改为可滚动片段列表；点击某条用例后，列表展示该用例直接/关联到的所有需求片段并自动选中当前相关片段，点击列表中的任一片段可定位到左侧原文对应位置，同时保持该用例的反向高亮。
+- 测试与验证（本次体验优化）：
+  - `node --check scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `node --check scripts/modules/xmindCasegen.js scripts/modules/upload.js scripts/modules/app.js scripts/core/xmindRequirementCoverageCore.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `node` 直连加载 `xmindRequirementCoverageCore`，验证仅有关联用例时片段归为部分覆盖、关联用例纳入对应用例且不进入未映射集合（通过）
+  - `git diff --check`（通过）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "前置准备 step1 的需求文档模式复用拖拽上传样式，并在导入后允许下一步|前置准备 step1 导入需求后展示需求图片数量" --reporter=line --workers=1`（通过，2/2）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例" --reporter=line --workers=1`（通过，1/1；覆盖运行中按钮、弹窗提示和分析按钮旋转图标断言）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖结果按签名缓存，用例变化后提示重新分析" --reporter=line --workers=1`（通过，1/1）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例" --reporter=line --workers=1`（通过，1/1；覆盖状态统计、正文图例和正文片段状态色区分断言）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例" --reporter=line --workers=1`（通过，1/1；原文片段点击不循环、分类按钮循环定位、点击后锚点保持断言）
+  - `npx playwright test --config tests/playwright.config.js tests/ui/xmind_casegen_flow.spec.js -g "需求覆盖按钮会调用模型并按原文片段展示对应用例" --reporter=line --workers=1`（通过，1/1；右侧用例对应多片段时顶部滚动片段列表、片段点击定位和用例反向高亮断言）
+  - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1）
+  - `curl -I http://127.0.0.1:19002/ai-workflow.html`（通过，临时静态页返回 200）
+  - Codex 内置浏览器尝试打开本地静态页（未完成：Chrome DevTools MCP 当前已有同 profile 浏览器进程占用，无法新建页面）
+  - `python3 notify_feishu.py`（通过，飞书返回 HTTP 200 / success）
+
 - 功能名称：XMind 用例生成工具栏搜索标识与定位修复
 - 功能描述：修复 `XMind 用例生成` 画布顶部工具栏搜索异常：输入关键字后命中节点没有稳定标识，点击 `上一个` / `下一个` 时画布会被 MindElixir 选中逻辑带偏，无法把当前命中节点定位到预期位置。
 - 操作方式：
@@ -167,12 +227,14 @@
   - 全量生成自动去重期间，根节点显示 `去重中`，工具栏按策略显示 `AI 用例去重中` 或 `AI 去重精简中`，左下角页签摘要显示 `去重中`；
   - 去重期间会禁用新的去重、保存入库、XMind 导出和 Markdown 导出，避免回写前用户修改同一份 AI 结果；
   - 去重成功后，画布用例数、工具栏统计、页签进度摘要和生成记录都以精简后的当前可见用例为准；
+  - 去重成功后，右上角模块/用例统计区会追加展示最近一次 AI 去重移除数量，格式为 `去重 N 条`，避免底部状态文案被截断时看不到去重结果；
   - 去重失败时保留原生成结果，状态提示和生成记录展示失败原因。
 - 新增内容/接口/组件：
   - 新增纯前端核心 `xmindCaseDedupeCore`，负责去重请求构建、保守精简提示词、输入模块归一化、模型 JSON 响应解析和回写前校验；
   - XMind 托管任务新增 `dedupe` scope 与 `xmind-ai-dedupe` action，沿用现有模型代理、任务中断、恢复上下文、workspace 隔离和后台任务机制；
   - workspace 状态新增 `dedupe` 片段，根流程 pipeline 新增 `deduping` 阶段和去重前后统计；
   - XMind 工具栏新增 `AI用例去重` 按钮，并接入去重中状态、操作阻塞、完成/失败历史；
+  - XMind 工具栏右上角模块/用例统计新增最近一次去重条数展示，复用已有去重成功结果，不新增后端接口或第二套状态；
   - step3 新增 `去重设置` 单开关，并在任务契约中新增 `dedupe_mode` / `simplify` 标识，自动去重和手动去重共用；
   - 新增 UI 自动化覆盖：step3 去重开关默认关闭与开启保存、全量生成后自动去重状态与请求内容、手动去重只发送 AI 用例且保留导入基线、默认仅去重不主动精简、去重失败保留原用例；
   - 本次未新增后端接口，未修改数据库结构。
@@ -195,6 +257,12 @@
   - `PLAYWRIGHT_BASE_URL=http://127.0.0.1:8099 npx playwright test --config /private/tmp/tap-playwright-8099.config.js tests/ui/xmind_casegen_flow.spec.js -g "工具栏 AI 用例去重默认仅去重|工具栏 AI 用例去重只发送当前可见 AI 用例" --reporter=line --workers=1`（未完成：临时静态服务可返回 200，但当前 macOS 沙箱启动 Chromium headless 时仍触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出，未进入业务断言）
   - `npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js -g "全量生成自动去重未删除任何用例时，仍会留下去重完成痕迹" --reporter=line --workers=1`（未完成：默认 8090 被本机其他服务占用并返回 404，Playwright webServer 等待超时）
   - `npx playwright test --config /private/tmp/tap-playwright-8097.config.js tests/ui/xmind_casegen_flow.spec.js -g "全量生成自动去重未删除任何用例时，仍会留下去重完成痕迹" --reporter=line --workers=1`（未完成：临时 8097 静态服务可返回 200，但当前 macOS 沙箱启动 Chromium headless 时仍触发 `MachPortRendezvous` 权限错误，浏览器在启动阶段 `SIGTRAP` 退出）
+  - `node --check scripts/core/xmindCaseDedupeCore.js scripts/modules/xmindCasegen.js tests/ui/xmind_casegen_flow.spec.js`（通过）
+  - `git diff --check`（通过）
+  - `APP_DB_FILE=apitest.db npm run test:api -- tests/api/xmind_casegen_no_new_endpoint.spec.js --reporter=line`（通过，1/1；确认未新增后端端点）
+  - `npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js -g "右上角模块用例统计会展示最近一次去重条数" --reporter=line --workers=1`（通过，1/1；覆盖右上角统计区展示 `去重 N 条`）
+  - `npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js -g "全量生成完成后会进入 AI 去重精简中" --reporter=line --workers=1`（未完成：旧用例前置未生效，根节点菜单只出现 `生成全量用例`，没有 `重新生成全量用例`，未进入去重流程和本次新增断言）
+  - `npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js -g "工具栏 AI 用例去重只发送当前可见 AI 用例" --reporter=line --workers=1`（未完成：旧用例前置只渲染导入基线用例，AI 预置用例未进入画布，未进入手动去重流程和本次新增断言）
 - 更新记录：
   - 2026-05-09 新增 XMind AI 用例去重精简能力：全量生成后自动去重、工具栏手动去重、去重中状态展示、失败保留原结果、需求上下文随请求提供，以及仅 AI 层回写的保守精简规则。
   - 2026-05-09 强化去重精简提示词：明确用例最终目标是保障项目产品质量、提升缺陷发现与回归验证价值；要求质量优先于数量压缩，不确定是否冗余时保留用例。
@@ -212,6 +280,7 @@
   - 2026-05-11 修复全量生成后仍未自动去重的问题：根流水线在每个模块用例提交成功时同步记录本轮生成的 AI 模块与完整用例快照，最终触发自动去重时优先使用该流水线快照；即使画布可见上下文恢复/同步时暂时读不到 AI 层，也不会误判为无可去重用例而直接写入普通生成记录。
   - 2026-05-11 修复全量生成自动 AI 去重在“未删减任何用例”时没有可见痕迹的问题：终态历史与状态摘要现在会明确展示去重已执行/未发现可去重用例，并把去重执行诊断写入生成记录，避免只在发生删减时才留下痕迹。
   - 2026-05-11 优化 XMind AI 去重提示词与契约：去重范围从“同模块优先”调整为“整份用例全局审查”，要求模型把所有输入模块下的用例作为完整用例集进行模块内与跨模块两两比对；只要具体测试目的和测试点基本一致，即使归属模块、标题或表达方式不同，也应判为重复候选。契约同步新增 `dedupe_scope=all_input_modules_global`、`cross_module_dedupe=true`、`require_global_case_scan=true`，并关闭 `prefer_same_module_dedupe`。
+  - 2026-05-14 优化 XMind AI 去重结果可见性：右上角模块/用例统计区在最近一次 AI 去重成功后追加 `去重 N 条`，使用既有 `dedupe.lastResult.removedCount` 派生展示；没有成功去重结果时保持原模块/用例统计不变。
 
 - 功能名称：XMind AI Markdown 导出
 - 功能描述：在 `XMind 用例生成` 抽屉新增 `导出为Markdown` 按钮，把当前活动 workspace 的可见 XMind 模块与用例导出为面向 AI 审核的 Markdown。当前导出已升级为 AI 强结构版：顶部提供结构化导出元数据与 AI 审核骨架，模块视图与全局索引保留稳定摘要表，模块详情改为每个模块一段结构化 JSON 记录，明确 `module_id / case_id / depends_on_modules / suggested_check_targets / preconditions / steps / expected / source_scope` 等字段，便于 Codex / GPT-5.4 直接解析并映射到项目实现核对任务。

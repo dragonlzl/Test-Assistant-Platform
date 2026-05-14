@@ -387,6 +387,77 @@ async function installXmindModelStub(page, delayMs) {
       return result;
     }
 
+    function buildCoverageResponse(userText) {
+      var segments = parseJsonText(extractSection(userText, '【需求片段(JSON)】'));
+      var cases = parseJsonText(extractSection(userText, '【当前可见用例(JSON)】'));
+      var segmentList = Array.isArray(segments) ? segments : [];
+      var caseList = Array.isArray(cases) ? cases : [];
+      var referenced = {};
+
+      function findCaseId(keyword) {
+        var found = '';
+        caseList.some(function(item) {
+          var title = String(item && item.title ? item.title : '');
+          if (title.indexOf(keyword) === -1) return false;
+          found = String(item.caseId || item.id || '');
+          return true;
+        });
+        if (!found && caseList[0]) found = String(caseList[0].caseId || caseList[0].id || '');
+        return found;
+      }
+
+      var responseSegments = segmentList.map(function(segment) {
+        var text = String(segment && segment.text ? segment.text : '');
+        var caseId = '';
+        var status = 'uncovered';
+        var reason = '暂无直接用例';
+        if (text.indexOf('背景') !== -1 || text.indexOf('上下文') !== -1) {
+          status = 'context';
+          reason = '上下文说明';
+        } else if (text.indexOf('成功') !== -1) {
+          caseId = findCaseId('成功');
+          status = caseId ? 'covered' : 'uncovered';
+          reason = caseId ? '成功路径已覆盖' : reason;
+        } else if (text.indexOf('失败') !== -1 || text.indexOf('错误') !== -1) {
+          caseId = findCaseId('失败');
+          status = caseId ? 'covered' : 'partial';
+          reason = caseId ? '失败提示已覆盖' : '缺少完整失败校验';
+        } else if (text.indexOf('退出登录') !== -1) {
+          var relatedCaseId = findCaseId('会话');
+          status = relatedCaseId ? 'partial' : 'uncovered';
+          reason = relatedCaseId ? '存在关联会话校验' : reason;
+          if (relatedCaseId) referenced[relatedCaseId] = true;
+          return {
+            segmentId: String(segment && segment.id ? segment.id : ''),
+            status: status,
+            caseIds: [],
+            relatedCaseIds: relatedCaseId ? [relatedCaseId] : [],
+            reason: reason,
+          };
+        }
+        if (caseId) referenced[caseId] = true;
+        return {
+          segmentId: String(segment && segment.id ? segment.id : ''),
+          status: status,
+          caseIds: caseId ? [caseId] : [],
+          relatedCaseIds: [],
+          reason: reason,
+        };
+      });
+      var unmapped = caseList.map(function(item) {
+        return String(item && (item.caseId || item.id) ? (item.caseId || item.id) : '');
+      }).filter(function(id) {
+        return id && !referenced[id];
+      });
+      return {
+        segments: responseSegments,
+        unmapped_case_ids: unmapped,
+        summary: {
+          note: 'mock coverage response',
+        },
+      };
+    }
+
     client.proxyModelRequest = function(payload, signal) {
       var modelPayload = payload && payload.payload ? payload.payload : {};
       var messages = Array.isArray(modelPayload.messages) ? modelPayload.messages : [];
@@ -404,6 +475,8 @@ async function installXmindModelStub(page, delayMs) {
 
       if (mode === 'ai_dedupe_simplify') {
         responseModules = buildDedupeResponseModules(userText, contract);
+      } else if (mode === 'requirement_coverage') {
+        responseModules = [];
       } else if (mode === 'full_modules' || mode === 'regenerate_modules') {
         responseModules = [
           makeModule('登录模块'),
@@ -505,6 +578,8 @@ async function installXmindModelStub(page, delayMs) {
             reason: removedCases.length ? '删除明显重复和高度重叠用例' : '未发现明显重复用例',
           },
         });
+      } else if (mode === 'requirement_coverage') {
+        content = JSON.stringify(buildCoverageResponse(userText));
       }
       var responseDelay = Number(delay) || 120;
       if (mode === 'ai_dedupe_simplify' && window.__xmindCasegenDedupeDelayMs !== undefined) {
@@ -1112,12 +1187,15 @@ async function seedDocumentRequirement(page, options) {
       var docxImages = [];
       var imageCount = Number(payload.imageCount || 0);
       if (imageCount > 0 && payload.imageBytes && Array.isArray(payload.imageBytes)) {
+        var imageTextOffsets = Array.isArray(payload.imageTextOffsets) ? payload.imageTextOffsets : [];
         for (var i = 0; i < imageCount; i += 1) {
           var bytes = new Uint8Array(payload.imageBytes);
           var file = new File([bytes], 'xmind-requirement-image-' + (i + 1) + '.png', { type: 'image/png' });
+          var textOffset = Number(imageTextOffsets[i]);
           docxImages.push({
             index: i + 1,
             blob: file,
+            textOffset: Number.isFinite(textOffset) && textOffset >= 0 ? textOffset : null,
           });
         }
       }
@@ -1133,6 +1211,7 @@ async function seedDocumentRequirement(page, options) {
     requirementLabel: requirementLabel,
     imageCount: Number(input.imageCount || 0),
     imageBytes: Array.from(input.imageBytes || []),
+    imageTextOffsets: Array.isArray(input.imageTextOffsets) ? input.imageTextOffsets : [],
   });
 }
 
@@ -1254,6 +1333,26 @@ async function syncActiveWorkspaceSnapshotFromLiveState(page, options) {
       return value && typeof value === 'object' ? value : {};
     }
 
+    function cloneRequirementMedia(value) {
+      var source = value && typeof value === 'object' ? value : {};
+      function cloneMediaList(list) {
+        return (Array.isArray(list) ? list : []).map(function(item) {
+          if (!item || typeof item !== 'object') return null;
+          var cloned = {};
+          Object.keys(item).forEach(function(key) {
+            cloned[key] = item[key];
+          });
+          return cloned;
+        }).filter(Boolean);
+      }
+      return {
+        docxImages: cloneMediaList(source.docxImages),
+        pastedImages: cloneMediaList(source.pastedImages),
+        lastDocxImageCount: Number(source.lastDocxImageCount || 0) || 0,
+        updatedAt: Number(source.updatedAt || 0) || Date.now(),
+      };
+    }
+
     var rawTextEl = document.getElementById('rawText');
     var caseTextEl = document.getElementById('caseText');
     var fileNameEl = document.getElementById('fileName');
@@ -1295,7 +1394,7 @@ async function syncActiveWorkspaceSnapshotFromLiveState(page, options) {
     record.snapshot.shared.caseGenTiming = clone(state.caseGenTiming, {});
     record.snapshot.shared.caseGenProgressNotice = clone(state.caseGenProgressNotice, {});
     record.snapshot.shared.caseGenSettings = clone(state.caseGenSettings, {});
-    record.snapshot.shared.requirementMedia = clone(state.requirementMedia, {});
+    record.snapshot.shared.requirementMedia = cloneRequirementMedia(state.requirementMedia);
 
     Object.keys(liveXmind).forEach(function(key) {
       record.snapshot.xmind[key] = clone(liveXmind[key], liveXmind[key]);
@@ -2336,11 +2435,15 @@ async function readXmindToolbarOverview(page) {
     var taskEl = document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-task-state]');
     var moduleEl = document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-count-modules] strong');
     var caseEl = document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-count-cases] strong');
+    var dedupeEl = document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-count-dedupe]');
+    var dedupeCountEl = dedupeEl ? dedupeEl.querySelector('strong') : null;
     return {
       state: taskEl ? String(taskEl.getAttribute('data-xmind-casegen-task-state') || '') : '',
       label: taskEl ? String(taskEl.textContent || '').replace(/\s+/g, ' ').trim() : '',
       modules: moduleEl ? Number(moduleEl.textContent || 0) : -1,
       cases: caseEl ? Number(caseEl.textContent || 0) : -1,
+      dedupeRemoved: dedupeCountEl ? Number(dedupeCountEl.textContent || 0) : null,
+      dedupeText: dedupeEl ? String(dedupeEl.textContent || '').replace(/\s+/g, ' ').trim() : '',
     };
   });
 }
@@ -5025,7 +5128,35 @@ test.describe('XMind 用例生成抽屉', () => {
     }, {}, { timeout: 20000 });
     await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('已导入');
     await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('xmind-step1-requirement.txt');
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('图片 0 张');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+  });
+
+  test('前置准备 step1 导入需求后展示需求图片数量', async ({ page }) => {
+    const token = 'token-xmind-prep-document-image-count';
+    const user = { id: 112, username: 'demo_user_112', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求正文：导入文档后应在生成前置准备中展示图片数量。',
+      requirementLabel: 'XMind图片数量需求',
+      imageCount: 2,
+      imageBytes: ONE_PIXEL_PNG,
+    });
+    await seedPrepState(page, {
+      step: 1,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: false,
+    });
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('已导入');
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('正文 26 字');
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('图片 2 张');
   });
 
   test('前置准备 step1 的手填需求模式会实时更新下一步按钮状态', async ({ page }) => {
@@ -6755,6 +6886,7 @@ test.describe('XMind 用例生成抽屉', () => {
         overviewVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer [data-xmind-casegen-inline-overview]')),
         historyVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenHistoryBtn')),
         dedupeVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDedupeBtn')),
+        coverageVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenCoverageBtn')),
         storeVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenStoreBtn')),
         deleteUndoVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDeleteUndoBtn')),
         deleteRedoVisible: Boolean(document.querySelector('#xmindCaseGenMindContainer #xmindCaseGenDeleteRedoBtn')),
@@ -6766,6 +6898,7 @@ test.describe('XMind 用例生成抽屉', () => {
       overviewVisible: true,
       historyVisible: true,
       dedupeVisible: true,
+      coverageVisible: true,
       storeVisible: true,
       deleteUndoVisible: true,
       deleteRedoVisible: true,
@@ -6806,6 +6939,587 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(previousCard).toContainText('登录模块');
     await expect(previousCard).toContainText('支付模块');
     await expect(previousCard).toContainText('0 条用例');
+  });
+
+  test('需求覆盖按钮会调用模型并按原文片段展示对应用例', async ({ page }) => {
+    const token = 'token-xmind-requirement-coverage';
+    const user = { id: 227, username: 'demo_user_requirement_coverage', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 1500);
+    const coverageRequirementLines = [
+        '1. 用户登录成功后进入首页',
+        '2. 用户登录失败时展示错误提示',
+        '3. 用户可以退出登录',
+        '4. 用户登录成功后首页展示欢迎语',
+      ].concat(Array.from({ length: 24 }, function(_, index) {
+        return String(index + 5) + '. 补充检查项 ' + String(index + 1) + ' 需要在需求覆盖视图中保持原文阅读连续性';
+      }));
+    await seedDocumentRequirement(page, {
+      text: coverageRequirementLines.join('\n'),
+      requirementLabel: 'XMind需求覆盖需求',
+      imageCount: 1,
+      imageBytes: ONE_PIXEL_PNG,
+      imageTextOffsets: [coverageRequirementLines[0].length + 1],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await openXmindCaseGenDrawer(page);
+    await seedAiSkeleton(page, [{
+      id: 'xmind-coverage-login',
+      title: '登录模块',
+      scenarios: ['登录主流程'],
+      points: ['成功和失败提示'],
+      coupled: [],
+    }]);
+    await seedAiCases(page, {
+      'xmind-coverage-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入正确账号密码'],
+        expected: '进入首页',
+      }, {
+        module: '登录模块',
+        title: '登录失败提示',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入错误密码'],
+        expected: '展示错误提示',
+      }, {
+        module: '登录模块',
+        title: '登录会话清理关联检查',
+        priority: 'P2',
+        preconditions: '账号已登录',
+        steps: ['1、刷新会话状态', '2、检查登录态清理结果'],
+        expected: '会话状态正确收敛',
+      }],
+    });
+
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind需求覆盖需求',
+      requirementLabel: 'XMind需求覆盖需求',
+      requirementLabelSource: 'ui-test',
+      lastRawImportName: 'xmind-requirement.docx',
+      rawText: coverageRequirementLines.join('\n'),
+      prep: {
+        step: 3,
+        requirementMode: 'document',
+        caseImportMode: 'skip',
+        completed: true,
+      },
+    });
+    await expect(page.locator('#xmindCaseGenCoverageBtn')).toBeEnabled();
+    await clickElementById(page, 'xmindCaseGenCoverageBtn');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await expect(page.locator('#xmindCaseGenSummaryDialogTitle')).toHaveText('需求覆盖');
+    await expect(page.locator('#xmindCaseGenSummaryDialog')).toHaveClass(/xmind-casegen-coverage-dialog/);
+    await expect(page.locator('#xmindCaseGenCoverageBtn')).toHaveClass(/is-running/);
+    await expect(page.locator('#xmindCaseGenCoverageBtn')).toContainText('分析中');
+    await expect(page.locator('#xmindCaseGenCoverageBtn .xmind-casegen-coverage-spinner')).toHaveCount(1);
+    await expect(page.locator('.xmind-casegen-coverage-notice.is-running .xmind-casegen-coverage-spinner')).toHaveCount(1);
+    await expect(page.locator('.xmind-casegen-coverage-reanalyze.is-running .xmind-casegen-coverage-spinner')).toHaveCount(1);
+    const coverageSpinnerStyle = await page.evaluate(() => {
+      var spinner = document.querySelector('.xmind-casegen-coverage-notice.is-running .xmind-casegen-coverage-spinner');
+      var style = spinner && typeof getComputedStyle === 'function' ? getComputedStyle(spinner) : null;
+      return {
+        transformableDisplay: style ? String(style.display || '') !== 'inline' : false,
+        boxSizing: style ? String(style.boxSizing || '') : '',
+        animationName: style ? String(style.animationName || '') : '',
+        width: style ? String(style.width || '') : '',
+        height: style ? String(style.height || '') : '',
+      };
+    });
+    expect(coverageSpinnerStyle).toEqual({
+      transformableDisplay: true,
+      boxSizing: 'border-box',
+      animationName: 'xmindCasegenToolbarSpin',
+      width: '14px',
+      height: '14px',
+    });
+    await expect(page.locator('.xmind-casegen-coverage-segment')).toHaveCount(coverageRequirementLines.length);
+    await expect(page.locator('.xmind-casegen-coverage-segment-list')).toHaveClass(/xmind-casegen-coverage-document/);
+    await expect(page.locator('.xmind-casegen-coverage-image')).toHaveCount(1);
+    await expect(page.locator('.xmind-casegen-coverage-image figcaption')).toHaveText('需求图片 1');
+    await expect(page.locator('.xmind-casegen-coverage-image img')).toHaveAttribute('src', /^blob:/);
+    const mediaOrder = await page.evaluate(() => {
+      var article = document.querySelector('.xmind-casegen-coverage-segment-list');
+      if (!article) return [];
+      return Array.prototype.slice.call(article.children || []).map(function(node) {
+        if (node && node.matches && node.matches('.xmind-casegen-coverage-image')) return 'image';
+        if (node && node.getAttribute) return String(node.getAttribute('data-coverage-segment') || '');
+        return String(node && node.tagName || '');
+      });
+    });
+    expect(mediaOrder.slice(0, 3)).toEqual(['REQ-001', 'image', 'REQ-002']);
+    await expect(page.locator('.xmind-casegen-coverage-source-legend')).toContainText('已覆盖 3');
+    await expect(page.locator('.xmind-casegen-coverage-source-legend')).toContainText('部分覆盖 1');
+    await expect(page.locator('.xmind-casegen-coverage-source-legend')).toContainText('未覆盖 24');
+    await expect(page.locator('.xmind-casegen-coverage-source-legend')).toContainText('上下文 0');
+    await expect(page.locator('.xmind-casegen-coverage-segment.is-partial').filter({ hasText: '退出登录' })).toHaveCount(1);
+    const coverageStatusStyles = await page.evaluate(() => {
+      function readStyle(selector) {
+        var node = document.querySelector(selector);
+        var style = node && typeof getComputedStyle === 'function' ? getComputedStyle(node) : null;
+        return style ? {
+          backgroundColor: String(style.backgroundColor || ''),
+          borderColor: String(style.borderColor || ''),
+          color: String(style.color || ''),
+          textDecorationLine: String(style.textDecorationLine || ''),
+          textDecorationStyle: String(style.textDecorationStyle || ''),
+        } : null;
+      }
+      function findSegment(text) {
+        return Array.prototype.slice.call(document.querySelectorAll('.xmind-casegen-coverage-segment')).filter(function(item) {
+          return String(item.textContent || '').indexOf(text) !== -1;
+        })[0] || null;
+      }
+      function readSegment(text) {
+        var node = findSegment(text);
+        var style = node && typeof getComputedStyle === 'function' ? getComputedStyle(node) : null;
+        return style ? {
+          display: String(style.display || ''),
+          backgroundColor: String(style.backgroundColor || ''),
+          color: String(style.color || ''),
+          textDecorationLine: String(style.textDecorationLine || ''),
+          textDecorationStyle: String(style.textDecorationStyle || ''),
+          status: String(node.getAttribute('data-coverage-status') || ''),
+        } : null;
+      }
+      var uncovered = findSegment('补充检查项 20');
+      return {
+        summary: {
+          covered: readStyle('.xmind-casegen-coverage-summary-jump.is-covered'),
+          partial: readStyle('.xmind-casegen-coverage-summary-jump.is-partial'),
+          uncovered: readStyle('.xmind-casegen-coverage-summary-jump.is-uncovered'),
+          context: readStyle('.xmind-casegen-coverage-summary-jump.is-context'),
+        },
+        legend: {
+          covered: readStyle('.xmind-casegen-coverage-source-legend-item.is-covered'),
+          partial: readStyle('.xmind-casegen-coverage-source-legend-item.is-partial'),
+          uncovered: readStyle('.xmind-casegen-coverage-source-legend-item.is-uncovered'),
+          context: readStyle('.xmind-casegen-coverage-source-legend-item.is-context'),
+        },
+        segment: {
+          covered: readSegment('登录成功'),
+          partial: readSegment('退出登录'),
+          uncovered: readSegment('补充检查项 20'),
+        },
+        uncoveredSelectedText: uncovered ? String(uncovered.textContent || '') : '',
+      };
+    });
+    expect(coverageStatusStyles.summary.covered).toBeTruthy();
+    expect(coverageStatusStyles.summary.partial).toBeTruthy();
+    expect(coverageStatusStyles.summary.uncovered).toBeTruthy();
+    expect(coverageStatusStyles.summary.context).toBeTruthy();
+    expect(new Set([
+      coverageStatusStyles.summary.covered.backgroundColor,
+      coverageStatusStyles.summary.partial.backgroundColor,
+      coverageStatusStyles.summary.uncovered.backgroundColor,
+      coverageStatusStyles.summary.context.backgroundColor,
+    ]).size).toBe(4);
+    expect(new Set([
+      coverageStatusStyles.legend.covered.backgroundColor,
+      coverageStatusStyles.legend.partial.backgroundColor,
+      coverageStatusStyles.legend.uncovered.backgroundColor,
+      coverageStatusStyles.legend.context.backgroundColor,
+    ]).size).toBe(4);
+    expect(coverageStatusStyles.segment.covered.display).toBe('inline');
+    expect(coverageStatusStyles.segment.covered.status).toBe('covered');
+    expect(coverageStatusStyles.segment.partial.status).toBe('partial');
+    expect(coverageStatusStyles.segment.uncovered.status).toBe('uncovered');
+    expect(coverageStatusStyles.segment.covered.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(coverageStatusStyles.segment.partial.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(coverageStatusStyles.segment.uncovered.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(new Set([
+      coverageStatusStyles.segment.covered.backgroundColor,
+      coverageStatusStyles.segment.partial.backgroundColor,
+      coverageStatusStyles.segment.uncovered.backgroundColor,
+    ]).size).toBe(3);
+    expect(coverageStatusStyles.segment.covered.textDecorationLine).toContain('underline');
+    expect(coverageStatusStyles.segment.partial.textDecorationLine).toContain('underline');
+    expect(coverageStatusStyles.segment.partial.textDecorationStyle).toBe('dashed');
+    expect(coverageStatusStyles.segment.uncovered.textDecorationLine).toContain('underline');
+    expect(coverageStatusStyles.uncoveredSelectedText).toContain('补充检查项 20');
+    const documentTextStyle = await page.evaluate(() => {
+      var target = Array.prototype.slice.call(document.querySelectorAll('.xmind-casegen-coverage-segment')).filter(function(item) {
+        return String(item.textContent || '').indexOf('补充检查项 20') !== -1;
+      })[0];
+      var covered = Array.prototype.slice.call(document.querySelectorAll('.xmind-casegen-coverage-segment')).filter(function(item) {
+        return String(item.textContent || '').indexOf('登录成功') !== -1;
+      })[0];
+      if (!target || typeof getComputedStyle !== 'function') return null;
+      var style = getComputedStyle(target);
+      var coveredStyle = covered ? getComputedStyle(covered) : null;
+      return {
+        display: style.display,
+        backgroundColor: style.backgroundColor,
+        textDecorationLine: style.textDecorationLine,
+        coveredStatus: covered ? String(covered.getAttribute('data-coverage-status') || '') : '',
+        coveredTextDecorationLine: coveredStyle ? String(coveredStyle.textDecorationLine || '') : '',
+      };
+    });
+    expect(documentTextStyle).toBeTruthy();
+    expect(documentTextStyle.display).toBe('inline');
+    expect(documentTextStyle.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(documentTextStyle.textDecorationLine).toContain('underline');
+    expect(documentTextStyle.coveredStatus).toBe('covered');
+    expect(documentTextStyle.coveredTextDecorationLine).toContain('underline');
+    await expect(page.locator('.xmind-casegen-coverage-selected-card')).toContainText('补充检查项 1');
+    await expect(page.locator('.xmind-casegen-coverage-cases')).toContainText('暂未找到直接或关联对应的用例');
+
+    await page.locator('[data-coverage-summary] [data-coverage-jump="covered"]').click();
+    await expect(page.locator('.xmind-casegen-coverage-selected-card')).toContainText('登录成功');
+    await page.locator('.xmind-casegen-coverage-segment.is-active').filter({ hasText: '登录成功' }).click();
+    await expect(page.locator('.xmind-casegen-coverage-selected-card')).toContainText('登录成功');
+    await page.locator('[data-coverage-summary] [data-coverage-jump="covered"]').click();
+    await expect(page.locator('.xmind-casegen-coverage-selected-card')).toContainText('登录失败');
+    await page.locator('[data-coverage-summary] [data-coverage-jump="partial"]').click();
+    await expect(page.locator('.xmind-casegen-coverage-selected-card')).toContainText('退出登录');
+    await expect(page.locator('.xmind-casegen-coverage-case-list')).toContainText('登录会话清理关联检查');
+    await expect(page.locator('.xmind-casegen-coverage-case.is-related')).toContainText('关联');
+    await page.locator('.xmind-casegen-coverage-case.is-related').click();
+    await expect(page.locator('.xmind-casegen-coverage-segment.is-case-highlighted')).toContainText('退出登录');
+    await page.locator('.xmind-casegen-coverage-source-legend [data-coverage-jump="uncovered"]').click();
+    await expect(page.locator('.xmind-casegen-coverage-selected-card')).toContainText('补充检查项 1');
+
+    await page.locator('.xmind-casegen-coverage-segment').filter({ hasText: '用户登录成功后进入首页' }).click();
+    await expect(page.locator('.xmind-casegen-coverage-case-list')).toContainText('登录模块');
+    await expect(page.locator('.xmind-casegen-coverage-case-list')).toContainText('登录成功校验');
+    await expect(page.locator('.xmind-casegen-coverage-case-list')).not.toContainText('登录失败提示');
+    await page.locator('.xmind-casegen-coverage-case').filter({ hasText: '登录成功校验' }).click();
+    await expect(page.locator('.xmind-casegen-coverage-selected-card')).toContainText('用例关联片段');
+    await expect(page.locator('.xmind-casegen-coverage-selected-item')).toHaveCount(2);
+    await expect(page.locator('.xmind-casegen-coverage-selected-item').filter({ hasText: '用户登录成功后进入首页' })).toHaveClass(/is-active/);
+    await expect(page.locator('.xmind-casegen-coverage-selected-item')).toContainText(['用户登录成功后进入首页', '用户登录成功后首页展示欢迎语']);
+    await page.locator('.xmind-casegen-coverage-selected-item').filter({ hasText: '用户登录成功后首页展示欢迎语' }).click();
+    await expect(page.locator('.xmind-casegen-coverage-segment.is-active')).toContainText('用户登录成功后首页展示欢迎语');
+    await expect(page.locator('.xmind-casegen-coverage-case.is-active')).toContainText('登录成功校验');
+    await expect(page.locator('.xmind-casegen-coverage-segment.is-case-highlighted')).toHaveCount(2);
+    await expect(page.locator('.xmind-casegen-coverage-segment.is-case-highlighted')).toContainText([
+      '用户登录成功后进入首页',
+      '用户登录成功后首页展示欢迎语',
+    ]);
+
+    const scrollState = await page.evaluate(() => {
+      var scroller = document.querySelector('[data-coverage-source-scroll]');
+      var target = Array.prototype.slice.call(document.querySelectorAll('.xmind-casegen-coverage-segment')).filter(function(item) {
+        return String(item.textContent || '').indexOf('补充检查项 20') !== -1;
+      })[0];
+      if (!scroller || !target) return { before: 0, after: 0 };
+      target.scrollIntoView({ block: 'center' });
+      var before = Number(scroller.scrollTop || 0);
+      var beforeScrollerRect = scroller.getBoundingClientRect();
+      var beforeTargetRect = target.getBoundingClientRect();
+      var beforeOffsetTop = beforeTargetRect.top - beforeScrollerRect.top;
+      target.click();
+      var nextScroller = document.querySelector('[data-coverage-source-scroll]');
+      var nextTarget = Array.prototype.slice.call(document.querySelectorAll('.xmind-casegen-coverage-segment')).filter(function(item) {
+        return String(item.textContent || '').indexOf('补充检查项 20') !== -1;
+      })[0];
+      var scrollerRect = nextScroller && nextScroller.getBoundingClientRect ? nextScroller.getBoundingClientRect() : null;
+      var targetRect = nextTarget && nextTarget.getBoundingClientRect ? nextTarget.getBoundingClientRect() : null;
+      var selectedCard = document.querySelector('.xmind-casegen-coverage-selected-card');
+      return {
+        before: before,
+        after: nextScroller ? Number(nextScroller.scrollTop || 0) : 0,
+        offsetDelta: scrollerRect && targetRect ? Math.abs((targetRect.top - scrollerRect.top) - beforeOffsetTop) : 999,
+        targetVisible: Boolean(scrollerRect && targetRect && targetRect.top >= scrollerRect.top && targetRect.bottom <= scrollerRect.bottom),
+        selectedText: selectedCard ? String(selectedCard.textContent || '') : '',
+      };
+    });
+    expect(scrollState.before).toBeGreaterThan(0);
+    expect(scrollState.after).toBeGreaterThan(0);
+    expect(scrollState.offsetDelta).toBeLessThan(8);
+    expect(scrollState.targetVisible).toBe(true);
+    expect(scrollState.selectedText).toContain('补充检查项 20');
+
+    const requestInfo = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+      var latest = null;
+      for (var i = calls.length - 1; i >= 0; i -= 1) {
+        if (calls[i] && calls[i].contract && String(calls[i].contract.mode || '') === 'requirement_coverage') {
+          latest = calls[i];
+          break;
+        }
+      }
+      function parseJsonText(text) {
+        var raw = String(text || '').trim();
+        if (!raw) return null;
+        try {
+          return JSON.parse(raw);
+        } catch (err) {}
+        return null;
+      }
+      function extractSection(text, marker) {
+        var source = String(text || '');
+        var index = source.indexOf(marker);
+        if (index === -1) return '';
+        var rest = source.slice(index + marker.length);
+        var next = rest.indexOf('\n\n【');
+        if (next !== -1) rest = rest.slice(0, next);
+        return String(rest || '').trim();
+      }
+      return latest ? {
+        contract: latest.contract || {},
+        prompt: String(latest.prompt || ''),
+        user: String(latest.user || ''),
+        segments: parseJsonText(extractSection(latest.user, '【需求片段(JSON)】')) || [],
+        cases: parseJsonText(extractSection(latest.user, '【当前可见用例(JSON)】')) || [],
+      } : null;
+    });
+    expect(requestInfo).toBeTruthy();
+    expect(requestInfo.contract.mode).toBe('requirement_coverage');
+    expect(requestInfo.contract.direct_requirement_coverage_only).toBe(false);
+    expect(requestInfo.contract.include_related_requirement_cases).toBe(true);
+    expect(requestInfo.contract.relation_scope).toBe('direct_and_related_requirement_cases');
+    expect(requestInfo.prompt).toContain('直接覆盖和关联对应关系');
+    expect(requestInfo.prompt).toContain('relatedCaseIds');
+    expect(requestInfo.user).toContain('【需求原文完整文本】');
+    expect(requestInfo.segments).toHaveLength(coverageRequirementLines.length);
+    expect(requestInfo.cases).toHaveLength(3);
+    expect(requestInfo.cases[0].caseId).toBe('TC-001');
+  });
+
+  test('需求覆盖结果按签名缓存，用例变化后提示重新分析', async ({ page }) => {
+    const token = 'token-xmind-coverage-cache';
+    const user = { id: 228, username: 'demo_user_coverage_cache', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 70);
+    await seedDocumentRequirement(page, {
+      text: [
+        '1. 用户登录成功后进入首页',
+        '2. 用户登录失败时展示错误提示',
+      ].join('\n'),
+      requirementLabel: 'XMind覆盖缓存需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await openXmindCaseGenDrawer(page);
+    await seedAiSkeleton(page, [{
+      id: 'xmind-coverage-cache-login',
+      title: '登录模块',
+      scenarios: ['登录主流程'],
+      points: ['成功和失败提示'],
+      coupled: [],
+    }]);
+    await seedAiCases(page, {
+      'xmind-coverage-cache-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入正确账号密码'],
+        expected: '进入首页',
+      }, {
+        module: '登录模块',
+        title: '登录失败提示',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入错误密码'],
+        expected: '展示错误提示',
+      }],
+    });
+
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind覆盖缓存需求',
+      requirementLabel: 'XMind覆盖缓存需求',
+      requirementLabelSource: 'ui-test',
+      lastRawImportName: 'xmind-coverage-cache.docx',
+      rawText: [
+        '1. 用户登录成功后进入首页',
+        '2. 用户登录失败时展示错误提示',
+      ].join('\n'),
+      prep: {
+        step: 3,
+        requirementMode: 'document',
+        caseImportMode: 'skip',
+        completed: true,
+      },
+    });
+    await clickElementById(page, 'xmindCaseGenCoverageBtn');
+    await expect(page.locator('.xmind-casegen-coverage-summary')).toContainText('需求覆盖');
+    await expect.poll(async () => {
+      return page.evaluate(() => {
+        var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+        return calls.filter(function(item) {
+          return item && item.contract && String(item.contract.mode || '') === 'requirement_coverage';
+        }).length;
+      });
+    }).toBe(1);
+
+    await clickElementById(page, 'xmindCaseGenSummaryCloseBtn');
+    await clickElementById(page, 'xmindCaseGenCoverageBtn');
+    await expect(page.locator('.xmind-casegen-coverage-summary')).toContainText('需求覆盖');
+    expect(await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+      return calls.filter(function(item) {
+        return item && item.contract && String(item.contract.mode || '') === 'requirement_coverage';
+      }).length;
+    })).toBe(1);
+
+    await clickElementById(page, 'xmindCaseGenSummaryCloseBtn');
+    await seedAiCases(page, {
+      'xmind-coverage-cache-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入正确账号密码'],
+        expected: '进入首页',
+      }, {
+        module: '登录模块',
+        title: '登录失败提示',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入错误密码'],
+        expected: '展示错误提示',
+      }, {
+        module: '登录模块',
+        title: '登录安全扩展校验',
+        priority: 'P2',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、触发安全校验'],
+        expected: '安全校验正常',
+      }],
+    });
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind覆盖缓存需求',
+      requirementLabel: 'XMind覆盖缓存需求',
+      requirementLabelSource: 'ui-test',
+      lastRawImportName: 'xmind-coverage-cache.docx',
+      rawText: [
+        '1. 用户登录成功后进入首页',
+        '2. 用户登录失败时展示错误提示',
+      ].join('\n'),
+      prep: {
+        step: 3,
+        requirementMode: 'document',
+        caseImportMode: 'skip',
+        completed: true,
+      },
+    });
+    await clickElementById(page, 'xmindCaseGenCoverageBtn');
+    await expect(page.locator('.xmind-casegen-coverage-notice.is-stale')).toContainText('已变化');
+    await expect(page.locator('.xmind-casegen-coverage-reanalyze')).toHaveText('重新分析');
+    expect(await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+      return calls.filter(function(item) {
+        return item && item.contract && String(item.contract.mode || '') === 'requirement_coverage';
+      }).length;
+    })).toBe(1);
+
+    await page.locator('.xmind-casegen-coverage-reanalyze').click();
+    await expect.poll(async () => {
+      return page.evaluate(() => {
+        var calls = Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : [];
+        return calls.filter(function(item) {
+          return item && item.contract && String(item.contract.mode || '') === 'requirement_coverage';
+        }).length;
+      });
+    }).toBe(2);
+    await expect(page.locator('.xmind-casegen-coverage-notice.is-stale')).toHaveCount(0);
+  });
+
+  test('右上角模块用例统计会展示最近一次去重条数', async ({ page }) => {
+    const token = 'token-xmind-dedupe-overview';
+    const user = { id: 229, username: 'demo_user_dedupe_overview', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：右上角统计区需要同时展示模块数、用例数和最近一次去重条数。',
+      requirementLabel: 'XMind去重统计需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await openXmindCaseGenDrawer(page);
+    await seedAiSkeleton(page, [{
+      id: 'xmind-dedupe-overview-login',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: [],
+    }]);
+    await seedAiCases(page, {
+      'xmind-dedupe-overview-login': [{
+        module: '登录模块',
+        title: '登录成功校验',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入正确账号密码'],
+        expected: '登录成功',
+      }, {
+        module: '登录模块',
+        title: '登录失败提示',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入错误密码'],
+        expected: '展示错误提示',
+      }],
+    });
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind去重统计需求',
+      requirementLabel: 'XMind去重统计需求',
+      requirementLabelSource: 'ui-test',
+      lastRawImportName: 'xmind-dedupe-overview.docx',
+      rawText: '需求：右上角统计区需要同时展示模块数、用例数和最近一次去重条数。',
+      prep: {
+        step: 3,
+        requirementMode: 'document',
+        caseImportMode: 'skip',
+        completed: true,
+      },
+    });
+    await page.evaluate(() => {
+      var app = window.app || {};
+      var state = app.state || {};
+      state.xmindCaseGen = state.xmindCaseGen || {};
+      state.xmindCaseGen.dedupe = state.xmindCaseGen.dedupe || {};
+      state.xmindCaseGen.dedupe.lastResult = {
+        status: 'done',
+        dedupeMode: 'dedupe_simplify',
+        beforeCount: 5,
+        afterCount: 2,
+        removedCount: 3,
+        moduleCount: 1,
+        diagnostics: ['AI 用例去重精简完成，已去重精简 3 条用例'],
+        dedupeRecords: [],
+        updatedAt: Date.now(),
+      };
+      if (app.xmindCasegenApi && typeof app.xmindCasegenApi.render === 'function') {
+        app.xmindCasegenApi.render({ reason: 'ui-test-dedupe-overview', persist: false });
+      }
+    });
+
+    await expect.poll(async () => await readXmindToolbarOverview(page)).toMatchObject({
+      state: 'idle',
+      label: '当前没有生成任务',
+      modules: 1,
+      cases: 2,
+      dedupeRemoved: 3,
+    });
+    await expect(page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-count-dedupe]')).toHaveText(/去重\s*3\s*条/);
+    await expect(page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-count-dedupe]')).toHaveAttribute('title', /最近一次 AI 用例去重并精简移除 3 条用例/);
   });
 
   test('全量生成完成后会进入 AI 去重精简中，并按精简后的可见用例数刷新状态', async ({ page }) => {

@@ -3411,6 +3411,9 @@
     const xmindCaseDedupeCore = window.app && window.app.xmindCaseDedupeCore && typeof window.app.xmindCaseDedupeCore.init === 'function'
       ? window.app.xmindCaseDedupeCore.init({})
       : null;
+    const xmindRequirementCoverageCore = window.app && window.app.xmindRequirementCoverageCore && typeof window.app.xmindRequirementCoverageCore.init === 'function'
+      ? window.app.xmindRequirementCoverageCore.init({})
+      : null;
     const mindElixirCore = window.app && window.app.mindElixirCore && typeof window.app.mindElixirCore.init === 'function'
       ? window.app.mindElixirCore.init({
         xmindApi: xmindCore,
@@ -3435,6 +3438,9 @@
     }
     if (xmindCaseDedupeCore) {
       window.app.xmindCaseDedupeCoreApi = xmindCaseDedupeCore;
+    }
+    if (xmindRequirementCoverageCore) {
+      window.app.xmindRequirementCoverageCoreApi = xmindRequirementCoverageCore;
     }
     if (mindElixirCore) {
       window.app.mindElixirCoreApi = mindElixirCore;
