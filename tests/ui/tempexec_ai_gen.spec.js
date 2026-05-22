@@ -11,6 +11,79 @@ async function waitTempExecReady(page) {
   await page.waitForFunction(() => window.app && window.app.tempExecApi);
 }
 
+async function startTempExecAiGeneration(page, requirementText) {
+  const overlay = page.locator('#casePageAiGenPrepOverlay-temp-exec');
+  await page.click('#tempExecAiGenBtn');
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toContainText('生成前置准备');
+  const documentMode = overlay.locator('input[name="casePageRequirementMode-temp-exec"][value="document"]');
+  const manualMode = overlay.locator('input[name="casePageRequirementMode-temp-exec"][value="manual"]');
+  await expect(documentMode).toHaveCount(1);
+  await documentMode.check({ force: true });
+  await expect(overlay.locator('[data-case-page-prep-action="select-requirement"]')).toHaveCount(1);
+  await manualMode.check({ force: true });
+  await page.fill('#casePageAiGenRequirementText-temp-exec', requirementText);
+  await overlay.locator('[data-case-page-prep-nav="next"]').click();
+  await expect(overlay).toContainText('导入已有用例');
+  await expect(overlay).toContainText('已锁定');
+  await expect(overlay).toContainText('用例数');
+  await overlay.locator('[data-case-page-prep-nav="next"]').click();
+  await expect(overlay).toContainText('生成选项');
+  await overlay.locator('[data-case-page-prep-nav="confirm"]').click();
+  await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
+  await expect(page.locator('#tempExecAiGenDrawer .case-library-ai-gen-section').filter({ hasText: '需求导入' })).toBeHidden();
+}
+
+function isSemanticDedupeRequest(body) {
+  const requestBody = body && body.payload ? body.payload : body;
+  if (!requestBody || !requestBody.messages || !requestBody.messages[1]) return false;
+  const payload = JSON.parse(requestBody.messages[1].content);
+  return payload
+    && payload.operation_contract
+    && payload.operation_contract.editable_scope === 'generated_cases_only';
+}
+
+async function fulfillTempExecSemanticDedupe(route, body) {
+  const requestBody = body && body.payload ? body.payload : body;
+  const requestPayload = JSON.parse(requestBody.messages[1].content);
+  expect(requestPayload.operation_contract.original_cases_readonly).toBe(true);
+  expect(requestPayload.operation_contract.generated_cases_editable).toBe(true);
+  expect(requestPayload.original_cases_readonly.length).toBeGreaterThan(0);
+  const generated = requestPayload.generated_cases_editable || [];
+  const seen = new Set();
+  const payload = {
+    generated_modules: generated.map((mod) => {
+      const kept = [];
+      (mod.cases || []).forEach((item) => {
+        if (item.title === '登录成功') return;
+        const key = [item.module, item.title, item.precondition || item.preconditions || '', item.steps, item.expected].join('::');
+        if (seen.has(key)) return;
+        seen.add(key);
+        kept.push(item);
+      });
+      return {
+        module: mod.module,
+        coverage: mod.coverage,
+        missing: mod.missing,
+        cases: kept,
+      };
+    }).filter((mod) => mod.cases.length),
+    removed_cases: [{
+      type: 'duplicate_with_original',
+      module: '登录',
+      title: '登录成功',
+      reason: '与原用例重复',
+      duplicate_with: '登录成功',
+    }],
+    summary: { removed: 1, reason: '语义重复' },
+  };
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(payload) } }] }),
+  });
+}
+
 test.describe('执行页 AI 用例生成', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -117,12 +190,42 @@ test.describe('执行页 AI 用例生成', () => {
       assignments: { caseLibraryGenId: modelId },
     });
 
+    let semanticDedupeCalls = 0;
     await page.route('**/mock-temp-exec-ai-append', async (route) => {
+      const body = route.request().postDataJSON();
+      if (isSemanticDedupeRequest(body)) {
+        semanticDedupeCalls += 1;
+        const requestBody = body && body.payload ? body.payload : body;
+        const requestPayload = JSON.parse(requestBody.messages[1].content);
+        const generatedTitles = [];
+        (requestPayload.generated_cases_editable || []).forEach((mod) => {
+          (mod.cases || []).forEach((item) => generatedTitles.push(item.title));
+        });
+        expect(generatedTitles.filter((title) => title === '支付失败-余额不足')).toHaveLength(2);
+        expect(generatedTitles.filter((title) => title === '登录成功')).toHaveLength(1);
+        return fulfillTempExecSemanticDedupe(route, body);
+      }
+      const userPayload = JSON.parse(body.messages[1].content);
+      expect(userPayload.locked_imported_cases.mode).toBe('import');
+      expect(userPayload.locked_imported_cases.readonly).toBe(true);
+      expect(userPayload.locked_imported_cases.case_count).toBe(1);
+      expect(userPayload.dedupe_contract.original_cases_readonly).toBe(true);
+      expect(userPayload.dedupe_contract.generated_cases_editable).toBe(true);
+      expect(body.messages[0].content).toContain('AI_CASE_WRITING_STYLE_GUIDE.md');
+      expect(body.messages[0].content).toContain('去重保护规则');
       const payload = {
         missing_modules: [{
           module: '支付',
           coverage: 0,
           cases: [{
+            module: '支付',
+            title: '支付失败-余额不足',
+            priority: 'P1',
+            precondition: '',
+            steps: '余额不足时提交支付',
+            expected: '提示余额不足',
+            remark: '',
+          }, {
             module: '支付',
             title: '支付失败-余额不足',
             priority: 'P1',
@@ -142,6 +245,14 @@ test.describe('执行页 AI 用例生成', () => {
             precondition: '',
             steps: '输入错误密码',
             expected: '提示密码错误',
+            remark: '',
+          }, {
+            module: '登录',
+            title: '登录成功',
+            priority: 'P1',
+            precondition: '',
+            steps: '输入正确账号密码',
+            expected: '登录成功',
             remark: '',
           }],
         }],
@@ -169,12 +280,71 @@ test.describe('执行页 AI 用例生成', () => {
       return btn && !btn.disabled;
     });
 
-    await page.click('#tempExecAiGenBtn');
-    await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
-    await page.fill('#tempExecAiGenRequirementInput', '需求：支持登录与支付');
-    await page.click('#tempExecAiGenRunBtn');
+    await startTempExecAiGeneration(page, '需求：支持登录与支付');
     await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
     await expect(page.locator('#tempExecAiGenResult')).toBeVisible();
+    await expect(page.locator('#tempExecAiGenResultBody td').getByText('支付失败-余额不足', { exact: true })).toHaveCount(1);
+    await expect(page.locator('#tempExecAiGenResultBody td').getByText('登录成功', { exact: true })).toHaveCount(0);
+    expect(semanticDedupeCalls).toBe(1);
+
+    await page.click('#tempExecAiGenDrawer .drawer-header [data-drawer-close="tempExecAiGenDrawer"]');
+    await expect(page.locator('#tempExecAiGenDrawer')).not.toHaveClass(/open/);
+    await page.click('#tempExecAiGenBtn');
+    await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
+    expect(semanticDedupeCalls).toBe(1);
+
+    await page.reload();
+    await waitTempExecReady(page);
+    await page.evaluate((nextId) => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
+        window.app.tempExecApi.setTempExecActive(nextId);
+      }
+    }, fileId);
+    await page.waitForFunction(() => {
+      const card = document.getElementById('tempExecToolbarCard');
+      return card && !card.classList.contains('hidden');
+    });
+    await page.click('#tempExecAiGenBtn');
+    await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
+    await expect(page.locator('#tempExecAiGenResultBody td').getByText('支付失败-余额不足', { exact: true })).toHaveCount(1);
+    expect(semanticDedupeCalls).toBe(1);
+
+    await page.click('#tempExecAiGenDiscardBtn');
+    await expect(page.locator('#tempExecAiGenStatus')).toContainText('已清空本次 AI 生成结果');
+    await expect(page.locator('#tempExecAiGenResult')).toBeHidden();
+    await expect(page.locator('#tempExecAiGenDrawer')).not.toHaveClass(/open|closing/);
+    await expect(page.locator('.temp-center-toast')).toContainText('已清空本次 AI 生成结果');
+
+    await page.click('#tempExecAiGenBtn');
+    await expect(page.locator('#casePageAiGenPrepOverlay-temp-exec')).toBeVisible();
+    await page.click('#casePageAiGenPrepOverlay-temp-exec [data-case-page-prep-close]');
+    await expect(page.locator('#casePageAiGenPrepOverlay-temp-exec')).toHaveCount(0);
+
+    await startTempExecAiGeneration(page, '需求：支持登录与支付');
+    await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
+    await expect(page.locator('#tempExecAiGenResultBody td').getByText('支付失败-余额不足', { exact: true })).toHaveCount(1);
+    expect(semanticDedupeCalls).toBe(2);
+
+    await page.click('#tempExecAiGenRegenerateBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('丢弃当前这批 AI 生成结果');
+    await page.click('#appConfirmDrawerCancelBtn');
+    await expect(page.locator('#appConfirmDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#casePageAiGenPrepOverlay-temp-exec')).toHaveCount(0);
+    await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
+    await page.click('#tempExecAiGenRegenerateBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(page.locator('#casePageAiGenPrepOverlay-temp-exec')).toBeVisible();
+    await page.click('#casePageAiGenPrepOverlay-temp-exec [data-case-page-prep-close]');
+    await expect(page.locator('#casePageAiGenPrepOverlay-temp-exec')).toHaveCount(0);
+
+    await startTempExecAiGeneration(page, '需求：支持登录与支付');
+    await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
+    await expect(page.locator('#tempExecAiGenResultBody td').getByText('支付失败-余额不足', { exact: true })).toHaveCount(1);
+    expect(semanticDedupeCalls).toBe(3);
 
     await page.click('#tempExecAiGenSelectAllBtn');
     await expect(page.locator('#tempExecAiGenAppendBtn')).toBeEnabled();
@@ -259,6 +429,10 @@ test.describe('执行页 AI 用例生成', () => {
     });
 
     await page.route('**/mock-temp-exec-ai', async (route) => {
+      const body = route.request().postDataJSON();
+      if (isSemanticDedupeRequest(body)) {
+        return fulfillTempExecSemanticDedupe(route, body);
+      }
       const payload = {
         missing_modules: [{
           module: '支付',
@@ -312,10 +486,7 @@ test.describe('执行页 AI 用例生成', () => {
       return btn && !btn.disabled;
     });
 
-    await page.click('#tempExecAiGenBtn');
-    await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
-    await page.fill('#tempExecAiGenRequirementInput', '需求：支持登录与支付');
-    await page.click('#tempExecAiGenRunBtn');
+    await startTempExecAiGeneration(page, '需求：支持登录与支付');
     await expect(page.locator('#tempExecAiGenBtn')).toContainText('正在生成');
     await page.evaluate((nextId) => {
       if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
@@ -341,10 +512,7 @@ test.describe('执行页 AI 用例生成', () => {
       return window.app && window.app.state && String(window.app.state.tempExecActiveId || '') === String(nextId || '');
     }, fileB);
 
-    await page.click('#tempExecAiGenBtn');
-    await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
-    await page.fill('#tempExecAiGenRequirementInput', '需求：支付流程');
-    await page.click('#tempExecAiGenRunBtn');
+    await startTempExecAiGeneration(page, '需求：支付流程');
     await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
     await expect(page.locator('#tempExecAiGenBtn')).toHaveClass(/has-badge/);
     await page.click('#tempExecAiGenDrawer .drawer-header [data-drawer-close="tempExecAiGenDrawer"]');
@@ -419,6 +587,10 @@ test.describe('执行页 AI 用例生成', () => {
     });
 
     await page.route('**/mock-temp-exec-ai-global', async (route) => {
+      const body = route.request().postDataJSON();
+      if (isSemanticDedupeRequest(body)) {
+        return fulfillTempExecSemanticDedupe(route, body);
+      }
       const payload = {
         missing_modules: [],
         existing_modules: [{
@@ -461,10 +633,7 @@ test.describe('执行页 AI 用例生成', () => {
       return window.app && window.app.core && typeof window.app.core.callModelWithConfig === 'function';
     });
 
-    await page.click('#tempExecAiGenBtn');
-    await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
-    await page.fill('#tempExecAiGenRequirementInput', '需求：登录流程');
-    await page.click('#tempExecAiGenRunBtn');
+    await startTempExecAiGeneration(page, '需求：登录流程');
 
     await page.goto(base + '/case-library.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
@@ -548,6 +717,10 @@ test.describe('执行页 AI 用例生成', () => {
     });
 
     await page.route('**/mock-temp-exec-ai-refresh', async (route) => {
+      const body = route.request().postDataJSON();
+      if (isSemanticDedupeRequest(body)) {
+        return fulfillTempExecSemanticDedupe(route, body);
+      }
       callCount += 1;
       await new Promise((resolve) => setTimeout(resolve, callCount === 1 ? 2000 : 500));
       const payload = {
@@ -585,10 +758,7 @@ test.describe('执行页 AI 用例生成', () => {
       return card && !card.classList.contains('hidden');
     });
 
-    await page.click('#tempExecAiGenBtn');
-    await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
-    await page.fill('#tempExecAiGenRequirementInput', '需求：支付流程');
-    await page.click('#tempExecAiGenRunBtn');
+    await startTempExecAiGeneration(page, '需求：支付流程');
     await expect(page.locator('#tempExecAiGenBtn')).toContainText('正在生成');
 
     await page.reload();

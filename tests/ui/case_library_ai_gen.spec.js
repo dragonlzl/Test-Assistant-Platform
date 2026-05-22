@@ -157,6 +157,79 @@ async function openDrawer(page, buttonSelector, drawerSelector) {
   throw lastErr || new Error('openDrawer failed: ' + drawerSelector);
 }
 
+async function startCaseLibraryAiGeneration(page, requirementText) {
+  const overlay = page.locator('#casePageAiGenPrepOverlay-case-library');
+  await page.click('#caseLibraryAiGenBtn');
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toContainText('生成前置准备');
+  const documentMode = overlay.locator('input[name="casePageRequirementMode-case-library"][value="document"]');
+  const manualMode = overlay.locator('input[name="casePageRequirementMode-case-library"][value="manual"]');
+  await expect(documentMode).toHaveCount(1);
+  await documentMode.check({ force: true });
+  await expect(overlay.locator('[data-case-page-prep-action="select-requirement"]')).toHaveCount(1);
+  await manualMode.check({ force: true });
+  await page.fill('#casePageAiGenRequirementText-case-library', requirementText);
+  await overlay.locator('[data-case-page-prep-nav="next"]').click();
+  await expect(overlay).toContainText('导入已有用例');
+  await expect(overlay).toContainText('已锁定');
+  await expect(overlay).toContainText('用例数');
+  await overlay.locator('[data-case-page-prep-nav="next"]').click();
+  await expect(overlay).toContainText('生成选项');
+  await overlay.locator('[data-case-page-prep-nav="confirm"]').click();
+  await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
+  await expect(page.locator('#caseLibraryAiGenDrawer .case-library-ai-gen-section').filter({ hasText: '需求导入' })).toBeHidden();
+}
+
+function isSemanticDedupeRequest(body) {
+  const requestBody = body && body.payload ? body.payload : body;
+  if (!requestBody || !requestBody.messages || !requestBody.messages[1]) return false;
+  const payload = JSON.parse(requestBody.messages[1].content);
+  return payload
+    && payload.operation_contract
+    && payload.operation_contract.editable_scope === 'generated_cases_only';
+}
+
+async function fulfillCaseLibrarySemanticDedupe(route, body) {
+  const requestBody = body && body.payload ? body.payload : body;
+  const requestPayload = JSON.parse(requestBody.messages[1].content);
+  expect(requestPayload.operation_contract.original_cases_readonly).toBe(true);
+  expect(requestPayload.operation_contract.generated_cases_editable).toBe(true);
+  expect(requestPayload.original_cases_readonly.length).toBeGreaterThan(0);
+  const generated = requestPayload.generated_cases_editable || [];
+  const seen = new Set();
+  const payload = {
+    generated_modules: generated.map((mod) => {
+      const kept = [];
+      (mod.cases || []).forEach((item) => {
+        if (item.title === '登录成功') return;
+        const key = [item.module, item.title, item.precondition || '', item.steps, item.expected].join('::');
+        if (seen.has(key)) return;
+        seen.add(key);
+        kept.push(item);
+      });
+      return {
+        module: mod.module,
+        coverage: mod.coverage,
+        missing: mod.missing,
+        cases: kept,
+      };
+    }).filter((mod) => mod.cases.length),
+    removed_cases: [{
+      type: 'duplicate_with_original',
+      module: '登录',
+      title: '登录成功',
+      reason: '与原用例重复',
+      duplicate_with: '登录成功',
+    }],
+    summary: { removed: 1, reason: '语义重复' },
+  };
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(payload) } }] }),
+  });
+}
+
 function buildCaseLibraryRoutes(page, options) {
   const {
     token,
@@ -165,6 +238,7 @@ function buildCaseLibraryRoutes(page, options) {
     versions,
     caseFiles,
     caseItemsByFileId,
+    modelProxyHandler,
   } = options;
   let nextId = 9000;
 
@@ -186,6 +260,12 @@ function buildCaseLibraryRoutes(page, options) {
 
     if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
     if (pathName === '/api/settings' && method === 'PUT') return respond(200, []);
+    if (pathName === '/api/model-proxy' && method === 'POST') {
+      if (typeof modelProxyHandler === 'function') {
+        return modelProxyHandler(route);
+      }
+      return respond(501, { detail: 'model proxy unavailable' });
+    }
     if (pathName === '/api/models' && method === 'GET') return respond(200, []);
     if (pathName === '/api/features' && method === 'GET') return respond(200, []);
     if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
@@ -376,12 +456,41 @@ test.describe('用例库 AI 用例生成', () => {
       assignments: { caseLibraryGenId: modelId },
     });
 
-    await page.route('**/mock-case-library-gen', async (route) => {
+    let semanticDedupeCalls = 0;
+    const fulfillModelResponse = async (route, requestBody) => {
+      const body = requestBody && requestBody.payload ? requestBody.payload : requestBody;
+      if (isSemanticDedupeRequest(body)) {
+        semanticDedupeCalls += 1;
+        const semanticPayload = JSON.parse(body.messages[1].content);
+        const generatedTitles = [];
+        (semanticPayload.generated_cases_editable || []).forEach((mod) => {
+          (mod.cases || []).forEach((item) => generatedTitles.push(item.title));
+        });
+        expect(generatedTitles.filter((title) => title === '支付成功')).toHaveLength(2);
+        expect(generatedTitles.filter((title) => title === '登录成功')).toHaveLength(1);
+        return fulfillCaseLibrarySemanticDedupe(route, body);
+      }
+      const userPayload = JSON.parse(body.messages[1].content);
+      expect(userPayload.locked_imported_cases.mode).toBe('import');
+      expect(userPayload.locked_imported_cases.readonly).toBe(true);
+      expect(userPayload.locked_imported_cases.case_count).toBe(1);
+      expect(userPayload.dedupe_contract.original_cases_readonly).toBe(true);
+      expect(userPayload.dedupe_contract.generated_cases_editable).toBe(true);
+      expect(body.messages[0].content).toContain('AI_CASE_WRITING_STYLE_GUIDE.md');
+      expect(body.messages[0].content).toContain('去重保护规则');
       const payload = {
         missing_modules: [{
           module: '支付',
           coverage: 0,
           cases: [{
+            module: '支付',
+            title: '支付成功',
+            priority: 'P1',
+            precondition: '',
+            steps: '选择商品并完成支付',
+            expected: '支付成功并提示结果',
+            remark: '',
+          }, {
             module: '支付',
             title: '支付成功',
             priority: 'P1',
@@ -402,6 +511,14 @@ test.describe('用例库 AI 用例生成', () => {
             steps: '输入错误密码',
             expected: '提示密码错误',
             remark: '',
+          }, {
+            module: '登录',
+            title: '登录成功',
+            priority: 'P1',
+            precondition: '已注册账号',
+            steps: '输入正确账号密码',
+            expected: '登录成功',
+            remark: '',
           }],
         }],
       };
@@ -410,6 +527,9 @@ test.describe('用例库 AI 用例生成', () => {
         contentType: 'application/json',
         body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(payload) } }] }),
       });
+    };
+    await page.route('**/mock-case-library-gen', async (route) => {
+      return fulfillModelResponse(route, route.request().postDataJSON());
     });
 
     await buildCaseLibraryRoutes(page, {
@@ -419,6 +539,7 @@ test.describe('用例库 AI 用例生成', () => {
       versions,
       caseFiles,
       caseItemsByFileId,
+      modelProxyHandler: async (route) => fulfillModelResponse(route, route.request().postDataJSON()),
     });
 
     await gotoIndex(page);
@@ -432,15 +553,14 @@ test.describe('用例库 AI 用例生成', () => {
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryEditView')).toContainText('登录成功');
 
-    await page.click('#caseLibraryAiGenBtn');
-    await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
-
-    await page.fill('#caseLibraryAiGenRequirementInput', '需求：支持登录与支付');
-    await page.click('#caseLibraryAiGenRunBtn');
+    await startCaseLibraryAiGeneration(page, '需求：支持登录与支付');
     await expect(page.locator('#caseLibraryAiGenStatus')).toContainText('生成完成');
     await expect(page.locator('#caseLibraryAiGenResult')).toBeVisible();
     await expect(page.locator('#caseLibraryAiGenResultBody')).toContainText('缺失');
     await expect(page.locator('#caseLibraryAiGenResultBody')).toContainText('60%');
+    await expect(page.locator('#caseLibraryAiGenResultBody td').getByText('支付成功', { exact: true })).toHaveCount(1);
+    await expect(page.locator('#caseLibraryAiGenResultBody td').getByText('登录成功', { exact: true })).toHaveCount(0);
+    expect(semanticDedupeCalls).toBe(1);
     await expect(page.locator('#caseLibraryAiGenBtn')).toHaveClass(/has-badge/);
     await expect(page.locator('#openCaseLibraryEditDrawerBtn')).not.toHaveClass(/case-library-ai-gen-dot/);
 
@@ -461,7 +581,58 @@ test.describe('用例库 AI 用例生成', () => {
 
     await page.click('#caseLibraryAiGenBtn');
     await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryAiGenStatus')).toContainText('生成完成');
+    expect(semanticDedupeCalls).toBe(1);
     await expect(page.locator('#caseLibraryAiGenBtn')).not.toHaveClass(/has-badge/);
+
+    await page.reload();
+    await waitCaseLibraryReady(page, 30000);
+    await switchToTab(page, 'case-library');
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await expect(page.locator(editBtnSelector)).toBeVisible();
+    await page.click(editBtnSelector);
+    await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
+    await page.click('#caseLibraryAiGenBtn');
+    await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryAiGenStatus')).toContainText('生成完成');
+    await expect(page.locator('#caseLibraryAiGenResultBody td').getByText('支付成功', { exact: true })).toHaveCount(1);
+    expect(semanticDedupeCalls).toBe(1);
+
+    await page.click('#caseLibraryAiGenDiscardBtn');
+    await expect(page.locator('#caseLibraryAiGenStatus')).toContainText('已清空本次 AI 生成结果');
+    await expect(page.locator('#caseLibraryAiGenResult')).toBeHidden();
+    await expect(page.locator('#caseLibraryAiGenDrawer')).not.toHaveClass(/open|closing/);
+    await expect(page.locator('.temp-center-toast')).toContainText('已清空本次 AI 生成结果');
+
+    await page.click('#caseLibraryAiGenBtn');
+    await expect(page.locator('#casePageAiGenPrepOverlay-case-library')).toBeVisible();
+    await page.click('#casePageAiGenPrepOverlay-case-library [data-case-page-prep-close]');
+    await expect(page.locator('#casePageAiGenPrepOverlay-case-library')).toHaveCount(0);
+
+    await startCaseLibraryAiGeneration(page, '需求：支持登录与支付');
+    await expect(page.locator('#caseLibraryAiGenStatus')).toContainText('生成完成');
+    await expect(page.locator('#caseLibraryAiGenResultBody td').getByText('支付成功', { exact: true })).toHaveCount(1);
+    expect(semanticDedupeCalls).toBe(2);
+
+    await page.click('#caseLibraryAiGenRegenerateBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#appConfirmDrawerMessage')).toContainText('丢弃当前这批 AI 生成结果');
+    await page.click('#appConfirmDrawerCancelBtn');
+    await expect(page.locator('#appConfirmDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#casePageAiGenPrepOverlay-case-library')).toHaveCount(0);
+    await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
+    await page.click('#caseLibraryAiGenRegenerateBtn');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await expect(page.locator('#casePageAiGenPrepOverlay-case-library')).toBeVisible();
+    await page.click('#casePageAiGenPrepOverlay-case-library [data-case-page-prep-close]');
+    await expect(page.locator('#casePageAiGenPrepOverlay-case-library')).toHaveCount(0);
+
+    await startCaseLibraryAiGeneration(page, '需求：支持登录与支付');
+    await expect(page.locator('#caseLibraryAiGenStatus')).toContainText('生成完成');
+    await expect(page.locator('#caseLibraryAiGenResultBody td').getByText('支付成功', { exact: true })).toHaveCount(1);
+    expect(semanticDedupeCalls).toBe(3);
 
     await page.click('#caseLibraryAiGenSelectAllBtn');
     await expect(page.locator('#caseLibraryAiGenAppendBtn')).toBeEnabled();
@@ -578,7 +749,11 @@ test.describe('用例库 AI 用例生成', () => {
       assignments: { caseLibraryGenId: modelId },
     });
 
-    await page.route('**/mock-case-library-gen-switch', async (route) => {
+    const fulfillSwitchModelResponse = async (route) => {
+      const body = route.request().postDataJSON();
+      if (isSemanticDedupeRequest(body)) {
+        return fulfillCaseLibrarySemanticDedupe(route, body);
+      }
       await new Promise((resolve) => setTimeout(resolve, 400));
       const payload = {
         missing_modules: [{
@@ -601,7 +776,8 @@ test.describe('用例库 AI 用例生成', () => {
         contentType: 'application/json',
         body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(payload) } }] }),
       });
-    });
+    };
+    await page.route('**/mock-case-library-gen-switch', async (route) => fulfillSwitchModelResponse(route));
 
     await buildCaseLibraryRoutes(page, {
       token,
@@ -610,6 +786,7 @@ test.describe('用例库 AI 用例生成', () => {
       versions,
       caseFiles,
       caseItemsByFileId,
+      modelProxyHandler: fulfillSwitchModelResponse,
     });
 
     await gotoIndex(page);
@@ -622,10 +799,7 @@ test.describe('用例库 AI 用例生成', () => {
     await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileIdA}"]`);
     await expect(page.locator('#caseLibraryEditCard')).toContainText('用例库A');
 
-    await page.click('#caseLibraryAiGenBtn');
-    await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
-    await page.fill('#caseLibraryAiGenRequirementInput', '需求：支付流程');
-    await page.click('#caseLibraryAiGenRunBtn');
+    await startCaseLibraryAiGeneration(page, '需求：支付流程');
     await page.click('#caseLibraryAiGenDrawer .drawer-header [data-drawer-close="caseLibraryAiGenDrawer"]');
     await expect(page.locator('#caseLibraryAiGenDrawer')).not.toHaveClass(/open/);
 

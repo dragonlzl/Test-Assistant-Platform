@@ -90,8 +90,16 @@ body {
   gap: 10px;
   height: calc(100vh - 2 * var(--sticky-offset, 12px));
   max-height: calc(100vh - 2 * var(--sticky-offset, 12px));
-  overflow: visible;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   z-index: 360;
+}
+.sidebar:has(.tab-group:hover),
+.sidebar:has(.tab-group:focus-within),
+.sidebar:has(.tab-group.open) {
+  overflow: visible;
+  z-index: 1800;
 }
 .drawer-open .sidebar {
   pointer-events: none;
@@ -5113,6 +5121,10 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .xmind-casegen-summary-overlay.hidden {
   display: none;
 }
+.case-page-ai-gen-prep-overlay {
+  position: fixed;
+  z-index: 1900;
+}
 .xmind-casegen-summary-dialog {
   width: min(760px, calc(100% - 32px));
   max-height: min(72vh, 680px);
@@ -5124,6 +5136,10 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   border: 1px solid rgba(148,163,184,0.28);
   background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,250,252,0.98));
   box-shadow: 0 24px 54px rgba(15,23,42,0.24);
+}
+.xmind-casegen-summary-dialog.case-page-ai-gen-prep-dialog {
+  width: min(860px, calc(100% - 32px));
+  max-height: min(86vh, 760px);
 }
 .xmind-casegen-summary-dialog-head {
   display: flex;
@@ -5155,7 +5171,8 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-right: 2px;
+  padding: 0 2px 16px 0;
+  scroll-padding-bottom: 96px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -5800,8 +5817,19 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 }
 .xmind-casegen-prep-choice input {
   position: absolute;
-  opacity: 0;
-  pointer-events: none;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  opacity: 0.01;
+  cursor: pointer;
+  z-index: 1;
+}
+.xmind-casegen-prep-choice input:disabled {
+  cursor: not-allowed;
 }
 .xmind-casegen-prep-choice.is-active {
   border-color: rgba(37,99,235,0.34);
@@ -6028,8 +6056,19 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 }
 .xmind-casegen-prep-toggle input {
   position: absolute;
-  opacity: 0;
-  pointer-events: none;
+  top: 12px;
+  right: 12px;
+  width: 56px;
+  height: 32px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  opacity: 0.01;
+  cursor: pointer;
+  z-index: 1;
+}
+.xmind-casegen-prep-toggle input:disabled {
+  cursor: not-allowed;
 }
 .xmind-casegen-prep-toggle-main {
   display: flex;
@@ -6145,8 +6184,8 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   position: sticky;
   bottom: 0;
   z-index: 2;
-  margin-top: auto;
-  padding: 14px 0 2px;
+  margin: auto -2px 0 0;
+  padding: 14px 2px 2px 0;
   background: linear-gradient(180deg, rgba(248,250,252,0), rgba(248,250,252,0.96) 22%, rgba(248,250,252,0.99) 100%);
 }
 .xmind-casegen-prep-footer-side {
@@ -6611,7 +6650,7 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   border-radius: 12px;
   box-shadow: 0 14px 28px rgba(15,23,42,0.18);
   min-width: 220px;
-  z-index: 480;
+  z-index: 1810;
 }
 .tab-group.open > .tab-submenu {
   display: flex;
@@ -8604,6 +8643,8 @@ tr.import-invalid-locate-active td {
     }
     .sidebar-tab-panel .casegen-progress-panel {
       margin: 0;
+      flex: 0 0 auto;
+      min-height: 136px;
     }
     .casegen-progress-panel .panel-head,
     .memo-pad-panel .panel-head {
@@ -9054,20 +9095,27 @@ tr.import-invalid-locate-active td {
       display: flex;
       flex-direction: column;
       gap: 6px;
-      flex: 1 1 auto;
-      min-height: 0;
+      flex: 0 0 auto;
+      min-height: 58px;
+      max-height: 280px;
       overflow-y: auto;
       padding-right: 4px;
+      position: relative;
+      z-index: 1;
     }
     .casegen-progress-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 6px;
+      width: 100%;
       padding: 6px 8px;
       border: 1px solid var(--border);
       border-radius: 10px;
       background: rgba(255,255,255,0.92);
+      color: inherit;
+      font: inherit;
+      text-align: left;
       cursor: pointer;
       transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
     }
@@ -11246,14 +11294,26 @@ tr.import-invalid-locate-active td {
   transform-origin: center center;
 }
 .xmind-casegen-viewer .xmind-casegen-inline-task-indicator.is-running .xmind-casegen-inline-task-dot {
+  position: relative;
   animation: xmindCasegenToolbarSpin 1.2s linear infinite;
+  transform: none !important;
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(37, 99, 235, 0.18);
-  border-top-color: currentColor;
+  border: 0;
   background: transparent;
   box-shadow: none;
   will-change: transform;
+}
+.xmind-casegen-viewer .xmind-casegen-inline-task-indicator.is-running .xmind-casegen-inline-task-dot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 2px solid rgba(37, 99, 235, 0.18);
+  border-top-color: currentColor;
+  border-radius: inherit;
+  animation: xmindCasegenToolbarSpin 1.2s linear infinite;
+  transform-origin: center center;
 }
 .xmind-casegen-viewer .xmind-casegen-inline-task-label {
   font-size: 12px;

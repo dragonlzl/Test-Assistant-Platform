@@ -197,7 +197,7 @@
         var stateCls = resolveWorkspaceProgressState(item);
         var activeCls = item && item.active === true ? ' is-active' : '';
         return '' +
-          '<div class="casegen-progress-item xmind-casegen-progress-item state-' + stateCls + activeCls + '" data-casegen-workspace="' + escapeHtml(item && item.id ? item.id : '') + '" title="' + escapeHtml(item && item.title ? item.title : '') + '">' +
+          '<button type="button" class="casegen-progress-item xmind-casegen-progress-item state-' + stateCls + activeCls + '" data-casegen-workspace="' + escapeHtml(item && item.id ? item.id : '') + '" title="' + escapeHtml(item && item.title ? item.title : '') + '">' +
             '<div class="info">' +
               '<span class="status-dot"></span>' +
               '<div class="titles">' +
@@ -211,9 +211,11 @@
                 '</div>' +
               '</div>' +
             '</div>' +
-          '</div>';
+          '</button>';
       }).join('');
-      caseGenProgressList.innerHTML = html;
+      if (caseGenProgressList.innerHTML !== html) {
+        caseGenProgressList.innerHTML = html;
+      }
       caseGenProgressPanel.classList.remove('hidden');
       syncCasegenProgressDot();
       requestLayoutSync();

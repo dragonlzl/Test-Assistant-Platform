@@ -668,7 +668,7 @@ xmind用例生成进度
       <button class="link-toggle" data-drawer-close="tempExecAiGenDrawer">收起</button>
     </div>
     <div class="drawer-body">
-      <div class="case-library-ai-gen-section">
+      <div class="case-library-ai-gen-section hidden">
         <h4>需求导入</h4>
         <div class="layout">
           <div class="pane">
@@ -689,7 +689,7 @@ xmind用例生成进度
           </div>
         </div>
       </div>
-      <div class="actions case-library-ai-gen-actions">
+      <div class="actions case-library-ai-gen-actions hidden">
         <button class="primary" id="tempExecAiGenRunBtn" type="button" disabled>生成用例</button>
       </div>
       <p class="status" id="tempExecAiGenStatus"></p>
@@ -698,6 +698,8 @@ xmind用例生成进度
           <div class="case-library-ai-gen-actions">
             <button class="secondary" id="tempExecAiGenSelectAllBtn" type="button">全选</button>
             <button class="secondary" id="tempExecAiGenSelectNoneBtn" type="button">全不选</button>
+            <button class="secondary" id="tempExecAiGenDiscardBtn" type="button">清空结果</button>
+            <button class="primary" id="tempExecAiGenRegenerateBtn" type="button">重新生成</button>
           </div>
           <span class="hint" id="tempExecAiGenSelectionHint">已选 0 条</span>
         </div>
@@ -1293,6 +1295,8 @@ xmind用例生成进度
 <script src="./scripts/core/casegenCore.js" defer></script>
 <script src="./scripts/modules/casegenProgress.js" defer></script>
 <script src="./scripts/modules/memoPad.js" defer></script>
+<script src="./scripts/modules/xmindKnowledgeBase.js" defer></script>
+<script src="./scripts/modules/casePageAiGenPrep.js" defer></script>
 <script src="./scripts/handlers/layoutHandlers.js" defer></script>
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>

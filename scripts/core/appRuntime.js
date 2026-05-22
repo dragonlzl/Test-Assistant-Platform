@@ -2509,6 +2509,17 @@
 
     renderCaseGenProgressBoard();
 
+    const xmindKnowledgeBaseApi = window.app.xmindKnowledgeBase && typeof window.app.xmindKnowledgeBase.init === 'function'
+      ? window.app.xmindKnowledgeBase.init({
+        state: state,
+        apiClient: window.app.apiClient || null,
+        escapeHtml: escapeHtml,
+      })
+      : null;
+    if (xmindKnowledgeBaseApi) {
+      window.app.xmindKnowledgeBaseApi = xmindKnowledgeBaseApi;
+    }
+
     const moduleContext = {
       state: state,
       config: window.app.config,
@@ -2552,13 +2563,8 @@
       xmindMarkdownExportCoreApi: window.app.xmindMarkdownExportCoreApi || null,
       mindElixirCoreApi: window.app.mindElixirCoreApi || null,
       casesCoreApi: window.app.casesCoreApi || null,
-      xmindKnowledgeBaseApi: window.app.xmindKnowledgeBase && typeof window.app.xmindKnowledgeBase.init === 'function'
-        ? window.app.xmindKnowledgeBase.init({
-          state: state,
-          apiClient: window.app.apiClient || null,
-          escapeHtml: escapeHtml,
-        })
-        : null,
+      xmindKnowledgeBaseApi: xmindKnowledgeBaseApi,
+      casePageAiGenPrepApi: null,
     };
     const autoContext = {
       state: state,

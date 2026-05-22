@@ -518,6 +518,14 @@
         writeTask(scene, null, 'clear');
       }
 
+      function updateTask(scene, patch, action) {
+        if (!scene) return null;
+        var current = readTask(scene);
+        if (!current) return null;
+        var next = patch && typeof patch === 'object' ? Object.assign({}, current, patch) : current;
+        return writeTask(scene, next, action || 'update');
+      }
+
       function buildTaskId() {
         return 'missing-reminder-ai-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
       }
@@ -766,6 +774,7 @@
         createTask: createTask,
         startTask: startTask,
         getTask: readTask,
+        updateTask: updateTask,
         clearTask: clearTask,
         resumeTasks: resumeTasks,
         buildTaskId: buildTaskId,
@@ -854,6 +863,14 @@
 
       function clearTask(scene) {
         writeTask(scene, null, 'clear');
+      }
+
+      function updateTask(scene, patch, action) {
+        if (!scene) return null;
+        var current = readTask(scene);
+        if (!current) return null;
+        var next = patch && typeof patch === 'object' ? Object.assign({}, current, patch) : current;
+        return writeTask(scene, next, action || 'update');
       }
 
       function buildTaskId() {
@@ -1089,6 +1106,7 @@
         createTask: createTask,
         startTask: startTask,
         getTask: readTask,
+        updateTask: updateTask,
         clearTask: clearTask,
         resumeTasks: resumeTasks,
         buildTaskId: buildTaskId,
@@ -1538,6 +1556,41 @@
         return next;
       }
 
+      function buildHeartbeatEventTask(task) {
+        if (!task || typeof task !== 'object') return null;
+        return {
+          id: String(task.id || ''),
+          status: String(task.status || ''),
+          scope: String(task.scope || ''),
+          workspaceId: String(task.workspaceId || ''),
+          rootPipelineId: String(task.rootPipelineId || ''),
+          actionId: String(task.actionId || ''),
+          dedupeMode: String(task.dedupeMode || ''),
+          runnerId: String(task.runnerId || ''),
+          heartbeatAt: Number(task.heartbeatAt || 0) || 0,
+          updatedAt: Number(task.updatedAt || 0) || 0,
+        };
+      }
+
+      function updateTaskHeartbeat(task) {
+        if (!task || !task.id) return null;
+        var list = volatileTaskList.length ? readVolatileTasks() : readTasks();
+        var next = cloneJson(task, null);
+        if (!next) return null;
+        next.updatedAt = Date.now();
+        var replaced = false;
+        for (var i = 0; i < list.length; i += 1) {
+          if (!list[i] || String(list[i].id || '') !== String(next.id || '')) continue;
+          list[i] = next;
+          replaced = true;
+          break;
+        }
+        if (!replaced) list.push(next);
+        rememberVolatileTasks(list, { prefer: true });
+        emitTaskUpdate(buildHeartbeatEventTask(next), 'heartbeat', []);
+        return next;
+      }
+
       function clearTask(taskId, action) {
         var targetId = taskId ? String(taskId || '') : '';
         if (!targetId) return false;
@@ -1643,7 +1696,7 @@
           current.runnerId = runnerId;
           current.heartbeatAt = Date.now();
           current.updatedAt = current.heartbeatAt;
-          upsertTask(current, 'heartbeat');
+          updateTaskHeartbeat(current);
         }, heartbeatIntervalMs);
         return function stopHeartbeat() {
           clearInterval(timer);
@@ -1656,6 +1709,17 @@
           return runningMap[task.id].promise;
         }
         var stopHeartbeat = startHeartbeat(task);
+        function waitForTaskMinVisible(current) {
+          var until = Number(current && current.minVisibleUntil || 0);
+          if (!Number.isFinite(until) || until <= 0) return Promise.resolve(current);
+          var delay = until - Date.now();
+          if (!Number.isFinite(delay) || delay <= 0) return Promise.resolve(current);
+          return new Promise(function(resolve) {
+            setTimeout(function() {
+              resolve(current);
+            }, delay);
+          });
+        }
         var promise = Promise.resolve()
           .then(function() {
             var current = getTask(task.id);
@@ -1677,6 +1741,12 @@
             }
             return callModel(model, requestText, current.prompt || '', current.reasoning || '', current.temperature, {
               owner: current.requestOwner || '',
+            });
+          })
+          .then(function(content) {
+            var current = getTask(task.id);
+            return waitForTaskMinVisible(current).then(function() {
+              return content;
             });
           })
           .then(function(content) {
