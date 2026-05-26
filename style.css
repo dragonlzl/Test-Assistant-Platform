@@ -6001,6 +6001,11 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   border: 1px solid rgba(148,163,184,0.22);
   background: rgba(248,250,252,0.74);
 }
+.xmind-casegen-prep-option-group.is-invalid {
+  border-color: rgba(239,68,68,0.58);
+  background: rgba(254,242,242,0.92);
+  box-shadow: 0 0 0 3px rgba(239,68,68,0.12);
+}
 .xmind-casegen-prep-option-group.is-disabled {
   opacity: 0.64;
 }
@@ -6016,10 +6021,19 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   font-weight: 800;
   color: var(--text);
 }
+.xmind-casegen-prep-required {
+  margin-left: 3px;
+  color: #dc2626;
+}
 .xmind-casegen-prep-option-group-desc {
   font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
+}
+.xmind-casegen-prep-field-error {
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 700;
 }
 .xmind-casegen-prep-toggle-grid {
   display: grid;
@@ -12189,6 +12203,14 @@ tr.import-invalid-locate-active td {
   flex-wrap: wrap;
 }
 
+.case-library-ai-gen-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .case-library-ai-gen-result {
   margin-top: 8px;
 }
@@ -13978,6 +14000,15 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-casegen-prep-toggle-desc,
 :root[data-theme="dark"] .xmind-casegen-summary-dialog-desc {
   color: #94a3b8;
+}
+:root[data-theme="dark"] .xmind-casegen-prep-option-group.is-invalid {
+  border-color: rgba(248,113,113,0.56);
+  background: rgba(127,29,29,0.3);
+  box-shadow: 0 0 0 3px rgba(248,113,113,0.14);
+}
+:root[data-theme="dark"] .xmind-casegen-prep-field-error,
+:root[data-theme="dark"] .xmind-casegen-prep-required {
+  color: #fca5a5;
 }
 :root[data-theme="dark"] .xmind-casegen-prep-warning {
   border-color: rgba(249,115,22,0.34);

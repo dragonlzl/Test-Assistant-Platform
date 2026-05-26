@@ -410,6 +410,7 @@
     aiGenDiscardBtn: document.getElementById('caseLibraryAiGenDiscardBtn'),
     aiGenRegenerateBtn: document.getElementById('caseLibraryAiGenRegenerateBtn'),
     aiGenSelectAllToggle: document.getElementById('caseLibraryAiGenSelectAllToggle'),
+    aiGenResultSummary: document.getElementById('caseLibraryAiGenResultSummary'),
     aiGenSelectionHint: document.getElementById('caseLibraryAiGenSelectionHint'),
     aiGenAppendBtn: document.getElementById('caseLibraryAiGenAppendBtn'),
     missingReminderTop: document.getElementById('caseLibraryMissingReminderTop'),
@@ -10622,13 +10623,38 @@
         resultToken: '',
         readResultToken: '',
         hasUnreadResult: false,
+        generationMode: '',
+        resultGeneratedCount: 0,
+        resultDedupeCount: 0,
       };
     }
     if (!state.aiGen.selection || !(state.aiGen.selection instanceof Set)) {
       state.aiGen.selection = new Set();
     }
     if (!Array.isArray(state.aiGen.modules)) state.aiGen.modules = [];
+    if (!isFinite(Number(state.aiGen.resultGeneratedCount))) state.aiGen.resultGeneratedCount = 0;
+    if (!isFinite(Number(state.aiGen.resultDedupeCount))) state.aiGen.resultDedupeCount = 0;
     return state.aiGen;
+  }
+
+  function resolveCaseLibraryAiGenGenerationMode(prepContext) {
+    var settings = prepContext && prepContext.settings ? prepContext.settings : {};
+    var mode = settings && settings.casePageGenerationMode !== undefined && settings.casePageGenerationMode !== null
+      ? String(settings.casePageGenerationMode || '').trim()
+      : '';
+    return mode;
+  }
+
+  function syncCaseLibraryAiGenCoverageColumn(hidden) {
+    if (!dom.aiGenResultBody || !dom.aiGenResultBody.parentNode) return;
+    var table = dom.aiGenResultBody.parentNode;
+    if (table && table.querySelectorAll) {
+      var nodes = table.querySelectorAll('th.coverage');
+      for (var i = 0; i < nodes.length; i += 1) {
+        if (hidden) nodes[i].classList.add('hidden');
+        else nodes[i].classList.remove('hidden');
+      }
+    }
   }
 
   var caseLibraryAiGenBadgePersistKey = 'tap-case-library-ai-gen-badges';
@@ -11077,8 +11103,11 @@
     }
     var missing = Array.isArray(data.missing_modules) ? data.missing_modules : null;
     var existing = Array.isArray(data.existing_modules) ? data.existing_modules : null;
+    var xmindModules = Array.isArray(data.modules) ? data.modules : null;
     if (!missing || !existing) {
-      return { error: '模型返回格式不正确：缺少 missing_modules/existing_modules' };
+      if (!xmindModules) return { error: '模型返回格式不正确：缺少 missing_modules/existing_modules' };
+      missing = [];
+      existing = [];
     }
     var modules = [];
 
@@ -11107,8 +11136,12 @@
       });
     }
 
-    missing.forEach(function(entry) { pushModule(entry, 'missing'); });
-    existing.forEach(function(entry) { pushModule(entry, 'existing'); });
+    if (xmindModules) {
+      xmindModules.forEach(function(entry) { pushModule(entry, entry && entry.missing === true ? 'missing' : 'existing'); });
+    } else {
+      missing.forEach(function(entry) { pushModule(entry, 'missing'); });
+      existing.forEach(function(entry) { pushModule(entry, 'existing'); });
+    }
     return { modules: modules };
   }
 
@@ -11126,6 +11159,57 @@
     });
   }
 
+  function countCaseLibraryAiGenModuleCases(modules) {
+    var list = Array.isArray(modules) ? modules : [];
+    var total = 0;
+    list.forEach(function(mod) {
+      var cases = mod && Array.isArray(mod.cases) ? mod.cases : [];
+      total += cases.length;
+    });
+    return total;
+  }
+
+  function normalizeCaseLibraryAiGenCount(value) {
+    var num = Number(value);
+    if (!isFinite(num) || num < 0) return null;
+    return Math.round(num);
+  }
+
+  function applyCaseLibraryAiGenResultStats(ai, parsed) {
+    var modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
+    var keptCount = countCaseLibraryAiGenModuleCases(modules);
+    var dedupe = parsed && parsed.ai_dedupe && typeof parsed.ai_dedupe === 'object' ? parsed.ai_dedupe : null;
+    var removedCount = dedupe ? normalizeCaseLibraryAiGenCount(dedupe.removedCount) : null;
+    var generatedCount = dedupe ? normalizeCaseLibraryAiGenCount(dedupe.beforeCount) : null;
+    if (removedCount === null && generatedCount !== null) removedCount = Math.max(0, generatedCount - keptCount);
+    if (removedCount === null && parsed && Array.isArray(parsed.removed_cases)) removedCount = parsed.removed_cases.length;
+    if (removedCount === null && dedupe && Array.isArray(dedupe.removedCases)) removedCount = dedupe.removedCases.length;
+    if (removedCount === null) removedCount = 0;
+    if (generatedCount === null) generatedCount = keptCount + removedCount;
+    ai.resultGeneratedCount = generatedCount;
+    ai.resultDedupeCount = removedCount;
+  }
+
+  function formatCaseLibraryAiGenCompleteStatus(ai) {
+    var generatedCount = normalizeCaseLibraryAiGenCount(ai.resultGeneratedCount);
+    var dedupeCount = normalizeCaseLibraryAiGenCount(ai.resultDedupeCount);
+    var text = '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条';
+    if (!ai.modules || !ai.modules.length) return '生成完成：' + text + '，未返回可追加用例';
+    return '生成完成：' + text;
+  }
+
+  function syncCaseLibraryAiGenResultSummary() {
+    var ai = ensureCaseLibraryAiGenState();
+    if (!dom.aiGenResultSummary) return;
+    if (!ai.generated && !countCaseLibraryAiGenModuleCases(ai.modules)) {
+      dom.aiGenResultSummary.textContent = '';
+      return;
+    }
+    var generatedCount = normalizeCaseLibraryAiGenCount(ai.resultGeneratedCount);
+    var dedupeCount = normalizeCaseLibraryAiGenCount(ai.resultDedupeCount);
+    dom.aiGenResultSummary.textContent = '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条';
+  }
+
   function renderCaseLibraryAiGenResult() {
     var ai = ensureCaseLibraryAiGenState();
     if (!dom.aiGenResult || !dom.aiGenResultBody) return;
@@ -11134,6 +11218,8 @@
     var selection = ai.selection instanceof Set ? ai.selection : new Set();
     var totalCases = 0;
     var selectableCases = 0;
+    var hideCoverage = ai.generationMode === 'enhanced';
+    syncCaseLibraryAiGenCoverageColumn(hideCoverage);
     modules.forEach(function(mod) {
       var list = Array.isArray(mod.cases) ? mod.cases : [];
       if (!list.length) return;
@@ -11151,7 +11237,9 @@
         var coverageCell = '';
         var moduleCell = '';
         if (idx === 0) {
-          coverageCell = '<td class="coverage' + (mod.missing ? ' missing' : '') + '" rowspan="' + list.length + '">' + escapeHtml(coverageText) + '</td>';
+          if (!hideCoverage) {
+            coverageCell = '<td class="coverage' + (mod.missing ? ' missing' : '') + '" rowspan="' + list.length + '">' + escapeHtml(coverageText) + '</td>';
+          }
           moduleCell = '<td class="module" rowspan="' + list.length + '">' + escapeHtml(mod.module) + '</td>';
         }
         rows.push(
@@ -11169,12 +11257,13 @@
       });
     });
     if (!rows.length) {
-      dom.aiGenResultBody.innerHTML = '<tr><td colspan="8"><p class="hint">暂无生成结果</p></td></tr>';
+      dom.aiGenResultBody.innerHTML = '<tr><td colspan="' + (hideCoverage ? '7' : '8') + '"><p class="hint">暂无生成结果</p></td></tr>';
       if (dom.aiGenResult.classList) dom.aiGenResult.classList.add('hidden');
     } else {
       dom.aiGenResultBody.innerHTML = rows.join('');
       if (dom.aiGenResult.classList) dom.aiGenResult.classList.remove('hidden');
     }
+    syncCaseLibraryAiGenResultSummary();
     syncCaseLibraryAiGenSelectionHint(selectableCases);
   }
 
@@ -11337,6 +11426,9 @@
     ai.resultToken = '';
     ai.readResultToken = '';
     ai.hasUnreadResult = false;
+    ai.generationMode = '';
+    ai.resultGeneratedCount = 0;
+    ai.resultDedupeCount = 0;
     if (!keepRequirement) {
       ai.requirementText = '';
       ai.requirementFileName = '';
@@ -11413,10 +11505,13 @@
       setStatus(dom.aiGenStatus, '生成失败：' + parsed.error, 'err');
       ai.modules = [];
       ai.selection = new Set();
+      ai.resultGeneratedCount = 0;
+      ai.resultDedupeCount = 0;
     } else {
       ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
       ai.selection = new Set();
-      setStatus(dom.aiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
+      applyCaseLibraryAiGenResultStats(ai, parsed);
+      setStatus(dom.aiGenStatus, formatCaseLibraryAiGenCompleteStatus(ai), 'ok');
       if (resultToken) {
         applyCaseLibraryAiGenAppendMap(ai.modules, getCaseLibraryAiGenAppendMap(task.caseFileId, resultToken));
       }
@@ -11447,6 +11542,10 @@
     ai.loading = task.status === 'running';
     ai.generated = task.status === 'done';
     ai.error = task.status === 'error' ? (task.error || '') : '';
+    ai.generationMode = resolveCaseLibraryAiGenGenerationMode(task.prepContext);
+    if (!ai.generationMode && task.xmindPipeline && task.xmindPipeline.enabled === true) {
+      ai.generationMode = 'enhanced';
+    }
     if (task.requirementText && (!ai.requirementText || ai.taskSignature === signature)) {
       ai.requirementText = String(task.requirementText || '');
       if (dom.aiGenRequirementInput) dom.aiGenRequirementInput.value = ai.requirementText;
@@ -11881,6 +11980,24 @@
       userPayload = prepApi.enrichPayload(userPayload, prepContext);
     }
     var userText = JSON.stringify(userPayload, null, 2);
+    var xmindPipeline = null;
+    if (prepContext && prepApi && typeof prepApi.buildXmindEnhancedPipelineRequest === 'function') {
+      xmindPipeline = prepApi.buildXmindEnhancedPipelineRequest({
+        scene: 'case-library',
+        caseFileId: state.editor.caseFile ? state.editor.caseFile.id : '',
+        displayName: state.editor.caseFile ? (state.editor.caseFile.file_name_clean || state.editor.caseFile.name || '') : '',
+        projectId: state.editor.caseFile ? (state.editor.caseFile.project_id || state.editor.caseFile.projectId || '') : '',
+        versionId: state.editor.caseFile ? (state.editor.caseFile.version_id || state.editor.caseFile.versionId || '') : '',
+        requirementText: requirementText,
+        moduleList: moduleList,
+        existingCases: casePayload,
+        coverageThreshold: threshold,
+      }, prepContext);
+      if (xmindPipeline && xmindPipeline.enabled === true && xmindPipeline.root) {
+        prompt = xmindPipeline.root.prompt || prompt;
+        userText = xmindPipeline.root.userText || userText;
+      }
+    }
     var signature = buildCaseLibraryAiGenSignature(state.editor.caseFile.id, requirementText, moduleList, prepContext);
     ai.runToken = 'local-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
     ai.loading = true;
@@ -11890,6 +12007,9 @@
     ai.selection = new Set();
     ai.taskSignature = signature;
     ai.caseFileId = state.editor.caseFile ? state.editor.caseFile.id : null;
+    ai.generationMode = resolveCaseLibraryAiGenGenerationMode(prepContext);
+    ai.resultGeneratedCount = 0;
+    ai.resultDedupeCount = 0;
     setStatus(dom.aiGenStatus, '正在生成用例...', '');
     renderCaseLibraryAiGenResult();
     syncCaseLibraryAiGenRunBtn();
@@ -11912,6 +12032,7 @@
         reasoning: reasoning,
         temperature: temperature,
         userText: userText,
+        xmindPipeline: xmindPipeline && xmindPipeline.enabled === true ? xmindPipeline : null,
         prepContext: prepContext || null,
       });
       manager.startTask('case-library', task);
@@ -11939,16 +12060,19 @@
         return parsed;
       })
       .then(function(parsed) {
-        if (parsed && parsed.error) {
-          ai.error = parsed.error;
-          setStatus(dom.aiGenStatus, '生成失败：' + parsed.error, 'err');
-          ai.modules = [];
-        } else {
-          ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
-          if (resultToken) applyCaseLibraryAiGenAppendMap(ai.modules, getCaseLibraryAiGenAppendMap(ai.caseFileId, resultToken));
-          setStatus(dom.aiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
-          genOk = true;
-        }
+      if (parsed && parsed.error) {
+        ai.error = parsed.error;
+        setStatus(dom.aiGenStatus, '生成失败：' + parsed.error, 'err');
+        ai.modules = [];
+        ai.resultGeneratedCount = 0;
+        ai.resultDedupeCount = 0;
+      } else {
+        ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
+        applyCaseLibraryAiGenResultStats(ai, parsed);
+        if (resultToken) applyCaseLibraryAiGenAppendMap(ai.modules, getCaseLibraryAiGenAppendMap(ai.caseFileId, resultToken));
+        setStatus(dom.aiGenStatus, formatCaseLibraryAiGenCompleteStatus(ai), 'ok');
+        genOk = true;
+      }
       })
       .catch(function(err) {
         ai.error = err && err.message ? err.message : '生成失败';

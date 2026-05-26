@@ -101,6 +101,7 @@
     var tempExecAiGenSelectNoneBtn = document.getElementById('tempExecAiGenSelectNoneBtn');
     var tempExecAiGenDiscardBtn = document.getElementById('tempExecAiGenDiscardBtn');
     var tempExecAiGenRegenerateBtn = document.getElementById('tempExecAiGenRegenerateBtn');
+    var tempExecAiGenResultSummary = document.getElementById('tempExecAiGenResultSummary');
     var tempExecAiGenSelectionHint = document.getElementById('tempExecAiGenSelectionHint');
     var tempExecAiGenSelectAllToggle = document.getElementById('tempExecAiGenSelectAllToggle');
     var tempExecAiGenAppendBtn = document.getElementById('tempExecAiGenAppendBtn');
@@ -1295,13 +1296,38 @@
           readResultToken: '',
           hasUnreadResult: false,
           caseFileId: null,
+          generationMode: '',
+          resultGeneratedCount: 0,
+          resultDedupeCount: 0,
         };
       }
       if (!state.tempExecAiGen.selection || !(state.tempExecAiGen.selection instanceof Set)) {
         state.tempExecAiGen.selection = new Set();
       }
       if (!Array.isArray(state.tempExecAiGen.modules)) state.tempExecAiGen.modules = [];
+      if (!isFinite(Number(state.tempExecAiGen.resultGeneratedCount))) state.tempExecAiGen.resultGeneratedCount = 0;
+      if (!isFinite(Number(state.tempExecAiGen.resultDedupeCount))) state.tempExecAiGen.resultDedupeCount = 0;
       return state.tempExecAiGen;
+    }
+
+    function resolveTempExecAiGenGenerationMode(prepContext) {
+      var settings = prepContext && prepContext.settings ? prepContext.settings : {};
+      var mode = settings && settings.casePageGenerationMode !== undefined && settings.casePageGenerationMode !== null
+        ? String(settings.casePageGenerationMode || '').trim()
+        : '';
+      return mode;
+    }
+
+    function syncTempExecAiGenCoverageColumn(hidden) {
+      if (!tempExecAiGenResultBody || !tempExecAiGenResultBody.parentNode) return;
+      var table = tempExecAiGenResultBody.parentNode;
+      if (table && table.querySelectorAll) {
+        var nodes = table.querySelectorAll('th.coverage');
+        for (var i = 0; i < nodes.length; i += 1) {
+          if (hidden) nodes[i].classList.add('hidden');
+          else nodes[i].classList.remove('hidden');
+        }
+      }
     }
 
     var tempExecAiGenBadgePersistKey = 'tap-temp-exec-ai-gen-badges';
@@ -1668,6 +1694,9 @@
 
     function normalizeTempExecAiText(value) {
       if (value === null || value === undefined) return '';
+      if (Array.isArray(value)) {
+        return value.map(function(item) { return normalizeTempExecAiText(item); }).filter(Boolean).join('\n');
+      }
       try {
         return String(value).replace(/[\u200b\u200c\u200d\u2060\ufeff]/g, '').trim();
       } catch (err) {
@@ -1788,8 +1817,11 @@
       }
       var missing = Array.isArray(data.missing_modules) ? data.missing_modules : null;
       var existing = Array.isArray(data.existing_modules) ? data.existing_modules : null;
+      var xmindModules = Array.isArray(data.modules) ? data.modules : null;
       if (!missing || !existing) {
-        return { error: '模型返回格式不正确：缺少 missing_modules/existing_modules' };
+        if (!xmindModules) return { error: '模型返回格式不正确：缺少 missing_modules/existing_modules' };
+        missing = [];
+        existing = [];
       }
       var modules = [];
 
@@ -1818,8 +1850,12 @@
         });
       }
 
-      missing.forEach(function(entry) { pushModule(entry, 'missing'); });
-      existing.forEach(function(entry) { pushModule(entry, 'existing'); });
+      if (xmindModules) {
+        xmindModules.forEach(function(entry) { pushModule(entry, entry && entry.missing === true ? 'missing' : 'existing'); });
+      } else {
+        missing.forEach(function(entry) { pushModule(entry, 'missing'); });
+        existing.forEach(function(entry) { pushModule(entry, 'existing'); });
+      }
       return { modules: modules };
     }
 
@@ -1837,6 +1873,57 @@
       });
     }
 
+    function countTempExecAiGenModuleCases(modules) {
+      var list = Array.isArray(modules) ? modules : [];
+      var total = 0;
+      list.forEach(function(mod) {
+        var cases = mod && Array.isArray(mod.cases) ? mod.cases : [];
+        total += cases.length;
+      });
+      return total;
+    }
+
+    function normalizeTempExecAiGenCount(value) {
+      var num = Number(value);
+      if (!isFinite(num) || num < 0) return null;
+      return Math.round(num);
+    }
+
+    function applyTempExecAiGenResultStats(ai, parsed) {
+      var modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
+      var keptCount = countTempExecAiGenModuleCases(modules);
+      var dedupe = parsed && parsed.ai_dedupe && typeof parsed.ai_dedupe === 'object' ? parsed.ai_dedupe : null;
+      var removedCount = dedupe ? normalizeTempExecAiGenCount(dedupe.removedCount) : null;
+      var generatedCount = dedupe ? normalizeTempExecAiGenCount(dedupe.beforeCount) : null;
+      if (removedCount === null && generatedCount !== null) removedCount = Math.max(0, generatedCount - keptCount);
+      if (removedCount === null && parsed && Array.isArray(parsed.removed_cases)) removedCount = parsed.removed_cases.length;
+      if (removedCount === null && dedupe && Array.isArray(dedupe.removedCases)) removedCount = dedupe.removedCases.length;
+      if (removedCount === null) removedCount = 0;
+      if (generatedCount === null) generatedCount = keptCount + removedCount;
+      ai.resultGeneratedCount = generatedCount;
+      ai.resultDedupeCount = removedCount;
+    }
+
+    function formatTempExecAiGenCompleteStatus(ai) {
+      var generatedCount = normalizeTempExecAiGenCount(ai.resultGeneratedCount);
+      var dedupeCount = normalizeTempExecAiGenCount(ai.resultDedupeCount);
+      var text = '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条';
+      if (!ai.modules || !ai.modules.length) return '生成完成：' + text + '，未返回可追加用例';
+      return '生成完成：' + text;
+    }
+
+    function syncTempExecAiGenResultSummary() {
+      var ai = ensureTempExecAiGenState();
+      if (!tempExecAiGenResultSummary) return;
+      if (!ai.generated && !countTempExecAiGenModuleCases(ai.modules)) {
+        tempExecAiGenResultSummary.textContent = '';
+        return;
+      }
+      var generatedCount = normalizeTempExecAiGenCount(ai.resultGeneratedCount);
+      var dedupeCount = normalizeTempExecAiGenCount(ai.resultDedupeCount);
+      tempExecAiGenResultSummary.textContent = '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条';
+    }
+
     function renderTempExecAiGenResult() {
       var ai = ensureTempExecAiGenState();
       if (!tempExecAiGenResult || !tempExecAiGenResultBody) return;
@@ -1845,6 +1932,8 @@
       var selection = ai.selection instanceof Set ? ai.selection : new Set();
       var totalCases = 0;
       var selectableCases = 0;
+      var hideCoverage = ai.generationMode === 'enhanced';
+      syncTempExecAiGenCoverageColumn(hideCoverage);
       modules.forEach(function(mod) {
         var list = Array.isArray(mod.cases) ? mod.cases : [];
         if (!list.length) return;
@@ -1862,7 +1951,9 @@
           var coverageCell = '';
           var moduleCell = '';
           if (idx === 0) {
-            coverageCell = '<td class="coverage' + (mod.missing ? ' missing' : '') + '" rowspan="' + list.length + '">' + escapeHtml(coverageText) + '</td>';
+            if (!hideCoverage) {
+              coverageCell = '<td class="coverage' + (mod.missing ? ' missing' : '') + '" rowspan="' + list.length + '">' + escapeHtml(coverageText) + '</td>';
+            }
             moduleCell = '<td class="module" rowspan="' + list.length + '">' + escapeHtml(mod.module) + '</td>';
           }
           rows.push(
@@ -1880,12 +1971,13 @@
         });
       });
       if (!rows.length) {
-        tempExecAiGenResultBody.innerHTML = '<tr><td colspan="8"><p class="hint">暂无生成结果</p></td></tr>';
+        tempExecAiGenResultBody.innerHTML = '<tr><td colspan="' + (hideCoverage ? '7' : '8') + '"><p class="hint">暂无生成结果</p></td></tr>';
         if (tempExecAiGenResult.classList) tempExecAiGenResult.classList.add('hidden');
       } else {
         tempExecAiGenResultBody.innerHTML = rows.join('');
         if (tempExecAiGenResult.classList) tempExecAiGenResult.classList.remove('hidden');
       }
+      syncTempExecAiGenResultSummary();
       syncTempExecAiGenSelectionHint(selectableCases);
     }
 
@@ -2082,6 +2174,9 @@
       ai.resultToken = '';
       ai.readResultToken = '';
       ai.hasUnreadResult = false;
+      ai.generationMode = '';
+      ai.resultGeneratedCount = 0;
+      ai.resultDedupeCount = 0;
       if (!keepRequirement) {
         ai.requirementText = '';
         ai.requirementFileName = '';
@@ -2169,10 +2264,13 @@
         setStatus(tempExecAiGenStatus, '生成失败：' + parsed.error, 'err');
         ai.modules = [];
         ai.selection = new Set();
+        ai.resultGeneratedCount = 0;
+        ai.resultDedupeCount = 0;
       } else {
         ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
         ai.selection = new Set();
-        setStatus(tempExecAiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
+        applyTempExecAiGenResultStats(ai, parsed);
+        setStatus(tempExecAiGenStatus, formatTempExecAiGenCompleteStatus(ai), 'ok');
         if (resultToken) {
           applyTempExecAiGenAppendMap(ai.modules, getTempExecAiGenAppendMap(task.caseFileId, resultToken));
         }
@@ -2213,6 +2311,10 @@
       ai.loading = task.status === 'running';
       ai.generated = task.status === 'done';
       ai.error = task.status === 'error' ? (task.error || '') : '';
+      ai.generationMode = resolveTempExecAiGenGenerationMode(task.prepContext);
+      if (!ai.generationMode && task.xmindPipeline && task.xmindPipeline.enabled === true) {
+        ai.generationMode = 'enhanced';
+      }
       if (task.requirementText && (!ai.requirementText || ai.taskSignature === signature)) {
         ai.requirementText = String(task.requirementText || '');
         if (tempExecAiGenRequirementInput) tempExecAiGenRequirementInput.value = ai.requirementText;
@@ -2670,6 +2772,24 @@
         userPayload = prepApi.enrichPayload(userPayload, prepContext);
       }
       var userText = JSON.stringify(userPayload, null, 2);
+      var xmindPipeline = null;
+      if (prepContext && prepApi && typeof prepApi.buildXmindEnhancedPipelineRequest === 'function') {
+        xmindPipeline = prepApi.buildXmindEnhancedPipelineRequest({
+          scene: 'temp-exec',
+          caseFileId: currentFile ? currentFile.id : '',
+          displayName: currentFile ? (currentFile.name || currentFile.file_name_clean || '') : '',
+          projectId: currentFile ? (currentFile.projectId || currentFile.project_id || '') : '',
+          versionId: currentFile ? (currentFile.versionId || currentFile.version_id || '') : '',
+          requirementText: requirementText,
+          moduleList: moduleList,
+          existingCases: casePayload,
+          coverageThreshold: threshold,
+        }, prepContext);
+        if (xmindPipeline && xmindPipeline.enabled === true && xmindPipeline.root) {
+          prompt = xmindPipeline.root.prompt || prompt;
+          userText = xmindPipeline.root.userText || userText;
+        }
+      }
       var signature = buildTempExecAiGenSignature(currentFile.id, requirementText, moduleList, prepContext);
       ai.runToken = 'temp-exec-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
       ai.loading = true;
@@ -2679,6 +2799,9 @@
       ai.selection = new Set();
       ai.taskSignature = signature;
       ai.caseFileId = currentFile ? currentFile.id : null;
+      ai.generationMode = resolveTempExecAiGenGenerationMode(prepContext);
+      ai.resultGeneratedCount = 0;
+      ai.resultDedupeCount = 0;
       setStatus(tempExecAiGenStatus, '正在生成用例...', '');
       renderTempExecAiGenResult();
       syncTempExecAiGenRunBtn();
@@ -2701,6 +2824,7 @@
           reasoning: reasoning,
           temperature: temperature,
           userText: userText,
+          xmindPipeline: xmindPipeline && xmindPipeline.enabled === true ? xmindPipeline : null,
           prepContext: prepContext || null,
         });
         manager.startTask('temp-exec', task);
@@ -2728,16 +2852,19 @@
           return parsed;
         })
         .then(function(parsed) {
-          if (parsed && parsed.error) {
-            ai.error = parsed.error;
-            setStatus(tempExecAiGenStatus, '生成失败：' + parsed.error, 'err');
-            ai.modules = [];
-          } else {
-            ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
-            if (resultToken) applyTempExecAiGenAppendMap(ai.modules, getTempExecAiGenAppendMap(ai.caseFileId, resultToken));
-            setStatus(tempExecAiGenStatus, ai.modules.length ? '生成完成' : '生成完成：未返回可追加用例', 'ok');
-            genOk = true;
-          }
+        if (parsed && parsed.error) {
+          ai.error = parsed.error;
+          setStatus(tempExecAiGenStatus, '生成失败：' + parsed.error, 'err');
+          ai.modules = [];
+          ai.resultGeneratedCount = 0;
+          ai.resultDedupeCount = 0;
+        } else {
+          ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
+          applyTempExecAiGenResultStats(ai, parsed);
+          if (resultToken) applyTempExecAiGenAppendMap(ai.modules, getTempExecAiGenAppendMap(ai.caseFileId, resultToken));
+          setStatus(tempExecAiGenStatus, formatTempExecAiGenCompleteStatus(ai), 'ok');
+          genOk = true;
+        }
         })
         .catch(function(err) {
           ai.error = err && err.message ? err.message : '生成失败';

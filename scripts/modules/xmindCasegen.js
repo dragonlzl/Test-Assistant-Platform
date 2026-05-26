@@ -6425,8 +6425,48 @@
         ? settingsSnapshot
         : buildXmindGenerationOptionsSnapshot();
       var enabledLabels = buildEnabledXmindOptionLabels(snapshot);
+      var existingCasesCompletionPolicy = getExistingCasesCompletionPolicy(contract);
+      var importedBaselineCompletionPolicy = getImportedBaselineCompletionPolicy(contract);
       var lines = [];
-      if (!enabledLabels.length) return '';
+      if (!enabledLabels.length && !existingCasesCompletionPolicy && !importedBaselineCompletionPolicy) return '';
+      if (existingCasesCompletionPolicy) {
+        var scope = contract && contract.scope ? String(contract.scope || '') : '';
+        if (scope === 'root') {
+          lines.push('当前是导入已有用例后的补全第一阶段：先评估当前已有模块是否足够覆盖需求。');
+          lines.push('如果已有模块不足以覆盖需求，只返回缺失的新模块，且这些模块的 cases 必须为空数组或省略。');
+          lines.push('如果已有模块已经足够覆盖需求，必须返回 {"modules":[]}。');
+          lines.push('第一阶段不要输出已有模块，也不要为任何模块生成用例；用例会在后续模块阶段统一生成或补全。');
+        } else {
+          lines.push('当前是导入已有用例后的补全第二阶段：按当前模块已有用例情况生成或补全。');
+          lines.push('如果当前模块没有可见用例，请围绕需求为该模块生成完整用例。');
+          lines.push('如果当前模块已有用例，请以已有用例为已覆盖基线，继续按需求正文、生成选项和风格指南充分补齐该模块应有的正常流、异常流、边界、状态变化、权限/配置、兼容性、弱网/中断恢复和跨模块联动等新增候选。');
+          lines.push('只有确认该模块在需求范围内已经完整覆盖，且不存在可补充的独立测试价值时，才返回当前模块 cases: []。');
+          lines.push('不得改写、合并、删除、复述或替换导入的已有用例。');
+        }
+        if (enabledLabels.length) {
+          lines.push('已开启的生成选项必须作为本轮补全维度纳入判断：' + enabledLabels.join('、') + '。');
+          lines.push('不要因为已有用例覆盖主流程就停止补全；需要结合已开启选项继续补足未覆盖或覆盖薄弱的测试场景。');
+        }
+        if (snapshot.customRequirement) {
+          lines.push('用户附加要求也只作为缺口判断依据，不能绕过先补模块、再生成或补全用例的流程。');
+        }
+        return lines.join('\n');
+      }
+      if (importedBaselineCompletionPolicy) {
+        lines.push('当前是导入已有用例后的追加生成：导入用例只作为覆盖参考和去重基线，不要因为导入用例数量多而线性扩写。');
+        lines.push('如果当前模块没有可见用例，请围绕需求为该模块生成完整用例。');
+        lines.push('如果当前模块已有用例，请以已有用例为已覆盖基线，继续按需求正文、生成选项和风格指南充分补齐该模块应有的正常流、异常流、边界、状态变化、权限/配置、兼容性、弱网/中断恢复和跨模块联动等新增候选。');
+        lines.push('只有确认该模块在需求范围内已经完整覆盖，且不存在可补充的独立测试价值时，才返回当前模块 cases: []。');
+        lines.push('不得改写、合并、删除、复述或替换导入的已有用例。');
+        if (enabledLabels.length) {
+          lines.push('已开启的生成选项必须作为本轮补全维度纳入判断：' + enabledLabels.join('、') + '。');
+          lines.push('不要因为导入用例很多就机械扩写，也不要因为已有用例覆盖主流程就停止补全；需要结合已开启选项继续补足未覆盖或覆盖薄弱的测试场景。');
+        }
+        if (snapshot.customRequirement) {
+          lines.push('用户附加要求也只作为缺口判断依据，不能绕过导入用例的覆盖和去重基线。');
+        }
+        return lines.join('\n');
+      }
       lines.push('已开启的生成选项属于本轮输出的硬性覆盖要求，不是参考建议。');
       lines.push('本轮必须直接覆盖：' + enabledLabels.join('、') + '。');
       if (isRootFullGenerationContract(contract)) {
@@ -9177,16 +9217,16 @@
         };
       }
       if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
-        return {
+        return createExistingCasesDiscoveryContract({
           scope: 'root',
           mode: 'existing_modules_cases',
           targetModule: '',
-          allowNewModules: false,
+          allowNewModules: true,
           generateCasesForNewModules: false,
-          generateCasesForExistingModules: true,
-          dedupeAgainstVisibleModules: false,
+          generateCasesForExistingModules: false,
+          dedupeAgainstVisibleModules: true,
           dedupeAgainstVisibleCases: true,
-        };
+        });
       }
       if (actionId === ROOT_ACTIONS.TOPUP_MODULES) {
         return {
@@ -9222,6 +9262,8 @@
           generateCasesForExistingModules: true,
           dedupeAgainstVisibleModules: false,
           dedupeAgainstVisibleCases: true,
+          importedBaselineCompletion: true,
+          generationPolicy: createImportedBaselineCompletionPolicy(),
         };
       }
       if (actionId === MODULE_ACTIONS.APPEND) {
@@ -9258,6 +9300,93 @@
         dedupeAgainstVisibleModules: false,
         dedupeAgainstVisibleCases: true,
       };
+    }
+
+    function createExistingCasesCompletionPolicy() {
+      return {
+        source: 'xmind_existing_cases_completion',
+        generationStrategy: 'requirement_completion',
+        completionStrength: 'full_reasonable_completion',
+        onlyGenerateForClearCoverageGaps: false,
+        returnEmptyWhenCovered: false,
+        protectImportedCases: true,
+        avoidImportedCaseLinearExpansion: true,
+      };
+    }
+
+    function createImportedBaselineCompletionPolicy() {
+      return {
+        source: 'xmind_imported_baseline_completion',
+        generationStrategy: 'requirement_completion',
+        completionStrength: 'full_reasonable_completion',
+        onlyGenerateForClearCoverageGaps: false,
+        returnEmptyWhenCovered: false,
+        protectImportedCases: true,
+        avoidImportedCaseLinearExpansion: true,
+      };
+    }
+
+    function createExistingCasesDiscoveryContract(contract) {
+      var next = cloneJson(contract, {});
+      next.existingCasesCompletion = true;
+      next.discoveryThenModuleCases = true;
+      next.generationPolicy = createExistingCasesCompletionPolicy();
+      next.allowNewModules = true;
+      next.generateCasesForNewModules = false;
+      next.generateCasesForExistingModules = false;
+      next.dedupeAgainstVisibleModules = true;
+      next.dedupeAgainstVisibleCases = true;
+      return next;
+    }
+
+    function applyExistingCasesCompletionPolicy(contract) {
+      var next = cloneJson(contract, {});
+      next.existingCasesCompletion = true;
+      next.discoveryThenModuleCases = true;
+      next.generationPolicy = createExistingCasesCompletionPolicy();
+      next.onlyGenerateForClearCoverageGaps = false;
+      next.returnEmptyWhenCovered = false;
+      next.allowNewModules = false;
+      next.generateCasesForNewModules = false;
+      next.generateCasesForExistingModules = true;
+      next.dedupeAgainstVisibleCases = true;
+      return next;
+    }
+
+    function applyImportedBaselineCompletionPolicy(contract) {
+      var next = cloneJson(contract, {});
+      next.importedBaselineCompletion = true;
+      next.discoveryThenModuleCases = true;
+      next.generationPolicy = createImportedBaselineCompletionPolicy();
+      next.onlyGenerateForClearCoverageGaps = false;
+      next.returnEmptyWhenCovered = false;
+      next.allowNewModules = false;
+      next.generateCasesForNewModules = false;
+      next.generateCasesForExistingModules = true;
+      next.dedupeAgainstVisibleCases = true;
+      return next;
+    }
+
+    function getExistingCasesCompletionPolicy(contract) {
+      if (!contract || typeof contract !== 'object') return null;
+      var mode = contract.mode ? String(contract.mode || '') : '';
+      if (contract.existingCasesCompletion === true || mode === 'existing_modules_cases') {
+        return contract.generationPolicy && typeof contract.generationPolicy === 'object'
+          ? contract.generationPolicy
+          : createExistingCasesCompletionPolicy();
+      }
+      return null;
+    }
+
+    function getImportedBaselineCompletionPolicy(contract) {
+      if (!contract || typeof contract !== 'object') return null;
+      var mode = contract.mode ? String(contract.mode || '') : '';
+      if (contract.importedBaselineCompletion === true || mode === 'append_all_modules_cases') {
+        return contract.generationPolicy && typeof contract.generationPolicy === 'object'
+          ? contract.generationPolicy
+          : createImportedBaselineCompletionPolicy();
+      }
+      return null;
     }
 
     function buildXmindPrompt(contract) {
@@ -14152,7 +14281,10 @@
         return baseText;
       }
       if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
-        return '已为已有模块补充 ' + String(addedCases) + ' 条用例';
+        if (createdModules > 0) {
+          return '已补充 ' + String(createdModules) + ' 个模块，' + String(addedCases) + ' 条用例';
+        }
+        return '已补充 ' + String(addedCases) + ' 条用例';
       }
       if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES || actionId === ROOT_ACTIONS.APPEND_ALL) {
         return '已补充 ' + String(createdModules) + ' 个模块，' + String(addedCases) + ' 条用例';
@@ -14427,7 +14559,7 @@
         }
       }
 
-      var existingDescriptors = actionId === ROOT_ACTIONS.APPEND_ALL
+      var existingDescriptors = (actionId === ROOT_ACTIONS.EXISTING_CASES || actionId === ROOT_ACTIONS.APPEND_ALL)
         ? buildRootPipelineTaskDescriptors(actionId, visibleContext)
         : [];
       var newModules = [];
@@ -14438,7 +14570,7 @@
         newModules = modules.slice();
         skeletonModules = cloneModulesWithoutCases(newModules);
         skeletonActionId = ROOT_ACTIONS.FULL_MODULES;
-      } else if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES || actionId === ROOT_ACTIONS.APPEND_ALL) {
+      } else if (actionId === ROOT_ACTIONS.EXISTING_CASES || actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES || actionId === ROOT_ACTIONS.APPEND_ALL) {
         newModules = modules.filter(function(item) {
           return !visibleMap[normalizeModuleKey(item && item.module ? item.module : '')];
         });
@@ -15874,6 +16006,19 @@
         var visibleContextMap = visibleContext.map || {};
         var resolvedEntry = visibleContextMap[moduleEntry.moduleKey] || moduleEntry;
         var contract = options.contractOverride || createOperationContract(actionId, resolvedEntry);
+        if (
+          String(options.rootPipelineActionId || '') === ROOT_ACTIONS.APPEND_ALL
+          && options.rootPipelineNewModule !== true
+          && (actionId === MODULE_ACTIONS.APPEND || actionId === MODULE_ACTIONS.FULL_CASES)
+        ) {
+          contract = applyImportedBaselineCompletionPolicy(contract);
+        }
+        if (
+          String(options.rootPipelineActionId || '') === ROOT_ACTIONS.EXISTING_CASES
+          && (actionId === MODULE_ACTIONS.APPEND || actionId === MODULE_ACTIONS.FULL_CASES)
+        ) {
+          contract = applyExistingCasesCompletionPolicy(contract);
+        }
         var historyModuleTitle = normalizeModuleTitle(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : moduleEntry.title);
         moduleTaskMeta.contract = cloneJson(contract, {});
         moduleTaskMeta.historyActionLabel = historyActionLabel;
@@ -16010,26 +16155,10 @@
         hadAiContentBeforeAction: rootTaskMeta && rootTaskMeta.hadAiContentBeforeAction === true,
         hadAiLayerBeforeAction: rootTaskMeta && rootTaskMeta.hadAiLayerBeforeAction === true,
         hadAiCasesBeforeAction: rootTaskMeta && rootTaskMeta.hadAiCasesBeforeAction === true,
-        stage: actionId === ROOT_ACTIONS.EXISTING_CASES ? 'modules' : 'discovering',
-        discoveryStatus: actionId === ROOT_ACTIONS.EXISTING_CASES ? 'skipped' : 'running',
+        stage: 'discovering',
+        discoveryStatus: 'running',
       });
       setRootPipelineState(pipeline);
-
-      if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
-        var existingDescriptors = buildRootPipelineTaskDescriptors(actionId, visibleContext).map(function(item) {
-          return Object.assign({}, item, { anchorNodeId: getRootNodeId() });
-        });
-        var startedCount = await startRootPipelineModuleTasks(pipeline, existingDescriptors, {
-          workspaceId: taskWorkspaceId,
-        });
-        rootState.taskId = startedCount > 0 ? String(pipeline.id || '') : '';
-        rootState.updatedAt = Date.now();
-        persistXmindState(true);
-        if (startedCount <= 0) {
-          finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: getRootNodeId() });
-        }
-        return true;
-      }
 
       var contract = rootTaskMeta && rootTaskMeta.contract
         ? cloneJson(rootTaskMeta.contract, {})

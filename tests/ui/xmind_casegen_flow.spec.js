@@ -499,12 +499,20 @@ async function installXmindModelStub(page, delayMs) {
             ]),
           ];
       } else if (mode === 'existing_modules_cases') {
-        responseModules = visibleList.map(function(item, index) {
-          var moduleName = item && item.module ? String(item.module) : ('模块' + String(index + 1));
-          return makeModule(moduleName, [
-            makeCase(moduleName, moduleName + '-补全用例', 1),
-          ]);
-        });
+        var missingModules = Array.isArray(window.__xmindCasegenExistingCompletionMissingModules)
+          ? window.__xmindCasegenExistingCompletionMissingModules
+          : [];
+        responseModules = missingModules.length
+          ? missingModules.map(function(item, index) {
+            var moduleName = item && item.module ? String(item.module) : ('缺失模块' + String(index + 1));
+            return makeModule(moduleName, Array.isArray(item && item.cases) ? item.cases : []);
+          })
+          : visibleList.map(function(item, index) {
+            var moduleName = item && item.module ? String(item.module) : ('模块' + String(index + 1));
+            return makeModule(moduleName, [
+              makeCase(moduleName, moduleName + '-补全用例', 1),
+            ]);
+          });
       } else if (mode === 'topup_modules') {
         responseModules = [makeModule('消息模块')];
       } else if (mode === 'topup_modules_cases') {
@@ -536,10 +544,16 @@ async function installXmindModelStub(page, delayMs) {
         ];
       } else if (mode === 'module_append_cases') {
         var moduleAppendIndex = nextCounter('module:' + targetModule);
+        var moduleAppendCount = Number(window.__xmindCasegenModuleAppendCaseCount || 1);
+        if (!Number.isFinite(moduleAppendCount) || moduleAppendCount < 1) moduleAppendCount = 1;
+        moduleAppendCount = Math.min(20, Math.floor(moduleAppendCount));
+        var moduleAppendCases = [];
+        for (var appendCaseIndex = 0; appendCaseIndex < moduleAppendCount; appendCaseIndex += 1) {
+          var caseNumber = moduleAppendIndex + appendCaseIndex;
+          moduleAppendCases.push(makeCase(targetModule, targetModule + '-追加-' + String(caseNumber), appendCaseIndex + 1));
+        }
         responseModules = [
-          makeModule(targetModule, [
-            makeCase(targetModule, targetModule + '-追加-' + moduleAppendIndex, 1),
-          ]),
+          makeModule(targetModule, moduleAppendCases),
         ];
       } else if (mode === 'module_full_cases') {
         responseModules = String(window.__xmindCasegenEmptyModuleTitle || '') === targetModule
@@ -9620,7 +9634,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await openXmindCaseGenDrawer(page);
     await waitForNodeText(page, '登录模块-基线用例');
 
-    await openNodeContextMenu(page, 'XMind基线需求');
+    await openRootContextMenu(page);
     const baselineItems = await getContextMenuItems(page);
     expect(baselineItems.map((item) => item.label)).toEqual([
       '补全模块',
@@ -9633,17 +9647,74 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await waitForNodeText(page, '登录模块-追加-1');
     await waitForNodeText(page, '消息模块');
-    await waitForNodeText(page, '消息模块新增用例');
+    await waitForNodeText(page, '消息模块-完整-1');
 
-    await openNodeContextMenu(page, 'XMind基线需求');
+    await openRootContextMenu(page);
     const afterAppendItems = await getContextMenuItems(page);
     expect(afterAppendItems[3].disabled).toBe(false);
     await clickContextMenuAction(page, '放弃本次生成');
 
     await waitForNodeText(page, '登录模块-基线用例');
     await waitForNodeTextAbsent(page, '登录模块-追加-1');
-    await waitForNodeTextAbsent(page, '消息模块新增用例');
+    await waitForNodeTextAbsent(page, '消息模块-完整-1');
     await waitForNodeTextAbsent(page, '消息模块');
+  });
+
+  test('导入基线后的追加全部按覆盖缺口生成，不按导入模块数量机械扩写', async ({ page }) => {
+    const token = 'token-xmind-baseline-gap-driven-append';
+    const user = { id: 38, username: 'demo_user_38', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 120);
+    await seedDocumentRequirement(page, {
+      text: '需求：导入已有登录用例后，只补充明确缺口，并新增消息模块。',
+      requirementLabel: 'XMind导入基线缺口追加需求',
+    });
+    await seedImportedBaseline(page, [{
+      module: '登录模块',
+      title: '登录模块-基线用例',
+      priority: 'P1',
+      preconditions: '账号已存在',
+      steps: ['1、进入登录页', '2、输入账号密码'],
+      expected: '登录成功',
+    }]);
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'import',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录模块-基线用例');
+
+    await openNodeContextMenu(page, 'XMind导入基线缺口追加需求');
+    await clickContextMenuAction(page, '追加生成全部模块+用例');
+
+    await waitForNodeText(page, '登录模块-追加-1');
+    await waitForNodeText(page, '消息模块-完整-1');
+    await waitForNodeStatusAbsent(page, 'XMind导入基线缺口追加需求');
+
+    const calls = await page.evaluate(() => Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : []);
+    const rootCalls = calls.filter((item) => item && item.contract && String(item.contract.mode || '') === 'append_all_modules_cases');
+    const appendCalls = calls.filter((item) => item && item.contract && String(item.contract.mode || '') === 'module_append_cases');
+    const fullCalls = calls.filter((item) => item && item.contract && String(item.contract.mode || '') === 'module_full_cases');
+
+    expect(rootCalls).toHaveLength(1);
+    expect(rootCalls[0].contract.importedBaselineCompletion).toBe(true);
+    expect(rootCalls[0].contract.generationPolicy.generationStrategy).toBe('requirement_completion');
+    expect(rootCalls[0].prompt).toContain('导入用例只作为覆盖参考和去重基线');
+    expect(appendCalls).toHaveLength(1);
+    expect(appendCalls[0].contract.importedBaselineCompletion).toBe(true);
+    expect(appendCalls[0].contract.generationPolicy.generationStrategy).toBe('requirement_completion');
+    expect(appendCalls[0].contract.dedupeAgainstVisibleCases).toBe(true);
+    expect(appendCalls[0].prompt).toContain('如果当前模块已有用例，请以已有用例为已覆盖基线');
+    expect(appendCalls[0].user).toContain('不要因为导入用例很多就机械扩写');
+    expect(fullCalls).toHaveLength(1);
+    expect(fullCalls[0].contract.targetModule).toBe('消息模块');
+    expect(fullCalls[0].contract.importedBaselineCompletion).toBeUndefined();
   });
 
   test('模块可并发生成，且根节点补模块动作不会阻塞现有模块生成', async ({ page }) => {
@@ -9959,6 +10030,154 @@ test.describe('XMind 用例生成抽屉', () => {
 
     const framesAfterOffscreen = await readAllTopupHighlightFrames(page);
     expect(framesAfterOffscreen).toHaveLength(2);
+  });
+
+  test('根节点已有模块补全用例不截断模型返回的新增用例', async ({ page }) => {
+    const token = 'token-xmind-root-existing-cases-limit';
+    const user = { id: 35, username: 'demo_user_35', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 120);
+    await page.evaluate(() => {
+      window.__xmindCasegenModuleAppendCaseCount = 5;
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：导入已有登录用例后，只针对明确缺口补充少量新增用例。',
+      requirementLabel: 'XMind已有模块缺口补全需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login-limit',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login-limit': [{
+        module: '登录模块',
+        title: '登录模块-已有主流程',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码'],
+        expected: '登录成功',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+      needBoundary: true,
+      needSpecial: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录模块-已有主流程');
+
+    await openNodeContextMenu(page, 'XMind已有模块缺口补全需求');
+    await clickContextMenuAction(page, '已有模块补全用例');
+
+    await waitForNodeText(page, '登录模块-追加-1');
+    await waitForNodeText(page, '登录模块-追加-2');
+    await waitForNodeText(page, '登录模块-追加-3');
+    await waitForNodeText(page, '登录模块-追加-4');
+    await waitForNodeText(page, '登录模块-追加-5');
+    await waitForNodeStatusAbsent(page, 'XMind已有模块缺口补全需求');
+
+    const appendCalls = await page.evaluate(() => {
+      return (Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : []).filter(function(item) {
+        return item && item.contract && String(item.contract.mode || '') === 'module_append_cases';
+      });
+    });
+    expect(appendCalls).toHaveLength(1);
+    expect(appendCalls[0].responseModules[0].cases).toHaveLength(5);
+    expect(appendCalls[0].contract.existingCasesCompletion).toBe(true);
+    expect(appendCalls[0].contract.generationPolicy.generationStrategy).toBe('requirement_completion');
+    expect(appendCalls[0].contract.generationPolicy.maxNewCasesPerModule).toBeUndefined();
+    expect(appendCalls[0].contract.maxNewCasesPerModule).toBeUndefined();
+    expect(appendCalls[0].prompt).toContain('补全第二阶段');
+    expect(appendCalls[0].prompt).not.toContain('最多新增');
+    expect(appendCalls[0].user).toContain('不要因为开启了生成选项就为每个模块机械新增用例');
+  });
+
+  test('根节点已有模块补全用例先补缺失模块再按用例状态生成或补全', async ({ page }) => {
+    const token = 'token-xmind-root-existing-cases-discovery-first';
+    const user = { id: 37, username: 'demo_user_37', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 120);
+    await page.evaluate(() => {
+      window.__xmindCasegenExistingCompletionMissingModules = [{
+        module: '支付模块',
+        cases: [],
+      }];
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：当前已有登录模块，但还缺少支付能力；登录已有用例需要补充异常场景，资料模块暂无用例。',
+      requirementLabel: 'XMind已有模块先补模块需求',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-login-discovery',
+      title: '登录模块',
+      scenarios: ['登录主场景'],
+      points: ['账号密码校验'],
+      coupled: ['用户中心'],
+    }, {
+      id: 'xmind-mod-profile-discovery',
+      title: '资料模块',
+      scenarios: ['资料主场景'],
+      points: ['资料展示'],
+      coupled: ['用户中心'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-login-discovery': [{
+        module: '登录模块',
+        title: '登录模块-已有主流程',
+        priority: 'P1',
+        preconditions: '账号已存在',
+        steps: ['1、进入登录页', '2、输入账号密码'],
+        expected: '登录成功',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录模块-已有主流程');
+
+    await openNodeContextMenu(page, 'XMind已有模块先补模块需求');
+    await clickContextMenuAction(page, '已有模块补全用例');
+
+    await waitForNodeText(page, '支付模块');
+    await waitForNodeText(page, '登录模块-追加-1');
+    await waitForNodeText(page, '资料模块-完整-1');
+    await waitForNodeText(page, '支付模块-完整-1');
+    await waitForNodeStatusAbsent(page, 'XMind已有模块先补模块需求');
+
+    const calls = await page.evaluate(() => Array.isArray(window.__xmindCasegenCalls) ? window.__xmindCasegenCalls : []);
+    const discoveryCalls = calls.filter((item) => item && item.contract && String(item.contract.mode || '') === 'existing_modules_cases');
+    const appendCalls = calls.filter((item) => item && item.contract && String(item.contract.mode || '') === 'module_append_cases');
+    const fullCalls = calls.filter((item) => item && item.contract && String(item.contract.mode || '') === 'module_full_cases');
+    const fullTargets = fullCalls.map((item) => String(item.contract.targetModule || '')).sort();
+
+    expect(discoveryCalls).toHaveLength(1);
+    expect(discoveryCalls[0].contract.allowNewModules).toBe(true);
+    expect(discoveryCalls[0].contract.generateCasesForNewModules).toBe(false);
+    expect(discoveryCalls[0].contract.generateCasesForExistingModules).toBe(false);
+    expect(discoveryCalls[0].contract.dedupeAgainstVisibleModules).toBe(true);
+    expect(discoveryCalls[0].prompt).toContain('补全第一阶段');
+    expect(discoveryCalls[0].user).toContain('第一阶段不要输出已有模块');
+    expect(appendCalls).toHaveLength(1);
+    expect(appendCalls[0].contract.targetModule).toBe('登录模块');
+    expect(fullTargets).toEqual(['支付模块', '资料模块']);
   });
 
   test('根节点补全模块会在追加位置展示生成中占位，并在完成后框选新增模块', async ({ page }) => {

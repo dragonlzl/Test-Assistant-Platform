@@ -22,6 +22,8 @@
     var STEP_REQUIREMENT = 1;
     var STEP_CASES = 2;
     var STEP_OPTIONS = 3;
+    var GENERATION_MODE_PRECISE = 'precise';
+    var GENERATION_MODE_ENHANCED = 'enhanced';
     var dialogs = {};
 
     function escapeHtml(text) {
@@ -74,6 +76,50 @@
       var head = text.charAt(0);
       if (head === 'p' || head === 'P') return 'P' + text.slice(1);
       return text;
+    }
+
+    function normalizeGenerationMode(value) {
+      var text = normalizeText(value);
+      if (text === GENERATION_MODE_PRECISE) return GENERATION_MODE_PRECISE;
+      if (text === GENERATION_MODE_ENHANCED) return GENERATION_MODE_ENHANCED;
+      return '';
+    }
+
+    function getGenerationModeMeta(mode) {
+      var stable = normalizeGenerationMode(mode);
+      if (stable === GENERATION_MODE_PRECISE) {
+        return {
+          mode: GENERATION_MODE_PRECISE,
+          title: '精准补充',
+          shortDesc: '执行时长快，新增数量少。',
+          strategy: 'threshold_focused',
+          coveragePolicy: 'hard_threshold',
+          prompt: '生成模式：精准补充。请把 coverage_threshold 作为硬门槛，优先只补原用例明确缺失或覆盖不足的测试点；输出数量保持克制，执行时长优先。',
+        };
+      }
+      if (stable === GENERATION_MODE_ENHANCED) {
+        return {
+          mode: GENERATION_MODE_ENHANCED,
+          title: '增强补全',
+          shortDesc: '覆盖更全，执行时间稍长。',
+          strategy: 'strong_completion',
+          coveragePolicy: 'ignore_for_generation',
+          prompt: [
+            '生成模式：增强补全，执行强补全策略。',
+            '本策略优先级高于基础提示词中“coverage_threshold 达到阈值可不生成”的规则；请忽略 coverage_threshold 的停生成效果，coverage_threshold 只作为参考信息，不允许作为跳过模块或停止生成的依据。',
+            '请参考 XMind 补全思路，对需求相关的已有模块和缺失模块都进行补全；即使原用例覆盖了主流程，也要继续按测试场景维度补足异常流、边界值、状态变化、配置/权限、兼容/移动端、弱网/中断恢复和跨模块联动等高价值候选。',
+            '原有用例只作为上下文和语义重复判断基线；仍然只能输出新增候选，不能改动原有用例。',
+          ].join('\n'),
+        };
+      }
+      return {
+        mode: '',
+        title: '',
+        shortDesc: '',
+        strategy: '',
+        coveragePolicy: '',
+        prompt: '',
+      };
     }
 
     function normalizeCaseItem(raw) {
@@ -155,12 +201,196 @@
       return order.map(function(key) { return map[key]; });
     }
 
+    function isEnhancedGenerationContext(prep) {
+      var settings = prep && prep.settings ? prep.settings : {};
+      return normalizeGenerationMode(settings.casePageGenerationMode || '') === GENERATION_MODE_ENHANCED;
+    }
+
+    function buildExternalXmindContract(mode, moduleName) {
+      if (mode === 'module_append_cases') {
+        return {
+          scope: 'module',
+          mode: 'module_append_cases',
+          targetModule: normalizeText(moduleName || ''),
+          allowNewModules: false,
+          generateCasesForNewModules: false,
+          generateCasesForExistingModules: true,
+          dedupeAgainstVisibleModules: false,
+          dedupeAgainstVisibleCases: true,
+        };
+      }
+      if (mode === 'module_full_cases') {
+        return {
+          scope: 'module',
+          mode: 'module_full_cases',
+          targetModule: normalizeText(moduleName || ''),
+          allowNewModules: false,
+          generateCasesForNewModules: false,
+          generateCasesForExistingModules: true,
+          dedupeAgainstVisibleModules: false,
+          dedupeAgainstVisibleCases: false,
+        };
+      }
+      return {
+        scope: 'root',
+        mode: 'append_all_modules_cases',
+        targetModule: '',
+        allowNewModules: true,
+        generateCasesForNewModules: true,
+        generateCasesForExistingModules: true,
+        dedupeAgainstVisibleModules: false,
+        dedupeAgainstVisibleCases: true,
+      };
+    }
+
+    function buildExternalXmindPromptBase(prep) {
+      var defaultPrompts = config && config.defaultPrompts ? config.defaultPrompts : {};
+      var defaultPrompt = defaultPrompts && defaultPrompts.xmindcasegen
+        ? String(defaultPrompts.xmindcasegen || '').trim()
+        : '';
+      var assignedPrompt = state && state.assignments && state.assignments.xmindCaseGenPrompt
+        ? String(state.assignments.xmindCaseGenPrompt || '').trim()
+        : '';
+      var guide = config && config.caseWritingStyleGuidePrompt ? String(config.caseWritingStyleGuidePrompt || '').trim() : '';
+      var promptContext = prep && prep.promptContext ? String(prep.promptContext || '').trim() : '';
+      var parts = [];
+      if (defaultPrompt) parts.push(defaultPrompt);
+      if (assignedPrompt && assignedPrompt !== defaultPrompt) parts.push(assignedPrompt);
+      if (promptContext) parts.push(promptContext);
+      parts.push([
+        '【外部用例基线生成约束】',
+        '当前不是 XMind 页面本身，不能修改 XMind 页面状态；但生成语义需要复用 XMind 的模块化发现、已有模块补强、新模块全量生成思路。',
+        '第二步导入用例为 locked_imported_cases，只读。原有用例只能作为模块基线、覆盖分析和重复判断上下文。',
+        '输出只能包含新增候选用例；不要改写、删除、合并或返回原有用例。',
+        '增强补全时，coverage_threshold 只作为参考，不能作为跳过模块或停止生成的依据。',
+      ].join('\n'));
+      if (guide && parts.join('\n').indexOf('AI_CASE_WRITING_STYLE_GUIDE.md') === -1) {
+        parts.push(guide);
+      }
+      return parts.filter(Boolean).join('\n\n');
+    }
+
+    function buildExternalXmindPrompt(promptBase, contract) {
+      var parts = [String(promptBase || '').trim()];
+      parts.push('operation_contract(JSON)：' + JSON.stringify(contract || {}));
+      return parts.filter(Boolean).join('\n\n');
+    }
+
+    function buildExternalXmindBasePayload(options, prep) {
+      var opts = options || {};
+      var settings = prep && prep.settings ? prep.settings : {};
+      var payloadExtra = prep && prep.payloadExtra ? prep.payloadExtra : {};
+      var existingCases = normalizeCaseList(opts.existingCases || prep && prep.sourceCases || []);
+      var moduleList = Array.isArray(opts.moduleList) && opts.moduleList.length
+        ? opts.moduleList.slice()
+        : buildModuleList(existingCases);
+      var context = opts.context || {};
+      var generationModeMeta = getGenerationModeMeta(settings.casePageGenerationMode || '');
+      var basePayload = {
+        requirement_text: opts.requirementText || prep && prep.requirementText || '',
+        requirement_supplement: prep && prep.requirementSupplement ? String(prep.requirementSupplement || '') : '',
+        module_list: moduleList,
+        existing_cases: existingCases,
+        coverage_threshold: opts.coverageThreshold,
+        generation_options: settings,
+        coverage_threshold_policy: payloadExtra.coverage_threshold_policy || '',
+        coverage_threshold_can_skip_module: payloadExtra.coverage_threshold_can_skip_module === true,
+        case_page_generation_mode: payloadExtra.case_page_generation_mode || null,
+        generation_policy: payloadExtra.generation_policy || null,
+        locked_imported_cases: payloadExtra.locked_imported_cases || null,
+        dedupe_contract: payloadExtra.dedupe_contract || null,
+        knowledge_base: payloadExtra.knowledge_base || null,
+        xmind_generation_context: payloadExtra.xmind_generation_context || null,
+        source_context: {
+          scene: opts.scene || context.scene || '',
+          case_file_id: opts.caseFileId || context.caseFileId || '',
+          display_name: opts.displayName || context.displayName || '',
+          project_id: opts.projectId || context.projectId || '',
+          version_id: opts.versionId || context.versionId || '',
+        },
+        generation_mode_summary: generationModeMeta.prompt,
+      };
+      return basePayload;
+    }
+
+    function buildExternalXmindStagePayload(basePayload, contract, visibleModules, stage, moduleEntry, discoveryModules) {
+      var payload = cloneJson(basePayload || {}, {});
+      payload.operation_contract = cloneJson(contract || {}, {});
+      payload.current_visible_modules = cloneJson(visibleModules || [], []);
+      payload.current_ai_generation_layer = cloneJson(discoveryModules || [], []);
+      payload.xmind_external_pipeline = {
+        enabled: true,
+        version: 1,
+        stage: stage || 'discovery',
+        pipeline: 'append_all_modules_cases',
+        root_mode: 'append_all_modules_cases',
+        module_mode: contract && contract.mode ? String(contract.mode || '') : '',
+        output_contract: 'xmind_modules',
+        final_output_scope: 'new_cases_only',
+        model_assignment_policy: 'use_case_library_generation_model',
+        protect_original_cases: true,
+      };
+      if (moduleEntry) {
+        payload.current_operation_module = cloneJson(moduleEntry, {});
+      }
+      return payload;
+    }
+
+    function buildXmindEnhancedPipelineRequest(options, prep) {
+      if (!isEnhancedGenerationContext(prep)) return null;
+      var opts = options || {};
+      var existingCases = normalizeCaseList(opts.existingCases || prep && prep.sourceCases || []);
+      var visibleModules = groupCasesByModule(existingCases).map(function(entry) {
+        return {
+          moduleId: entry.moduleId,
+          moduleKey: entry.moduleKey,
+          module: entry.module,
+          key_scenarios: [],
+          test_points: [],
+          coupled_modules: [],
+          cases: entry.cases || [],
+        };
+      });
+      var promptBase = buildExternalXmindPromptBase(prep || {});
+      var rootContract = buildExternalXmindContract('append_all_modules_cases', '');
+      var basePayload = buildExternalXmindBasePayload({
+        scene: opts.scene || '',
+        caseFileId: opts.caseFileId || '',
+        displayName: opts.displayName || '',
+        projectId: opts.projectId || '',
+        versionId: opts.versionId || '',
+        requirementText: opts.requirementText || '',
+        moduleList: opts.moduleList || [],
+        existingCases: existingCases,
+        coverageThreshold: opts.coverageThreshold,
+      }, prep || {});
+      var rootPayload = buildExternalXmindStagePayload(basePayload, rootContract, visibleModules, 'discovery', null, []);
+      return {
+        enabled: true,
+        version: 1,
+        source: 'case-page-xmind-external-pipeline',
+        mode: 'append_all_modules_cases',
+        promptBase: promptBase,
+        root: {
+          prompt: buildExternalXmindPrompt(promptBase, rootContract),
+          userText: JSON.stringify(rootPayload, null, 2),
+          operationContract: rootContract,
+        },
+        basePayload: basePayload,
+        visibleModules: visibleModules,
+        moduleConcurrency: 4,
+      };
+    }
+
     function ensureSettings() {
       if (!state.caseGenSettings || typeof state.caseGenSettings !== 'object') {
         state.caseGenSettings = {};
       }
       var settings = state.caseGenSettings;
       if (settings.customRequirement === undefined || settings.customRequirement === null) settings.customRequirement = '';
+      if (settings.casePageGenerationMode === undefined || settings.casePageGenerationMode === null) {
+        settings.casePageGenerationMode = GENERATION_MODE_ENHANCED;
+      }
       settings.dedupeSimplify = settings.dedupeSimplify === true;
       settings.needFunctionCondition = settings.needFunctionCondition !== false;
       settings.needNumericValidation = settings.needNumericValidation !== false;
@@ -179,6 +409,7 @@
       var settings = ensureSettings();
       return {
         customRequirement: String(settings.customRequirement || ''),
+        casePageGenerationMode: normalizeGenerationMode(settings.casePageGenerationMode || ''),
         dedupeSimplify: settings.dedupeSimplify === true,
         needFunctionCondition: settings.needFunctionCondition === true,
         needNumericValidation: settings.needNumericValidation === true,
@@ -272,6 +503,7 @@
         allowRequirementDocument: true,
         loading: false,
         knowledgeBaseState: buildKnowledgeBaseSkipState('等待确认后按配置检索'),
+        generationModeInvalid: false,
         statusText: '',
         statusType: '',
         resolver: null,
@@ -415,6 +647,17 @@
         + '</label>';
     }
 
+    function renderGenerationModeChoice(dialog, mode, title, desc, active) {
+      var cls = 'xmind-casegen-prep-choice xmind-casegen-prep-mode-choice';
+      if (active) cls += ' is-active';
+      return ''
+        + '<label class="' + cls + '" data-case-page-prep-generation-mode-choice="' + escapeHtml(mode) + '">'
+        +   '<input type="radio" name="casePageGenerationMode-' + escapeHtml(dialog.scene) + '" value="' + escapeHtml(mode) + '" ' + (active ? 'checked ' : '') + '/>'
+        +   '<span class="xmind-casegen-prep-choice-title">' + escapeHtml(title) + '</span>'
+        +   '<span class="xmind-casegen-prep-choice-desc">' + escapeHtml(desc) + '</span>'
+        + '</label>';
+    }
+
     function renderKnowledgeSummary(dialog) {
       var kb = dialog.knowledgeBaseState || buildKnowledgeBaseSkipState('');
       var rule = kb.ruleSearch || {};
@@ -437,6 +680,10 @@
     function renderOptionsStep(dialog) {
       var settings = snapshotSettings();
       var specialDisabled = settings.needSpecial !== true;
+      var generationMode = dialog.generationModeInvalid === true
+        ? ''
+        : normalizeGenerationMode(settings.casePageGenerationMode || '');
+      var modeInvalid = dialog.generationModeInvalid === true && !generationMode;
       return ''
         + '<div class="xmind-casegen-prep-card xmind-casegen-prep-card-main">'
         +   '<div class="xmind-casegen-prep-card-head">'
@@ -451,6 +698,14 @@
         +     '<textarea id="casePageAiGenCustomRequirement-' + escapeHtml(dialog.scene) + '" data-case-page-prep-setting="customRequirement" placeholder="非必填，用于补充生成要求。">' + escapeHtml(settings.customRequirement || '') + '</textarea>'
         +   '</div>'
         +   '<div class="xmind-casegen-prep-option-stack">'
+        +     '<div class="xmind-casegen-prep-option-group xmind-casegen-prep-generation-mode-group' + (modeInvalid ? ' is-invalid' : '') + '" data-case-page-prep-generation-mode-group>'
+        +       '<div class="xmind-casegen-prep-option-group-head"><strong class="xmind-casegen-prep-option-group-title">生成模式<span class="xmind-casegen-prep-required">*</span></strong><span class="xmind-casegen-prep-option-group-desc">必选一项，决定本轮生成数量和执行时长。</span></div>'
+        +       '<div class="xmind-casegen-prep-choice-grid">'
+        +         renderGenerationModeChoice(dialog, GENERATION_MODE_PRECISE, '精准补充', '执行时长快，新增数量少。', generationMode === GENERATION_MODE_PRECISE)
+        +         renderGenerationModeChoice(dialog, GENERATION_MODE_ENHANCED, '增强补全', '覆盖更全，执行时间稍长。', generationMode === GENERATION_MODE_ENHANCED)
+        +       '</div>'
+        +       (modeInvalid ? '<div class="xmind-casegen-prep-field-error">请选择一种生成模式。</div>' : '')
+        +     '</div>'
         +     '<div class="xmind-casegen-prep-option-group">'
         +       '<div class="xmind-casegen-prep-option-group-head"><strong class="xmind-casegen-prep-option-group-title">去重设置</strong><span class="xmind-casegen-prep-option-group-desc">仅处理本轮 AI 生成用例，原有用例只读参与比对。</span></div>'
         +       '<div class="xmind-casegen-prep-toggle-grid">' + renderToggle('dedupeSimplify', '去重并精简', '关闭时只移除重复；开启后在保证覆盖前提下压缩冗余。', settings.dedupeSimplify) + '</div>'
@@ -535,7 +790,12 @@
       dialog.statusText = '';
       dialog.statusType = '';
       dialog.knowledgeBaseState = buildKnowledgeBaseSkipState('等待确认后按配置检索');
+      dialog.generationModeInvalid = false;
       dialog.open = true;
+      var settings = ensureSettings();
+      if (!normalizeGenerationMode(settings.casePageGenerationMode || '')) {
+        settings.casePageGenerationMode = GENERATION_MODE_ENHANCED;
+      }
 
       var overlayId = getOverlayId(scene);
       var existing = document.getElementById(overlayId);
@@ -593,6 +853,16 @@
             return;
           }
           dialog.requirementMode = target.value === 'document' ? 'document' : 'manual';
+          renderDialog(scene);
+          return;
+        }
+        if (target.name && String(target.name).indexOf('casePageGenerationMode-') === 0) {
+          var mode = normalizeGenerationMode(target.value || '');
+          updateSetting('casePageGenerationMode', mode);
+          var modeDialog = getDialog(scene);
+          modeDialog.generationModeInvalid = false;
+          modeDialog.statusText = '';
+          modeDialog.statusType = '';
           renderDialog(scene);
           return;
         }
@@ -690,6 +960,8 @@
       var settings = ensureSettings();
       if (key === 'customRequirement') {
         settings.customRequirement = String(value || '');
+      } else if (key === 'casePageGenerationMode') {
+        settings.casePageGenerationMode = normalizeGenerationMode(value || '');
       } else {
         settings[key] = value === true;
         if (key === 'needSpecial' && value !== true) {
@@ -763,6 +1035,13 @@
 
     function buildOptionsText(settings) {
       var lines = [];
+      var generationModeMeta = getGenerationModeMeta(settings.casePageGenerationMode || '');
+      if (generationModeMeta.mode) {
+        lines.push('生成模式：' + generationModeMeta.title + '（' + generationModeMeta.shortDesc + '）');
+        if (generationModeMeta.coveragePolicy === 'ignore_for_generation') {
+          lines.push('增强补全强策略：忽略覆盖率停生成规则，coverage_threshold 仅作参考。');
+        }
+      }
       if (settings.customRequirement) lines.push('额外要求：' + settings.customRequirement);
       if (settings.needFunctionCondition) lines.push('考虑功能使用条件');
       if (settings.needNumericValidation) lines.push('数值验证');
@@ -780,6 +1059,34 @@
       if (settings.dedupeSimplify) lines.push('生成后去重并精简，原有用例只读保护');
       else lines.push('生成后仅去重，原有用例只读保护');
       return lines.join('\n');
+    }
+
+    function focusGenerationModeGroup(scene) {
+      setTimeout(function() {
+        var overlay = document.getElementById(getOverlayId(scene));
+        if (!overlay) return;
+        var target = overlay.querySelector('[data-case-page-prep-generation-mode-group]');
+        if (target && target.scrollIntoView) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (target && target.classList) {
+          target.classList.add('is-invalid');
+        }
+      }, 0);
+    }
+
+    function resolveSelectedGenerationMode(scene, settings) {
+      var overlay = document.getElementById(getOverlayId(scene));
+      if (overlay && overlay.querySelectorAll) {
+        var inputs = overlay.querySelectorAll('input[type="radio"]');
+        for (var i = 0; i < inputs.length; i += 1) {
+          var input = inputs[i];
+          if (!input || !input.name || String(input.name).indexOf('casePageGenerationMode-') !== 0) continue;
+          if (input.checked) return normalizeGenerationMode(input.value || '');
+        }
+        return '';
+      }
+      return normalizeGenerationMode(settings && settings.casePageGenerationMode ? settings.casePageGenerationMode : '');
     }
 
     async function runKnowledgeBase(dialog, model, reasoning, temperature) {
@@ -837,11 +1144,25 @@
         renderDialog(scene);
         return;
       }
+      var currentSettings = snapshotSettings();
+      var selectedGenerationMode = resolveSelectedGenerationMode(scene, currentSettings);
+      if (!selectedGenerationMode) {
+        dialog.statusText = '请选择一种生成模式';
+        dialog.statusType = 'warn';
+        dialog.step = STEP_OPTIONS;
+        dialog.generationModeInvalid = true;
+        renderDialog(scene);
+        focusGenerationModeGroup(scene);
+        return;
+      }
+      currentSettings.casePageGenerationMode = selectedGenerationMode;
+      updateSetting('casePageGenerationMode', selectedGenerationMode);
       dialog.loading = true;
       dialog.statusText = '正在准备生成上下文...';
       dialog.statusType = '';
+      dialog.generationModeInvalid = false;
       renderDialog(scene);
-      var settings = snapshotSettings();
+      var settings = currentSettings;
       var context = dialog.context || {};
       var model = context.model || null;
       var reasoning = context.reasoning || '';
@@ -862,13 +1183,42 @@
       var existingCases = normalizeCaseList(context.cases || []);
       var knowledgeText = kbState && kbState.injectedContextText ? String(kbState.injectedContextText || '') : '';
       var optionsText = buildOptionsText(settings);
+      var generationModeMeta = getGenerationModeMeta(settings.casePageGenerationMode || '');
       var payloadExtra = {
-          generation_options: settings,
+        generation_options: settings,
+        coverage_threshold_policy: generationModeMeta.coveragePolicy === 'ignore_for_generation'
+          ? 'ignore_for_enhanced_strong_completion'
+          : 'hard_threshold',
+        coverage_threshold_can_skip_module: generationModeMeta.coveragePolicy !== 'ignore_for_generation',
         xmind_generation_context: {
           requirement_mode: dialog.allowRequirementDocument === false ? 'manual' : (dialog.requirementMode || 'manual'),
           requirement_label: context.displayName || '当前用例',
           requirement_supplement: dialog.requirementSupplement || '',
           option_summary: optionsText,
+          generation_mode: generationModeMeta.mode,
+          generation_mode_label: generationModeMeta.title,
+          generation_strategy: generationModeMeta.strategy,
+          coverage_policy: generationModeMeta.coveragePolicy,
+        },
+        case_page_generation_mode: {
+          mode: generationModeMeta.mode,
+          label: generationModeMeta.title,
+          strategy: generationModeMeta.strategy,
+          coverage_policy: generationModeMeta.coveragePolicy,
+          ignore_coverage_threshold: generationModeMeta.coveragePolicy === 'ignore_for_generation',
+          speed: generationModeMeta.mode === GENERATION_MODE_PRECISE ? 'fast' : 'slower',
+          expected_case_count: generationModeMeta.mode === GENERATION_MODE_PRECISE ? 'fewer' : 'more_complete',
+          instruction: generationModeMeta.prompt,
+        },
+        generation_policy: {
+          strategy: generationModeMeta.strategy,
+          coverage_threshold_behavior: generationModeMeta.coveragePolicy === 'ignore_for_generation'
+            ? 'ignore_for_generation_and_do_not_skip_modules'
+            : 'hard_threshold_for_generation',
+          must_generate_for_relevant_existing_modules: generationModeMeta.coveragePolicy === 'ignore_for_generation',
+          must_generate_for_missing_modules: true,
+          protect_original_cases: true,
+          output_scope: 'new_cases_only',
         },
         locked_imported_cases: {
           mode: 'import',
@@ -893,6 +1243,7 @@
         },
       };
       var promptContext = [
+        generationModeMeta.prompt ? ('【执行页/用例库生成模式】\n' + generationModeMeta.prompt) : '',
         optionsText ? ('【XMind 用例生成选项】\n' + optionsText) : '',
         knowledgeText || '',
         '【导入已有用例规则】\n第二步已锁定为导入当前页面当前用例文件的全部用例；这些用例是只读基线，只能用于覆盖分析和重复判断。',
@@ -999,10 +1350,21 @@
       return output;
     }
 
+    function countModuleCases(modules) {
+      var source = Array.isArray(modules) ? modules : [];
+      var total = 0;
+      source.forEach(function(mod) {
+        var cases = mod && Array.isArray(mod.cases) ? mod.cases : [];
+        total += cases.length;
+      });
+      return total;
+    }
+
     async function applyAiDedupeToParsed(parsed, existingCases, prep, modelOptions) {
       var data = parsed && typeof parsed === 'object' ? parsed : {};
       if (!data || data.error || !Array.isArray(data.modules) || !data.modules.length) return data;
       if (!modelOptions || typeof modelOptions.callModelWithConfig !== 'function' || !modelOptions.model) return data;
+      var beforeCount = countModuleCases(data.modules);
       var request = buildProtectedAiDedupeRequest(data, existingCases, prep || {}, prep && prep.settings ? prep.settings : {});
       var content = '';
       try {
@@ -1024,10 +1386,15 @@
       }
       var modules = normalizeAiDedupeModules(payload.generated_modules || payload.modules, data.modules);
       var aiRemoved = Array.isArray(payload.removed_cases) ? payload.removed_cases : [];
+      var afterCount = countModuleCases(modules);
+      var removedCount = Math.max(0, beforeCount - afterCount);
       data.modules = modules;
       data.ai_dedupe = {
         enabled: true,
         removedCases: aiRemoved,
+        beforeCount: beforeCount,
+        afterCount: afterCount,
+        removedCount: removedCount,
         summary: payload.summary || null,
       };
       data.removed_cases = aiRemoved;
@@ -1038,6 +1405,8 @@
       open: openDialog,
       enrichPayload: enrichPayload,
       enrichPrompt: enrichPrompt,
+      isEnhancedGenerationContext: isEnhancedGenerationContext,
+      buildXmindEnhancedPipelineRequest: buildXmindEnhancedPipelineRequest,
       applyAiDedupeToParsed: applyAiDedupeToParsed,
       normalizeCaseList: normalizeCaseList,
       buildModuleList: buildModuleList,

@@ -29,6 +29,10 @@ async function startTempExecAiGeneration(page, requirementText) {
   await expect(overlay).toContainText('用例数');
   await overlay.locator('[data-case-page-prep-nav="next"]').click();
   await expect(overlay).toContainText('生成选项');
+  await expect(overlay).toContainText('生成模式');
+  await expect(overlay).toContainText('精准补充');
+  await expect(overlay).toContainText('增强补全');
+  await expect(overlay.locator('input[name="casePageGenerationMode-temp-exec"][value="enhanced"]')).toBeChecked();
   await overlay.locator('[data-case-page-prep-nav="confirm"]').click();
   await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
   await expect(page.locator('#tempExecAiGenDrawer .case-library-ai-gen-section').filter({ hasText: '需求导入' })).toBeHidden();
@@ -190,6 +194,8 @@ test.describe('执行页 AI 用例生成', () => {
       assignments: { caseLibraryGenId: modelId },
     });
 
+    let discoveryCalls = 0;
+    let moduleCalls = 0;
     let semanticDedupeCalls = 0;
     await page.route('**/mock-temp-exec-ai-append', async (route) => {
       const body = route.request().postDataJSON();
@@ -205,56 +211,108 @@ test.describe('执行页 AI 用例生成', () => {
         expect(generatedTitles.filter((title) => title === '登录成功')).toHaveLength(1);
         return fulfillTempExecSemanticDedupe(route, body);
       }
-      const userPayload = JSON.parse(body.messages[1].content);
+      const requestBody = body && body.payload ? body.payload : body;
+      const userPayload = JSON.parse(requestBody.messages[1].content);
+      const pipelineMeta = userPayload.xmind_external_pipeline || {};
       expect(userPayload.locked_imported_cases.mode).toBe('import');
       expect(userPayload.locked_imported_cases.readonly).toBe(true);
       expect(userPayload.locked_imported_cases.case_count).toBe(1);
+      expect(userPayload.case_page_generation_mode.mode).toBe('enhanced');
+      expect(userPayload.case_page_generation_mode.label).toBe('增强补全');
+      expect(userPayload.case_page_generation_mode.strategy).toBe('strong_completion');
+      expect(userPayload.case_page_generation_mode.coverage_policy).toBe('ignore_for_generation');
+      expect(userPayload.case_page_generation_mode.ignore_coverage_threshold).toBe(true);
+      expect(userPayload.coverage_threshold_policy).toBe('ignore_for_enhanced_strong_completion');
+      expect(userPayload.coverage_threshold_can_skip_module).toBe(false);
+      expect(userPayload.case_page_generation_mode.instruction).toContain('参考 XMind 补全');
+      expect(userPayload.case_page_generation_mode.instruction).toContain('忽略');
+      expect(userPayload.generation_policy.coverage_threshold_behavior).toBe('ignore_for_generation_and_do_not_skip_modules');
+      expect(userPayload.generation_policy.must_generate_for_relevant_existing_modules).toBe(true);
       expect(userPayload.dedupe_contract.original_cases_readonly).toBe(true);
       expect(userPayload.dedupe_contract.generated_cases_editable).toBe(true);
-      expect(body.messages[0].content).toContain('AI_CASE_WRITING_STYLE_GUIDE.md');
-      expect(body.messages[0].content).toContain('去重保护规则');
-      const payload = {
-        missing_modules: [{
-          module: '支付',
-          coverage: 0,
-          cases: [{
-            module: '支付',
-            title: '支付失败-余额不足',
-            priority: 'P1',
-            precondition: '',
-            steps: '余额不足时提交支付',
-            expected: '提示余额不足',
-            remark: '',
+      expect(requestBody.messages[0].content).toContain('AI_CASE_WRITING_STYLE_GUIDE.md');
+      expect(requestBody.messages[0].content).toContain('生成模式：增强补全');
+      expect(requestBody.messages[0].content).toContain('强补全策略');
+      expect(requestBody.messages[0].content).toContain('coverage_threshold 只作为参考信息');
+      expect(requestBody.messages[0].content).toContain('去重保护规则');
+      expect(pipelineMeta.enabled).toBe(true);
+      expect(pipelineMeta.pipeline).toBe('append_all_modules_cases');
+      expect(pipelineMeta.output_contract).toBe('xmind_modules');
+      if (pipelineMeta.stage === 'discovery') {
+        discoveryCalls += 1;
+        expect(userPayload.operation_contract.mode).toBe('append_all_modules_cases');
+        expect(userPayload.operation_contract.generateCasesForExistingModules).toBe(true);
+        expect(userPayload.operation_contract.generateCasesForNewModules).toBe(true);
+        expect(userPayload.current_visible_modules.map((item) => item.module)).toContain('登录');
+        const payload = {
+          modules: [{
+            module: '登录',
+            coverage: 60,
+            cases: [],
           }, {
             module: '支付',
-            title: '支付失败-余额不足',
-            priority: 'P1',
-            precondition: '',
-            steps: '余额不足时提交支付',
-            expected: '提示余额不足',
-            remark: '',
+            coverage: 0,
+            missing: true,
+            cases: [],
           }],
-        }],
-        existing_modules: [{
+        };
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(payload) } }] }),
+        });
+      }
+      expect(pipelineMeta.stage).toBe('module');
+      moduleCalls += 1;
+      const targetModule = userPayload.operation_contract.targetModule;
+      expect(['登录', '支付']).toContain(targetModule);
+      const casesByModule = targetModule === '登录'
+        ? [{
           module: '登录',
-          coverage: 60,
-          cases: [{
-            module: '登录',
-            title: '登录失败-密码错误',
-            priority: 'P1',
-            precondition: '',
-            steps: '输入错误密码',
-            expected: '提示密码错误',
-            remark: '',
-          }, {
-            module: '登录',
-            title: '登录成功',
-            priority: 'P1',
-            precondition: '',
-            steps: '输入正确账号密码',
-            expected: '登录成功',
-            remark: '',
-          }],
+          title: '登录失败-密码错误',
+          priority: 'P1',
+          precondition: '',
+          steps: '输入错误密码',
+          expected: '提示密码错误',
+          remark: '',
+        }, {
+          module: '登录',
+          title: '登录成功',
+          priority: 'P1',
+          precondition: '',
+          steps: '输入正确账号密码',
+          expected: '登录成功',
+          remark: '',
+        }]
+        : [{
+          module: '支付',
+          title: '支付失败-余额不足',
+          priority: 'P1',
+          precondition: '',
+          steps: '余额不足时提交支付',
+          expected: '提示余额不足',
+          remark: '',
+        }, {
+          module: '支付',
+          title: '支付失败-余额不足',
+          priority: 'P1',
+          precondition: '',
+          steps: '余额不足时提交支付',
+          expected: '提示余额不足',
+          remark: '',
+        }];
+      if (targetModule === '登录') {
+        expect(userPayload.operation_contract.mode).toBe('module_append_cases');
+        expect(userPayload.current_operation_module.visible_cases.length).toBe(1);
+      } else {
+        expect(userPayload.operation_contract.mode).toBe('module_full_cases');
+        expect(userPayload.current_operation_module.visible_cases.length).toBe(0);
+      }
+      const payload = {
+        modules: [{
+          module: targetModule,
+          coverage: targetModule === '登录' ? 60 : 0,
+          cases: casesByModule,
         }],
       };
       return route.fulfill({
@@ -282,9 +340,15 @@ test.describe('执行页 AI 用例生成', () => {
 
     await startTempExecAiGeneration(page, '需求：支持登录与支付');
     await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
+    await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成 4 条，去重 2 条');
+    await expect(page.locator('#tempExecAiGenResultSummary')).toHaveText('生成 4 条，去重 2 条');
     await expect(page.locator('#tempExecAiGenResult')).toBeVisible();
+    await expect(page.locator('#tempExecAiGenResult th.coverage')).toBeHidden();
+    await expect(page.locator('#tempExecAiGenResultBody td.coverage')).toHaveCount(0);
     await expect(page.locator('#tempExecAiGenResultBody td').getByText('支付失败-余额不足', { exact: true })).toHaveCount(1);
     await expect(page.locator('#tempExecAiGenResultBody td').getByText('登录成功', { exact: true })).toHaveCount(0);
+    expect(discoveryCalls).toBe(1);
+    expect(moduleCalls).toBe(2);
     expect(semanticDedupeCalls).toBe(1);
 
     await page.click('#tempExecAiGenDrawer .drawer-header [data-drawer-close="tempExecAiGenDrawer"]');
@@ -308,6 +372,7 @@ test.describe('执行页 AI 用例生成', () => {
     await page.click('#tempExecAiGenBtn');
     await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
+    await expect(page.locator('#tempExecAiGenResultSummary')).toHaveText('生成 4 条，去重 2 条');
     await expect(page.locator('#tempExecAiGenResultBody td').getByText('支付失败-余额不足', { exact: true })).toHaveCount(1);
     expect(semanticDedupeCalls).toBe(1);
 
@@ -359,6 +424,93 @@ test.describe('执行页 AI 用例生成', () => {
     await expect(page.locator('#tempExecAiGenResultBody td').getByText('登录失败-密码错误', { exact: true }).locator('..').locator('input[data-temp-exec-ai-select]')).toBeDisabled();
     await expect(page.locator('#tempExecView')).toContainText('支付失败-余额不足');
     await expect(page.locator('#tempExecView')).toContainText('登录失败-密码错误');
+  });
+
+  test('生成前准备必须选择生成模式', async ({ page }) => {
+    const fileId = 'temp-file-ai-mode-required';
+    const payload = {
+      files: [{
+        id: fileId,
+        name: '用例模式必选',
+        requirement: '需求模式必选',
+        cases: [{
+          module: '登录',
+          title: '登录成功',
+          priority: 'P1',
+          preconditions: '',
+          steps: '输入正确账号密码',
+          expected: '登录成功',
+          actual: '未执行',
+          remark: '',
+        }],
+      }],
+      versions: [],
+      activeId: fileId,
+    };
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    const modelId = 'temp-exec-ai-mode-required-model';
+
+    await page.addInitScript((data) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.removeItem('tap-auth-token'); } catch (_) {}
+      try { localStorage.setItem('usecase-temp-exec-v1', JSON.stringify(data.payload)); } catch (_) {}
+      try { localStorage.setItem('tempexec-focus-v1', JSON.stringify([])); } catch (_) {}
+      try { localStorage.setItem('cleaner-models-v1', JSON.stringify(data.models)); } catch (_) {}
+      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify(data.assignments)); } catch (_) {}
+    }, {
+      payload,
+      models: [{
+        id: modelId,
+        name: '执行模式必选模型',
+        provider: 'custom',
+        baseUrl: base + '/mock-temp-exec-ai-mode-required',
+        apiKey: 'mock-key',
+        model: 'mock-model',
+        maxTokens: 512,
+      }],
+      assignments: { caseLibraryGenId: modelId },
+    });
+
+    let modelCalls = 0;
+    await page.route('**/mock-temp-exec-ai-mode-required', async (route) => {
+      modelCalls += 1;
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ choices: [{ message: { content: '{"missing_modules":[],"existing_modules":[]}' } }] }),
+      });
+    });
+
+    await gotoExec(page);
+    await waitTempExecReady(page);
+    await page.evaluate((nextId) => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
+        window.app.tempExecApi.setTempExecActive(nextId);
+      }
+    }, fileId);
+    await page.waitForFunction(() => {
+      const card = document.getElementById('tempExecToolbarCard');
+      return card && !card.classList.contains('hidden');
+    });
+
+    const overlay = page.locator('#casePageAiGenPrepOverlay-temp-exec');
+    await page.click('#tempExecAiGenBtn');
+    await expect(overlay).toBeVisible();
+    await page.fill('#casePageAiGenRequirementText-temp-exec', '需求：登录流程');
+    await overlay.locator('[data-case-page-prep-nav="next"]').click();
+    await overlay.locator('[data-case-page-prep-nav="next"]').click();
+    await expect(overlay.locator('input[name="casePageGenerationMode-temp-exec"][value="enhanced"]')).toBeChecked();
+    await page.evaluate(() => {
+      document.querySelectorAll('input[name="casePageGenerationMode-temp-exec"]').forEach((input) => {
+        input.checked = false;
+      });
+    });
+    await overlay.locator('[data-case-page-prep-nav="confirm"]').click();
+    await expect(overlay).toBeVisible();
+    await expect(overlay).toContainText('请选择一种生成模式');
+    await expect(overlay.locator('[data-case-page-prep-generation-mode-group]')).toHaveClass(/is-invalid/);
+    await expect(page.locator('#tempExecAiGenDrawer')).not.toHaveClass(/open/);
+    expect(modelCalls).toBe(0);
   });
 
   test('生成完成后红点同步专注区/执行分配入口', async ({ page }) => {
