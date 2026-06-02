@@ -1690,6 +1690,59 @@
         }
       }
 
+      var pendingViewportPan = {
+        frameId: 0,
+        deltaX: 0,
+        deltaY: 0,
+        reason: '',
+        dragging: false,
+      };
+
+      function requestViewportFrame(callback) {
+        if (typeof window !== 'undefined' && window && typeof window.requestAnimationFrame === 'function') {
+          return window.requestAnimationFrame(callback);
+        }
+        return setTimeout(callback, 16);
+      }
+
+      function flushPendingViewportPan() {
+        var deltaX = pendingViewportPan.deltaX;
+        var deltaY = pendingViewportPan.deltaY;
+        var reason = pendingViewportPan.reason || 'pan';
+        var dragging = pendingViewportPan.dragging === true;
+        pendingViewportPan.frameId = 0;
+        pendingViewportPan.deltaX = 0;
+        pendingViewportPan.deltaY = 0;
+        pendingViewportPan.reason = '';
+        pendingViewportPan.dragging = false;
+        if (deltaX === 0 && deltaY === 0) return;
+        var inst = getInstance();
+        if (!inst || typeof inst.move !== 'function') return;
+        try {
+          inst.move(deltaX, deltaY);
+        } catch (err) {
+          return;
+        }
+        updateViewerDragState(viewerEl, inst, dragging);
+        notifyViewportStateChange(reason);
+      }
+
+      function queueViewportPan(deltaX, deltaY, reason, dragging) {
+        var x = Number(deltaX);
+        var y = Number(deltaY);
+        if (!isFinite(x)) x = 0;
+        if (!isFinite(y)) y = 0;
+        if (x === 0 && y === 0) return false;
+        pendingViewportPan.deltaX += x;
+        pendingViewportPan.deltaY += y;
+        pendingViewportPan.reason = reason ? String(reason || '') : 'pan';
+        pendingViewportPan.dragging = pendingViewportPan.dragging === true || dragging === true;
+        if (!pendingViewportPan.frameId) {
+          pendingViewportPan.frameId = requestViewportFrame(flushPendingViewportPan);
+        }
+        return true;
+      }
+
       function setDrawerFullscreen(enabled) {
         if (!canToggleDrawerFullscreen()) {
           syncFullscreenButtonState();
@@ -1757,14 +1810,7 @@
           deltaX = deltaY;
           deltaY = 0;
         }
-        try {
-          inst.move(-deltaX, -deltaY);
-        } catch (err) {
-          return false;
-        }
-        updateViewerDragState(viewerEl, inst, false);
-        notifyViewportStateChange('pan-wheel');
-        return true;
+        return queueViewportPan(-deltaX, -deltaY, 'pan-wheel', false);
       }
 
       function zoomFit() {
@@ -2269,6 +2315,10 @@
         if (canvasEl && canvasEl.contains && canvasEl.contains(target)) return true;
         if (target.closest && target.closest('[data-mind-canvas]')) return true;
         return false;
+      }
+
+      function isMindNodeExpanderTarget(target) {
+        return Boolean(target && target.closest && target.closest('me-epd'));
       }
 
       function ensureNodeContextMenuEl() {
@@ -2815,6 +2865,7 @@
         if (e.pointerType && e.pointerType !== 'mouse') return false;
         if (!isCtrlModifierActive(e)) return false;
         if (isEventInsideMindControls(e.target)) return false;
+        if (isMindNodeExpanderTarget(e.target)) return false;
         if (enableCustomBoxSelection && e.target && e.target.closest && e.target.closest('me-tpc')) return false;
         if (!isEventInsideMindCanvas(e.target)) return false;
         return true;
@@ -2853,6 +2904,7 @@
         if (!e || e.button !== 0) return false;
         if (!(isCtrlModifierActive(e) || e.metaKey)) return false;
         if (isEventInsideMindControls(e.target)) return false;
+        if (isMindNodeExpanderTarget(e.target)) return false;
         var nodeEl = resolveViewerEventNode(e);
         if (!nodeEl) return false;
         if (shouldSkipModifierSelectionMouseEvent(e, nodeEl)) {
@@ -2905,12 +2957,7 @@
         ctrlLeftCanvasDrag.lastY = e.clientY;
         if (deltaX !== 0 || deltaY !== 0) {
           markViewportInteraction();
-          try {
-            inst.move(deltaX, deltaY);
-          } catch (err) {
-            // ignore
-          }
-          updateViewerDragState(viewerEl, inst, true);
+          queueViewportPan(deltaX, deltaY, 'pan-drag', true);
         }
         stopCtrlLeftCanvasDragEvent(e);
       }
@@ -2967,6 +3014,7 @@
         if (boxPending || boxSelecting) return;
         if (isCtrlModifierActive(e) || e.metaKey) return;
         if (isEventInsideMindControls(e.target)) return;
+        if (isMindNodeExpanderTarget(e.target)) return;
         hideNodeContextMenu();
         clearClickNodeEditTimer();
         focusViewerForKeyboard();
@@ -3616,6 +3664,7 @@
         var target = e && e.target ? e.target : null;
         if (!target || isTypingTarget(target)) return null;
         if (isEventInsideMindControls(target)) return null;
+        if (isMindNodeExpanderTarget(target)) return null;
         if (target.closest && target.closest('.xmind-node-context-menu')) return null;
         if (target.closest && target.closest('.xmind-node-quick-action')) return null;
         if (
@@ -3700,6 +3749,12 @@
 
       function onViewerClick(e) {
         resetModifierSelectionPointerGuard();
+        if (e && isMindNodeExpanderTarget(e.target)) {
+          hideNodeContextMenu();
+          clearClickNodeEditTimer();
+          updateEditButtons();
+          return;
+        }
         if (enableCustomBoxSelection && modifierSelectionSuppressClickUntil && Date.now() <= modifierSelectionSuppressClickUntil) {
           if (e && e.preventDefault) e.preventDefault();
           if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
@@ -3788,6 +3843,7 @@
       }
 
       function onViewerDblClick(e) {
+        if (e && isMindNodeExpanderTarget(e.target)) return;
         if (editing) {
           clearClickNodeEditTimer();
           var editingTargetNode = resolveViewerEventNode(e);
@@ -4281,6 +4337,10 @@
 
       function onViewerPointerDownForDragPreview(e) {
         clearClickNodeEditTimer();
+        if (isMindNodeExpanderTarget(e && e.target)) {
+          clearCustomPointerDragState();
+          return;
+        }
         if (!editing) {
           clearCustomPointerDragState();
           return;

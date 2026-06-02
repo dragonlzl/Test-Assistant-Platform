@@ -189,6 +189,7 @@
     var MIND_RENDER_QUEUE_DEBOUNCE_MS = 120;
     var MIND_RENDER_QUEUE_MAX_WAIT_MS = 500;
     var VIEW_STATE_CAPTURE_DEBOUNCE_MS = 300;
+    var VIEW_STATE_INTERACTION_CAPTURE_DEBOUNCE_MS = 520;
     var VIEW_STATE_MANUAL_GESTURE_MS = 260;
     var WORKSPACE_MAX = 2;
     var multimodalMaxImages = 20;
@@ -483,11 +484,11 @@
         try {
           mindInstance.move(-deltaX, -deltaY);
           markManualViewportInteraction();
-          scheduleCaptureCurrentViewState(false);
+          scheduleLightweightViewportCapture();
         } catch (err) {
           // ignore fallback failures; normal MindElixir wheel handling may still apply.
         }
-      }, 0);
+      }, 36);
       return true;
     }
 
@@ -1710,6 +1711,7 @@
       syncDedupeToolbarButton();
       syncCoverageToolbarButton();
       syncKnowledgeBaseToolbarState();
+      syncHistoryButtonState();
       syncInlineModelPicker();
       syncInlineToolbarCollapseState();
       return true;
@@ -2257,13 +2259,14 @@
           nextWorkspaceSeq: 1,
           mode: 'modules',
           treeSourceSignature: '',
-        hasModuleSkeleton: false,
-        hasImportedBaseline: false,
-        openButtonDotVisible: false,
-        knowledgeBase: createDefaultKnowledgeBaseState(),
-        dedupe: createDefaultDedupeState(),
-        coverage: createDefaultCoverageState(),
-        viewState: createDefaultViewState(),
+          hasModuleSkeleton: false,
+          hasImportedBaseline: false,
+          openButtonDotVisible: false,
+          historyUnread: false,
+          knowledgeBase: createDefaultKnowledgeBaseState(),
+          dedupe: createDefaultDedupeState(),
+          coverage: createDefaultCoverageState(),
+          viewState: createDefaultViewState(),
           history: [],
           operationSnapshots: [],
           lastOperationSnapshotId: '',
@@ -2334,6 +2337,7 @@
       state.xmindCaseGen.inlineStatusText = String(state.xmindCaseGen.inlineStatusText || '');
       state.xmindCaseGen.inlineStatusType = normalizeInlineStatusType(state.xmindCaseGen.inlineStatusType || '');
       state.xmindCaseGen.openButtonDotVisible = state.xmindCaseGen.openButtonDotVisible === true;
+      state.xmindCaseGen.historyUnread = state.xmindCaseGen.historyUnread === true;
       state.xmindCaseGen.knowledgeBase = normalizeKnowledgeBaseState(state.xmindCaseGen.knowledgeBase);
       state.xmindCaseGen.workspaceOrder = state.xmindCaseGen.workspaceOrder.map(function(item) {
         return String(item || '').trim();
@@ -2449,6 +2453,10 @@
       return ensureState().openButtonDotVisible === true;
     }
 
+    function hasHistoryUnreadNotice() {
+      return ensureState().historyUnread === true;
+    }
+
     function syncCasegenProgressSidebar() {
       try {
         if (window.app && window.app.casesGenApi && typeof window.app.casesGenApi.renderCaseGenProgressBoard === 'function') {
@@ -2479,6 +2487,18 @@
       syncCasegenProgressSidebar();
     }
 
+    function syncHistoryButtonState() {
+      if (!historyBtn || !historyBtn.classList) return;
+      var unread = hasHistoryUnreadNotice();
+      historyBtn.classList.toggle('has-notice-dot', unread);
+      if (historyBtn.setAttribute) {
+        historyBtn.setAttribute(
+          'aria-label',
+          unread ? '生成记录（有新的生成记录）' : '生成记录'
+        );
+      }
+    }
+
     function clearOpenButtonCompletionNotice(options) {
       var opts = options || {};
       var xmindState = ensureState();
@@ -2501,6 +2521,34 @@
       var changed = xmindState.openButtonDotVisible !== true;
       xmindState.openButtonDotVisible = true;
       syncOpenButtonState();
+      if (changed && opts.persist !== false) {
+        persistXmindState(true);
+      }
+      return changed;
+    }
+
+    function clearHistoryUnreadNotice(options) {
+      var opts = options || {};
+      var xmindState = ensureState();
+      var changed = xmindState.historyUnread === true;
+      xmindState.historyUnread = false;
+      syncHistoryButtonState();
+      if (changed && opts.persist !== false) {
+        persistXmindState(true);
+      }
+      return changed;
+    }
+
+    function markHistoryUnreadNotice(options) {
+      var opts = options || {};
+      if (summaryDialogOpen === true && summaryDialogMode === 'history') {
+        syncHistoryButtonState();
+        return false;
+      }
+      var xmindState = ensureState();
+      var changed = xmindState.historyUnread !== true;
+      xmindState.historyUnread = true;
+      syncHistoryButtonState();
       if (changed && opts.persist !== false) {
         persistXmindState(true);
       }
@@ -3199,6 +3247,7 @@
         inlineStatusText: '',
         inlineStatusType: '',
         openButtonDotVisible: false,
+        historyUnread: false,
         knowledgeBase: createDefaultKnowledgeBaseState(),
         dedupe: createDefaultDedupeState(),
         coverage: createDefaultCoverageState(),
@@ -4085,7 +4134,8 @@
       return normalizeUniqueStringList(keys);
     }
 
-    function captureCurrentViewState() {
+    function captureCurrentViewState(options) {
+      var opts = options || {};
       var viewState = getViewState();
       if (workspaceShadowDepth > 0 || workspaceUiMutedDepth > 0) {
         viewState.updatedAt = Date.now();
@@ -4113,8 +4163,11 @@
       var drawerState = mindInstance && typeof mindInstance.__tapCaptureDrawerState === 'function'
         ? mindInstance.__tapCaptureDrawerState()
         : null;
-      var anchorState = captureVisibleMindAnchorStateFromDom();
-      var mindData = buildCurrentMindDataSnapshot();
+      var lightweight = opts.lightweight === true;
+      var anchorState = lightweight
+        ? (viewState.anchorState && viewState.anchorState.nodeId ? cloneJson(viewState.anchorState, viewState.anchorState) : null)
+        : captureVisibleMindAnchorStateFromDom();
+      var mindData = lightweight ? null : buildCurrentMindDataSnapshot();
       viewState.fullscreen = drawerEl && drawerEl.classList
         ? drawerEl.classList.contains('xmind-drawer-fullscreen')
         : Boolean(drawerState && drawerState.fullscreen === true);
@@ -4134,10 +4187,14 @@
         centerX: Number(anchorState.centerX || 0),
         centerY: Number(anchorState.centerY || 0),
       } : null;
-      var collapsedFromDom = collectCollapsedNodeKeysFromMindDom();
-      viewState.collapsedNodeKeys = collapsedFromDom.length
-        ? collapsedFromDom
-        : (mindData && mindData.nodeData ? collectCollapsedNodeKeysFromMindData(mindData.nodeData) : []);
+      if (lightweight) {
+        viewState.collapsedNodeKeys = normalizeUniqueStringList(viewState.collapsedNodeKeys);
+      } else {
+        var collapsedFromDom = collectCollapsedNodeKeysFromMindDom();
+        viewState.collapsedNodeKeys = collapsedFromDom.length
+          ? collapsedFromDom
+          : (mindData && mindData.nodeData ? collectCollapsedNodeKeysFromMindData(mindData.nodeData) : []);
+      }
       viewState.treeSourceSignature = String(ensureState().treeSourceSignature || '');
       viewState.updatedAt = Date.now();
       return cloneJson(viewState, createDefaultViewState());
@@ -4414,18 +4471,28 @@
       }
     }
 
-    function scheduleCaptureCurrentViewState(useImmediate) {
+    function scheduleCaptureCurrentViewState(useImmediate, options) {
+      var opts = options || {};
       if (viewStatePersistTimer) clearTimeout(viewStatePersistTimer);
       if (useImmediate === true) {
-        captureCurrentViewState();
+        captureCurrentViewState(opts);
         persistXmindState(true);
         return;
       }
+      var delayMs = Number(opts.delayMs || VIEW_STATE_CAPTURE_DEBOUNCE_MS);
+      if (!Number.isFinite(delayMs) || delayMs < 0) delayMs = VIEW_STATE_CAPTURE_DEBOUNCE_MS;
       viewStatePersistTimer = setTimeout(function() {
         viewStatePersistTimer = 0;
-        captureCurrentViewState();
+        captureCurrentViewState(opts);
         persistXmindState(false);
-      }, VIEW_STATE_CAPTURE_DEBOUNCE_MS);
+      }, delayMs);
+    }
+
+    function scheduleLightweightViewportCapture() {
+      scheduleCaptureCurrentViewState(false, {
+        lightweight: true,
+        delayMs: VIEW_STATE_INTERACTION_CAPTURE_DEBOUNCE_MS,
+      });
     }
 
     function applyCurrentMindViewState(viewState) {
@@ -5203,13 +5270,20 @@
       if (!mindContainer || !mindInstance || !isDrawerOpen()) return;
       viewStateInteractionTarget = mindContainer;
       viewStateLastObservedTransform = '';
-      viewStateClickHandler = function() {
+      viewStateClickHandler = function(event) {
+        var target = event && event.target ? event.target : null;
+        if (target && target.closest && target.closest('me-epd')) {
+          setTimeout(function() {
+            scheduleCaptureCurrentViewState(false);
+          }, 36);
+          return;
+        }
         scheduleCaptureCurrentViewState(false);
       };
       viewStateWheelHandler = function(event) {
         markManualViewportInteraction();
         scheduleCanvasWheelPanFallback(event);
-        scheduleCaptureCurrentViewState(false);
+        scheduleLightweightViewportCapture();
       };
       viewStatePointerDownHandler = function(event) {
         beginManualViewportGestureTracking(event);
@@ -5238,7 +5312,7 @@
       if (canvasEl) {
         viewStateScrollTarget = canvasEl;
         viewStateScrollHandler = function() {
-          scheduleCaptureCurrentViewState(false);
+          scheduleLightweightViewportCapture();
         };
         canvasEl.addEventListener('scroll', viewStateScrollHandler, { passive: true });
       }
@@ -5246,6 +5320,7 @@
         viewStateMutationObserver = new MutationObserver(function(mutations) {
           var shouldPersist = false;
           var nextTransform = mapEl && mapEl.style ? String(mapEl.style.transform || '') : '';
+          var transformChanged = Boolean(mapEl && nextTransform !== viewStateLastObservedTransform);
           (mutations || []).some(function(mutation) {
             var target = mutation && mutation.target ? mutation.target : null;
             if (!target) return false;
@@ -5259,13 +5334,19 @@
             }
             return false;
           });
-          if (mapEl && nextTransform !== viewStateLastObservedTransform) {
+          if (transformChanged) {
             if (hasPendingManualViewportGesture()) {
               markManualViewportInteraction();
             }
             viewStateLastObservedTransform = nextTransform;
           }
-          if (shouldPersist) scheduleCaptureCurrentViewState(false);
+          if (shouldPersist) {
+            if (transformChanged) {
+              scheduleLightweightViewportCapture();
+            } else {
+              scheduleCaptureCurrentViewState(false);
+            }
+          }
         });
         try {
           if (mapEl) {
@@ -6556,6 +6637,10 @@
       if (history.length > HISTORY_LIMIT) history.length = HISTORY_LIMIT;
       xmindState.history = history;
       xmindState.summaryResultKind = resultKind === 'error' ? 'error' : '';
+      markHistoryUnreadNotice({ persist: false });
+      if (summaryDialogOpen === true && summaryDialogMode === 'history') {
+        renderHistoryDialog();
+      }
       persistXmindState(true);
     }
 
@@ -8414,6 +8499,7 @@
       summaryDialogMode = 'history';
       summaryDialogOpen = true;
       applySummaryDialogState();
+      clearHistoryUnreadNotice();
     }
 
     function openCoverageDialog(options) {
@@ -8493,6 +8579,7 @@
         historyBtn.setAttribute('aria-expanded', open && mode === 'history' ? 'true' : 'false');
         historyBtn.textContent = '生成记录';
       }
+      syncHistoryButtonState();
       if (knowledgeRuleBtn) {
         knowledgeRuleBtn.setAttribute('aria-expanded', open && mode === 'knowledge-base' ? 'true' : 'false');
       }
@@ -10801,6 +10888,7 @@
           : 0.2,
         modules: cloneJson(built && built.modules, []),
         dedupeMode: normalizeDedupeMode(built && built.dedupeMode ? built.dedupeMode : dedupeMode),
+        partialModulesResponseAllowed: built && built.partialModulesResponseAllowed === true,
         beforeCaseCount: Number(built && built.beforeCaseCount || 0),
       };
     }
@@ -13438,8 +13526,10 @@
               persistViewportActionViewState();
               return;
             }
-            if (reason === 'zoom-wheel' || reason === 'pan-wheel') {
+            if (reason === 'zoom-wheel' || reason === 'pan-wheel' || reason === 'pan-drag') {
               markManualViewportInteraction();
+              scheduleLightweightViewportCapture();
+              return;
             }
             scheduleCaptureCurrentViewState(false);
           },
@@ -14039,12 +14129,13 @@
           dedupe_order: ['within_module', 'cross_module'],
           crossModuleDedupe: true,
           moduleReturnPolicy: {
-            returnAllInputModules: true,
+            returnAllInputModules: false,
             preserveModuleIdAndKey: true,
-            unchangedModulesMustBeReturned: true,
-            partialModulesResponseAllowed: false,
+            unchangedModulesMustBeReturned: false,
+            partialModulesResponseAllowed: true,
           },
-          reviewMethod: 'exhaustive_global_pairwise_scan',
+          returnChangedModulesOnlyAllowed: true,
+          reviewMethod: 'global_candidate_cluster_scan',
           duplicateDetectionPolicy: {
             compareFields: ['module', 'title', 'preconditions', 'steps', 'expected', 'test_purpose', 'test_point', 'validation_goal'],
             requireFullModuleScan: true,
@@ -14064,6 +14155,7 @@
         model: cloneJson(taskInput && taskInput.model, null),
         reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
         temperature: Number(taskInput && taskInput.temperature),
+        dedupePartialModulesResponseAllowed: taskInput && taskInput.partialModulesResponseAllowed === true,
         restoreContext: buildManagedTaskRestoreContext({
           workspaceId: taskWorkspaceId,
           compact: true,
@@ -16144,7 +16236,10 @@
       var result = dedupeCoreApi.normalizeDedupeResult(
         task && task.resultRaw ? task.resultRaw : '',
         task && Array.isArray(task.dedupeModules) ? task.dedupeModules : [],
-        { dedupeMode: dedupeMode }
+        {
+          dedupeMode: dedupeMode,
+          allowPartialModulesResponse: task && task.dedupePartialModulesResponseAllowed === true,
+        }
       );
       var diagnostics = normalizeHistoryDiagnostics(result && result.diagnostics ? result.diagnostics : []);
       var removedCount = Number(result && result.removedCount || 0) || 0;

@@ -5028,6 +5028,23 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   flex-wrap: wrap;
   gap: 10px;
 }
+.xmind-casegen-actions button,
+.xmind-casegen-inline-btn.has-notice-dot {
+  position: relative;
+}
+.xmind-casegen-actions button.has-notice-dot::after,
+.xmind-casegen-inline-btn.has-notice-dot::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px #fff;
+  pointer-events: none;
+}
 .xmind-casegen-inline-actions {
   display: flex;
   flex-wrap: wrap;
@@ -12056,6 +12073,7 @@ tr.import-invalid-locate-active td {
   position: relative;
   min-height: 100%;
   min-width: 100%;
+  will-change: transform;
 }
 
 @media (max-width: 1100px) {
@@ -13604,6 +13622,10 @@ button.exec-overview-file-chip,
 }
 :root[data-theme="dark"] .case-library-ai-gen-dot::after {
   box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.9);
+}
+:root[data-theme="dark"] .xmind-casegen-actions button.has-notice-dot::after,
+:root[data-theme="dark"] .xmind-casegen-inline-btn.has-notice-dot::after {
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.95);
 }
 :root[data-theme="dark"] .xmind-casegen-toolbar,
 :root[data-theme="dark"] .xmind-casegen-canvas-shell {
