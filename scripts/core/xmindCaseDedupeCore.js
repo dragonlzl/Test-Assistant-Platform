@@ -284,23 +284,23 @@
         '质量优先级高于数量压缩：不要为了让用例更少而削弱关键业务路径、用户高频路径、异常路径、边界条件、权限/安全、数据一致性、兼容性和状态流转覆盖。',
         '处理后的用例必须仍然有足够的缺陷发现能力和回归验证价值；如果不确定某条用例是否冗余，应保留。',
         '去重审查方法：',
-        'A. 必须把所有输入模块下的用例视为一份完整用例集，全局扫描模块内与模块间所有用例，按标题、前置条件、步骤、预期结果、具体测试目的、测试点和校验目标做两两比对，不能发现少量重复后提前停止。',
-        'B. 跨模块也属于本次去重范围；不要因为用例归属模块不同就跳过。只要具体测试目的和测试点基本一致，触发条件、核心步骤与预期校验覆盖同一件事，即使标题、模块名、表达方式不同，也应判为重复候选。',
+        'A. 必须把所有输入模块下的用例视为一份完整用例集，全局审查每个模块和每条用例；先按标题、前置条件、步骤、预期结果、具体测试目的、测试点和校验目标归一化分组，建立重复候选簇，再对候选簇做精审，不能发现少量重复后提前停止。',
+        'B. 处理顺序必须先做每个模块内去重，再做跨模块去重；跨模块也属于本次去重范围，不要因为用例归属模块不同就跳过。只要具体测试目的和测试点基本一致，触发条件、核心步骤与预期校验覆盖同一件事，即使标题、模块名、表达方式不同，也应判为重复候选；明显无关的组合不需要机械枚举。',
         'C. 对同义表达保持敏感：例如“禁用/禁止/不可用”、“可发射/可使用/允许触发”、“数量显示/储存显示/显示一致性”等，如果测试目的、测试点、触发条件和预期结果基本一致，应判为重复候选。',
         'D. 只有当两条用例分别验证不同业务对象、不同用户路径、不同状态流转、不同异常/边界/权限/数据风险点时，才应保留为独立覆盖；不能仅因模块不同而保留重复用例。',
-        'E. 输出前必须确认整份用例集、每个输入模块以及所有跨模块组合都已完成审查，并把所有明确重复或合并关系写入 removed_cases；不得只返回第一批发现的重复项。',
-        'F. modules 必须返回完整替换列表，数量必须和输入模块数量一致；每个模块必须原样带回 moduleId、moduleKey、module，未发生变化的模块也要原样返回 cases，不得只返回发生变化的模块。',
+        'E. 输出前必须确认整份用例集、每个输入模块以及所有模块内和跨模块重复候选都已完成审查，并把所有明确重复或合并关系写入 removed_cases；不得只返回第一批发现的重复项。',
+        'F. modules 允许只返回发生变化的模块；发生删除、合并、改写的模块必须返回该模块完整 cases。未发生变化的模块可以省略，系统会原样保留；如果返回未变化模块，也必须原样带回 moduleId、moduleKey、module 和 cases。',
         '约束：',
         '1. 只能处理输入模块中已有的用例，不得新增模块。',
         '2. 不要为了减少数量牺牲有独立测试目的、独立测试点的关键功能、异常、边界、权限、数据校验、状态流转覆盖。',
         '3. 只有在合并重复用例或开启“去重并精简”时，才允许改写标题、步骤、预期。',
-        '4. 每个原本有用例的模块都必须返回该模块的 moduleId、moduleKey、module 和 cases 数组。',
+        '4. 发生变化的模块必须返回该模块的 moduleId、moduleKey、module 和完整 cases 数组；未变化模块可以不返回。',
         '5. 只返回 JSON，不要输出解释文本。',
         '6. 必须在 removed_cases 中逐条列出去掉、重复或合并的原用例，并说明处理关系；没有去掉则返回空数组。',
         '7. 如果是重复删除，removed_cases.type 返回 "duplicate"，duplicate_with 写保留的用例标题，duplicate_point 用 12 个中文字以内说明重复点，例如“步骤和预期一致”“校验目标相同”。',
         '8. 如果是合并，removed_cases.type 返回 "merge"，merged_from 写合并前的原用例标题数组，merged_into 写合并后的用例标题。',
         '9. removed_cases.reason 必须言简意赅，控制在 20 个中文字以内，只写核心原因，如“覆盖高度重叠”“步骤重复”“场景已合并”。',
-        '返回格式：{"modules":[{"moduleId":"输入中的moduleId","moduleKey":"输入中的moduleKey","module":"模块名","cases":[{"module":"模块名","title":"用例标题","priority":"P1","preconditions":"前置条件","steps":["1、步骤"],"expected":"预期结果"}]}],"removed_cases":[{"type":"duplicate","module":"模块名","title":"被去掉的原用例标题","reason":"步骤重复","duplicate_with":"保留用例标题","duplicate_point":"步骤和预期一致"},{"type":"merge","module":"模块名","title":"被合并的原用例标题","reason":"场景已合并","merged_from":["合并前用例1","合并前用例2"],"merged_into":"合并后用例标题"}],"summary":{"removed":0,"reason":"简述"}}',
+        '返回格式：{"modules":[{"moduleId":"输入中的moduleId","moduleKey":"输入中的moduleKey","module":"发生变化的模块名","cases":[{"module":"模块名","title":"用例标题","priority":"P1","preconditions":"前置条件","steps":["1、步骤"],"expected":"预期结果"}]}],"removed_cases":[{"type":"duplicate","module":"模块名","title":"被去掉的原用例标题","reason":"步骤重复","duplicate_with":"保留用例标题","duplicate_point":"步骤和预期一致"},{"type":"merge","module":"模块名","title":"被合并的原用例标题","reason":"场景已合并","merged_from":["合并前用例1","合并前用例2"],"merged_into":"合并后用例标题"}],"summary":{"removed":0,"reason":"简述"}}',
       ].join('\n');
     }
 
@@ -330,18 +330,20 @@
           simplify: isDedupeSimplifyMode(dedupeMode),
           strength: source.strength || 'conservative',
           source: source.source || 'manual-toolbar',
-          return_full_replacement: true,
+          return_full_replacement: false,
+          return_changed_modules_only_allowed: true,
           editable_scope: 'ai_generated_cases_only',
           quality_goal: 'improve_product_quality_without_reducing_coverage_or_defect_detection_value',
           dedupe_scope: 'all_input_modules_global',
+          dedupe_order: ['within_module', 'cross_module'],
           cross_module_dedupe: true,
           module_return_policy: {
-            return_all_input_modules: true,
+            return_all_input_modules: false,
             preserve_module_id_and_key: true,
-            unchanged_modules_must_be_returned: true,
-            partial_modules_response_allowed: false,
+            unchanged_modules_must_be_returned: false,
+            partial_modules_response_allowed: true,
           },
-          review_method: 'exhaustive_global_pairwise_scan',
+          review_method: 'global_candidate_cluster_scan',
           duplicate_detection_policy: {
             compare_fields: ['module', 'title', 'preconditions', 'steps', 'expected', 'test_purpose', 'test_point', 'validation_goal'],
             require_full_module_scan: true,
@@ -371,13 +373,14 @@
         payload.requirement.supplement || '（无）',
         '',
         '【需要去重精简的 AI 生成用例(JSON)】',
-        JSON.stringify(payload.modules, null, 2),
+        JSON.stringify(payload.modules),
       ].join('\n');
       return {
         prompt: buildDedupePrompt(dedupeMode),
         requestText: requestText,
         modules: modules,
         dedupeMode: dedupeMode,
+        partialModulesResponseAllowed: true,
         beforeCaseCount: modules.reduce(function(total, item) {
           return total + (Array.isArray(item.cases) ? item.cases.length : 0);
         }, 0),
@@ -388,6 +391,8 @@
       var opts = options || {};
       var dedupeMode = normalizeDedupeMode(opts.dedupeMode || opts.mode);
       var resultLabel = isDedupeSimplifyMode(dedupeMode) ? '精简' : '去重';
+      var allowPartialModulesResponse = opts.allowPartialModulesResponse === true
+        || opts.partialModulesResponseAllowed === true;
       var modules = normalizeModulesInput(inputModules);
       var moduleMap = {};
       var moduleIdMap = {};
@@ -484,7 +489,7 @@
         });
         return result;
       });
-      if (missingOutputModules.length) {
+      if (missingOutputModules.length && !allowPartialModulesResponse) {
         diagnostics.push(
           '模型只返回了 ' + String(Math.max(0, modules.length - missingOutputModules.length))
           + '/' + String(modules.length) + ' 个模块的完整' + resultLabel + '结果，'

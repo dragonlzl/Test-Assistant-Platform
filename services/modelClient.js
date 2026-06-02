@@ -857,6 +857,20 @@
       return err;
     }
 
+    function buildModelTimeoutError(timeoutSec) {
+      return new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
+    }
+
+    function normalizeAbortOrTimeoutError(err, signal, timeoutSec, timedOut) {
+      if (!isAbortOrTimeoutError(err, signal)) return null;
+      if (timedOut === true) return buildModelTimeoutError(timeoutSec);
+      var abortErr = buildAbortError(signal);
+      if (abortErr && abortErr.abortReason === 'timeout') {
+        return buildModelTimeoutError(timeoutSec);
+      }
+      return abortErr || err;
+    }
+
     async function callModelWithConfig(model, userText, promptText, reasoningEffort, temperature, requestOptions) {
       if (!model || !model.baseUrl || !model.model) {
         throw new Error('模型配置不完整');
@@ -883,9 +897,13 @@
       var controller = typeof AbortController === 'function' ? new AbortController() : null;
       var requestOwner = requestOptions && requestOptions.owner ? String(requestOptions.owner || '') : '';
       var timer = null;
+      var timedOut = false;
       if (controller) {
         registerActiveController(controller, requestOwner);
-        timer = setTimeout(function onTimeout() { controller.abort('timeout'); }, timeoutMs);
+        timer = setTimeout(function onTimeout() {
+          timedOut = true;
+          controller.abort('timeout');
+        }, timeoutMs);
       }
       var res;
       var rawBody = '';
@@ -897,12 +915,20 @@
           timeoutSec,
           controller ? controller.signal : undefined
         );
-      } catch (err) {
-        if (isAbortOrTimeoutError(err, controller ? controller.signal : null)) {
-          var abortErr = buildAbortError(controller ? controller.signal : null);
-          if (abortErr && abortErr.abortReason === 'timeout') {
-            throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
+        if (!res || !res.ok) {
+          try {
+            rawBody = res && typeof res.text === 'function' ? await res.text() : '';
+          } catch (err2) {
+            rawBody = '';
           }
+          var normalizedErr = normalizeHttpErrorBody(rawBody);
+          var errText = normalizedErr ? ('：' + normalizedErr.slice(0, 200)) : '';
+          throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
+        }
+        rawBody = await res.text();
+      } catch (err) {
+        var abortErr = normalizeAbortOrTimeoutError(err, controller ? controller.signal : null, timeoutSec, timedOut);
+        if (abortErr) {
           throw abortErr || err;
         }
         throw err;
@@ -910,17 +936,6 @@
         if (timer) clearTimeout(timer);
         if (controller) unregisterActiveController(controller);
       }
-      if (!res || !res.ok) {
-        try {
-          rawBody = res && typeof res.text === 'function' ? await res.text() : '';
-        } catch (err) {
-          rawBody = '';
-        }
-        var normalizedErr = normalizeHttpErrorBody(rawBody);
-        var errText = normalizedErr ? ('：' + normalizedErr.slice(0, 200)) : '';
-        throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
-      }
-      rawBody = await res.text();
       var parsedRaw = parseModelRawBody(rawBody);
       if (parsedRaw.isHtml) {
         throw buildHtmlResponseError(rawBody);
@@ -969,9 +984,13 @@
       var controller = typeof AbortController === 'function' ? new AbortController() : null;
       var requestOwner = opts.owner ? String(opts.owner || '') : '';
       var timer = null;
+      var timedOut = false;
       if (controller) {
         registerActiveController(controller, requestOwner);
-        timer = setTimeout(function onTimeout() { controller.abort('timeout'); }, timeoutMs);
+        timer = setTimeout(function onTimeout() {
+          timedOut = true;
+          controller.abort('timeout');
+        }, timeoutMs);
       }
       var res;
       var rawBody = '';
@@ -983,12 +1002,20 @@
           timeoutSec,
           controller ? controller.signal : undefined
         );
-      } catch (err) {
-        if (isAbortOrTimeoutError(err, controller ? controller.signal : null)) {
-          var abortErr = buildAbortError(controller ? controller.signal : null);
-          if (abortErr && abortErr.abortReason === 'timeout') {
-            throw new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
+        if (!res || !res.ok) {
+          try {
+            rawBody = res && typeof res.text === 'function' ? await res.text() : '';
+          } catch (err2) {
+            rawBody = '';
           }
+          var normalizedErr = normalizeHttpErrorBody(rawBody);
+          var errText = normalizedErr ? ('：' + normalizedErr.slice(0, 200)) : '';
+          throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
+        }
+        rawBody = await res.text();
+      } catch (err) {
+        var abortErr = normalizeAbortOrTimeoutError(err, controller ? controller.signal : null, timeoutSec, timedOut);
+        if (abortErr) {
           throw abortErr || err;
         }
         throw err;
@@ -996,17 +1023,6 @@
         if (timer) clearTimeout(timer);
         if (controller) unregisterActiveController(controller);
       }
-      if (!res || !res.ok) {
-        try {
-          rawBody = res && typeof res.text === 'function' ? await res.text() : '';
-        } catch (err) {
-          rawBody = '';
-        }
-        var normalizedErr = normalizeHttpErrorBody(rawBody);
-        var errText = normalizedErr ? ('：' + normalizedErr.slice(0, 200)) : '';
-        throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
-      }
-      rawBody = await res.text();
       var parsedRaw = parseModelRawBody(rawBody);
       if (parsedRaw.isHtml) {
         throw buildHtmlResponseError(rawBody);

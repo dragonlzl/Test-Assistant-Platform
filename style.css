@@ -5028,6 +5028,23 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   flex-wrap: wrap;
   gap: 10px;
 }
+.xmind-casegen-actions button,
+.xmind-casegen-inline-btn.has-notice-dot {
+  position: relative;
+}
+.xmind-casegen-actions button.has-notice-dot::after,
+.xmind-casegen-inline-btn.has-notice-dot::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 2px #fff;
+  pointer-events: none;
+}
 .xmind-casegen-inline-actions {
   display: flex;
   flex-wrap: wrap;
@@ -11693,6 +11710,14 @@ tr.import-invalid-locate-active td {
   overflow: visible;
 }
 
+.xmind-structure-viewer me-tpc.xmind-casegen-node-status-running .text {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.28), 0 0 0 8px rgba(37, 99, 235, 0.10);
+}
+
+.xmind-structure-viewer me-tpc.xmind-casegen-node-status-error .text {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.28), 0 0 0 8px rgba(239, 68, 68, 0.10);
+}
+
 .xmind-structure-viewer .xmind-node-quick-action {
   position: absolute;
   top: 50%;
@@ -12048,6 +12073,7 @@ tr.import-invalid-locate-active td {
   position: relative;
   min-height: 100%;
   min-width: 100%;
+  will-change: transform;
 }
 
 @media (max-width: 1100px) {
@@ -13596,6 +13622,10 @@ button.exec-overview-file-chip,
 }
 :root[data-theme="dark"] .case-library-ai-gen-dot::after {
   box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.9);
+}
+:root[data-theme="dark"] .xmind-casegen-actions button.has-notice-dot::after,
+:root[data-theme="dark"] .xmind-casegen-inline-btn.has-notice-dot::after {
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.95);
 }
 :root[data-theme="dark"] .xmind-casegen-toolbar,
 :root[data-theme="dark"] .xmind-casegen-canvas-shell {

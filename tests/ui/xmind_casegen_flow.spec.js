@@ -8583,8 +8583,8 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, 'XMind搜索焦点保护需求');
     await openNodeContextMenu(page, 'XMind搜索焦点保护需求');
     await clickContextMenuAction(page, '生成全量用例');
-    await waitForNodeText(page, '登录模块-完整-1');
-    await waitForNodeText(page, '支付模块-完整-1');
+    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '支付成功校验');
 
     const searchInput = page.locator('#xmindCaseGenMindContainer [data-mind-search-input]');
     const searchCount = page.locator('#xmindCaseGenMindContainer [data-mind-search-count]');
@@ -8615,16 +8615,16 @@ test.describe('XMind 用例生成抽屉', () => {
     });
 
     await searchInput.click();
-    await searchInput.fill('登录模块-完整-1');
+    await searchInput.fill('登录成功校验');
     await page.keyboard.press('Backspace');
-    await expect(searchInput).toHaveValue('登录模块-完整-');
+    await expect(searchInput).toHaveValue('登录成功校');
     await expect(searchCount).toHaveText(/1\s*\/\s*[1-9]\d*/);
     await expect.poll(async () => {
       return await readSearchMarkState();
     }).toMatchObject({
       activeHasClass: true,
       hitCount: 1,
-      activeText: '登录模块-完整-1',
+      activeText: '登录成功校验',
     });
     await expect.poll(async () => {
       return await page.evaluate(() => {
@@ -8632,10 +8632,10 @@ test.describe('XMind 用例生成抽屉', () => {
         return Boolean(input && document.activeElement === input);
       });
     }).toBe(true);
-    await waitForNodeText(page, '登录模块-完整-1');
-    await waitForNodeText(page, '支付模块-完整-1');
+    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '支付成功校验');
 
-    await searchInput.fill('模块-完整-1');
+    await searchInput.fill('成功校验');
     await expect(searchCount).toHaveText(/1\s*\/\s*2/);
     await expect.poll(async () => {
       const state = await readSearchMarkState();
@@ -8646,7 +8646,7 @@ test.describe('XMind 用例生成抽屉', () => {
         centerDyOk: state.centerDy !== null && state.centerDy < 120,
       };
     }).toEqual({
-      activeText: '登录模块-完整-1',
+      activeText: '登录成功校验',
       hitCount: 2,
       centerDxOk: true,
       centerDyOk: true,
@@ -8661,7 +8661,7 @@ test.describe('XMind 用例生成抽屉', () => {
         centerDyOk: state.centerDy !== null && state.centerDy < 120,
       };
     }).toEqual({
-      activeText: '支付模块-完整-1',
+      activeText: '支付成功校验',
       centerDxOk: true,
       centerDyOk: true,
     });
@@ -8675,7 +8675,7 @@ test.describe('XMind 用例生成抽屉', () => {
         centerDyOk: state.centerDy !== null && state.centerDy < 120,
       };
     }).toEqual({
-      activeText: '登录模块-完整-1',
+      activeText: '登录成功校验',
       centerDxOk: true,
       centerDyOk: true,
     });
@@ -8691,8 +8691,8 @@ test.describe('XMind 用例生成抽屉', () => {
         return Boolean(input && document.activeElement === input);
       });
     }).toBe(true);
-    await waitForNodeText(page, '登录模块-完整-1');
-    await waitForNodeText(page, '支付模块-完整-1');
+    await waitForNodeText(page, '登录成功校验');
+    await waitForNodeText(page, '支付成功校验');
   });
 
   test('右侧导出XMind按钮替换为模型选择框，并支持直接切换 XMind 模型', async ({ page }) => {
