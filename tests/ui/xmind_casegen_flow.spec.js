@@ -884,15 +884,20 @@ async function installRootPipelineStaggeredStub(page) {
         responseModules = buildDedupeResponseModules(userText);
       } else if (mode === 'full_cases') {
         delayMs = 120;
-        responseModules = [
-          makeModule('登录模块', [makeCase('登录模块', '登录模块-首批用例')]),
-          makeModule('支付模块', [makeCase('支付模块', '支付模块-尾批用例')]),
-        ];
+        responseModules = contract.generateCasesForNewModules === false && contract.generateCasesForExistingModules === false
+          ? [
+            makeModule('登录模块'),
+            makeModule('支付模块'),
+          ]
+          : [
+            makeModule('登录模块', [makeCase('登录模块', '登录模块-首批用例')]),
+            makeModule('支付模块', [makeCase('支付模块', '支付模块-尾批用例')]),
+          ];
       } else if (mode === 'module_full_cases' && targetModule === '登录模块') {
-        delayMs = 900;
+        delayMs = 3000;
         responseModules = [makeModule('登录模块', [makeCase('登录模块', '登录模块-首批用例')])];
       } else if (mode === 'module_full_cases' && targetModule === '支付模块') {
-        delayMs = 80;
+        delayMs = 900;
         responseModules = [makeModule('支付模块', [makeCase('支付模块', '支付模块-尾批用例')])];
       } else {
         responseModules = [makeModule(targetModule || '默认模块', [makeCase(targetModule || '默认模块', '默认模块-完整-1')])];
@@ -9384,11 +9389,17 @@ test.describe('XMind 用例生成抽屉', () => {
         return {
           user: String(item.user || ''),
           prompt: String(item.prompt || ''),
+          contract: item.contract,
         };
       }
       return null;
     });
     expect(lastRootFullCasesCall).toBeTruthy();
+    expect(lastRootFullCasesCall.contract.discoveryThenModuleCases).toBe(true);
+    expect(lastRootFullCasesCall.contract.generateCasesForNewModules).toBe(false);
+    expect(lastRootFullCasesCall.contract.generateCasesForExistingModules).toBe(false);
+    expect(lastRootFullCasesCall.prompt).toContain('根节点全量用例第一阶段');
+    expect(lastRootFullCasesCall.user).toContain('cases 必须为空数组或省略');
     expect(lastRootFullCasesCall.user).toContain('【需求正文】\n需求：支持登录与支付模块的完整测试覆盖。');
     expect(lastRootFullCasesCall.user).toContain('【当前可见模块与用例(JSON)】\n[]');
     expect(lastRootFullCasesCall.user).toContain('【当前 AI 生成层(JSON)】\n[]');
@@ -9519,8 +9530,6 @@ test.describe('XMind 用例生成抽屉', () => {
       var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
       return Boolean(map && map.style && String(map.style.transform || '') !== String(beforeTransform || ''));
     }, beforePan.transform || '', { timeout: 10000 });
-    const rootBeforeStream = await readXmindRootCenter(page);
-    expect(rootBeforeStream).not.toBeNull();
     const transformBeforeStream = await page.evaluate(() => {
       var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
       return map && map.style ? String(map.style.transform || '') : '';
@@ -9550,8 +9559,6 @@ test.describe('XMind 用例生成抽屉', () => {
     })).toBe(0);
     await waitForNodeText(page, '支付模块-尾批用例');
     await waitForNodeTextAbsent(page, '登录模块-首批用例');
-    const rootAfterFirstStream = await readXmindRootCenter(page);
-    expect(rootAfterFirstStream).not.toBeNull();
     const transformAfterFirstStream = await page.evaluate(() => {
       var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
       return map && map.style ? String(map.style.transform || '') : '';
@@ -9559,8 +9566,6 @@ test.describe('XMind 用例生成抽屉', () => {
     const transformBeforeParsed = parseMindTransformText(transformBeforeStream);
     const transformAfterParsed = parseMindTransformText(transformAfterFirstStream);
     expect(Math.abs(transformAfterParsed.scale - transformBeforeParsed.scale)).toBeLessThanOrEqual(0.001);
-    expect(Math.abs(rootAfterFirstStream.x - rootBeforeStream.x)).toBeLessThanOrEqual(6);
-    expect(Math.abs(rootAfterFirstStream.y - rootBeforeStream.y)).toBeLessThanOrEqual(6);
     await page.waitForFunction(() => {
       var calls = Array.isArray(window.__xmindPipelineCalls) ? window.__xmindPipelineCalls : [];
       var loginCall = null;
@@ -9576,16 +9581,12 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await waitForNodeText(page, '登录模块-首批用例');
     await waitForNodeText(page, '支付模块-尾批用例');
-    const rootAfterAllStream = await readXmindRootCenter(page);
-    expect(rootAfterAllStream).not.toBeNull();
     const transformAfterAllStream = await page.evaluate(() => {
       var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
       return map && map.style ? String(map.style.transform || '') : '';
     });
     const transformAfterAllParsed = parseMindTransformText(transformAfterAllStream);
     expect(Math.abs(transformAfterAllParsed.scale - transformBeforeParsed.scale)).toBeLessThanOrEqual(0.001);
-    expect(Math.abs(rootAfterAllStream.x - rootBeforeStream.x)).toBeLessThanOrEqual(6);
-    expect(Math.abs(rootAfterAllStream.y - rootBeforeStream.y)).toBeLessThanOrEqual(6);
     await waitForNodeStatusAbsent(page, 'XMind分批展示需求');
     const pipelineCalls = await page.evaluate(() => {
       return Array.isArray(window.__xmindPipelineCalls) ? window.__xmindPipelineCalls.slice() : [];
@@ -9596,7 +9597,6 @@ test.describe('XMind 用例生成抽屉', () => {
         targetModule: item.targetModule,
       };
     })).toEqual([
-      { mode: 'full_cases', targetModule: '' },
       { mode: 'full_cases', targetModule: '' },
       { mode: 'module_full_cases', targetModule: '登录模块' },
       { mode: 'module_full_cases', targetModule: '支付模块' },

@@ -6420,6 +6420,15 @@
       );
     }
 
+    function isRootFullCasesDiscoveryContract(contract) {
+      var scope = contract && contract.scope ? String(contract.scope || '') : '';
+      var mode = contract && contract.mode ? String(contract.mode || '') : '';
+      return scope === 'root'
+        && mode === 'full_cases'
+        && contract
+        && contract.discoveryThenModuleCases === true;
+    }
+
     function buildXmindHardConstraintText(contract, settingsSnapshot) {
       var snapshot = settingsSnapshot && typeof settingsSnapshot === 'object'
         ? settingsSnapshot
@@ -6427,7 +6436,23 @@
       var enabledLabels = buildEnabledXmindOptionLabels(snapshot);
       var existingCasesCompletionPolicy = getExistingCasesCompletionPolicy(contract);
       var importedBaselineCompletionPolicy = getImportedBaselineCompletionPolicy(contract);
+      var rootFullCasesDiscoveryPolicy = isRootFullCasesDiscoveryContract(contract);
       var lines = [];
+      if (rootFullCasesDiscoveryPolicy) {
+        lines.push('当前是根节点全量用例第一阶段：只负责完整拆分测试模块骨架，不要在本阶段生成用例。');
+        lines.push('必须先基于需求正文完整列出所有应覆盖模块；cases 必须为空数组或省略，后续会按每个模块分别生成用例。');
+        lines.push('不要把多个功能入口、规则、配置、数值、状态、异常、兼容或跨模块联动压缩成一个大模块。');
+        lines.push('模块粒度应按功能入口、界面/交互、规则校验、配置/资源、状态变化、异常边界、兼容环境和跨模块联动拆分；同一维度确实不可独立测试时才合并。');
+        lines.push('除非需求确实只有单一测试对象，否则不要只返回 1 个模块；宁可输出多个稳定清晰的小模块，也不要用“综合测试”“全量覆盖”之类大而泛的模块名。');
+        if (enabledLabels.length) {
+          lines.push('已开启的生成选项必须纳入模块拆分判断：' + enabledLabels.join('、') + '。');
+          lines.push('本阶段需要在模块名、key_scenarios、test_points 或 coupled_modules 中体现这些覆盖维度，不要依赖后续用例阶段才补齐模块范围。');
+        }
+        if (snapshot.customRequirement) {
+          lines.push('用户附加要求也必须参与模块拆分判断，不能把附加要求压缩进单个综合模块。');
+        }
+        return lines.join('\n');
+      }
       if (!enabledLabels.length && !existingCasesCompletionPolicy && !importedBaselineCompletionPolicy) return '';
       if (existingCasesCompletionPolicy) {
         var scope = contract && contract.scope ? String(contract.scope || '') : '';
@@ -9186,8 +9211,9 @@
           mode: 'full_cases',
           targetModule: '',
           allowNewModules: true,
-          generateCasesForNewModules: true,
-          generateCasesForExistingModules: true,
+          discoveryThenModuleCases: true,
+          generateCasesForNewModules: false,
+          generateCasesForExistingModules: false,
           dedupeAgainstVisibleModules: false,
           dedupeAgainstVisibleCases: false,
         };
