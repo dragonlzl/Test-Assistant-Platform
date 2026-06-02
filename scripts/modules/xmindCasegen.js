@@ -88,6 +88,9 @@
     var mindContainer = document.getElementById('xmindCaseGenMindContainer');
 
     var renderTimer = 0;
+    var queuedMindRender = null;
+    var queuedMindRenderTimer = 0;
+    var queuedMindRenderDeadlineTimer = 0;
     var listObserver = null;
     var drawerInstance = null;
     var summaryDialogOpen = false;
@@ -175,6 +178,9 @@
     var HISTORY_LIMIT = 80;
     var DRAWER_RESTORE_RETRY_LIMIT = 18;
     var SUSPEND_VIEW_STATE_CACHE_KEY = 'tap-xmind-casegen-suspend-view-v1';
+    var MIND_RENDER_QUEUE_DEBOUNCE_MS = 120;
+    var MIND_RENDER_QUEUE_MAX_WAIT_MS = 500;
+    var VIEW_STATE_CAPTURE_DEBOUNCE_MS = 300;
     var WORKSPACE_MAX = 2;
     var multimodalMaxImages = 20;
     var multimodalMaxEdge = 1600;
@@ -4282,7 +4288,7 @@
         viewStatePersistTimer = 0;
         captureCurrentViewState();
         persistXmindState(false);
-      }, 90);
+      }, VIEW_STATE_CAPTURE_DEBOUNCE_MS);
     }
 
     function applyCurrentMindViewState(viewState) {
@@ -4578,6 +4584,315 @@
         }
       }
       return render(nextOptions);
+    }
+
+    function normalizeQueuedMindRenderMode(mode) {
+      var name = String(mode || '').toLowerCase();
+      if (name === 'terminal') return 'terminal';
+      if (name === 'structure') return 'structure';
+      return 'status';
+    }
+
+    function getQueuedMindRenderPriority(mode) {
+      if (mode === 'terminal') return 2;
+      if (mode === 'structure') return 1;
+      return 0;
+    }
+
+    function cloneRenderOptionsForQueue(options) {
+      var source = options && typeof options === 'object' ? options : {};
+      var copy = {};
+      Object.keys(source).forEach(function(key) {
+        copy[key] = source[key];
+      });
+      return copy;
+    }
+
+    function mergeQueuedMindRenderOptions(prevOptions, nextOptions) {
+      var prev = prevOptions && typeof prevOptions === 'object' ? prevOptions : {};
+      var next = nextOptions && typeof nextOptions === 'object' ? nextOptions : {};
+      var merged = cloneRenderOptionsForQueue(prev);
+      Object.keys(next).forEach(function(key) {
+        if (key === 'persist') {
+          if (next.persist === false || prev.persist === false) merged.persist = false;
+          else if (next.persist === true) merged.persist = true;
+          return;
+        }
+        if (key === 'anchorNodeId') {
+          if (next.anchorNodeId || !merged.anchorNodeId) merged.anchorNodeId = next.anchorNodeId;
+          return;
+        }
+        if (key === 'centerRootAfterRender' || key === 'restoreViewStateAfterRender' || key === 'skipRestorableViewState') {
+          merged[key] = next[key] === true || merged[key] === true;
+          return;
+        }
+        merged[key] = next[key];
+      });
+      if (prev.reason && next.reason && prev.reason !== next.reason) {
+        merged.reason = String(next.reason || '') + '+batched';
+      }
+      return merged;
+    }
+
+    function buildRenderedMindNodeMap() {
+      var map = {};
+      if (!mindContainer || !mindContainer.querySelectorAll) return map;
+      var nodes = mindContainer.querySelectorAll('[data-xmind-node-id]');
+      for (var i = 0; i < nodes.length; i += 1) {
+        var nodeEl = nodes[i];
+        var stableId = nodeEl && nodeEl.getAttribute
+          ? String(nodeEl.getAttribute('data-xmind-node-id') || '')
+          : '';
+        if (stableId && !map[stableId]) map[stableId] = nodeEl;
+      }
+      return map;
+    }
+
+    function findRenderedMindNodeByStableId(nodeId, nodeMap) {
+      var stableId = String(nodeId || '');
+      if (!stableId) return null;
+      if (nodeMap && Object.prototype.hasOwnProperty.call(nodeMap, stableId)) {
+        return nodeMap[stableId] || null;
+      }
+      if (!mindContainer || !mindContainer.querySelectorAll) return null;
+      var nodes = mindContainer.querySelectorAll('[data-xmind-node-id]');
+      for (var i = 0; i < nodes.length; i += 1) {
+        var nodeEl = nodes[i];
+        if (nodeEl && nodeEl.getAttribute && String(nodeEl.getAttribute('data-xmind-node-id') || '') === stableId) {
+          return nodeEl;
+        }
+      }
+      return null;
+    }
+
+    function syncRenderedMindNodeStatus(nodeId, status, statusLabel, statusText, nodeMap) {
+      var nodeEl = findRenderedMindNodeByStableId(nodeId, nodeMap);
+      if (!nodeEl || !nodeEl.classList) return false;
+      var existing = nodeEl.querySelector ? nodeEl.querySelector('.xmind-node-status-badge') : null;
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+      nodeEl.classList.remove('xmind-casegen-node-has-status');
+      if (!status) return true;
+
+      nodeEl.classList.add('xmind-casegen-node-has-status');
+      var badge = document.createElement('span');
+      badge.className = 'xmind-node-status-badge ' + (status === 'running' ? 'is-running' : 'is-error');
+      if (status === 'running') {
+        var spinner = document.createElement('span');
+        spinner.className = 'xmind-node-status-spinner';
+        badge.appendChild(spinner);
+      }
+      var textSpan = document.createElement('span');
+      textSpan.textContent = statusLabel
+        ? String(statusLabel || '')
+        : (status === 'running' ? '生成中' : '失败');
+      if (status !== 'running' && statusText) badge.title = String(statusText || '');
+      badge.appendChild(textSpan);
+      nodeEl.appendChild(badge);
+      return true;
+    }
+
+    function syncRenderedMindStatusBadges() {
+      if (!mindContainer || !mindInstance || !isDrawerOpen()) return;
+      var nodeMap = buildRenderedMindNodeMap();
+      var rootState = ensureRootUiState();
+      syncRenderedMindNodeStatus(
+        getRootNodeId(),
+        rootState.running ? 'running' : (rootState.status === 'error' ? 'error' : ''),
+        rootState.running && rootState.lastAction === DEDUPE_ACTION_ID ? '去重中' : '',
+        rootState.error || '',
+        nodeMap
+      );
+
+      var context = ensureVisibleModuleContext(buildVisibleModuleContext());
+      context.list.forEach(function(entry) {
+        if (!entry || !entry.aiModuleId) return;
+        var moduleState = ensureModuleUiState(entry.aiModuleId);
+        syncRenderedMindNodeStatus(
+          getModuleNodeId(entry),
+          moduleState && moduleState.running && moduleState.rootPendingActionId !== ROOT_ACTIONS.EXISTING_CASES
+            ? 'running'
+            : (moduleState && moduleState.status === 'error' ? 'error' : ''),
+          '',
+          moduleState && moduleState.error ? moduleState.error : '',
+          nodeMap
+        );
+      });
+    }
+
+    function flushLightweightMindStatus() {
+      try {
+        syncInterruptButton();
+        renderWorkspaceTabs();
+        syncInlineToolbarOverview();
+        syncRenderedMindStatusBadges();
+      } catch (err) {
+        // ignore status-only rendering failures
+      }
+    }
+
+    function captureMindSearchStateForRender() {
+      if (!mindContainer || !mindContainer.querySelector) return null;
+      var input = mindContainer.querySelector('[data-mind-search-input]');
+      if (!input) return null;
+      var value = String(input.value || '');
+      var active = false;
+      try {
+        active = Boolean(document && document.activeElement === input);
+      } catch (err) {
+        active = false;
+      }
+      if (!value && !active) return null;
+      var start = typeof input.selectionStart === 'number' ? Number(input.selectionStart) : NaN;
+      var end = typeof input.selectionEnd === 'number' ? Number(input.selectionEnd) : NaN;
+      return {
+        value: value,
+        active: active,
+        start: Number.isFinite(start) ? start : NaN,
+        end: Number.isFinite(end) ? end : NaN,
+      };
+    }
+
+    function dispatchMindSearchInputEvent(input) {
+      if (!input) return;
+      try {
+        var eventObj = new Event('input', { bubbles: true });
+        input.dispatchEvent(eventObj);
+      } catch (err) {
+        try {
+          var legacyEvent = document.createEvent('Event');
+          legacyEvent.initEvent('input', true, false);
+          input.dispatchEvent(legacyEvent);
+        } catch (err2) {
+          // ignore
+        }
+      }
+    }
+
+    function applyMindSearchStateToInput(searchState, options) {
+      if (!searchState || !mindContainer || !mindContainer.querySelector) return false;
+      var input = mindContainer.querySelector('[data-mind-search-input]');
+      if (!input) return false;
+      var opts = options && typeof options === 'object' ? options : {};
+      var value = String(searchState.value || '');
+      if (opts.setValue !== false) {
+        input.value = value;
+      } else if (String(input.value || '') !== value) {
+        return false;
+      }
+      dispatchMindSearchInputEvent(input);
+      if (searchState.active === true && typeof input.focus === 'function') {
+        try {
+          input.focus({ preventScroll: true });
+        } catch (focusErr) {
+          try {
+            input.focus();
+          } catch (focusErr2) {
+            // ignore
+          }
+        }
+      }
+      if (typeof input.setSelectionRange === 'function') {
+        var length = String(input.value || '').length;
+        var start = Number.isFinite(Number(searchState.start)) ? Number(searchState.start) : length;
+        var end = Number.isFinite(Number(searchState.end)) ? Number(searchState.end) : start;
+        if (start < 0) start = 0;
+        if (end < 0) end = 0;
+        if (start > length) start = length;
+        if (end > length) end = length;
+        try {
+          input.setSelectionRange(start, end);
+        } catch (rangeErr) {
+          // ignore
+        }
+      }
+      return true;
+    }
+
+    function restoreMindSearchStateAfterRender(searchState) {
+      if (!applyMindSearchStateToInput(searchState, { setValue: true })) return;
+      [32, 120, 260].forEach(function(delayMs) {
+        setTimeout(function() {
+          applyMindSearchStateToInput(searchState, { setValue: false });
+        }, delayMs);
+      });
+    }
+
+    function clearQueuedMindRenderTimers() {
+      if (queuedMindRenderTimer) {
+        clearTimeout(queuedMindRenderTimer);
+        queuedMindRenderTimer = 0;
+      }
+      if (queuedMindRenderDeadlineTimer) {
+        clearTimeout(queuedMindRenderDeadlineTimer);
+        queuedMindRenderDeadlineTimer = 0;
+      }
+    }
+
+    function armQueuedMindRenderTimers(delayMs) {
+      var waitMs = Number(delayMs || 0);
+      if (!Number.isFinite(waitMs) || waitMs < 0) waitMs = MIND_RENDER_QUEUE_DEBOUNCE_MS;
+      if (queuedMindRenderTimer) clearTimeout(queuedMindRenderTimer);
+      queuedMindRenderTimer = setTimeout(flushQueuedMindRender, waitMs);
+      if (!queuedMindRenderDeadlineTimer) {
+        queuedMindRenderDeadlineTimer = setTimeout(flushQueuedMindRender, MIND_RENDER_QUEUE_MAX_WAIT_MS);
+      }
+    }
+
+    function flushQueuedMindRender() {
+      var queued = queuedMindRender;
+      queuedMindRender = null;
+      clearQueuedMindRenderTimers();
+      if (!queued) return;
+      if (workspaceShadowDepth > 0) {
+        queuedMindRender = queued;
+        armQueuedMindRenderTimers(MIND_RENDER_QUEUE_DEBOUNCE_MS);
+        return;
+      }
+
+      var mode = normalizeQueuedMindRenderMode(queued.mode);
+      if (mode === 'status') {
+        flushLightweightMindStatus();
+        return;
+      }
+
+      if (viewStatePersistTimer) {
+        clearTimeout(viewStatePersistTimer);
+        viewStatePersistTimer = 0;
+        if (isDrawerOpen() && mindInstance) {
+          captureCurrentViewState();
+        }
+      }
+
+      var options = queued.options || {};
+      if (mode === 'terminal') renderWithViewportCarryover(options);
+      else render(options);
+    }
+
+    function scheduleQueuedMindRender(mode, options) {
+      var nextMode = normalizeQueuedMindRenderMode(mode);
+      var nextOptions = cloneRenderOptionsForQueue(options);
+      var currentMode = queuedMindRender ? normalizeQueuedMindRenderMode(queuedMindRender.mode) : '';
+      var selectedMode = getQueuedMindRenderPriority(nextMode) >= getQueuedMindRenderPriority(currentMode)
+        ? nextMode
+        : currentMode;
+      queuedMindRender = {
+        mode: selectedMode,
+        options: mergeQueuedMindRenderOptions(queuedMindRender ? queuedMindRender.options : null, nextOptions),
+      };
+      armQueuedMindRenderTimers(MIND_RENDER_QUEUE_DEBOUNCE_MS);
+    }
+
+    function queueTerminalMindRender(options) {
+      if (!isDrawerOpen()) return;
+      scheduleQueuedMindRender('terminal', options || {});
+    }
+
+    function queueStructureMindRender(options) {
+      scheduleQueuedMindRender('structure', options || {});
+    }
+
+    function queueStatusMindRender(options) {
+      scheduleQueuedMindRender('status', options || {});
     }
 
     function getRestorableViewState(treeSignature) {
@@ -8343,6 +8658,19 @@
 
     function buildRootPipelineDedupeReadiness(context) {
       var visibleContext = ensureVisibleModuleContext(context);
+      var pipeline = getRootPipelineState();
+      var generatedDedupeModules = normalizeRootPipelineDedupeModules(
+        pipeline && Array.isArray(pipeline.generatedDedupeModules)
+          ? pipeline.generatedDedupeModules
+          : []
+      );
+      if (hasRootPipelineDedupeCases(generatedDedupeModules)) {
+        return {
+          missingModules: [],
+          dedupeModules: generatedDedupeModules,
+          ready: true,
+        };
+      }
       var missingModules = collectAiModulesWithoutCasesFromContext(visibleContext);
       var dedupeModules = collectAiDedupeModulesFromContext(visibleContext);
       return {
@@ -12032,6 +12360,25 @@
       }).filter(Boolean).join('_') || ('node_' + Date.now());
     }
 
+    function hashNodeIdText(value) {
+      var text = String(value === undefined || value === null ? '' : value);
+      var hash = 2166136261;
+      for (var i = 0; i < text.length; i += 1) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return (hash >>> 0).toString(36);
+    }
+
+    function buildStableNodeId(parts) {
+      var list = Array.isArray(parts) ? parts : [];
+      var raw = list.map(function(part) {
+        return String(part === undefined || part === null ? '' : part);
+      }).join('|');
+      var base = buildNodeId(list);
+      return base + '_' + hashNodeIdText(raw);
+    }
+
     function getRootNodeId() {
       return buildNodeId(['root', getRequirementLabelText()]);
     }
@@ -12108,6 +12455,13 @@
       var caseSource = row && row.source ? String(row.source || '') : 'ai';
       var caseSourceIndex = row && Number.isFinite(Number(row.sourceIndex)) ? Number(row.sourceIndex) : caseIndex;
       var caseSignature = row && row.caseSignature ? String(row.caseSignature || '') : buildCaseSignature(item, moduleTitle);
+      var caseNodeParts = [
+        moduleEntry && moduleEntry.aiModuleId ? moduleEntry.aiModuleId : '',
+        moduleEntry && moduleEntry.moduleKey ? moduleEntry.moduleKey : '',
+        caseSource,
+        caseSourceIndex,
+        caseSignature || caseTitle,
+      ];
       var fields = xmindCoreApi && typeof xmindCoreApi.buildCaseFieldsForXmind === 'function'
         ? xmindCoreApi.buildCaseFieldsForXmind(item || {}, moduleTitle)
         : [
@@ -12127,6 +12481,7 @@
         caseSource: caseSource,
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
+        nodeId: buildStableNodeId(['expected'].concat(caseNodeParts)),
         segment: 'expected'
       }, topupHighlight);
       var stepsMeta = withTopupHighlightMeta({
@@ -12138,6 +12493,7 @@
         caseSource: caseSource,
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
+        nodeId: buildStableNodeId(['steps'].concat(caseNodeParts)),
         segment: 'steps'
       }, topupHighlight);
       var preMeta = withTopupHighlightMeta({
@@ -12149,6 +12505,7 @@
         caseSource: caseSource,
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
+        nodeId: buildStableNodeId(['preconditions'].concat(caseNodeParts)),
         segment: 'preconditions'
       }, topupHighlight);
       var priorityMeta = withTopupHighlightMeta({
@@ -12160,6 +12517,7 @@
         caseSource: caseSource,
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
+        nodeId: buildStableNodeId(['priority'].concat(caseNodeParts)),
         segment: 'priority'
       }, topupHighlight);
       var caseMeta = withTopupHighlightMeta({
@@ -12171,6 +12529,7 @@
         caseSource: caseSource,
         caseSourceIndex: caseSourceIndex,
         caseSignature: caseSignature,
+        nodeId: buildStableNodeId(['case'].concat(caseNodeParts)),
       }, topupHighlight);
       var expectedNode = createNode(fields[5] || '-', expectedMeta, null, {
         expanded: resolveNodeExpandedState(expectedMeta, collapsedNodeMap, fields[5] || '-', [
@@ -12618,6 +12977,7 @@
         if (options.persist !== false) persistXmindState(false);
         return;
       }
+      var searchState = captureMindSearchStateForRender();
       var skipRestorableViewState = options.skipRestorableViewState === true && options.centerRootAfterRender === true;
       var restorableViewState = skipRestorableViewState
         ? null
@@ -12726,6 +13086,7 @@
           // 刷新恢复与跨 workspace 视口接力都要等首帧布局稳定后再回放，避免同步改画布把页面卡死。
           scheduleWorkspaceViewRestore(restorableViewState, getActiveWorkspaceId());
         }
+        restoreMindSearchStateAfterRender(searchState);
       } catch (err) {
         setDebugState({ phase: 'render-error', error: err && err.message ? String(err.message) : '未知错误' });
         cleanupTopupHighlightPresentation();
@@ -13019,6 +13380,36 @@
       }, 40);
     }
 
+    function isRunningTaskStructuralRenderRequired(task) {
+      if (!task || !task.scope) return false;
+      var actionId = String(task.actionId || '');
+      if (task.scope === 'root') {
+        return Boolean(
+          task.hadAiCasesBeforeAction === true
+          || task.hadAiLayerBeforeAction === true
+          || actionId === ROOT_ACTIONS.EXISTING_CASES
+          || actionId === ROOT_ACTIONS.TOPUP_MODULES
+          || actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES
+        );
+      }
+      if (task.scope === 'module') {
+        return Boolean(
+          actionId === MODULE_ACTIONS.APPEND
+          || task.hadAiCasesBeforeAction === true
+          || task.createdModuleBeforeAction === true
+          || task.rootPendingActionId
+        );
+      }
+      return false;
+    }
+
+    function shouldRenderRunningTasksStructurally(tasks) {
+      var list = Array.isArray(tasks) ? tasks : [];
+      return list.some(function(task) {
+        return isRunningTaskStructuralRenderRequired(task);
+      });
+    }
+
     function syncManagedRunningUiState(options) {
       var opts = options || {};
       if (workspaceShadowDepth > 0) {
@@ -13091,11 +13482,16 @@
         // noop
       } else persistXmindState(false);
       if (opts.render === true && isDrawerOpen()) {
-        render({
+        var renderOptions = {
           reason: opts.reason || 'task-sync',
           persist: false,
           anchorNodeId: opts.anchorNodeId || '',
-        });
+        };
+        if (shouldRenderRunningTasksStructurally(runningTasks)) {
+          queueStructureMindRender(renderOptions);
+        } else {
+          queueStatusMindRender(renderOptions);
+        }
       }
       return runningTasks;
     }
@@ -14079,7 +14475,7 @@
         stateNow.updatedAt = Date.now();
         syncInterruptButton();
         if (isDrawerOpen()) {
-          renderWithViewportCarryover({
+          queueStatusMindRender({
             reason: 'dedupe-terminal-visual-ended',
             persist: false,
             anchorNodeId: getRootNodeId(),
@@ -14116,7 +14512,7 @@
         });
       }
       if (isDrawerOpen()) {
-        renderWithViewportCarryover({
+        queueStatusMindRender({
           reason: 'dedupe-terminal-visible-grace',
           persist: false,
           anchorNodeId: getRootNodeId(),
@@ -14202,7 +14598,7 @@
         });
       }
       if (isDrawerOpen()) {
-        renderWithViewportCarryover({
+        queueStatusMindRender({
           reason: source === 'auto-full' ? 'root-pipeline-dedupe-running' : 'manual-dedupe-running',
           persist: false,
           anchorNodeId: getRootNodeId(),
@@ -14534,7 +14930,7 @@
         notifyStatus(notifyText, notifyType, { forceInline: true });
       }
       if (isDrawerOpen()) {
-        renderWithViewportCarryover({
+        queueTerminalMindRender({
           reason: renderReason,
           persist: false,
           anchorNodeId: Object.prototype.hasOwnProperty.call(opts, 'anchorNodeId') ? String(opts.anchorNodeId || '') : '',
@@ -14561,6 +14957,17 @@
       var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
       var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
       var modules = filtered.list;
+      var fullCaseOutputModules = [];
+      if (String(actionId || '') === ROOT_ACTIONS.FULL_CASES) {
+        var fullCaseDedupeContract = cloneJson(contract, {}) || {};
+        fullCaseDedupeContract.generateCasesForNewModules = true;
+        fullCaseDedupeContract.generateCasesForExistingModules = true;
+        fullCaseOutputModules = filterModulesByContract(
+          normalizedOutput.list,
+          fullCaseDedupeContract,
+          visibleContext
+        ).list;
+      }
       var coverageGapInfo = evaluateRootCoverageGaps(task, modules, contract);
       if (task && task.skipCoverageRetry !== true && coverageGapInfo.shouldRetry === true) {
         try {
@@ -14614,7 +15021,7 @@
       if (actionId === ROOT_ACTIONS.FULL_CASES) {
         var fullCasesContextAfterSkeleton = ensureVisibleModuleContext(buildVisibleModuleContext());
         var fullCasesMapAfterSkeleton = fullCasesContextAfterSkeleton.map || {};
-        fullCasesModuleSnapshot = modules.map(function(item) {
+        fullCasesModuleSnapshot = fullCaseOutputModules.map(function(item) {
           var moduleKey = normalizeModuleKey(item && item.module ? item.module : '');
           var resolvedEntry = moduleKey ? fullCasesMapAfterSkeleton[moduleKey] : null;
           return {
@@ -14624,7 +15031,7 @@
             key_scenarios: item && Array.isArray(item.key_scenarios) ? item.key_scenarios.slice() : [],
             test_points: item && Array.isArray(item.test_points) ? item.test_points.slice() : [],
             coupled_modules: item && Array.isArray(item.coupled_modules) ? item.coupled_modules.slice() : [],
-            cases: [],
+            cases: normalizeFallbackCaseList(item && item.cases, item && item.module ? item.module : ''),
           };
         });
         updateRootPipelineState(function(current) {
@@ -14694,7 +15101,7 @@
       }
 
       if (isDrawerOpen()) {
-        renderWithViewportCarryover({ reason: 'root-pipeline-discovery-committed', persist: false, anchorNodeId: anchorNodeId });
+        queueTerminalMindRender({ reason: 'root-pipeline-discovery-committed', persist: false, anchorNodeId: anchorNodeId });
       }
       syncTerminalTaskRestoreContext(task);
       persistManagedTaskWorkspaceState(true);
@@ -14733,7 +15140,7 @@
         ).concat(errorInfo.diagnostics || []));
       });
       if (isDrawerOpen()) {
-        renderWithViewportCarryover({ reason: opts.renderReason || 'root-pipeline-discovery-error', persist: false, anchorNodeId: anchorNodeId });
+        queueTerminalMindRender({ reason: opts.renderReason || 'root-pipeline-discovery-error', persist: false, anchorNodeId: anchorNodeId });
       }
       syncTerminalTaskRestoreContext(task);
       persistManagedTaskWorkspaceState(true);
@@ -14886,7 +15293,7 @@
       }
       markRootPipelineModuleTaskCompleted(task);
       if (isDrawerOpen()) {
-        renderWithViewportCarryover({ reason: changed ? 'root-pipeline-module-committed' : 'root-pipeline-module-no-change', persist: false, anchorNodeId: anchorNodeId });
+        queueTerminalMindRender({ reason: changed ? 'root-pipeline-module-committed' : 'root-pipeline-module-no-change', persist: false, anchorNodeId: anchorNodeId });
       }
       syncTerminalTaskRestoreContext(task);
       persistManagedTaskWorkspaceState(true);
@@ -14932,7 +15339,7 @@
       });
       markRootPipelineModuleTaskCompleted(task);
       if (isDrawerOpen()) {
-        renderWithViewportCarryover({ reason: opts.renderReason || 'root-pipeline-module-error', persist: false, anchorNodeId: anchorNodeId });
+        queueTerminalMindRender({ reason: opts.renderReason || 'root-pipeline-module-error', persist: false, anchorNodeId: anchorNodeId });
       }
       syncTerminalTaskRestoreContext(task);
       persistManagedTaskWorkspaceState(true);
@@ -14990,7 +15397,7 @@
         discardCaseGenOperationSnapshotEntry(task && task.snapshotId ? task.snapshotId : '');
         if (task && task.hadAiCasesBeforeAction === true) setAllModuleResultsVisibility(true);
         notifyStatus('本轮未生成新的模块或用例', 'warn', { forceInline: true });
-        if (isDrawerOpen()) renderWithViewportCarryover({ reason: 'root-task-no-change', persist: false, anchorNodeId: anchorNodeId });
+        if (isDrawerOpen()) queueTerminalMindRender({ reason: 'root-task-no-change', persist: false, anchorNodeId: anchorNodeId });
         persistManagedTaskWorkspaceState(true);
         return false;
       }
@@ -15021,7 +15428,7 @@
       notifyStatus(message, 'ok');
       clearDeleteHistoryStacks();
       syncCasesGenPageRender();
-      if (isDrawerOpen()) renderWithViewportCarryover({ reason: 'root-task-committed', persist: false, anchorNodeId: anchorNodeId });
+      if (isDrawerOpen()) queueTerminalMindRender({ reason: 'root-task-committed', persist: false, anchorNodeId: anchorNodeId });
       persistManagedTaskWorkspaceState(true);
       return true;
     }
@@ -15072,7 +15479,7 @@
       } else {
         notifyStatus(failureLabel, 'err', { forceInline: true });
       }
-      if (isDrawerOpen()) renderWithViewportCarryover({ reason: opts.renderReason || 'root-task-error', persist: false, anchorNodeId: anchorNodeId });
+      if (isDrawerOpen()) queueTerminalMindRender({ reason: opts.renderReason || 'root-task-error', persist: false, anchorNodeId: anchorNodeId });
       persistManagedTaskWorkspaceState(true);
       return false;
     }
@@ -15160,7 +15567,7 @@
             previewText: appendNoChangeInfo.previewText,
           });
           notifyStatus('当前模块未补充到新的用例', 'warn', { forceInline: true });
-          if (isDrawerOpen()) renderWithViewportCarryover({ reason: 'module-task-append-empty', persist: false, anchorNodeId: anchorNodeId });
+          if (isDrawerOpen()) queueTerminalMindRender({ reason: 'module-task-append-empty', persist: false, anchorNodeId: anchorNodeId });
           persistManagedTaskWorkspaceState(true);
           return false;
         }
@@ -15198,7 +15605,7 @@
             previewText: fullNoChangeInfo.previewText,
           });
           notifyStatus('当前模块未生成到有效用例', 'warn', { forceInline: true });
-          if (isDrawerOpen()) renderWithViewportCarryover({ reason: 'module-task-full-empty', persist: false, anchorNodeId: anchorNodeId });
+          if (isDrawerOpen()) queueTerminalMindRender({ reason: 'module-task-full-empty', persist: false, anchorNodeId: anchorNodeId });
           persistManagedTaskWorkspaceState(true);
           return false;
         }
@@ -15234,7 +15641,7 @@
       );
       clearDeleteHistoryStacks();
       syncCasesGenPageRender();
-      if (isDrawerOpen()) renderWithViewportCarryover({ reason: 'module-task-committed', persist: false, anchorNodeId: anchorNodeId });
+      if (isDrawerOpen()) queueTerminalMindRender({ reason: 'module-task-committed', persist: false, anchorNodeId: anchorNodeId });
       persistManagedTaskWorkspaceState(true);
       return true;
     }
@@ -15291,7 +15698,7 @@
       } else {
         notifyStatus(failureLabel, 'err', { forceInline: true });
       }
-      if (isDrawerOpen()) renderWithViewportCarryover({ reason: opts.renderReason || 'module-task-error', persist: false, anchorNodeId: anchorNodeId });
+      if (isDrawerOpen()) queueTerminalMindRender({ reason: opts.renderReason || 'module-task-error', persist: false, anchorNodeId: anchorNodeId });
       persistManagedTaskWorkspaceState(true);
       return false;
     }
@@ -15421,7 +15828,7 @@
       }
 
       if (isDrawerOpen()) {
-        renderWithViewportCarryover({
+        queueTerminalMindRender({
           reason: task && task.rootPipelineId ? 'root-pipeline-dedupe-committed' : 'manual-dedupe-committed',
           persist: false,
           anchorNodeId: getRootNodeId(),
@@ -15495,7 +15902,7 @@
       }
 
       if (isDrawerOpen()) {
-        renderWithViewportCarryover({
+        queueTerminalMindRender({
           reason: resultKind === 'cancelled' ? 'dedupe-task-cancelled' : 'dedupe-task-error',
           persist: false,
           anchorNodeId: getRootNodeId(),
@@ -15973,7 +16380,17 @@
       if (options.rootPendingActionId) {
         setModuleRootPendingAction(moduleState, options.rootPendingActionId);
       }
-      render({ reason: options.renderReason || 'module-running', anchorNodeId: anchorNodeId, persist: false });
+      var moduleRunningRenderOptions = { reason: options.renderReason || 'module-running', anchorNodeId: anchorNodeId, persist: false };
+      if (
+        createdModuleRecordBeforeTask
+        || hadAiCasesBeforeAction
+        || actionId === MODULE_ACTIONS.APPEND
+        || options.rootPendingActionId
+      ) {
+        queueStructureMindRender(moduleRunningRenderOptions);
+      } else {
+        queueStatusMindRender(moduleRunningRenderOptions);
+      }
 
       var moduleTaskMeta = {
         scope: 'module',
@@ -16245,7 +16662,18 @@
         markRootPendingModules(visibleContext.list, actionId);
       }
       if (hadAiCasesBeforeAction) setAllModuleResultsVisibility(false);
-      render({ reason: 'root-running', anchorNodeId: anchorNodeId, persist: false });
+      var rootRunningRenderOptions = { reason: 'root-running', anchorNodeId: anchorNodeId, persist: false };
+      if (
+        hadAiLayerBeforeAction
+        || hadAiCasesBeforeAction
+        || actionId === ROOT_ACTIONS.EXISTING_CASES
+        || actionId === ROOT_ACTIONS.TOPUP_MODULES
+        || actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES
+      ) {
+        queueStructureMindRender(rootRunningRenderOptions);
+      } else {
+        queueStatusMindRender(rootRunningRenderOptions);
+      }
       var rootTaskMeta = {
         scope: 'root',
         workspaceId: taskWorkspaceId,

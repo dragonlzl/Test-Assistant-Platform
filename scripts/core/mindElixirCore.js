@@ -806,13 +806,27 @@
       return text.trim().toLowerCase();
     }
 
+    function isMindNodeSearchable(node) {
+      var meta = node && node.xmindMeta && typeof node.xmindMeta === 'object' ? node.xmindMeta : null;
+      var type = meta && meta.type ? String(meta.type || '') : '';
+      if (
+        type === 'priority'
+        || type === 'preconditions'
+        || type === 'steps'
+        || type === 'expected'
+      ) {
+        return false;
+      }
+      return true;
+    }
+
     function collectSearchNodeIds(node, keyword, output) {
       if (!node || !keyword) return;
       var list = Array.isArray(output) ? output : [];
       var topicText = node && node.topic !== undefined && node.topic !== null
         ? String(node.topic)
         : '';
-      if (topicText.toLowerCase().indexOf(keyword) !== -1 && node.id) {
+      if (isMindNodeSearchable(node) && topicText.toLowerCase().indexOf(keyword) !== -1 && node.id) {
         list.push(String(node.id));
       }
       var children = Array.isArray(node.children) ? node.children : [];

@@ -19,6 +19,7 @@
     var caseGenProgressTabDot = dom.caseGenProgressTabDot;
     var sidebarTabCasegen = dom.sidebarTabCasegen;
     var persistWorkflowState = ctx.persistWorkflowState || function() {};
+    var caseGenProgressBoardHtml = '';
     function requestLayoutSync() {
       try {
         if (window.app && window.app.sidebarPanels && typeof window.app.sidebarPanels.requestLayoutSync === 'function') {
@@ -65,8 +66,11 @@
     }
 
     function syncTabDotVisible(visible) {
-      if (!caseGenProgressTabDot) return;
-      caseGenProgressTabDot.classList.toggle('is-visible', visible === true);
+      if (!caseGenProgressTabDot || !caseGenProgressTabDot.classList) return false;
+      var nextVisible = visible === true;
+      var changed = caseGenProgressTabDot.classList.contains('is-visible') !== nextVisible;
+      caseGenProgressTabDot.classList.toggle('is-visible', nextVisible);
+      return changed;
     }
 
     function getXmindCasegenApi() {
@@ -100,11 +104,11 @@
     }
 
     function markCasegenTabViewed() {
-      syncTabDotVisible(hasXmindCompletionNotice());
+      return syncTabDotVisible(hasXmindCompletionNotice());
     }
 
     function syncCasegenProgressDot(doneIds, hasNewDoneEvent) {
-      syncTabDotVisible(hasXmindCompletionNotice());
+      return syncTabDotVisible(hasXmindCompletionNotice());
     }
 
     function ensureCaseGenRunningSet() {
@@ -187,10 +191,16 @@
       if (!caseGenProgressPanel || !caseGenProgressList) return;
       var items = getXmindWorkspaceProgressItems();
       if (!items.length) {
+        var emptyHtml = '<p class="hint">暂无 xmind 生成页签，点击打开 XMind 用例生成</p>';
+        var panelWasHidden = caseGenProgressPanel.classList.contains('hidden');
+        var htmlChanged = caseGenProgressBoardHtml !== emptyHtml;
+        if (htmlChanged) {
+          caseGenProgressList.innerHTML = emptyHtml;
+          caseGenProgressBoardHtml = emptyHtml;
+        }
         caseGenProgressPanel.classList.remove('hidden');
-        caseGenProgressList.innerHTML = '<p class="hint">暂无 xmind 生成页签，点击打开 XMind 用例生成</p>';
-        syncCasegenProgressDot();
-        requestLayoutSync();
+        var dotChanged = syncCasegenProgressDot();
+        if (htmlChanged || panelWasHidden || dotChanged) requestLayoutSync();
         return;
       }
       var html = items.map(function(item) {
@@ -213,12 +223,15 @@
             '</div>' +
           '</button>';
       }).join('');
-      if (caseGenProgressList.innerHTML !== html) {
+      var panelWasHidden2 = caseGenProgressPanel.classList.contains('hidden');
+      var changed = caseGenProgressBoardHtml !== html;
+      if (changed) {
         caseGenProgressList.innerHTML = html;
+        caseGenProgressBoardHtml = html;
       }
       caseGenProgressPanel.classList.remove('hidden');
-      syncCasegenProgressDot();
-      requestLayoutSync();
+      var dotChanged2 = syncCasegenProgressDot();
+      if (changed || panelWasHidden2 || dotChanged2) requestLayoutSync();
     }
 
     function renderCaseProgressItem(item) {
