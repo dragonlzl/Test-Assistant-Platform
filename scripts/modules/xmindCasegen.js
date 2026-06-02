@@ -6470,7 +6470,12 @@
       lines.push('已开启的生成选项属于本轮输出的硬性覆盖要求，不是参考建议。');
       lines.push('本轮必须直接覆盖：' + enabledLabels.join('、') + '。');
       if (isRootFullGenerationContract(contract)) {
-        lines.push('当前是根节点首轮全量/重生成动作，首次输出必须直接覆盖上述要求，不允许把相关覆盖留到后续补全或追加。');
+        if (contract && String(contract.mode || '') === 'full_cases') {
+          lines.push('当前是根节点全量用例生成的模块拆分阶段：先返回不重复的模块清单，每个模块必须代表独立测试范围，模块名不得重复或近义重复。');
+          lines.push('模块拆分阶段可以提供候选 cases 作为后续模块生成兜底，但后续仍会逐模块执行用例生成；不得把跨模块去重视为模块生成完成。');
+        } else {
+          lines.push('当前是根节点首轮全量/重生成动作，首次输出必须直接覆盖上述要求，不允许把相关覆盖留到后续补全或追加。');
+        }
       }
       if (snapshot.needFunctionCondition) {
         lines.push('如果需求存在解锁条件、开放条件、使用条件、身份/权限/等级/资格门槛、资源消耗、前置任务、时间窗、次数或可用前提，必须在模块拆分、关键场景、测试要点或用例中直接体现。');
@@ -8336,6 +8341,17 @@
       return result;
     }
 
+    function buildRootPipelineDedupeReadiness(context) {
+      var visibleContext = ensureVisibleModuleContext(context);
+      var missingModules = collectAiModulesWithoutCasesFromContext(visibleContext);
+      var dedupeModules = collectAiDedupeModulesFromContext(visibleContext);
+      return {
+        missingModules: missingModules,
+        dedupeModules: dedupeModules,
+        ready: missingModules.length === 0 && dedupeModules.length > 0,
+      };
+    }
+
     function hasVisibleAiCasesForDedupe() {
       return collectCurrentAiDedupeModules().length > 0;
     }
@@ -9186,8 +9202,8 @@
           mode: 'full_cases',
           targetModule: '',
           allowNewModules: true,
-          generateCasesForNewModules: true,
-          generateCasesForExistingModules: true,
+          generateCasesForNewModules: false,
+          generateCasesForExistingModules: false,
           dedupeAgainstVisibleModules: false,
           dedupeAgainstVisibleCases: false,
         };
@@ -13232,6 +13248,8 @@
           strength: DEDUPE_STRENGTH,
           editableScope: 'ai_generated_cases_only',
           dedupeScope: 'all_input_modules_global',
+          dedupeOrder: ['within_module', 'cross_module'],
+          dedupe_order: ['within_module', 'cross_module'],
           crossModuleDedupe: true,
           moduleReturnPolicy: {
             returnAllInputModules: true,
@@ -14273,6 +14291,8 @@
           } else {
             baseText += '，' + getDedupeNoChangeSummaryText(dedupeMode);
           }
+        } else if (pipeline && pipeline.dedupeStatus === 'blocked') {
+          baseText += '，仍有模块未生成用例，已暂停 AI 用例去重';
         } else if (pipeline && pipeline.dedupeStatus === 'error') {
           baseText += '，AI 用例去重失败，已保留原结果';
         } else if (pipeline && pipeline.dedupeStatus === 'cancelled') {
@@ -14348,29 +14368,24 @@
         rootState.hideAiLayer = false;
         rootState.updatedAt = Date.now();
         var dedupeContext = buildVisibleModuleContext({ includeAiLayer: true });
-        var incompleteDedupeModules = collectAiModulesWithoutCasesFromContext(dedupeContext);
-        var contextDedupeModules = collectAiDedupeModulesFromContext(dedupeContext);
-        var pipelineDedupeModules = normalizeRootPipelineDedupeModules(pipeline.generatedDedupeModules || []);
-        var dedupeModules = contextDedupeModules;
-        if (hasRootPipelineDedupeCases(pipelineDedupeModules)) {
-          dedupeModules = pipelineDedupeModules;
-          diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat(
-            '自动去重使用本轮生成快照：' + String(pipelineDedupeModules.length) + ' 个模块'
-          ));
-        }
-        if (dedupeModules.length) {
-          if (incompleteDedupeModules.length) {
-            var incompleteNames = incompleteDedupeModules.map(function(item) {
-              return item && item.module ? String(item.module || '') : '';
-            }).filter(Boolean).slice(0, 5).join('、');
-            var incompleteText = '仅处理已生成用例的模块；' + String(incompleteDedupeModules.length) + ' 个模块暂无 AI 用例未参与去重'
-              + (incompleteNames ? '：' + incompleteNames : '');
-            updateRootPipelineState(function(current) {
-              appendRootPipelineDiagnostics(current, incompleteText);
-            });
-            pipeline = getRootPipelineState() || pipeline;
-            diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat(incompleteText));
-          }
+        var readiness = buildRootPipelineDedupeReadiness(dedupeContext);
+        var missingDedupeModules = readiness.missingModules || [];
+        var dedupeModules = readiness.dedupeModules || [];
+        var missingNames = missingDedupeModules.map(function(item) {
+          return item && item.module ? String(item.module || '') : '';
+        }).filter(Boolean).slice(0, 5).join('、');
+        if (missingDedupeModules.length > 0) {
+          var missingText = '还有 ' + String(missingDedupeModules.length) + ' 个模块未生成用例，已暂停去重'
+            + (missingNames ? '：' + missingNames : '');
+          updateRootPipelineState(function(current) {
+            current.dedupeStatus = 'blocked';
+            current.dedupeError = missingText;
+            appendRootPipelineDiagnostics(current, missingText);
+          });
+          pipeline = getRootPipelineState() || pipeline;
+          diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat(missingText));
+          notifyStatus(missingText, 'warn', { forceInline: true });
+        } else if (dedupeModules.length) {
           try {
             var autoDedupeMode = getDedupeModeFromSettings();
             startAiDedupeTask({
@@ -14393,13 +14408,9 @@
             diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat('AI 用例去重启动失败，已保留原结果'));
           }
         } else {
-          var emptyDedupeNames = incompleteDedupeModules.map(function(item) {
-            return item && item.module ? String(item.module || '') : '';
-          }).filter(Boolean).slice(0, 5).join('、');
           updateRootPipelineState(function(current) {
             current.dedupeStatus = 'skipped';
-            appendRootPipelineDiagnostics(current, '当前没有可去重的 AI 生成用例，已跳过去重'
-              + (emptyDedupeNames ? '；暂无 AI 用例模块：' + emptyDedupeNames : ''));
+            appendRootPipelineDiagnostics(current, '当前没有可去重的 AI 生成用例，已跳过去重');
           });
           pipeline = getRootPipelineState() || pipeline;
           diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat('当前没有可去重的 AI 生成用例，已跳过去重'));
@@ -14490,6 +14501,12 @@
           summaryText = 'AI 用例去重已中断，已保留当前结果';
           notifyText = buildRootPipelineSuccessMessage(pipeline);
           notifyType = 'warn';
+        } else if (pipeline.dedupeStatus === 'blocked') {
+          summaryText = '仍有模块未生成用例，已暂停 AI 用例去重';
+          notifyText = pipeline.dedupeError || summaryText;
+          notifyType = 'warn';
+          rootState.status = 'error';
+          rootState.error = notifyText;
         } else if (pipeline.dedupeStatus === 'done') {
           summaryText = buildRootPipelineSuccessMessage(pipeline);
           notifyText = summaryText;
@@ -14593,48 +14610,44 @@
         rootState.updatedAt = Date.now();
       }
 
-      if (actionId === ROOT_ACTIONS.FULL_CASES && Number(task && task.coverageRetryCount || 0) > 0) {
-        var retryApplied = applyRootOutput(actionId, modules, visibleContext, Number(task && task.durationMs || 0));
+      var fullCasesModuleSnapshot = [];
+      if (actionId === ROOT_ACTIONS.FULL_CASES) {
+        var fullCasesContextAfterSkeleton = ensureVisibleModuleContext(buildVisibleModuleContext());
+        var fullCasesMapAfterSkeleton = fullCasesContextAfterSkeleton.map || {};
+        fullCasesModuleSnapshot = modules.map(function(item) {
+          var moduleKey = normalizeModuleKey(item && item.module ? item.module : '');
+          var resolvedEntry = moduleKey ? fullCasesMapAfterSkeleton[moduleKey] : null;
+          return {
+            moduleId: resolvedEntry && resolvedEntry.aiModuleId ? String(resolvedEntry.aiModuleId || '') : '',
+            moduleKey: moduleKey,
+            module: item && item.module ? item.module : '',
+            key_scenarios: item && Array.isArray(item.key_scenarios) ? item.key_scenarios.slice() : [],
+            test_points: item && Array.isArray(item.test_points) ? item.test_points.slice() : [],
+            coupled_modules: item && Array.isArray(item.coupled_modules) ? item.coupled_modules.slice() : [],
+            cases: [],
+          };
+        });
         updateRootPipelineState(function(current) {
-          current.stage = 'modules';
-          current.discoveryStatus = 'done';
-          current.dedupeStatus = 'skipped';
-          current.createdModules += Number(retryApplied.createdModules || 0);
-          current.addedCases += Number(retryApplied.addedCases || 0);
-          current.generatedDedupeModules = normalizeRootPipelineDedupeModules(modules.map(function(item) {
-            var key = normalizeModuleKey(item && item.module ? item.module : '');
-            var entry = key ? buildVisibleModuleContext().map[key] : null;
-            return {
-              moduleId: entry && entry.aiModuleId ? String(entry.aiModuleId || '') : '',
-              moduleKey: key,
-              module: item && item.module ? item.module : '',
-              key_scenarios: item && Array.isArray(item.key_scenarios) ? item.key_scenarios.slice() : [],
-              test_points: item && Array.isArray(item.test_points) ? item.test_points.slice() : [],
-              coupled_modules: item && Array.isArray(item.coupled_modules) ? item.coupled_modules.slice() : [],
-              cases: item && Array.isArray(item.cases) ? item.cases.slice() : [],
-            };
-          }));
-          mergeRootPipelineDetails(current, retryApplied.details);
+          current.generatedDedupeModules = normalizeRootPipelineDedupeModules(fullCasesModuleSnapshot);
+        });
+      }
+
+      if (actionId === ROOT_ACTIONS.FULL_CASES && Number(task && task.coverageRetryCount || 0) > 0) {
+        updateRootPipelineState(function(current) {
           var retryReasonLabels = normalizeHistoryDiagnostics(task && task.coverageRetryReasons ? task.coverageRetryReasons : []);
           appendRootPipelineDiagnostics(current, retryReasonLabels.length
             ? ('自动补强覆盖：' + retryReasonLabels.join('、'))
             : '自动补强覆盖完成');
         });
-        clearDeleteHistoryStacks();
-        syncCasesGenPageRender();
-        if (isDrawerOpen()) {
-          renderWithViewportCarryover({ reason: 'root-pipeline-coverage-retry-committed', persist: false, anchorNodeId: anchorNodeId });
-        }
-        syncTerminalTaskRestoreContext(task);
-        persistManagedTaskWorkspaceState(true);
-        finalizeRootPipelineIfReady(String(pipeline.id || ''), { anchorNodeId: anchorNodeId });
-        return retryApplied.changed === true;
       }
 
       updateRootPipelineState(function(current) {
         current.stage = 'modules';
         current.discoveryStatus = 'done';
-        if (actionId !== ROOT_ACTIONS.FULL_CASES) {
+        if (actionId === ROOT_ACTIONS.FULL_CASES) {
+          current.createdModules += Number(skeletonApplied.createdModules || 0);
+          mergeRootPipelineDetails(current, skeletonApplied.details);
+        } else {
           current.createdModules += Number(skeletonApplied.createdModules || 0);
           mergeRootPipelineDetails(current, skeletonApplied.details);
         }
@@ -14645,23 +14658,6 @@
 
       var postContext = ensureVisibleModuleContext(buildVisibleModuleContext());
       var postContextMap = postContext.map || {};
-      if (actionId === ROOT_ACTIONS.FULL_CASES && newModules.length) {
-        updateRootPipelineState(function(current) {
-          current.generatedDedupeModules = normalizeRootPipelineDedupeModules(newModules.map(function(item) {
-            var moduleKey = normalizeModuleKey(item && item.module ? item.module : '');
-            var resolvedEntry = moduleKey ? postContextMap[moduleKey] : null;
-            return {
-              moduleId: resolvedEntry && resolvedEntry.aiModuleId ? String(resolvedEntry.aiModuleId || '') : '',
-              moduleKey: moduleKey,
-              module: item && item.module ? item.module : '',
-              key_scenarios: item && Array.isArray(item.key_scenarios) ? item.key_scenarios.slice() : [],
-              test_points: item && Array.isArray(item.test_points) ? item.test_points.slice() : [],
-              coupled_modules: item && Array.isArray(item.coupled_modules) ? item.coupled_modules.slice() : [],
-              cases: item && Array.isArray(item.cases) ? item.cases.slice() : [],
-            };
-          }));
-        });
-      }
       var descriptors = existingDescriptors.slice();
       newModules.forEach(function(item) {
         var moduleKey = normalizeModuleKey(item && item.module ? item.module : '');
@@ -14684,9 +14680,8 @@
             moduleEntry: resolvedEntry,
             actionId: MODULE_ACTIONS.FULL_CASES,
             rootPipelineNewModule: false,
-            forceCreatedModuleBeforeAction: true,
             anchorNodeId: anchorNodeId,
-            fallbackCases: normalizeFallbackCaseList(item && item.cases, item && item.module ? item.module : ''),
+            fallbackCases: [],
           };
         }).filter(Boolean);
       }
@@ -14874,7 +14869,6 @@
         updateRootPipelineState(function(current) {
           current.addedCases += addedCount;
           if (String(task && task.rootPipelineActionId ? task.rootPipelineActionId : '') === ROOT_ACTIONS.FULL_CASES) {
-            current.createdModules += 1;
             upsertRootPipelineDedupeModule(current, {
               moduleId: moduleId,
               moduleKey: String(task && task.moduleKey ? task.moduleKey : (resolvedEntry && resolvedEntry.moduleKey ? resolvedEntry.moduleKey : '')),
