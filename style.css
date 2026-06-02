@@ -11693,6 +11693,14 @@ tr.import-invalid-locate-active td {
   overflow: visible;
 }
 
+.xmind-structure-viewer me-tpc.xmind-casegen-node-status-running .text {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.28), 0 0 0 8px rgba(37, 99, 235, 0.10);
+}
+
+.xmind-structure-viewer me-tpc.xmind-casegen-node-status-error .text {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.28), 0 0 0 8px rgba(239, 68, 68, 0.10);
+}
+
 .xmind-structure-viewer .xmind-node-quick-action {
   position: absolute;
   top: 50%;

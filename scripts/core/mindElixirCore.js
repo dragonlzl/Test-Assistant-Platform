@@ -2565,7 +2565,7 @@
         if (!insideCanvas && !insideViewer) return;
         if (e.cancelable === false) return;
         if (e.type === 'wheel') {
-          if (applyAncestorWheelScroll(e)) {
+          if (!insideCanvas && applyAncestorWheelScroll(e)) {
             if (e.preventDefault) e.preventDefault();
             if (e.stopImmediatePropagation) e.stopImmediatePropagation();
             else if (e.stopPropagation) e.stopPropagation();
