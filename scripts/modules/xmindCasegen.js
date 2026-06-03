@@ -1548,6 +1548,34 @@
       };
     }
 
+    function clearDedupeOverviewSummary(options) {
+      var opts = options || {};
+      var dedupeState = ensureDedupeUiState();
+      var changed = false;
+      if (dedupeState.lastResult) {
+        dedupeState.lastResult = null;
+        changed = true;
+      }
+      if (opts.clearTerminalVisual !== false) {
+        if (dedupeTerminalVisualTimer) {
+          clearTimeout(dedupeTerminalVisualTimer);
+          dedupeTerminalVisualTimer = 0;
+        }
+        if (
+          dedupeState.terminalVisualRunning === true
+          || Number(dedupeState.terminalVisualUntil || 0) > 0
+        ) {
+          dedupeState.terminalVisualRunning = false;
+          dedupeState.terminalVisualUntil = 0;
+          changed = true;
+        }
+      }
+      if (!changed) return false;
+      dedupeState.updatedAt = Date.now();
+      if (opts.sync !== false) syncInlineToolbarOverview();
+      return true;
+    }
+
     function getInlineToolbarOverviewSummary() {
       var context = buildVisibleModuleContext();
       var moduleCount = Array.isArray(context && context.list) ? context.list.length : 0;
@@ -15059,6 +15087,7 @@
       var dedupeMode = normalizeDedupeMode(opts.dedupeMode || getDedupeModeFromSettings());
       var taskInput = buildXmindDedupeTaskInput(modules, { source: source, dedupeMode: dedupeMode });
       var dedupeVisibleStartedAt = Date.now();
+      clearDedupeOverviewSummary({ clearTerminalVisual: true, sync: false });
       var task = startManagedXmindTask(buildDedupeTaskPayload(taskInput, {
         workspaceId: taskWorkspaceId,
         dedupeSource: source,
@@ -15071,6 +15100,7 @@
         notifySuppressed: source === 'auto-full',
       }));
       setDedupeRunningState(task, source);
+      syncInlineToolbarOverview();
       if (opts.rootPipelineId) {
         updateRootPipelineState(function(current) {
           current.stage = 'deduping';
@@ -16881,6 +16911,7 @@
       moduleState.updatedAt = Date.now();
       moduleState.hideResults = hadAiCasesBeforeAction;
       clearModuleTopupHighlight(moduleState);
+      clearDedupeOverviewSummary({ clearTerminalVisual: true });
       if (options.rootPendingActionId) {
         setModuleRootPendingAction(moduleState, options.rootPendingActionId);
       }
@@ -17162,6 +17193,7 @@
       rootState.error = '';
       rootState.updatedAt = Date.now();
       clearAllTopupHighlights();
+      clearDedupeOverviewSummary({ clearTerminalVisual: true });
       if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
         markRootPendingModules(visibleContext.list, actionId);
       }
