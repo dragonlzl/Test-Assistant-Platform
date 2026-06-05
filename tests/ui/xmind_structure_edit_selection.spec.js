@@ -275,6 +275,69 @@ async function expectSelectedLabels(page, viewerSelector, expectedLabels) {
   }).toEqual(normalized);
 }
 
+async function readInputBoxText(page) {
+  return page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    return input ? String(input.textContent || '') : '';
+  });
+}
+
+async function beginInputBoxWithText(page, viewerSelector, topicText, text) {
+  var nextText = String(text || '');
+  expect(nextText.length).toBeGreaterThan(0);
+  await clearEditSelection(page, viewerSelector);
+  await clickEditNode(page, viewerSelector, topicText);
+  await page.locator(viewerSelector).focus();
+  await page.keyboard.press(nextText.slice(0, 1));
+  await expect(page.locator('#input-box')).toBeVisible();
+  if (nextText.length > 1) {
+    await page.keyboard.type(nextText.slice(1));
+  }
+  await expect.poll(async () => {
+    return await readInputBoxText(page);
+  }).toBe(nextText);
+}
+
+async function dragSelectWholeInputBox(page) {
+  var points = await page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    if (!input || !input.getBoundingClientRect) return null;
+    var rect = input.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    return {
+      startX: rect.left + 2,
+      startY: rect.top + (rect.height / 2),
+      endX: rect.right - 2,
+      endY: rect.top + (rect.height / 2),
+    };
+  });
+  expect(points).toBeTruthy();
+  await page.mouse.move(points.startX, points.startY);
+  await page.mouse.down({ button: 'left' });
+  await page.mouse.move(points.endX, points.endY, { steps: 12 });
+  await page.mouse.up({ button: 'left' });
+}
+
+async function assertInputBoxDragSelectionCanDelete(page, viewerSelector) {
+  await beginInputBoxWithText(page, viewerSelector, '支付模块', 'abcdef');
+  await dragSelectWholeInputBox(page);
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      var selection = window.getSelection ? window.getSelection() : null;
+      return selection ? String(selection.toString() || '') : '';
+    });
+  }).toBe('abcdef');
+  await page.keyboard.press('Backspace');
+  await expect.poll(async () => {
+    return await readInputBoxText(page);
+  }).toBe('');
+  await page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    if (input && typeof input.blur === 'function') input.blur();
+  });
+  await page.waitForTimeout(80);
+}
+
 async function runEditSelectionAssertions(page, viewerSelector) {
   await clearEditSelection(page, viewerSelector);
   await clickEditNode(page, viewerSelector, '余额不足时支付失败');
@@ -489,5 +552,132 @@ test.describe('XMind 编辑态节点选择', () => {
     await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
 
     await runEditSelectionAssertions(page, '#tempExecXmindStructureViewer');
+  });
+
+  test('用例库 XMind 编辑文本支持鼠标拖选后删除', async ({ page }) => {
+    const token = 'token-case-library-xmind-edit-text-selection';
+    const user = { id: 131, username: 'xmind_edit_text_selection_user', role: 'admin', level: 'leader' };
+    const project = { id: 1601, name: 'XMind编辑文本选择项目' };
+    const versions = [{ id: 1701, name: 'v1' }];
+    const now = new Date().toISOString();
+    const caseFileId = 1801;
+    const caseFiles = [{
+      id: caseFileId,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: '编辑文本拖选用例集',
+      reuse_enabled: false,
+      item_count: 1,
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    }];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFileId] = [{
+      id: 18001,
+      case_file_id: caseFileId,
+      module: '支付模块',
+      title: '余额不足时支付失败',
+      priority: 'P1',
+      precondition: '账号已登录',
+      steps: '提交支付订单',
+      expected: '提示余额不足',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }];
+
+    await buildCaseLibraryRoutes(page, {
+      token,
+      user,
+      project,
+      versions,
+      caseFiles,
+      caseItemsByFileId,
+    });
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('tap-theme-hint', 'light'); } catch (_) {}
+      try { localStorage.setItem('usecase-settings-v1', JSON.stringify({ theme: 'light' })); } catch (_) {}
+    }, { token });
+
+    await gotoCaseLibrary(page);
+    await waitCaseLibraryReady(page);
+    await switchToTab(page, 'case-library');
+
+    await page.click('#openCaseLibraryEditDrawerBtn');
+    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await page.click('#caseLibraryEditListBody [data-case-lib-edit="' + String(caseFileId) + '"]');
+    await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
+
+    await page.click('#caseLibraryXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    const viewer = page.locator('#caseLibraryXmindStructureViewer');
+    await viewer.locator('[data-mind-action="edit-enter"]').click();
+    await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
+
+    await assertInputBoxDragSelectionCanDelete(page, '#caseLibraryXmindStructureViewer');
+  });
+
+  test('用例执行 XMind 编辑文本支持鼠标拖选后删除', async ({ page }) => {
+    const fileId = 'temp-xmind-edit-text-selection';
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.removeItem('tap-auth-token'); } catch (_) {}
+      try { localStorage.setItem('usecase-temp-exec-v1', JSON.stringify(payload)); } catch (_) {}
+      try { localStorage.setItem('tempexec-focus-v1', JSON.stringify([])); } catch (_) {}
+    }, {
+      files: [{
+        id: fileId,
+        name: '执行编辑文本拖选集',
+        requirement: '执行编辑文本拖选需求',
+        cases: [{
+          module: '支付模块',
+          title: '余额不足时支付失败',
+          priority: 'P1',
+          preconditions: '账号已登录',
+          steps: '提交支付订单',
+          expected: '提示余额不足',
+          actual: '未执行',
+          remark: '',
+        }],
+      }],
+      versions: [],
+      activeId: fileId,
+    });
+
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.fallback();
+      }
+      return route.abort();
+    });
+
+    await gotoExec(page);
+    await waitExecReady(page);
+    await page.evaluate((nextId) => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
+        window.app.tempExecApi.setTempExecActive(nextId);
+      }
+    }, fileId);
+
+    await page.waitForFunction(() => {
+      var btn = document.getElementById('tempExecXmindViewBtn');
+      return Boolean(btn && !btn.disabled && !(btn.classList && btn.classList.contains('hidden')));
+    }, {}, { timeout: 15000 });
+
+    await page.click('#tempExecXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    const viewer = page.locator('#tempExecXmindStructureViewer');
+    await viewer.locator('[data-mind-action="edit-enter"]').click();
+    await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
+
+    await assertInputBoxDragSelectionCanDelete(page, '#tempExecXmindStructureViewer');
   });
 });

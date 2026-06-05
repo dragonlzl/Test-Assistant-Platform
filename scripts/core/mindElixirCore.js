@@ -2366,8 +2366,9 @@
         }
       }
 
-      function hideNodeContextMenu() {
-        clearViewerNativeTextSelection();
+      function hideNodeContextMenu(options) {
+        var preserveNativeSelection = Boolean(options && options.preserveNativeSelection === true);
+        if (!preserveNativeSelection) clearViewerNativeTextSelection();
         nodeContextMenuMeta = null;
         forceHideAllNodeContextMenus();
         if (!nodeContextMenuEl || !nodeContextMenuEl.classList) return;
@@ -3511,6 +3512,22 @@
         return false;
       }
 
+      function isEditingInputBoxTarget(target) {
+        if (!editing || !target) return false;
+        if (target.id === 'input-box') return true;
+        if (target.closest && target.closest('#input-box')) return true;
+        return false;
+      }
+
+      function protectEditingInputBoxMouseEvent(e) {
+        if (!e || !isEditingInputBoxTarget(e.target)) return;
+        hideNodeContextMenu({ preserveNativeSelection: true });
+        clearClickNodeEditTimer();
+        clearCustomPointerDragState();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        else if (e.stopPropagation) e.stopPropagation();
+      }
+
       function isMutationKeyEvent(e) {
         if (!e) return false;
         var key = e.key ? String(e.key) : '';
@@ -3523,7 +3540,10 @@
 
       function onViewerKeydown(e) {
         if (!e) return;
-        hideNodeContextMenu();
+        var eventTarget = e.target || null;
+        var typing = isTypingTarget(eventTarget);
+        if (typing) hideNodeContextMenu({ preserveNativeSelection: true });
+        else hideNodeContextMenu();
         if (e.key === 'Escape' && isDrawerFullscreen()) {
           if (e.preventDefault) e.preventDefault();
           if (e.stopPropagation) e.stopPropagation();
@@ -3531,7 +3551,6 @@
           return;
         }
         if (controlsEl && controlsEl.contains && controlsEl.contains(e.target)) return;
-        var typing = isTypingTarget(e.target);
         var lower = e.key ? String(e.key).toLowerCase() : '';
 
         if (!editing) {
@@ -3752,6 +3771,12 @@
         resetModifierSelectionPointerGuard();
         if (e && isMindNodeExpanderTarget(e.target)) {
           hideNodeContextMenu();
+          clearClickNodeEditTimer();
+          updateEditButtons();
+          return;
+        }
+        if (e && isTypingTarget(e.target)) {
+          hideNodeContextMenu({ preserveNativeSelection: true });
           clearClickNodeEditTimer();
           updateEditButtons();
           return;
@@ -4342,6 +4367,10 @@
           clearCustomPointerDragState();
           return;
         }
+        if (isTypingTarget(e && e.target)) {
+          clearCustomPointerDragState();
+          return;
+        }
         if (!editing) {
           clearCustomPointerDragState();
           return;
@@ -4685,6 +4714,12 @@
         searchInputEl.addEventListener('keydown', onSearchKeydown);
       }
       if (viewerEl && typeof viewerEl.addEventListener === 'function') {
+        viewerEl.addEventListener('pointerdown', protectEditingInputBoxMouseEvent, true);
+        viewerEl.addEventListener('mousedown', protectEditingInputBoxMouseEvent, true);
+        viewerEl.addEventListener('pointerup', protectEditingInputBoxMouseEvent, true);
+        viewerEl.addEventListener('mouseup', protectEditingInputBoxMouseEvent, true);
+        viewerEl.addEventListener('click', protectEditingInputBoxMouseEvent, true);
+        viewerEl.addEventListener('dblclick', protectEditingInputBoxMouseEvent, true);
         viewerEl.addEventListener('contextmenu', onViewerContextMenu, true);
         viewerEl.addEventListener('wheel', blockCanvasNativeGesture, { capture: true, passive: false });
         viewerEl.addEventListener('touchstart', blockCanvasNativeGesture, { capture: true, passive: false });
@@ -4850,6 +4885,12 @@
           searchInputEl.removeEventListener('keydown', onSearchKeydown);
         }
         if (viewerEl && typeof viewerEl.removeEventListener === 'function') {
+          viewerEl.removeEventListener('pointerdown', protectEditingInputBoxMouseEvent, true);
+          viewerEl.removeEventListener('mousedown', protectEditingInputBoxMouseEvent, true);
+          viewerEl.removeEventListener('pointerup', protectEditingInputBoxMouseEvent, true);
+          viewerEl.removeEventListener('mouseup', protectEditingInputBoxMouseEvent, true);
+          viewerEl.removeEventListener('click', protectEditingInputBoxMouseEvent, true);
+          viewerEl.removeEventListener('dblclick', protectEditingInputBoxMouseEvent, true);
           viewerEl.removeEventListener('contextmenu', onViewerContextMenu, true);
           viewerEl.removeEventListener('wheel', blockCanvasNativeGesture, true);
           viewerEl.removeEventListener('touchstart', blockCanvasNativeGesture, true);
