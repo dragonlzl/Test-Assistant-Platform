@@ -12860,8 +12860,17 @@
       return buildNodeId(['root', getRequirementLabelText()]);
     }
 
+    function buildModuleNodeId(moduleKey) {
+      var key = String(moduleKey || '').trim() || 'module';
+      return buildStableNodeId(['module', key]);
+    }
+
     function getModuleNodeId(moduleEntry) {
-      return buildNodeId(['module', moduleEntry && moduleEntry.moduleKey ? moduleEntry.moduleKey : 'module']);
+      var entry = moduleEntry || {};
+      var key = entry && entry.moduleKey ? String(entry.moduleKey || '') : '';
+      if (!key) key = normalizeModuleKey(entry.title || entry.module || '');
+      if (!key) key = normalizeModuleTitle(entry.title || entry.module || '');
+      return buildModuleNodeId(key || 'module');
     }
 
     function createNode(topic, meta, children, options) {
@@ -14898,7 +14907,7 @@
       }
       if (task && task.scope === 'module') {
         if (moduleEntry) return getModuleNodeId(moduleEntry);
-        return buildNodeId(['module', task && task.moduleKey ? task.moduleKey : 'module']);
+        return buildModuleNodeId(task && task.moduleKey ? task.moduleKey : 'module');
       }
       return getRootNodeId();
     }

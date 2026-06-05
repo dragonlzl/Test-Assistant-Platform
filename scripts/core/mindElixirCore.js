@@ -1585,6 +1585,7 @@
 
       function onSearchKeydown(e) {
         if (!e) return;
+        if (e.stopPropagation) e.stopPropagation();
         if (e.key !== 'Enter') return;
         if (e.preventDefault) e.preventDefault();
         if (e.shiftKey) moveSearch(-1, { preserveInputFocus: true, selection: readSearchInputSelection() });

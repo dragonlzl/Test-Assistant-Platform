@@ -8616,8 +8616,24 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await searchInput.click();
     await searchInput.fill('登录成功校验');
+    await page.evaluate(() => {
+      var root = document.getElementById('xmindCaseGenMindContainer');
+      window.__xmindSearchBackspaceBubbled = false;
+      if (!root || root.__xmindSearchBackspaceGuardAttached) return;
+      root.__xmindSearchBackspaceGuardAttached = true;
+      root.addEventListener('keydown', function(event) {
+        if (!event || event.key !== 'Backspace') return;
+        var target = event.target || null;
+        if (!target || !target.matches || !target.matches('[data-mind-search-input]')) return;
+        window.__xmindSearchBackspaceBubbled = true;
+        if (event.preventDefault) event.preventDefault();
+      });
+    });
     await page.keyboard.press('Backspace');
     await expect(searchInput).toHaveValue('登录成功校');
+    await expect.poll(async () => {
+      return await page.evaluate(() => window.__xmindSearchBackspaceBubbled === true);
+    }).toBe(false);
     await expect(searchCount).toHaveText(/1\s*\/\s*[1-9]\d*/);
     await expect.poll(async () => {
       return await readSearchMarkState();
@@ -8693,6 +8709,91 @@ test.describe('XMind 用例生成抽屉', () => {
     }).toBe(true);
     await waitForNodeText(page, '登录成功校验');
     await waitForNodeText(page, '支付成功校验');
+  });
+
+  test('XMind 节点搜索可以定位中文模块命中，避免跳到同 ID 的其他模块', async ({ page }) => {
+    const token = 'token-xmind-search-chinese-module-id';
+    const user = { id: 215, username: 'demo_user_search_chinese_module', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await createXmindWorkspaceByManualPrep(page, 'XMind中文模块搜索需求', '需求：验证中文模块搜索时可以定位到真实命中的模块节点。', {
+      useExistingWorkspace: true,
+      completed: true,
+      completePrep: true,
+    });
+    const modules = [{
+      id: 'xmind-mod-buy',
+      title: '购买结算',
+      scenarios: ['购买主场景'],
+      points: ['结算校验'],
+      coupled: ['奖励模块'],
+    }, {
+      id: 'xmind-mod-other',
+      title: '其他奖励',
+      scenarios: ['奖励主场景'],
+      points: ['奖励状态校验'],
+      coupled: ['购买结算'],
+    }];
+    await seedAiSkeleton(page, modules);
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind中文模块搜索需求',
+      requirementLabel: 'XMind中文模块搜索需求',
+      requirementLabelSource: 'workspace',
+    });
+
+    await waitForNodeText(page, '购买结算');
+    await waitForNodeText(page, '其他奖励');
+
+    const moduleNodeIds = await page.evaluate(() => {
+      var targetLabels = { '购买结算': true, '其他奖励': true };
+      var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
+      var ids = [];
+      Array.prototype.forEach.call(nodes, function(node) {
+        var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+        var label = textEl
+          ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+          : '';
+        if (!targetLabels[label]) return;
+        ids.push(String(node.getAttribute('data-nodeid') || ''));
+      });
+      return ids;
+    });
+    expect(moduleNodeIds).toHaveLength(2);
+    expect(new Set(moduleNodeIds).size).toBe(2);
+
+    const searchInput = page.locator('#xmindCaseGenMindContainer [data-mind-search-input]');
+    const searchCount = page.locator('#xmindCaseGenMindContainer [data-mind-search-count]');
+    await searchInput.fill('其他');
+    await expect(searchCount).toHaveText(/1\s*\/\s*1/);
+
+    await expect.poll(async () => {
+      return await page.evaluate(() => {
+        var root = document.getElementById('xmindCaseGenMindContainer');
+        var canvas = root ? root.querySelector('[data-mind-canvas]') : null;
+        var active = root ? root.querySelector('me-tpc.xmind-search-active') : null;
+        var textEl = active && active.querySelector ? (active.querySelector('.text') || active) : active;
+        var activeRect = textEl && textEl.getBoundingClientRect ? textEl.getBoundingClientRect() : null;
+        var canvasRect = canvas && canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : null;
+        var dx = activeRect && canvasRect
+          ? Math.abs((activeRect.left + activeRect.width / 2) - (canvasRect.left + canvasRect.width / 2))
+          : null;
+        var dy = activeRect && canvasRect
+          ? Math.abs((activeRect.top + activeRect.height / 2) - (canvasRect.top + canvasRect.height / 2))
+          : null;
+        return {
+          activeText: textEl ? String(textEl.textContent || '').replace(/\s+/g, ' ').trim() : '',
+          centerDxOk: dx !== null && dx < 120,
+          centerDyOk: dy !== null && dy < 120,
+        };
+      });
+    }).toEqual({
+      activeText: '其他奖励',
+      centerDxOk: true,
+      centerDyOk: true,
+    });
   });
 
   test('右侧导出XMind按钮替换为模型选择框，并支持直接切换 XMind 模型', async ({ page }) => {
