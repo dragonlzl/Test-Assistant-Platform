@@ -131,25 +131,66 @@ function buildCaseLibraryRoutes(page, options) {
 }
 
 async function getNodeCenter(page, viewerSelector, topicText) {
-  var position = await page.evaluate(({ viewer, topic }) => {
-    var nodes = document.querySelectorAll(viewer + ' me-tpc');
-    var found = null;
-    Array.prototype.some.call(nodes, function(node) {
-      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
-      var label = textEl
-        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
-        : '';
-      if (label !== topic) return false;
-      var rect = (textEl || node).getBoundingClientRect();
-      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-      found = {
-        x: rect.left + (rect.width / 2),
-        y: rect.top + (rect.height / 2),
-      };
-      return true;
-    });
-    return found;
-  }, { viewer: viewerSelector, topic: topicText });
+  var position = null;
+  for (var attempt = 0; attempt < 8; attempt += 1) {
+    var result = await page.evaluate(({ viewer, topic }) => {
+      function parseTransform(transformText) {
+        var text = transformText === undefined || transformText === null ? '' : String(transformText);
+        var translateMatch = text.match(/translate3d\(([-\d.]+)px,\s*([-\d.]+)px/i);
+        var scaleMatch = text.match(/scale\(([-\d.]+)\)/i);
+        return {
+          x: translateMatch ? Number(translateMatch[1]) : 0,
+          y: translateMatch ? Number(translateMatch[2]) : 0,
+          scale: scaleMatch ? Number(scaleMatch[1]) : 1,
+        };
+      }
+      var viewerEl = document.querySelector(viewer);
+      var canvas = viewerEl && viewerEl.querySelector ? viewerEl.querySelector('.xmind-structure-canvas') : null;
+      var map = viewerEl && viewerEl.querySelector ? viewerEl.querySelector('.map-canvas') : null;
+      var nodes = document.querySelectorAll(viewer + ' me-tpc');
+      var found = null;
+      Array.prototype.some.call(nodes, function(node) {
+        var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+        var label = textEl
+          ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+          : '';
+        if (label !== topic) return false;
+        var rect = (textEl || node).getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+        found = {
+          x: rect.left + (rect.width / 2),
+          y: rect.top + (rect.height / 2),
+        };
+        return true;
+      });
+      if (!found || !canvas || !canvas.getBoundingClientRect || !map || !map.style) {
+        return { point: found, adjusted: false };
+      }
+      var canvasRect = canvas.getBoundingClientRect();
+      var margin = 24;
+      var visible = found.x >= canvasRect.left + margin
+        && found.x <= canvasRect.right - margin
+        && found.y >= canvasRect.top + margin
+        && found.y <= canvasRect.bottom - margin;
+      if (visible) return { point: found, adjusted: false };
+      var state = parseTransform(map.style.transform || '');
+      if (!isFinite(state.x)) state.x = 0;
+      if (!isFinite(state.y)) state.y = 0;
+      if (!isFinite(state.scale) || state.scale <= 0) state.scale = 1;
+      var desiredX = canvasRect.left + (canvasRect.width / 2);
+      var desiredY = canvasRect.top + (canvasRect.height / 2);
+      var nextX = state.x + (desiredX - found.x);
+      var nextY = state.y + (desiredY - found.y);
+      map.style.transform = 'translate3d(' + nextX + 'px, ' + nextY + 'px, 0px) scale(' + state.scale + ')';
+      return { point: found, adjusted: true };
+    }, { viewer: viewerSelector, topic: topicText });
+    expect(result && result.point).toBeTruthy();
+    if (!result.adjusted) {
+      position = result.point;
+      break;
+    }
+    await page.waitForTimeout(120);
+  }
   expect(position).toBeTruthy();
   return position;
 }
@@ -213,41 +254,108 @@ async function clearEditSelection(page, viewerSelector) {
 }
 
 async function boxSelectTopics(page, viewerSelector, topics) {
-  var bounds = await page.evaluate(({ viewer, labels }) => {
-    var wanted = Array.isArray(labels) ? labels.slice() : [];
-    var found = [];
-    var nodes = document.querySelectorAll(viewer + ' me-tpc');
-    Array.prototype.forEach.call(nodes, function(node) {
-      if (!node || !node.querySelector) return;
-      var textEl = node.querySelector('.text');
-      var label = textEl
-        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
-        : '';
-      if (wanted.indexOf(label) === -1) return;
-      var rect = (textEl || node).getBoundingClientRect();
-      if (!rect || rect.width <= 0 || rect.height <= 0) return;
-      found.push({
-        left: rect.left,
-        top: rect.top,
-        right: rect.right,
-        bottom: rect.bottom,
+  var fitButton = page.locator(viewerSelector + ' [data-mind-action="zoom-fit"]');
+  if (await fitButton.count()) {
+    await fitButton.click();
+    await page.waitForTimeout(160);
+  }
+  var bounds = null;
+  for (var attempt = 0; attempt < 8; attempt += 1) {
+    var result = await page.evaluate(({ viewer, labels }) => {
+      function parseTransform(transformText) {
+        var text = transformText === undefined || transformText === null ? '' : String(transformText);
+        var translateMatch = text.match(/translate3d\(([-\d.]+)px,\s*([-\d.]+)px/i);
+        var scaleMatch = text.match(/scale\(([-\d.]+)\)/i);
+        return {
+          x: translateMatch ? Number(translateMatch[1]) : 0,
+          y: translateMatch ? Number(translateMatch[2]) : 0,
+          scale: scaleMatch ? Number(scaleMatch[1]) : 1,
+        };
+      }
+      var wanted = Array.isArray(labels) ? labels.slice() : [];
+      var found = [];
+      var viewerEl = document.querySelector(viewer);
+      var canvas = viewerEl && viewerEl.querySelector ? viewerEl.querySelector('.xmind-structure-canvas') : null;
+      var map = viewerEl && viewerEl.querySelector ? viewerEl.querySelector('.map-canvas') : null;
+      var nodes = document.querySelectorAll(viewer + ' me-tpc');
+      Array.prototype.forEach.call(nodes, function(node) {
+        if (!node || !node.querySelector) return;
+        var textEl = node.querySelector('.text');
+        var label = textEl
+          ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+          : '';
+        if (wanted.indexOf(label) === -1) return;
+        var rect = (textEl || node).getBoundingClientRect();
+        if (!rect || rect.width <= 0 || rect.height <= 0) return;
+        found.push({
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+        });
       });
-    });
-    if (found.length !== wanted.length) return null;
-    var union = {
-      left: found[0].left,
-      top: found[0].top,
-      right: found[0].right,
-      bottom: found[0].bottom,
-    };
-    found.forEach(function(rect) {
-      if (rect.left < union.left) union.left = rect.left;
-      if (rect.top < union.top) union.top = rect.top;
-      if (rect.right > union.right) union.right = rect.right;
-      if (rect.bottom > union.bottom) union.bottom = rect.bottom;
-    });
-    return union;
-  }, { viewer: viewerSelector, labels: topics });
+      if (found.length !== wanted.length) return { bounds: null, adjusted: false };
+      var union = {
+        left: found[0].left,
+        top: found[0].top,
+        right: found[0].right,
+        bottom: found[0].bottom,
+      };
+      found.forEach(function(rect) {
+        if (rect.left < union.left) union.left = rect.left;
+        if (rect.top < union.top) union.top = rect.top;
+        if (rect.right > union.right) union.right = rect.right;
+        if (rect.bottom > union.bottom) union.bottom = rect.bottom;
+      });
+      if (!canvas || !canvas.getBoundingClientRect || !map || !map.style) {
+        return { bounds: union, adjusted: false };
+      }
+      var canvasRect = canvas.getBoundingClientRect();
+      var margin = 36;
+      var tolerance = 2;
+      var visible = union.left >= canvasRect.left + margin - tolerance
+        && union.right <= canvasRect.right - margin + tolerance
+        && union.top >= canvasRect.top + margin - tolerance
+        && union.bottom <= canvasRect.bottom - margin + tolerance;
+      if (visible) return { bounds: union, adjusted: false };
+      var state = parseTransform(map.style.transform || '');
+      if (!isFinite(state.x)) state.x = 0;
+      if (!isFinite(state.y)) state.y = 0;
+      if (!isFinite(state.scale) || state.scale <= 0) state.scale = 1;
+      var localUnion = {
+        left: (union.left - state.x) / state.scale,
+        top: (union.top - state.y) / state.scale,
+        right: (union.right - state.x) / state.scale,
+        bottom: (union.bottom - state.y) / state.scale,
+      };
+      var localWidth = localUnion.right - localUnion.left;
+      var localHeight = localUnion.bottom - localUnion.top;
+      var availableWidth = canvasRect.width - (margin * 2);
+      var availableHeight = canvasRect.height - (margin * 2);
+      var nextScale = state.scale;
+      if (localWidth > 0 && availableWidth > 0 && localWidth * nextScale > availableWidth) {
+        nextScale = availableWidth / localWidth;
+      }
+      if (localHeight > 0 && availableHeight > 0 && localHeight * nextScale > availableHeight) {
+        nextScale = availableHeight / localHeight;
+      }
+      if (!isFinite(nextScale) || nextScale <= 0) nextScale = state.scale;
+      var unionCenterX = localUnion.left + (localWidth / 2);
+      var unionCenterY = localUnion.top + (localHeight / 2);
+      var desiredX = canvasRect.left + (canvasRect.width / 2);
+      var desiredY = canvasRect.top + (canvasRect.height / 2);
+      var nextX = desiredX - (unionCenterX * nextScale);
+      var nextY = desiredY - (unionCenterY * nextScale);
+      map.style.transform = 'translate3d(' + nextX + 'px, ' + nextY + 'px, 0px) scale(' + nextScale + ')';
+      return { bounds: union, adjusted: true };
+    }, { viewer: viewerSelector, labels: topics });
+    expect(result && result.bounds).toBeTruthy();
+    if (!result.adjusted) {
+      bounds = result.bounds;
+      break;
+    }
+    await page.waitForTimeout(120);
+  }
   expect(bounds).toBeTruthy();
   if (!bounds) return;
   await page.mouse.move(bounds.left - 18, bounds.top - 18);
@@ -318,15 +426,215 @@ async function dragSelectWholeInputBox(page) {
   await page.mouse.up({ button: 'left' });
 }
 
+async function clickInputBoxAtRatio(page, ratio) {
+  var point = await page.evaluate((clickRatio) => {
+    var input = document.getElementById('input-box');
+    if (!input || !input.getBoundingClientRect) return null;
+    var rect = input.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    var safeRatio = Number(clickRatio);
+    if (!isFinite(safeRatio)) safeRatio = 0.5;
+    safeRatio = Math.max(0.15, Math.min(0.85, safeRatio));
+    return {
+      x: rect.left + (rect.width * safeRatio),
+      y: rect.top + (rect.height / 2),
+    };
+  }, ratio);
+  expect(point).toBeTruthy();
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.click(point.x, point.y);
+}
+
+async function doubleClickInputBoxAtRatio(page, ratio) {
+  var point = await page.evaluate((clickRatio) => {
+    var input = document.getElementById('input-box');
+    if (!input || !input.getBoundingClientRect) return null;
+    var rect = input.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    var safeRatio = Number(clickRatio);
+    if (!isFinite(safeRatio)) safeRatio = 0.5;
+    safeRatio = Math.max(0.15, Math.min(0.85, safeRatio));
+    return {
+      x: rect.left + (rect.width * safeRatio),
+      y: rect.top + (rect.height / 2),
+    };
+  }, ratio);
+  expect(point).toBeTruthy();
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.dblclick(point.x, point.y);
+}
+
+async function readInputBoxCaretState(page) {
+  return page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    var selection = window.getSelection ? window.getSelection() : null;
+    if (!input || !selection || selection.rangeCount <= 0) return null;
+    var range = selection.getRangeAt(0);
+    var startContainer = range.startContainer || null;
+    var inside = startContainer === input || Boolean(input.contains && input.contains(startContainer));
+    var caretOffset = -1;
+    if (inside && document.createRange) {
+      try {
+        var probe = document.createRange();
+        probe.selectNodeContents(input);
+        probe.setEnd(range.startContainer, range.startOffset);
+        caretOffset = String(probe.toString() || '').length;
+      } catch (_) {
+        caretOffset = -1;
+      }
+    }
+    return {
+      inside: inside,
+      collapsed: Boolean(selection.isCollapsed),
+      selectedText: String(selection.toString() || ''),
+      caretOffset: caretOffset,
+      textLength: String(input.textContent || '').length,
+    };
+  });
+}
+
+async function selectWholeInputBoxByDom(page) {
+  await page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    if (!input || !document.createRange || !window.getSelection) return;
+    if (typeof input.focus === 'function') input.focus();
+    var range = document.createRange();
+    range.selectNodeContents(input);
+    var selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+}
+
+async function assertMouseBeginEditPlacesCaret(page, viewerSelector, topicText) {
+  await clearEditSelection(page, viewerSelector);
+  var point = await getNodeCenter(page, viewerSelector, topicText);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.dblclick(point.x, point.y);
+  await expect(page.locator('#input-box')).toBeVisible();
+  await expect.poll(async () => {
+    return await readInputBoxText(page);
+  }).toBe(topicText);
+  await expect.poll(async () => {
+    var state = await readInputBoxCaretState(page);
+    return Boolean(
+      state
+      && state.inside
+      && state.collapsed
+      && state.selectedText === ''
+      && state.caretOffset >= 0
+      && state.caretOffset <= state.textLength
+    );
+  }).toBe(true);
+  await clickInputBoxAtRatio(page, 0.26);
+  await expect.poll(async () => {
+    var state = await readInputBoxCaretState(page);
+    return Boolean(
+      state
+      && state.inside
+      && state.collapsed
+      && state.selectedText === ''
+      && state.caretOffset >= 0
+      && state.caretOffset <= state.textLength
+    );
+  }).toBe(true);
+  await clickInputBoxAtRatio(page, 0.74);
+  await expect.poll(async () => {
+    var state = await readInputBoxCaretState(page);
+    return Boolean(
+      state
+      && state.inside
+      && state.collapsed
+      && state.selectedText === ''
+      && state.caretOffset >= 0
+      && state.caretOffset <= state.textLength
+    );
+  }).toBe(true);
+  await page.waitForTimeout(220);
+  await selectWholeInputBoxByDom(page);
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      var selection = window.getSelection ? window.getSelection() : null;
+      return selection ? String(selection.toString() || '') : '';
+    });
+  }).toBe(topicText);
+  await clickInputBoxAtRatio(page, 0.42);
+  await expect.poll(async () => {
+    var state = await readInputBoxCaretState(page);
+    return Boolean(
+      state
+      && state.inside
+      && state.collapsed
+      && state.selectedText === ''
+      && state.caretOffset > 0
+      && state.caretOffset < state.textLength
+    );
+  }).toBe(true);
+  await page.evaluate(() => {
+    var input = document.getElementById('input-box');
+    if (input && typeof input.blur === 'function') input.blur();
+  });
+  await page.waitForTimeout(120);
+}
+
 async function assertInputBoxDragSelectionCanDelete(page, viewerSelector) {
-  await beginInputBoxWithText(page, viewerSelector, '支付模块', 'abcdef');
+  var inputText = 'abcdefghij';
+  await assertMouseBeginEditPlacesCaret(page, viewerSelector, '余额不足时支付失败');
+  await beginInputBoxWithText(page, viewerSelector, '支付模块', inputText);
+  await page.waitForTimeout(220);
+  await selectWholeInputBoxByDom(page);
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      var selection = window.getSelection ? window.getSelection() : null;
+      return selection ? String(selection.toString() || '') : '';
+    });
+  }).toBe(inputText);
+  await clickInputBoxAtRatio(page, 0.48);
+  await expect.poll(async () => {
+    var state = await readInputBoxCaretState(page);
+    return Boolean(
+      state
+      && state.inside
+      && state.collapsed
+      && state.selectedText === ''
+      && state.caretOffset > 0
+      && state.caretOffset < state.textLength
+    );
+  }).toBe(true);
+  await doubleClickInputBoxAtRatio(page, 0.48);
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      var selection = window.getSelection ? window.getSelection() : null;
+      return selection ? String(selection.toString() || '') : '';
+    });
+  }).toBe(inputText);
+  await page.waitForTimeout(240);
+  await expect.poll(async () => {
+    return await page.evaluate(() => {
+      var selection = window.getSelection ? window.getSelection() : null;
+      return selection ? String(selection.toString() || '') : '';
+    });
+  }).toBe(inputText);
+  await clickInputBoxAtRatio(page, 0.48);
+  await expect.poll(async () => {
+    var state = await readInputBoxCaretState(page);
+    return Boolean(
+      state
+      && state.inside
+      && state.collapsed
+      && state.selectedText === ''
+      && state.caretOffset > 0
+      && state.caretOffset < state.textLength
+    );
+  }).toBe(true);
   await dragSelectWholeInputBox(page);
   await expect.poll(async () => {
     return await page.evaluate(() => {
       var selection = window.getSelection ? window.getSelection() : null;
       return selection ? String(selection.toString() || '') : '';
     });
-  }).toBe('abcdef');
+  }).toBe(inputText);
   await page.keyboard.press('Backspace');
   await expect.poll(async () => {
     return await readInputBoxText(page);
@@ -336,6 +644,147 @@ async function assertInputBoxDragSelectionCanDelete(page, viewerSelector) {
     if (input && typeof input.blur === 'function') input.blur();
   });
   await page.waitForTimeout(80);
+}
+
+async function readExactTopicCount(page, viewerSelector, topicText) {
+  return page.evaluate(({ viewer, topic }) => {
+    var nodes = document.querySelectorAll(viewer + ' me-tpc');
+    var count = 0;
+    Array.prototype.forEach.call(nodes || [], function(node) {
+      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+      var label = textEl
+        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
+        : '';
+      if (label === topic) count += 1;
+    });
+    return count;
+  }, { viewer: viewerSelector, topic: topicText });
+}
+
+async function deleteTopicNode(page, viewerSelector, topicText) {
+  await clickEditNode(page, viewerSelector, topicText);
+  await expect(page.locator(viewerSelector + ' [data-mind-action="node-delete"]')).toBeEnabled();
+  await page.locator(viewerSelector + ' [data-mind-action="node-delete"]').click();
+  await page.waitForTimeout(620);
+}
+
+async function readDirectChildState(page, viewerSelector, parentTopic) {
+  return page.evaluate(({ viewer, topic }) => {
+    function normalize(value) {
+      return value === undefined || value === null ? '' : String(value).replace(/\s+/g, ' ').trim();
+    }
+    var nodes = document.querySelectorAll(viewer + ' me-tpc');
+    var target = null;
+    Array.prototype.some.call(nodes || [], function(node) {
+      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+      var label = textEl
+        ? normalize(typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent)
+        : '';
+      if (label !== topic) return false;
+      target = node;
+      return true;
+    });
+    if (!target || !target.nodeObj) return null;
+    var children = Array.isArray(target.nodeObj.children) ? target.nodeObj.children : [];
+    var emptyChildIds = [];
+    var childTopics = [];
+    children.forEach(function(child) {
+      var childTopic = normalize(child && child.topic);
+      childTopics.push(childTopic);
+      if (!childTopic) emptyChildIds.push(String(child && child.id ? child.id : ''));
+    });
+    return {
+      childCount: children.length,
+      emptyChildCount: emptyChildIds.length,
+      emptyChildIds: emptyChildIds,
+      childTopics: childTopics,
+    };
+  }, { viewer: viewerSelector, topic: parentTopic });
+}
+
+async function clickFirstEmptyDirectChild(page, viewerSelector, parentTopic) {
+  var point = await page.evaluate(({ viewer, topic }) => {
+    function normalize(value) {
+      return value === undefined || value === null ? '' : String(value).replace(/\s+/g, ' ').trim();
+    }
+    var nodes = document.querySelectorAll(viewer + ' me-tpc');
+    var target = null;
+    Array.prototype.some.call(nodes || [], function(node) {
+      if (!node || !node.nodeObj || !node.nodeObj.parent) return false;
+      var parentLabel = normalize(node.nodeObj.parent.topic);
+      var currentLabel = normalize(node.nodeObj.topic);
+      if (parentLabel !== topic || currentLabel) return false;
+      target = node;
+      return true;
+    });
+    if (!target || !target.getBoundingClientRect) return null;
+    var rect = target.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+    return {
+      x: rect.left + (rect.width / 2),
+      y: rect.top + (rect.height / 2),
+    };
+  }, { viewer: viewerSelector, topic: parentTopic });
+  expect(point).toBeTruthy();
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.click(point.x, point.y);
+  await page.waitForTimeout(120);
+}
+
+async function readMapTransform(page, viewerSelector) {
+  return page.evaluate((viewer) => {
+    var map = document.querySelector(viewer + ' .map-canvas');
+    if (!map || !map.style) return '';
+    return String(map.style.transform || '');
+  }, viewerSelector);
+}
+
+async function setMapTransform(page, viewerSelector, transformText) {
+  await page.evaluate(({ viewer, transform }) => {
+    var map = document.querySelector(viewer + ' .map-canvas');
+    if (map && map.style) map.style.transform = String(transform || '');
+  }, { viewer: viewerSelector, transform: transformText });
+}
+
+async function assertDeletingFieldKeepsCase(page, viewerSelector) {
+  await expect.poll(async () => {
+    return await readExactTopicCount(page, viewerSelector, '其他途径先解锁皮肤');
+  }).toBe(1);
+  await deleteTopicNode(page, viewerSelector, '对应皮肤直接处于已拥有状态');
+  await expect.poll(async () => {
+    return await readExactTopicCount(page, viewerSelector, '其他途径先解锁皮肤');
+  }).toBe(1);
+  await expect.poll(async () => {
+    return await readExactTopicCount(page, viewerSelector, '对应皮肤直接处于已拥有状态');
+  }).toBe(0);
+}
+
+async function assertDeletingNewEmptyChildKeepsParentAndViewport(page, viewerSelector) {
+  await clickEditNode(page, viewerSelector, '其他');
+  var before = await readDirectChildState(page, viewerSelector, '其他');
+  expect(before).toBeTruthy();
+  await expect(page.locator(viewerSelector + ' [data-mind-action="node-add"]')).toBeEnabled();
+  await page.locator(viewerSelector + ' [data-mind-action="node-add"]').click();
+  await expect.poll(async () => {
+    var state = await readDirectChildState(page, viewerSelector, '其他');
+    return state ? state.emptyChildCount : -1;
+  }).toBeGreaterThan(0);
+  await clickFirstEmptyDirectChild(page, viewerSelector, '其他');
+  var transformBefore = 'translate3d(-320px, -140px, 0px) scale(1)';
+  await setMapTransform(page, viewerSelector, transformBefore);
+  await expect(page.locator(viewerSelector + ' [data-mind-action="node-delete"]')).toBeEnabled();
+  await page.locator(viewerSelector + ' [data-mind-action="node-delete"]').click();
+  await page.waitForTimeout(360);
+  await expect.poll(async () => {
+    return await readExactTopicCount(page, viewerSelector, '其他');
+  }).toBe(1);
+  await expect.poll(async () => {
+    var state = await readDirectChildState(page, viewerSelector, '其他');
+    return state ? state.emptyChildCount : -1;
+  }).toBe(0);
+  await expect.poll(async () => {
+    return await readMapTransform(page, viewerSelector);
+  }).toBe(transformBefore);
 }
 
 async function runEditSelectionAssertions(page, viewerSelector) {
@@ -679,5 +1128,134 @@ test.describe('XMind 编辑态节点选择', () => {
     await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
 
     await assertInputBoxDragSelectionCanDelete(page, '#tempExecXmindStructureViewer');
+  });
+
+  test('用例库 XMind 编辑删除只移除真实选中分支和新增子节点', async ({ page }) => {
+    const token = 'token-case-library-xmind-real-delete-target';
+    const user = { id: 132, username: 'xmind_real_delete_user', role: 'admin', level: 'leader' };
+    const project = { id: 1901, name: 'XMind真实删除项目' };
+    const versions = [{ id: 1902, name: 'v1' }];
+    const now = new Date().toISOString();
+    const caseFileId = 1903;
+    const caseFiles = [{
+      id: caseFileId,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: '真实删除目标用例集',
+      reuse_enabled: false,
+      item_count: 1,
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    }];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFileId] = [{
+      id: 19031,
+      case_file_id: caseFileId,
+      module: '其他',
+      title: '其他途径先解锁皮肤',
+      priority: 'P2',
+      precondition: '未拥有全部皮肤',
+      steps: '1、好友赠送一个皮肤\n2、先进入金框商城购买皮肤，再观察好友赠送的皮肤能否领取',
+      expected: '对应皮肤直接处于已拥有状态',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }];
+
+    await buildCaseLibraryRoutes(page, {
+      token,
+      user,
+      project,
+      versions,
+      caseFiles,
+      caseItemsByFileId,
+    });
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('tap-theme-hint', 'light'); } catch (_) {}
+      try { localStorage.setItem('usecase-settings-v1', JSON.stringify({ theme: 'light' })); } catch (_) {}
+    }, { token });
+
+    await gotoCaseLibrary(page);
+    await waitCaseLibraryReady(page);
+    await switchToTab(page, 'case-library');
+
+    await page.click('#openCaseLibraryEditDrawerBtn');
+    await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await page.click('#caseLibraryEditListBody [data-case-lib-edit="' + String(caseFileId) + '"]');
+    await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
+
+    await page.click('#caseLibraryXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    const viewer = page.locator('#caseLibraryXmindStructureViewer');
+    await viewer.locator('[data-mind-action="edit-enter"]').click();
+    await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
+
+    await assertDeletingFieldKeepsCase(page, '#caseLibraryXmindStructureViewer');
+    await assertDeletingNewEmptyChildKeepsParentAndViewport(page, '#caseLibraryXmindStructureViewer');
+  });
+
+  test('用例执行 XMind 编辑删除只移除真实选中分支和新增子节点', async ({ page }) => {
+    const fileId = 'temp-xmind-real-delete-target';
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.removeItem('tap-auth-token'); } catch (_) {}
+      try { localStorage.setItem('usecase-temp-exec-v1', JSON.stringify(payload)); } catch (_) {}
+      try { localStorage.setItem('tempexec-focus-v1', JSON.stringify([])); } catch (_) {}
+    }, {
+      files: [{
+        id: fileId,
+        name: '执行真实删除目标集',
+        requirement: '执行真实删除目标需求',
+        cases: [{
+          module: '其他',
+          title: '其他途径先解锁皮肤',
+          priority: 'P2',
+          preconditions: '未拥有全部皮肤',
+          steps: '1、好友赠送一个皮肤\n2、先进入金框商城购买皮肤，再观察好友赠送的皮肤能否领取',
+          expected: '对应皮肤直接处于已拥有状态',
+          actual: '未执行',
+          remark: '',
+        }],
+      }],
+      versions: [],
+      activeId: fileId,
+    });
+
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.fallback();
+      }
+      return route.abort();
+    });
+
+    await gotoExec(page);
+    await waitExecReady(page);
+    await page.evaluate((nextId) => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
+        window.app.tempExecApi.setTempExecActive(nextId);
+      }
+    }, fileId);
+
+    await page.waitForFunction(() => {
+      var btn = document.getElementById('tempExecXmindViewBtn');
+      return Boolean(btn && !btn.disabled && !(btn.classList && btn.classList.contains('hidden')));
+    }, {}, { timeout: 15000 });
+
+    await page.click('#tempExecXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    const viewer = page.locator('#tempExecXmindStructureViewer');
+    await viewer.locator('[data-mind-action="edit-enter"]').click();
+    await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
+
+    await assertDeletingFieldKeepsCase(page, '#tempExecXmindStructureViewer');
+    await assertDeletingNewEmptyChildKeepsParentAndViewport(page, '#tempExecXmindStructureViewer');
   });
 });

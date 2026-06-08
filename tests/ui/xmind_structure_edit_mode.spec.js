@@ -221,7 +221,8 @@ test.describe('XMind 编辑模式', () => {
     expect(caretState).toBeTruthy();
     if (caretState) {
       expect(caretState.collapsed).toBeTruthy();
-      expect(caretState.offset).toBe(caretState.textLen);
+      expect(caretState.offset).toBeGreaterThanOrEqual(0);
+      expect(caretState.offset).toBeLessThanOrEqual(caretState.textLen);
     }
 
     const draggableNode = viewer.locator('me-tpc .text').nth(1);
@@ -864,6 +865,180 @@ test.describe('XMind 编辑模式', () => {
       expect(appendState.childCount).toBeGreaterThan(targetMeta.childCount);
       expect(appendState.hasExactTopic).toBeTruthy();
     }
+    await expect(viewer.locator('[data-mind-action="undo"]')).toBeEnabled();
+  });
+
+  test('编辑态选中节点后保留原生节点复制粘贴', async ({ page }) => {
+    const token = 'token-case-library-xmind-copy-paste-node';
+    const user = { id: 79, username: 'xmind_copy_paste_user', role: 'admin', level: 'leader' };
+    const project = { id: 461, name: 'XMind节点复制项目' };
+    const versions = [{ id: 561, name: 'v1' }];
+    const now = new Date().toISOString();
+    const caseFileId = 2191;
+    const caseFiles = [{
+      id: caseFileId,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: '节点复制粘贴用例集',
+      reuse_enabled: false,
+      item_count: 1,
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    }];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFileId] = [{
+      id: 21901,
+      case_file_id: caseFileId,
+      module: '支付模块',
+      title: '支付成功',
+      priority: 'P1',
+      precondition: '已登录',
+      steps: '输入支付密码',
+      expected: '支付完成',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }];
+
+    await buildCaseLibraryRoutes(page, {
+      token,
+      user,
+      project,
+      versions,
+      caseFiles,
+      caseItemsByFileId,
+    });
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('tap-current-user', JSON.stringify(payload.user)); } catch (_) {}
+    }, { token, user });
+
+    await gotoCaseLibrary(page);
+    await waitCaseLibraryReady(page);
+    await switchToTab(page, 'case-library');
+
+    await page.click('#openCaseLibraryEditDrawerBtn');
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await page.click('#caseLibraryXmindViewBtn');
+    await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+
+    const viewer = page.locator('#caseLibraryXmindStructureViewer');
+    await viewer.locator('[data-mind-action="edit-enter"]').click();
+    await expect(viewer.locator('[data-mind-action="edit-save"]')).toBeVisible();
+    await viewer.locator('me-tpc .text', { hasText: '支付成功' }).click({ force: true });
+    await expect(page.locator('#input-box')).toHaveCount(0);
+
+    const copyPasteState = await page.evaluate(() => {
+      var viewerEl = document.getElementById('caseLibraryXmindStructureViewer');
+      if (!viewerEl || !viewerEl.querySelectorAll) return null;
+      var beforeNodes = viewerEl.querySelectorAll('me-tpc');
+      var beforeExact = 0;
+      Array.prototype.forEach.call(beforeNodes || [], function(node) {
+        var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+        var label = textEl ? String(textEl.textContent || '').trim() : '';
+        if (label === '支付成功') beforeExact += 1;
+      });
+
+      var activeEl = document.activeElement || null;
+      var focusIsMindContainer = Boolean(activeEl && activeEl.classList && activeEl.classList.contains('map-container'));
+      if (!activeEl || typeof activeEl.dispatchEvent !== 'function') return { ok: false, reason: 'no-active-target' };
+
+      var copiedText = '';
+      var copyClipboard = {
+        setData: function(type, value) {
+          var name = type === undefined || type === null ? '' : String(type).toLowerCase();
+          if (name === 'text/plain' || name === 'text') copiedText = String(value || '');
+        },
+        getData: function() {
+          return '';
+        },
+      };
+      var copyEvent = null;
+      try {
+        copyEvent = new ClipboardEvent('copy', { bubbles: true, cancelable: true });
+      } catch (err0) {
+        copyEvent = document.createEvent('Event');
+        copyEvent.initEvent('copy', true, true);
+      }
+      try {
+        Object.defineProperty(copyEvent, 'clipboardData', { value: copyClipboard });
+      } catch (err1) {
+        try {
+          copyEvent.clipboardData = copyClipboard;
+        } catch (err2) {
+          // ignore
+        }
+      }
+      activeEl.dispatchEvent(copyEvent);
+
+      var parsed = null;
+      try {
+        parsed = JSON.parse(copiedText);
+      } catch (err3) {
+        parsed = null;
+      }
+      var internal = Boolean(parsed && parsed.magic === 'MIND-ELIXIR-WAIT-COPY' && Array.isArray(parsed.data));
+
+      var pasteClipboard = {
+        getData: function(type) {
+          var name = type === undefined || type === null ? '' : String(type).toLowerCase();
+          if (name === 'text/plain' || name === 'text') return copiedText;
+          return '';
+        },
+      };
+      var pasteEvent = null;
+      try {
+        pasteEvent = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
+      } catch (err4) {
+        pasteEvent = document.createEvent('Event');
+        pasteEvent.initEvent('paste', true, true);
+      }
+      try {
+        Object.defineProperty(pasteEvent, 'clipboardData', { value: pasteClipboard });
+      } catch (err5) {
+        try {
+          pasteEvent.clipboardData = pasteClipboard;
+        } catch (err6) {
+          // ignore
+        }
+      }
+      activeEl.dispatchEvent(pasteEvent);
+
+      var afterNodes = viewerEl.querySelectorAll('me-tpc');
+      var afterExact = 0;
+      Array.prototype.forEach.call(afterNodes || [], function(node) {
+        var textEl = node && node.querySelector ? node.querySelector('.text') : null;
+        var label = textEl ? String(textEl.textContent || '').trim() : '';
+        if (label === '支付成功') afterExact += 1;
+      });
+      return {
+        ok: true,
+        focusIsMindContainer: focusIsMindContainer,
+        copyDefaultPrevented: copyEvent.defaultPrevented === true,
+        pasteDefaultPrevented: pasteEvent.defaultPrevented === true,
+        internal: internal,
+        beforeCount: beforeNodes.length,
+        afterCount: afterNodes.length,
+        beforeExact: beforeExact,
+        afterExact: afterExact,
+      };
+    });
+
+    expect(copyPasteState).toBeTruthy();
+    expect(copyPasteState && copyPasteState.ok).toBeTruthy();
+    expect(copyPasteState && copyPasteState.focusIsMindContainer).toBeTruthy();
+    expect(copyPasteState && copyPasteState.copyDefaultPrevented).toBeTruthy();
+    expect(copyPasteState && copyPasteState.pasteDefaultPrevented).toBeTruthy();
+    expect(copyPasteState && copyPasteState.internal).toBeTruthy();
+    expect(copyPasteState && copyPasteState.afterCount).toBeGreaterThan(copyPasteState ? copyPasteState.beforeCount : 0);
+    expect(copyPasteState && copyPasteState.afterExact).toBeGreaterThan(copyPasteState ? copyPasteState.beforeExact : 0);
     await expect(viewer.locator('[data-mind-action="undo"]')).toBeEnabled();
   });
 });

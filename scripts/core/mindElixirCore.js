@@ -914,12 +914,16 @@
       };
 
       function focusViewerForKeyboard() {
-        if (!viewerEl || typeof viewerEl.focus !== 'function') return;
+        var inst = getInstance();
+        var focusEl = inst && inst.container && typeof inst.container.focus === 'function'
+          ? inst.container
+          : viewerEl;
+        if (!focusEl || typeof focusEl.focus !== 'function') return;
         try {
-          viewerEl.focus({ preventScroll: true });
+          focusEl.focus({ preventScroll: true });
         } catch (err) {
           try {
-            viewerEl.focus();
+            focusEl.focus();
           } catch (err2) {
             // ignore
           }
@@ -942,6 +946,13 @@
         until: 0,
         nodeKey: '',
       };
+      var editNodePointerSelection = {
+        active: false,
+        nodeId: '',
+        startX: 0,
+        startY: 0,
+      };
+      var editNodePointerSuppressCanvasClearUntil = 0;
 
       var rightDragGestureBlock = {
         active: false,
@@ -963,9 +974,23 @@
       var nodeContextMenuMeta = null;
       var clickNodeEditTimer = 0;
       var clickNodeEditDelay = 220;
-      var beginEditSelectionMode = 'select-all';
+      var beginEditSelectionMode = 'end';
+      var beginEditCaretPoint = null;
       var beginEditSelectionResetTimer = 0;
       var pendingKeyboardNodeEditPayload = null;
+      var editInputPointerState = {
+        active: false,
+        startX: 0,
+        startY: 0,
+        moved: false,
+        multiClick: false,
+      };
+      var inputSelectionScheduleToken = 0;
+      var lastEditingInputBoxEl = null;
+      var inputSelectionGuardTimer = 0;
+      var inputSelectionGuardUntil = 0;
+      var inputSelectionGuardToken = 0;
+      var inputSelectionGuardPoint = null;
       var nodeDecorateTimer = 0;
       var nodeDecorateObserver = null;
       var drawerEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer') : null;
@@ -1937,9 +1962,20 @@
         return findViewerNodeBySelectionGroup(selectionGroupKey) || node;
       }
 
-      function getSelectionIdentityKey(node) {
+      function shouldPreserveActualSelectionNode(options) {
+        return editing === true || Boolean(options && options.preserveActualNodes === true);
+      }
+
+      function resolveSelectionNode(node, options) {
+        if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return null;
+        if (shouldPreserveActualSelectionNode(options)) return node;
+        return resolveSelectionAnchorNode(node) || node;
+      }
+
+      function getSelectionIdentityKey(node, options) {
         if (!node || !node.tagName || String(node.tagName).toLowerCase() !== 'me-tpc') return '';
-        var key = node.getAttribute && node.getAttribute('data-xmind-select-group')
+        var useSelectionGroup = !shouldPreserveActualSelectionNode(options);
+        var key = useSelectionGroup && node.getAttribute && node.getAttribute('data-xmind-select-group')
           ? String(node.getAttribute('data-xmind-select-group'))
           : '';
         if (!key) {
@@ -1960,8 +1996,15 @@
         modifierSelectionPointerGuard.nodeKey = '';
       }
 
+      function resetEditNodePointerSelection() {
+        editNodePointerSelection.active = false;
+        editNodePointerSelection.nodeId = '';
+        editNodePointerSelection.startX = 0;
+        editNodePointerSelection.startY = 0;
+      }
+
       function markModifierSelectionPointerGuard(node) {
-        var anchorNode = resolveSelectionAnchorNode(node) || node;
+        var anchorNode = resolveSelectionNode(node) || node;
         var key = getSelectionIdentityKey(anchorNode);
         if (!key) {
           resetModifierSelectionPointerGuard();
@@ -1978,21 +2021,21 @@
           resetModifierSelectionPointerGuard();
           return false;
         }
-        var anchorNode = resolveSelectionAnchorNode(node) || node;
+        var anchorNode = resolveSelectionNode(node) || node;
         var key = getSelectionIdentityKey(anchorNode);
         if (!key || key !== modifierSelectionPointerGuard.nodeKey) return false;
         resetModifierSelectionPointerGuard();
         return true;
       }
 
-      function normalizeSelectionNodeList(nodes) {
+      function normalizeSelectionNodeList(nodes, options) {
         var list = Array.isArray(nodes) ? nodes : [];
         var out = [];
         var seen = Object.create(null);
         list.forEach(function(node) {
-          var anchorNode = resolveSelectionAnchorNode(node) || node;
+          var anchorNode = resolveSelectionNode(node, options) || node;
           if (!anchorNode || !anchorNode.tagName || String(anchorNode.tagName).toLowerCase() !== 'me-tpc') return;
-          var key = getSelectionIdentityKey(anchorNode);
+          var key = getSelectionIdentityKey(anchorNode, options);
           if (!key) {
             key = String(out.length + 1);
           }
@@ -2142,15 +2185,16 @@
         });
       }
 
-      function collectSelectedNodes() {
+      function collectSelectedNodes(options) {
+        var selectionOptions = options || {};
         var inst = getInstance();
         var out = [];
         var seen = Object.create(null);
 
         function pushNode(node) {
-          var anchorNode = resolveSelectionAnchorNode(node) || node;
+          var anchorNode = resolveSelectionNode(node, selectionOptions) || node;
           if (!anchorNode || !anchorNode.tagName || String(anchorNode.tagName).toLowerCase() !== 'me-tpc') return;
-          var key = getSelectionIdentityKey(anchorNode);
+          var key = getSelectionIdentityKey(anchorNode, selectionOptions);
           if (!key) return;
           if (seen[key]) return;
           seen[key] = true;
@@ -2171,7 +2215,7 @@
             (!liveNode.isConnected || (hasViewerContains && !viewerEl.contains(liveNode)))
           ) {
             var selectionGroupKey = liveNode.getAttribute ? String(liveNode.getAttribute('data-xmind-select-group') || '') : '';
-            if (selectionGroupKey) {
+            if (!shouldPreserveActualSelectionNode(selectionOptions) && selectionGroupKey) {
               liveNode = findViewerNodeBySelectionGroup(selectionGroupKey) || liveNode;
             } else if (liveNode.nodeObj && liveNode.nodeObj.id) {
               liveNode = findViewerNodeById(String(liveNode.nodeObj.id)) || liveNode;
@@ -2254,7 +2298,7 @@
 
       function toggleNodeInCustomSelection(nodeEl) {
         if (!enableCustomBoxSelection || !nodeEl) return [];
-        var targetNode = resolveSelectionAnchorNode(nodeEl) || nodeEl;
+        var targetNode = resolveSelectionNode(nodeEl) || nodeEl;
         var targetKey = getSelectionIdentityKey(targetNode);
         if (!targetKey) return [];
         var current = collectSelectedNodes();
@@ -2431,7 +2475,7 @@
 
       function selectSingleNodeForContextMenu(nodeEl, preserveExistingSelection) {
         if (!nodeEl) return;
-        nodeEl = resolveSelectionAnchorNode(nodeEl) || nodeEl;
+        nodeEl = resolveSelectionNode(nodeEl) || nodeEl;
         if (preserveExistingSelection === true && isNodeCurrentlySelected(nodeEl)) {
           focusViewerForKeyboard();
           return;
@@ -2471,10 +2515,83 @@
         }
       }
 
+      function selectActualNodeForEditing(nodeEl) {
+        if (!editing || pendingSave || !nodeEl || !nodeEl.nodeObj) return false;
+        var nodeId = nodeEl.nodeObj.id === null || nodeEl.nodeObj.id === undefined
+          ? ''
+          : String(nodeEl.nodeObj.id);
+
+        clearCustomSelection(false);
+        setCustomSelectionNodes([nodeEl]);
+        clearBoxSelectionClasses();
+        if (nodeEl.classList) nodeEl.classList.add('xmind-box-selected');
+        syncMindSelectionWithNodes([nodeEl]);
+        focusViewerForKeyboard();
+        updateEditButtons();
+
+        setTimeout(function() {
+          if (!editing || pendingSave) return;
+          var liveNode = nodeId ? findViewerNodeById(nodeId) : nodeEl;
+          if (!liveNode || !liveNode.nodeObj) return;
+          setCustomSelectionNodes([liveNode]);
+          clearBoxSelectionClasses();
+          if (liveNode.classList) liveNode.classList.add('xmind-box-selected');
+          syncMindSelectionWithNodes([liveNode]);
+          updateEditButtons();
+        }, 0);
+        return true;
+      }
+
+      function shouldUsePlainEditNodePointer(e) {
+        if (!editing || pendingSave || !e) return false;
+        if (e.button !== undefined && e.button !== 0) return false;
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || isCtrlModifierActive(e)) return false;
+        if (isEventInsideMindControls(e.target)) return false;
+        if (isMindNodeExpanderTarget(e.target)) return false;
+        return true;
+      }
+
+      function beginEditNodePointerSelection(e) {
+        resetEditNodePointerSelection();
+        if (!shouldUsePlainEditNodePointer(e)) return;
+        var nodeEl = resolveViewerEventNode(e);
+        editNodePointerSelection.active = true;
+        editNodePointerSelection.nodeId = nodeEl && nodeEl.nodeObj && nodeEl.nodeObj.id !== null && nodeEl.nodeObj.id !== undefined
+          ? String(nodeEl.nodeObj.id)
+          : '';
+        editNodePointerSelection.startX = typeof e.clientX === 'number' ? e.clientX : 0;
+        editNodePointerSelection.startY = typeof e.clientY === 'number' ? e.clientY : 0;
+      }
+
+      function finishEditNodePointerSelection(e) {
+        if (!editNodePointerSelection.active) return;
+        var nodeId = editNodePointerSelection.nodeId;
+        var startX = editNodePointerSelection.startX;
+        var startY = editNodePointerSelection.startY;
+        resetEditNodePointerSelection();
+        if (!shouldUsePlainEditNodePointer(e)) return;
+        var endX = typeof e.clientX === 'number' ? e.clientX : startX;
+        var endY = typeof e.clientY === 'number' ? e.clientY : startY;
+        if (Math.abs(endX - startX) > 6 || Math.abs(endY - startY) > 6) {
+          editNodePointerSuppressCanvasClearUntil = Date.now() + 360;
+          return;
+        }
+        setTimeout(function() {
+          if (!editing || pendingSave) return;
+          var liveNode = nodeId ? findViewerNodeById(nodeId) : resolveViewerEventNode(e);
+          if (!liveNode || !liveNode.nodeObj) return;
+          scheduleBeginEditSelectionMode('point', {
+            x: endX,
+            y: endY,
+          });
+          selectActualNodeForEditing(liveNode);
+        }, 0);
+      }
+
       function resolveContextMenuTargetNode(target) {
         var nodeEl = target && target.closest ? target.closest('me-tpc') : null;
         if (nodeEl) {
-          nodeEl = resolveSelectionAnchorNode(nodeEl) || nodeEl;
+          nodeEl = resolveSelectionNode(nodeEl) || nodeEl;
           selectSingleNodeForContextMenu(nodeEl, true);
           return nodeEl;
         }
@@ -3149,6 +3266,15 @@
         notifyEditStateChange();
       }
 
+      function scheduleUpdateEditButtons() {
+        setTimeout(function() {
+          updateEditButtons();
+        }, 0);
+        setTimeout(function() {
+          updateEditButtons();
+        }, 80);
+      }
+
       function enterEditMode() {
         if (!allowEdit) return;
         if (editing) return;
@@ -3270,10 +3396,12 @@
         if (!inst || typeof inst.removeNodes !== 'function') return;
         var selected = collectRemovableSelectedNodes();
         if (!selected.length) return;
+        var viewState = captureMindViewState(inst);
         clearValidationMarks();
         try {
           inst.removeNodes(selected);
           clearBoxSelectionClasses();
+          scheduleMindViewRestore(inst, viewState, null, { force: true });
           scheduleRecordSnapshot();
         } catch (err) {
           // ignore
@@ -3503,29 +3631,253 @@
         }
       }
 
+      function resolveElementTarget(target) {
+        if (!target) return null;
+        if (target.nodeType === 1) return target;
+        if (target.parentElement) return target.parentElement;
+        if (target.parentNode && target.parentNode.nodeType === 1) return target.parentNode;
+        return null;
+      }
+
+      function isEditableContentElement(el) {
+        if (!el) return false;
+        if (el.isContentEditable) return true;
+        var editableEl = el.closest ? el.closest('[contenteditable]') : null;
+        if (!editableEl || !editableEl.getAttribute) return false;
+        var attr = String(editableEl.getAttribute('contenteditable') || '').toLowerCase();
+        return attr !== 'false';
+      }
+
       function isTypingTarget(target) {
-        if (!target) return false;
-        if (target.id === 'input-box') return true;
-        var tag = target.tagName ? String(target.tagName).toLowerCase() : '';
+        var el = resolveElementTarget(target);
+        if (!el) return false;
+        if (el.id === 'input-box') return true;
+        if (el.closest && el.closest('#input-box')) return true;
+        var tag = el.tagName ? String(el.tagName).toLowerCase() : '';
         if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
-        if (target.isContentEditable) return true;
+        if (isEditableContentElement(el)) return true;
         return false;
       }
 
       function isEditingInputBoxTarget(target) {
-        if (!editing || !target) return false;
-        if (target.id === 'input-box') return true;
-        if (target.closest && target.closest('#input-box')) return true;
-        return false;
+        return Boolean(resolveEditingInputBoxElement(target));
+      }
+
+      function resolveEditingInputBoxElement(target) {
+        if (!editing || !target) return null;
+        var el = resolveElementTarget(target);
+        if (!el) return null;
+        if (el.id === 'input-box') return el;
+        if (el.closest) return el.closest('#input-box');
+        return null;
+      }
+
+      function stopEditingInputBoxMouseBubble(e) {
+        if (!e || !isEditingInputBoxTarget(e.target)) return;
+        if (e.stopPropagation) e.stopPropagation();
+      }
+
+      function ensureEditingInputBoxMouseIsolation(target) {
+        var inputEl = resolveEditingInputBoxElement(target);
+        if (!inputEl || inputEl.__tapXmindInputMouseIsolated === true) return;
+        inputEl.__tapXmindInputMouseIsolated = true;
+        var events = ['pointerdown', 'mousedown', 'pointermove', 'mousemove', 'pointerup', 'mouseup', 'click', 'dblclick', 'selectstart'];
+        for (var i = 0; i < events.length; i += 1) {
+          inputEl.addEventListener(events[i], stopEditingInputBoxMouseBubble, false);
+        }
+      }
+
+      function readInputBoxSelectionState(inputEl) {
+        if (!inputEl || typeof window === 'undefined' || !window || typeof window.getSelection !== 'function') return null;
+        var selection = null;
+        try {
+          selection = window.getSelection();
+        } catch (err0) {
+          selection = null;
+        }
+        if (!selection || selection.rangeCount <= 0) return null;
+        var range = null;
+        try {
+          range = selection.getRangeAt(0);
+        } catch (err1) {
+          range = null;
+        }
+        if (!range) return null;
+        var startContainer = range.startContainer || null;
+        var endContainer = range.endContainer || null;
+        var startInside = startContainer === inputEl || Boolean(inputEl.contains && inputEl.contains(startContainer));
+        var endInside = endContainer === inputEl || Boolean(inputEl.contains && inputEl.contains(endContainer));
+        return {
+          inside: startInside && endInside,
+          collapsed: Boolean(selection.isCollapsed),
+          selectedText: String(selection.toString() || ''),
+          text: String(inputEl.textContent || ''),
+        };
+      }
+
+      function isInputBoxFullySelected(inputEl) {
+        var state = readInputBoxSelectionState(inputEl);
+        if (!state || !state.inside || state.collapsed) return false;
+        if (!state.text) return false;
+        return state.selectedText === state.text;
+      }
+
+      function collapseFullInputBoxSelectionToEnd(inputEl) {
+        if (!editing || pendingSave || !inputEl || inputEl !== document.getElementById('input-box')) return false;
+        if (editInputPointerState.active) return false;
+        if (!isInputBoxFullySelected(inputEl)) return false;
+        return placeInputCaretToEnd();
+      }
+
+      function scheduleCollapseFullInputBoxSelection(inputEl) {
+        if (!inputEl) return;
+        var token = createInputSelectionScheduleToken();
+        setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
+          collapseFullInputBoxSelectionToEnd(inputEl);
+        }, 32);
+        setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
+          collapseFullInputBoxSelectionToEnd(inputEl);
+        }, 96);
+        setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
+          collapseFullInputBoxSelectionToEnd(inputEl);
+        }, 160);
+      }
+
+      function syncEditingInputBoxElement() {
+        if (!editing || typeof document === 'undefined' || !document || typeof document.getElementById !== 'function') return;
+        var inputEl = document.getElementById('input-box');
+        if (!inputEl) {
+          lastEditingInputBoxEl = null;
+          return;
+        }
+        ensureEditingInputBoxMouseIsolation(inputEl);
+        if (lastEditingInputBoxEl === inputEl) return;
+        lastEditingInputBoxEl = inputEl;
+        scheduleCollapseFullInputBoxSelection(inputEl);
+      }
+
+      function resetEditInputPointerState() {
+        editInputPointerState.active = false;
+        editInputPointerState.startX = 0;
+        editInputPointerState.startY = 0;
+        editInputPointerState.moved = false;
+        editInputPointerState.multiClick = false;
+      }
+
+      function cancelScheduledInputSelection() {
+        inputSelectionScheduleToken += 1;
+        clearInputSelectionGuard();
+      }
+
+      function createInputSelectionScheduleToken() {
+        inputSelectionScheduleToken += 1;
+        return inputSelectionScheduleToken;
+      }
+
+      function isInputSelectionScheduleCurrent(token) {
+        return token === inputSelectionScheduleToken;
+      }
+
+      function clearInputSelectionGuard() {
+        if (inputSelectionGuardTimer) {
+          clearTimeout(inputSelectionGuardTimer);
+          inputSelectionGuardTimer = 0;
+        }
+        inputSelectionGuardUntil = 0;
+        inputSelectionGuardToken = 0;
+        inputSelectionGuardPoint = null;
+      }
+
+      function runInputSelectionGuard() {
+        inputSelectionGuardTimer = 0;
+        if (
+          !editing
+          || pendingSave
+          || !inputSelectionGuardUntil
+          || Date.now() > inputSelectionGuardUntil
+          || !isInputSelectionScheduleCurrent(inputSelectionGuardToken)
+        ) {
+          clearInputSelectionGuard();
+          return;
+        }
+        if (!editInputPointerState.active) {
+          var inputEl = document.getElementById('input-box');
+          if (inputEl && isInputBoxFullySelected(inputEl)) {
+            if (inputSelectionGuardPoint) placeInputCaretAtPoint(inputSelectionGuardPoint);
+            else placeInputCaretToEnd();
+          }
+        }
+        if (
+          inputSelectionGuardUntil
+          && Date.now() <= inputSelectionGuardUntil
+          && isInputSelectionScheduleCurrent(inputSelectionGuardToken)
+        ) {
+          inputSelectionGuardTimer = setTimeout(runInputSelectionGuard, 32);
+        } else {
+          clearInputSelectionGuard();
+        }
+      }
+
+      function startInputSelectionGuard(point, token) {
+        if (!token) return;
+        inputSelectionGuardPoint = normalizeClientPoint(point);
+        inputSelectionGuardToken = token;
+        inputSelectionGuardUntil = Date.now() + 180;
+        if (inputSelectionGuardTimer) {
+          clearTimeout(inputSelectionGuardTimer);
+          inputSelectionGuardTimer = 0;
+        }
+        inputSelectionGuardTimer = setTimeout(runInputSelectionGuard, 0);
+      }
+
+      function onDocumentSelectionChangeForInputBox() {
+        if (!editing || !inputSelectionGuardUntil || inputSelectionGuardTimer) return;
+        if (Date.now() > inputSelectionGuardUntil) {
+          clearInputSelectionGuard();
+          return;
+        }
+        inputSelectionGuardTimer = setTimeout(runInputSelectionGuard, 0);
+      }
+
+      function trackEditingInputBoxMouseEvent(e) {
+        if (!e) return;
+        var type = e.type ? String(e.type) : '';
+        var x = typeof e.clientX === 'number' ? e.clientX : 0;
+        var y = typeof e.clientY === 'number' ? e.clientY : 0;
+        var isMultiClick = Number(e.detail || 0) > 1 || type === 'dblclick';
+        if (type === 'pointerdown' || type === 'mousedown') {
+          cancelScheduledInputSelection();
+          editInputPointerState.active = true;
+          editInputPointerState.startX = x;
+          editInputPointerState.startY = y;
+          editInputPointerState.moved = false;
+          editInputPointerState.multiClick = isMultiClick;
+          return;
+        }
+        if (!editInputPointerState.active) return;
+        if (isMultiClick) editInputPointerState.multiClick = true;
+        if (Math.abs(x - editInputPointerState.startX) > 5 || Math.abs(y - editInputPointerState.startY) > 5) {
+          editInputPointerState.moved = true;
+        }
+        if (type === 'pointerup' || type === 'mouseup' || type === 'click') {
+          var shouldPlaceCaret = !editInputPointerState.moved && !editInputPointerState.multiClick;
+          resetEditInputPointerState();
+          if (shouldPlaceCaret) {
+            scheduleInputCaretAtPoint({ x: x, y: y });
+          }
+        }
       }
 
       function protectEditingInputBoxMouseEvent(e) {
         if (!e || !isEditingInputBoxTarget(e.target)) return;
+        ensureEditingInputBoxMouseIsolation(e.target);
+        trackEditingInputBoxMouseEvent(e);
         hideNodeContextMenu({ preserveNativeSelection: true });
         clearClickNodeEditTimer();
         clearCustomPointerDragState();
-        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-        else if (e.stopPropagation) e.stopPropagation();
       }
 
       function isMutationKeyEvent(e) {
@@ -3625,26 +3977,48 @@
         clickNodeEditTimer = 0;
       }
 
-      function scheduleBeginEditSelectionMode(mode) {
-        beginEditSelectionMode = mode === 'end' ? 'end' : 'select-all';
+      function normalizeBeginEditSelectionMode(mode) {
+        if (mode === 'select-all') return 'select-all';
+        if (mode === 'point') return 'point';
+        return 'end';
+      }
+
+      function normalizeClientPoint(point) {
+        if (!point) return null;
+        var x = Number(point.x);
+        var y = Number(point.y);
+        if (!isFinite(x) || !isFinite(y)) return null;
+        return { x: x, y: y };
+      }
+
+      function scheduleBeginEditSelectionMode(mode, point) {
+        var nextMode = normalizeBeginEditSelectionMode(mode);
+        beginEditSelectionMode = nextMode;
+        beginEditCaretPoint = nextMode === 'point' ? normalizeClientPoint(point) : null;
         if (beginEditSelectionResetTimer) {
           clearTimeout(beginEditSelectionResetTimer);
           beginEditSelectionResetTimer = 0;
         }
         beginEditSelectionResetTimer = setTimeout(function() {
           beginEditSelectionResetTimer = 0;
-          beginEditSelectionMode = 'select-all';
+          beginEditSelectionMode = 'end';
+          beginEditCaretPoint = null;
         }, 360);
       }
 
-      function consumeBeginEditSelectionMode() {
-        var mode = beginEditSelectionMode === 'end' ? 'end' : 'select-all';
-        beginEditSelectionMode = 'select-all';
+      function consumeBeginEditSelectionRequest() {
+        var mode = normalizeBeginEditSelectionMode(beginEditSelectionMode);
+        var point = beginEditCaretPoint;
+        beginEditSelectionMode = 'end';
+        beginEditCaretPoint = null;
         if (beginEditSelectionResetTimer) {
           clearTimeout(beginEditSelectionResetTimer);
           beginEditSelectionResetTimer = 0;
         }
-        return mode;
+        return {
+          mode: mode,
+          point: point,
+        };
       }
 
       function clearPendingKeyboardNodeEdit() {
@@ -3680,6 +4054,28 @@
         return null;
       }
 
+      function findViewerNodeAtPoint(clientX, clientY) {
+        if (!viewerEl || !viewerEl.querySelectorAll) return null;
+        var x = Number(clientX);
+        var y = Number(clientY);
+        if (!isFinite(x) || !isFinite(y)) return null;
+        var nodes = viewerEl.querySelectorAll('me-tpc');
+        var matched = null;
+        var matchedArea = 0;
+        Array.prototype.forEach.call(nodes || [], function(node) {
+          if (!node || !node.nodeObj || !node.getBoundingClientRect) return;
+          var rect = node.getBoundingClientRect();
+          if (!rect || rect.width <= 0 || rect.height <= 0) return;
+          if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return;
+          var area = rect.width * rect.height;
+          if (!matched || area < matchedArea) {
+            matched = node;
+            matchedArea = area;
+          }
+        });
+        return matched;
+      }
+
       function resolveViewerEventNode(e) {
         var target = e && e.target ? e.target : null;
         if (!target || isTypingTarget(target)) return null;
@@ -3706,13 +4102,15 @@
               return pointedNode;
             }
           }
+          var pointedFallbackNode = findViewerNodeAtPoint(e.clientX, e.clientY);
+          if (pointedFallbackNode) return pointedFallbackNode;
         }
         var nodeEl = target.closest ? target.closest('me-tpc') : null;
         if (!nodeEl || !nodeEl.nodeObj) return null;
         return nodeEl;
       }
 
-      function triggerNodeEditWithMode(nodeEl, mode) {
+      function triggerNodeEditWithMode(nodeEl, mode, point) {
         if (!nodeEl || !nodeEl.nodeObj) return;
         var nodeId = nodeEl.nodeObj.id === null || nodeEl.nodeObj.id === undefined
           ? ''
@@ -3723,7 +4121,7 @@
           var liveNodeEl = nodeId ? findViewerNodeById(nodeId) : nodeEl;
           if (!liveNodeEl) return;
           selectSingleNodeForContextMenu(liveNodeEl);
-          scheduleBeginEditSelectionMode(mode);
+          scheduleBeginEditSelectionMode(mode, point);
           try {
             inst.beginEdit(liveNodeEl);
           } catch (err) {
@@ -3745,7 +4143,10 @@
 
         clickNodeEditTimer = setTimeout(function() {
           clickNodeEditTimer = 0;
-          triggerNodeEditWithMode(nodeEl, 'select-all');
+          triggerNodeEditWithMode(nodeEl, 'point', {
+            x: e.clientX,
+            y: e.clientY,
+          });
         }, clickNodeEditDelay);
       }
 
@@ -3809,6 +4210,18 @@
           return;
         }
         var nodeEl = resolveViewerEventNode(e);
+        if (editing && !pendingSave && e && !isCtrlModifierActive(e) && !e.metaKey && !e.shiftKey && !e.altKey) {
+          if (nodeEl) {
+            scheduleBeginEditSelectionMode('point', {
+              x: e.clientX,
+              y: e.clientY,
+            });
+            selectActualNodeForEditing(nodeEl);
+          } else if (isEventInsideMindCanvas(e.target) && Date.now() > editNodePointerSuppressCanvasClearUntil) {
+            clearCustomSelection(true);
+            focusViewerForKeyboard();
+          }
+        }
         if (enableCustomBoxSelection && !editing && e && (isCtrlModifierActive(e) || e.metaKey) && !e.shiftKey && !e.altKey && nodeEl) {
           if (e.preventDefault) e.preventDefault();
           if (e.stopPropagation) e.stopPropagation();
@@ -3831,6 +4244,7 @@
         hideNodeContextMenu();
         clearClickNodeEditTimer();
         updateEditButtons();
+        scheduleUpdateEditButtons();
       }
 
       function normalizeLocatePath(pathArr) {
@@ -3872,15 +4286,20 @@
         if (e && isMindNodeExpanderTarget(e.target)) return;
         if (editing) {
           clearClickNodeEditTimer();
-          var editingTargetNode = resolveViewerEventNode(e);
-          if (!editingTargetNode) {
-            var rawTarget = e && e.target ? e.target : null;
-            if (rawTarget && isTypingTarget(rawTarget)) {
-              scheduleInputCaretToEnd();
-            }
+          var rawTarget = e && e.target ? e.target : null;
+          if (rawTarget && isTypingTarget(rawTarget)) {
+            hideNodeContextMenu({ preserveNativeSelection: true });
             return;
           }
-          scheduleBeginEditSelectionMode('end');
+          var editingTargetNode = resolveViewerEventNode(e);
+          if (!editingTargetNode) return;
+          if (e && e.preventDefault) e.preventDefault();
+          if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
+          else if (e && e.stopPropagation) e.stopPropagation();
+          triggerNodeEditWithMode(editingTargetNode, 'point', {
+            x: e && typeof e.clientX === 'number' ? e.clientX : 0,
+            y: e && typeof e.clientY === 'number' ? e.clientY : 0,
+          });
           return;
         }
         if (!opts || typeof opts.onNodeDblClickLocate !== 'function') return;
@@ -4202,14 +4621,111 @@
         }
       }
 
+      function placeInputCaretAtPoint(point) {
+        if (typeof document === 'undefined') return false;
+        var inputEl = document.getElementById('input-box');
+        if (!inputEl) return false;
+        var normalizedPoint = normalizeClientPoint(point);
+        if (!normalizedPoint) return placeInputCaretToEnd();
+        if (typeof inputEl.focus === 'function' && document.activeElement !== inputEl) {
+          try {
+            inputEl.focus();
+          } catch (err0) {
+            // ignore
+          }
+        }
+
+        var range = null;
+        if (typeof document.caretRangeFromPoint === 'function') {
+          try {
+            range = document.caretRangeFromPoint(normalizedPoint.x, normalizedPoint.y);
+          } catch (err1) {
+            range = null;
+          }
+        }
+        if (!range && typeof document.caretPositionFromPoint === 'function' && typeof document.createRange === 'function') {
+          try {
+            var position = document.caretPositionFromPoint(normalizedPoint.x, normalizedPoint.y);
+            if (position && position.offsetNode) {
+              range = document.createRange();
+              range.setStart(position.offsetNode, position.offset);
+              range.collapse(true);
+            }
+          } catch (err2) {
+            range = null;
+          }
+        }
+
+        if (!range) {
+          var currentStateWithoutRange = readInputBoxSelectionState(inputEl);
+          if (currentStateWithoutRange && currentStateWithoutRange.inside && currentStateWithoutRange.collapsed) return true;
+          return placeInputCaretToEnd();
+        }
+        var startContainer = range.startContainer || null;
+        if (startContainer !== inputEl && !(inputEl.contains && inputEl.contains(startContainer))) {
+          var currentStateOutside = readInputBoxSelectionState(inputEl);
+          if (currentStateOutside && currentStateOutside.inside && currentStateOutside.collapsed) return true;
+          return placeInputCaretToEnd();
+        }
+        if (typeof window === 'undefined' || !window || typeof window.getSelection !== 'function') return false;
+
+        var selection = null;
+        try {
+          selection = window.getSelection();
+        } catch (err3) {
+          selection = null;
+        }
+        if (!selection) return false;
+
+        try {
+          if (typeof range.collapse === 'function') range.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return true;
+        } catch (err4) {
+          return false;
+        }
+      }
+
       function scheduleInputTextSelection() {
+        var token = createInputSelectionScheduleToken();
+        clearInputSelectionGuard();
         selectInputBoxText();
         setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
           selectInputBoxText();
         }, 0);
         setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
           selectInputBoxText();
         }, 24);
+      }
+
+      function scheduleInputCaretAtPoint(point) {
+        var normalizedPoint = normalizeClientPoint(point);
+        if (!normalizedPoint) {
+          scheduleInputCaretToEnd();
+          return;
+        }
+        var token = createInputSelectionScheduleToken();
+        startInputSelectionGuard(normalizedPoint, token);
+        placeInputCaretAtPoint(normalizedPoint);
+        setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
+          placeInputCaretAtPoint(normalizedPoint);
+        }, 0);
+        setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
+          placeInputCaretAtPoint(normalizedPoint);
+        }, 24);
+        setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
+          placeInputCaretAtPoint(normalizedPoint);
+        }, 72);
+        setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
+          placeInputCaretAtPoint(normalizedPoint);
+        }, 144);
       }
 
       function replaceInputBoxText(text) {
@@ -4300,13 +4816,25 @@
       }
 
       function scheduleInputCaretToEnd() {
+        var token = createInputSelectionScheduleToken();
+        startInputSelectionGuard(null, token);
         placeInputCaretToEnd();
         setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
           placeInputCaretToEnd();
         }, 0);
         setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
           placeInputCaretToEnd();
         }, 24);
+        setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
+          placeInputCaretToEnd();
+        }, 72);
+        setTimeout(function() {
+          if (!isInputSelectionScheduleCurrent(token)) return;
+          placeInputCaretToEnd();
+        }, 144);
       }
 
       var customDragGhostEl = null;
@@ -4693,8 +5221,14 @@
         if (!editing || applyingHistory) return;
         var op = payload && payload.name ? String(payload.name) : '';
         if (op === 'beginEdit') {
-          var selectionMode = consumeBeginEditSelectionMode();
-          if (selectionMode === 'end') scheduleInputCaretToEnd();
+          syncEditingInputBoxElement();
+          var selectionRequest = consumeBeginEditSelectionRequest();
+          if (pendingKeyboardNodeEditPayload) {
+            scheduleApplyPendingKeyboardNodeEdit();
+            return;
+          }
+          if (selectionRequest.mode === 'point') scheduleInputCaretAtPoint(selectionRequest.point);
+          else if (selectionRequest.mode === 'end') scheduleInputCaretToEnd();
           else scheduleInputTextSelection();
           scheduleApplyPendingKeyboardNodeEdit();
           return;
@@ -4720,6 +5254,10 @@
         viewerEl.addEventListener('mouseup', protectEditingInputBoxMouseEvent, true);
         viewerEl.addEventListener('click', protectEditingInputBoxMouseEvent, true);
         viewerEl.addEventListener('dblclick', protectEditingInputBoxMouseEvent, true);
+        viewerEl.addEventListener('pointerdown', beginEditNodePointerSelection, true);
+        viewerEl.addEventListener('mousedown', beginEditNodePointerSelection, true);
+        viewerEl.addEventListener('pointerup', finishEditNodePointerSelection, true);
+        viewerEl.addEventListener('mouseup', finishEditNodePointerSelection, true);
         viewerEl.addEventListener('contextmenu', onViewerContextMenu, true);
         viewerEl.addEventListener('wheel', blockCanvasNativeGesture, { capture: true, passive: false });
         viewerEl.addEventListener('touchstart', blockCanvasNativeGesture, { capture: true, passive: false });
@@ -4788,6 +5326,9 @@
         window.addEventListener('mouseup', resetDragGhostPreview, true);
         window.addEventListener('pointercancel', resetDragGhostPreview, true);
       }
+      if (typeof document !== 'undefined' && document && typeof document.addEventListener === 'function') {
+        document.addEventListener('selectionchange', onDocumentSelectionChangeForInputBox);
+      }
       if (instance && instance.bus && typeof instance.bus.addListener === 'function') {
         instance.bus.addListener('operation', operationListener);
       }
@@ -4814,6 +5355,7 @@
       }
       if (typeof MutationObserver !== 'undefined' && canvasEl) {
         nodeDecorateObserver = new MutationObserver(function() {
+          syncEditingInputBoxElement();
           scheduleNodeDecorations();
         });
         try {
@@ -4871,7 +5413,12 @@
           clearTimeout(beginEditSelectionResetTimer);
           beginEditSelectionResetTimer = 0;
         }
-        beginEditSelectionMode = 'select-all';
+        beginEditSelectionMode = 'end';
+        beginEditCaretPoint = null;
+        resetEditInputPointerState();
+        cancelScheduledInputSelection();
+        clearInputSelectionGuard();
+        lastEditingInputBoxEl = null;
         clearPendingKeyboardNodeEdit();
         stopBoxSelection();
         clearSearchClasses();
@@ -4891,6 +5438,10 @@
           viewerEl.removeEventListener('mouseup', protectEditingInputBoxMouseEvent, true);
           viewerEl.removeEventListener('click', protectEditingInputBoxMouseEvent, true);
           viewerEl.removeEventListener('dblclick', protectEditingInputBoxMouseEvent, true);
+          viewerEl.removeEventListener('pointerdown', beginEditNodePointerSelection, true);
+          viewerEl.removeEventListener('mousedown', beginEditNodePointerSelection, true);
+          viewerEl.removeEventListener('pointerup', finishEditNodePointerSelection, true);
+          viewerEl.removeEventListener('mouseup', finishEditNodePointerSelection, true);
           viewerEl.removeEventListener('contextmenu', onViewerContextMenu, true);
           viewerEl.removeEventListener('wheel', blockCanvasNativeGesture, true);
           viewerEl.removeEventListener('touchstart', blockCanvasNativeGesture, true);
@@ -4958,6 +5509,9 @@
           window.removeEventListener('pointerup', resetDragGhostPreview, true);
           window.removeEventListener('mouseup', resetDragGhostPreview, true);
           window.removeEventListener('pointercancel', resetDragGhostPreview, true);
+        }
+        if (typeof document !== 'undefined' && document && typeof document.removeEventListener === 'function') {
+          document.removeEventListener('selectionchange', onDocumentSelectionChangeForInputBox);
         }
         if (instance && instance.bus && typeof instance.bus.removeListener === 'function') {
           instance.bus.removeListener('operation', operationListener);
@@ -5220,13 +5774,14 @@
       return writeMindTransformState(instance, transformState);
     }
 
-    function scheduleMindViewRestore(instance, viewState, anchorState) {
+    function scheduleMindViewRestore(instance, viewState, anchorState, options) {
       if (!instance || !viewState) return;
+      var forceRestore = Boolean(options && options.force === true);
       var shouldRestoreAnchor = !(viewState && viewState.skipAnchorAlign === true) && Boolean(anchorState);
       [0, 16, 48, 96, 180, 320, 520].forEach(function(delayMs) {
         setTimeout(function() {
           if (!isActiveMindRenderInstance(instance)) return;
-          if (delayMs > 0 && instance.__tapViewportInteracted === true) return;
+          if (!forceRestore && delayMs > 0 && instance.__tapViewportInteracted === true) return;
           restoreMindViewState(instance, viewState);
           if (shouldRestoreAnchor) {
             restoreMindAnchorState(instance, anchorState);
