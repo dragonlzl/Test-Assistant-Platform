@@ -13076,7 +13076,7 @@
         var moduleId = entry && entry.aiModuleId ? String(entry.aiModuleId || '') : '';
         var moduleState = moduleId && modulesState[moduleId] ? modulesState[moduleId] : null;
         var marker = moduleState && moduleState.topupHighlight
-          ? normalizeTopupHighlight(moduleState.topupHighlight)
+          ? cloneTopupHighlight(moduleState.topupHighlight)
           : null;
         return {
           moduleKey: entry && entry.moduleKey ? String(entry.moduleKey || '') : '',
