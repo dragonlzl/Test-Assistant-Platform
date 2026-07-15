@@ -64,6 +64,22 @@
       return result;
     }
 
+    function normalizeReferenceModulesInput(list) {
+      return (Array.isArray(list) ? list : []).map(function(item) {
+        if (!item || typeof item !== 'object') return null;
+        var title = normalizeModuleTitle(item.module || item.moduleName || item.module_name || item.title || '');
+        var key = normalizeModuleKey(item.moduleKey || item.module_key || item.key || title);
+        var cases = normalizeCaseList(item.cases);
+        if (!title || !key || !cases.length) return null;
+        return {
+          moduleId: item.moduleId || item.module_id ? String(item.moduleId || item.module_id || '') : '',
+          moduleKey: key,
+          module: title,
+          cases: cases,
+        };
+      }).filter(Boolean);
+    }
+
     function normalizeDedupeMode(value) {
       return String(value || '') === 'dedupe_simplify' ? 'dedupe_simplify' : 'dedupe_only';
     }
@@ -263,8 +279,10 @@
       return result;
     }
 
-    function buildDedupePrompt(mode) {
+    function buildDedupePrompt(mode, options) {
       var dedupeMode = normalizeDedupeMode(mode);
+      var promptOptions = options && typeof options === 'object' ? options : {};
+      var batchMode = promptOptions.batchMode === true;
       var modeLines = isDedupeSimplifyMode(dedupeMode)
         ? [
           '本次策略：去重并精简。',
@@ -277,10 +295,19 @@
           '不要主动压缩用例数量，不要为了精简而删除有独立覆盖价值的业务路径、异常路径、边界条件或权限/安全场景。',
           '除必要合并重复用例外，尽量保留原用例标题、步骤、预期。',
         ];
+      var batchLines = batchMode
+        ? [
+          '本次为全局去重的有界批次：target_modules 是本批唯一可编辑用例；readonly_reference_modules 是更早批次的只读用例摘要。',
+          '必须把 target_modules 与 readonly_reference_modules 一起用于重复候选审查，但只能删除、合并或改写 target_modules 中的用例。',
+          '当目标用例与只读引用重复时，保留只读引用对应覆盖，仅在目标模块中删除或合并重复项；不得返回或改写只读引用模块。',
+          'modules 只能返回 target_modules 中发生变化的模块，removed_cases 也只能记录 target_modules 中被处理的用例。',
+        ]
+        : [];
       return [
         '你是资深测试用例评审专家，请对 XMind AI 生成用例做整份用例全局去重。',
         '最终目标：这些用例会被用于保障项目产品质量，帮助团队更早发现缺陷、降低回归风险、提升用户体验稳定性。',
         modeLines.join('\n'),
+        batchLines.join('\n'),
         '质量优先级高于数量压缩：不要为了让用例更少而削弱关键业务路径、用户高频路径、异常路径、边界条件、权限/安全、数据一致性、兼容性和状态流转覆盖。',
         '处理后的用例必须仍然有足够的缺陷发现能力和回归验证价值；如果不确定某条用例是否冗余，应保留。',
         '去重审查方法：',
@@ -318,6 +345,8 @@
     function buildDedupeRequest(input) {
       var source = input && typeof input === 'object' ? input : {};
       var modules = normalizeModulesInput(source.modules);
+      var referenceModules = normalizeReferenceModulesInput(source.referenceModules);
+      var batchMode = source.batchMode === true;
       var requirementText = String(source.requirementText || '').trim();
       var requirementSupplement = String(source.requirementSupplement || '').trim();
       var dedupeMode = normalizeDedupeMode(source.dedupeMode || source.mode);
@@ -330,6 +359,9 @@
           simplify: isDedupeSimplifyMode(dedupeMode),
           strength: source.strength || 'conservative',
           source: source.source || 'manual-toolbar',
+          batch_mode: batchMode,
+          batch_index: Number(source.batchIndex || 0),
+          batch_count: Number(source.batchCount || 0),
           return_full_replacement: false,
           return_changed_modules_only_allowed: true,
           editable_scope: 'ai_generated_cases_only',
@@ -337,6 +369,14 @@
           dedupe_scope: 'all_input_modules_global',
           dedupe_order: ['within_module', 'cross_module'],
           cross_module_dedupe: true,
+          editable_module_keys: modules.map(function(item) { return item.moduleKey; }),
+          readonly_reference_module_keys: referenceModules.map(function(item) { return item.moduleKey; }),
+          readonly_reference_policy: batchMode ? {
+            compare_against_references: true,
+            references_are_not_editable: true,
+            keep_reference_when_duplicate: true,
+            return_reference_modules: false,
+          } : null,
           module_return_policy: {
             return_all_input_modules: false,
             preserve_module_id_and_key: true,
@@ -361,7 +401,16 @@
           supplement: requirementSupplement,
         },
         modules: modules,
+        referenceModules: referenceModules,
       };
+      if (!batchMode) {
+        delete payload.operation_contract.batch_mode;
+        delete payload.operation_contract.batch_index;
+        delete payload.operation_contract.batch_count;
+        delete payload.operation_contract.editable_module_keys;
+        delete payload.operation_contract.readonly_reference_module_keys;
+        delete payload.operation_contract.readonly_reference_policy;
+      }
       var requestText = [
         '【operation_contract(JSON)】',
         JSON.stringify(payload.operation_contract, null, 2),
@@ -375,10 +424,19 @@
         '【需要去重精简的 AI 生成用例(JSON)】',
         JSON.stringify(payload.modules),
       ].join('\n');
+      if (batchMode) {
+        requestText += [
+          '',
+          '【只读的跨批次用例摘要(JSON，不得回写)】',
+          payload.referenceModules.length ? JSON.stringify(payload.referenceModules) : '[]',
+        ].join('\n');
+      }
       return {
-        prompt: buildDedupePrompt(dedupeMode),
+        prompt: buildDedupePrompt(dedupeMode, { batchMode: batchMode }),
         requestText: requestText,
         modules: modules,
+        referenceModules: referenceModules,
+        batchMode: batchMode,
         dedupeMode: dedupeMode,
         partialModulesResponseAllowed: true,
         beforeCaseCount: modules.reduce(function(total, item) {

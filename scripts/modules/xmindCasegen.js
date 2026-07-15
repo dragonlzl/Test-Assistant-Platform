@@ -191,7 +191,7 @@
     var VIEW_STATE_CAPTURE_DEBOUNCE_MS = 300;
     var VIEW_STATE_INTERACTION_CAPTURE_DEBOUNCE_MS = 520;
     var VIEW_STATE_MANUAL_GESTURE_MS = 260;
-    var WORKSPACE_MAX = 2;
+    var WORKSPACE_MAX = 3;
     var multimodalMaxImages = 20;
     var multimodalMaxEdge = 1600;
     var multimodalMaxBytes = 4 * 1024 * 1024;
@@ -284,6 +284,8 @@
         status: '',
         error: '',
         dedupeMode: DEDUPE_MODE_ONLY,
+        batchCompleted: 0,
+        batchTotal: 0,
         lastResult: null,
         updatedAt: 0,
       };
@@ -1172,6 +1174,18 @@
       return window.app && window.app.xmindCaseDedupeCoreApi ? window.app.xmindCaseDedupeCoreApi : null;
     }
 
+    function getXmindDedupeBatchCoreApi() {
+      if (ctx.xmindDedupeBatchCore) return ctx.xmindDedupeBatchCore;
+      if (ctx.xmindDedupeBatchCoreApi) return ctx.xmindDedupeBatchCoreApi;
+      return window.app && window.app.xmindDedupeBatchCore ? window.app.xmindDedupeBatchCore : null;
+    }
+
+    function getXmindGenerationTimingCoreApi() {
+      if (ctx.xmindGenerationTimingCore) return ctx.xmindGenerationTimingCore;
+      if (ctx.xmindGenerationTimingCoreApi) return ctx.xmindGenerationTimingCoreApi;
+      return window.app && window.app.xmindGenerationTimingCore ? window.app.xmindGenerationTimingCore : null;
+    }
+
     function getXmindRequirementCoverageCoreApi() {
       if (ctx.xmindRequirementCoverageCore) return ctx.xmindRequirementCoverageCore;
       if (ctx.xmindRequirementCoverageCoreApi) return ctx.xmindRequirementCoverageCoreApi;
@@ -1596,6 +1610,8 @@
             scope: 'dedupe',
             actionId: DEDUPE_ACTION_ID,
             dedupeMode: normalizeDedupeMode(dedupeState.dedupeMode),
+            batchCompleted: Number(dedupeState.batchCompleted || 0),
+            batchTotal: Number(dedupeState.batchTotal || 0),
             label: 'AI用例去重',
           });
         }
@@ -1615,19 +1631,39 @@
       var coverageRunning = runningOperations.some(function(item) {
         return item && item.scope === 'coverage';
       });
+      var moduleOperation = null;
+      runningOperations.some(function(item) {
+        if (item && item.scope === 'module') {
+          moduleOperation = item;
+          return true;
+        }
+        return false;
+      });
+      var runningPipeline = getRootPipelineState();
+      var moduleCompleted = Number(runningPipeline && runningPipeline.moduleTaskCompleted || 0);
+      var moduleTotal = Number(runningPipeline && runningPipeline.moduleTaskTotal || 0);
+      var moduleProgressText = moduleTotal > 0
+        ? (String(Math.min(moduleCompleted, moduleTotal)) + '/' + String(moduleTotal))
+        : '';
+      var generationRunningLabel = moduleOperation && moduleProgressText
+        ? ('正在生成模块用例 ' + moduleProgressText)
+        : '正在执行生成任务';
+      var generationRunningHint = moduleOperation
+        ? ('当前模块：' + String(moduleOperation.label || '未命名模块') + '；超时上限遵循模型调用设置')
+        : ('当前共有 ' + String(runningCount) + ' 个生成任务在执行');
       var dedupeMode = dedupeOperation ? normalizeDedupeMode(dedupeOperation.dedupeMode) : getDedupeModeFromSettings();
       return {
         runningCount: runningCount,
         runningState: runningCount > 0 ? 'running' : 'idle',
         runningLabel: runningCount > 0
-          ? (coverageRunning ? '需求覆盖分析中' : (dedupeRunning ? getDedupeRunningLabel(dedupeMode) : '正在执行生成任务'))
+          ? (coverageRunning ? '需求覆盖分析中' : (dedupeRunning ? getDedupeRunningLabel(dedupeMode, dedupeOperation) : generationRunningLabel))
           : '当前没有生成任务',
         runningHint: runningCount > 0
           ? (coverageRunning
             ? '正在分析当前页签可见用例对需求原文的覆盖'
             : (dedupeRunning
-            ? getDedupeRunningHint(dedupeMode)
-            : ('当前共有 ' + String(runningCount) + ' 个生成任务在执行')))
+            ? getDedupeRunningHint(dedupeMode, dedupeOperation)
+            : generationRunningHint))
           : '当前可继续发起生成、补全或删除操作',
         moduleCount: moduleCount,
         caseCount: caseCount,
@@ -2816,6 +2852,7 @@
             mergedDetailMap[key] = {
               module: normalizeModuleTitle(item.module || ''),
               caseCount: caseCount,
+              durationMs: normalizeHistoryDurationMs(item.durationMs),
             };
           }
         });
@@ -3055,17 +3092,20 @@
         pipeline.detailMap[key] = {
           module: title || '未命名模块',
           caseCount: 0,
+          durationMs: 0,
         };
       }
       return pipeline.detailMap[key];
     }
 
-    function appendRootPipelineModuleDetail(pipeline, moduleTitle, caseCount) {
+    function appendRootPipelineModuleDetail(pipeline, moduleTitle, caseCount, durationMs) {
       var entry = ensureRootPipelineDetailEntry(pipeline, moduleTitle);
       if (!entry) return;
       var nextCount = Number(caseCount);
       if (!Number.isFinite(nextCount) || nextCount < 0) nextCount = 0;
       entry.caseCount += nextCount;
+      var nextDurationMs = normalizeHistoryDurationMs(durationMs);
+      if (nextDurationMs > 0) entry.durationMs = nextDurationMs;
     }
 
     function appendRootPipelineDiagnostics(pipeline, items) {
@@ -6507,6 +6547,34 @@
       return '根节点 · ' + getRequirementLabelText();
     }
 
+    function normalizeHistoryDurationMs(value) {
+      var durationMs = Number(value || 0);
+      if (!Number.isFinite(durationMs) || durationMs <= 0) return 0;
+      return Math.round(durationMs);
+    }
+
+    function getTaskModelRequestDurationMs(task) {
+      var totalDurationMs = normalizeHistoryDurationMs(task && task.modelRequestTotalDurationMs);
+      if (totalDurationMs > 0) return totalDurationMs;
+      var lastDurationMs = normalizeHistoryDurationMs(task && task.modelRequestDurationMs);
+      if (lastDurationMs > 0) return lastDurationMs;
+      return normalizeHistoryDurationMs(task && task.durationMs);
+    }
+
+    function formatHistoryDuration(durationMs) {
+      var value = normalizeHistoryDurationMs(durationMs);
+      if (!value) return '';
+      if (value < 1000) return (value / 1000).toFixed(1) + ' 秒';
+      if (value < 60000) {
+        var seconds = value / 1000;
+        return (seconds < 10 ? seconds.toFixed(1) : String(Math.round(seconds))) + ' 秒';
+      }
+      var totalSeconds = Math.round(value / 1000);
+      var minutes = Math.floor(totalSeconds / 60);
+      var remainingSeconds = totalSeconds % 60;
+      return String(minutes) + ' 分 ' + String(remainingSeconds) + ' 秒';
+    }
+
     function normalizeHistoryDetails(details) {
       var map = {};
       (Array.isArray(details) ? details : []).forEach(function(item) {
@@ -6518,11 +6586,16 @@
           map[stableKey] = {
             module: moduleTitle || '未命名模块',
             caseCount: 0,
+            durationMs: 0,
           };
         }
         var caseCount = Number(item.caseCount);
         if (!Number.isFinite(caseCount) || caseCount < 0) caseCount = 0;
         map[stableKey].caseCount += caseCount;
+        map[stableKey].durationMs = Math.max(
+          Number(map[stableKey].durationMs || 0),
+          normalizeHistoryDurationMs(item.durationMs)
+        );
       });
       return Object.keys(map).map(function(key) {
         return map[key];
@@ -6883,9 +6956,13 @@
           var detailHtml = details.length
             ? '<div class="xmind-casegen-history-detail-list">'
                 + details.map(function(detail) {
+                  var durationText = formatHistoryDuration(detail && detail.durationMs);
                   return '<div class="xmind-casegen-history-detail">'
                     + '<strong class="xmind-casegen-history-detail-module">' + escapeHtml(detail.module || '未命名模块') + '</strong>'
-                    + '<span class="xmind-casegen-history-detail-count">' + String(Number(detail.caseCount) || 0) + ' 条用例</span>'
+                    + '<span class="xmind-casegen-history-detail-count">'
+                      + String(Number(detail.caseCount) || 0) + ' 条用例'
+                      + (durationText ? (' · 耗时 ' + escapeHtml(durationText)) : '')
+                    + '</span>'
                     + '</div>';
                 }).join('')
               + '</div>'
@@ -7049,14 +7126,26 @@
       return isDedupeSimplifyMode(mode) ? '去重并精简' : '仅去重';
     }
 
-    function getDedupeRunningLabel(mode) {
-      return isDedupeSimplifyMode(mode) ? 'AI 去重精简中' : 'AI 用例去重中';
+    function getDedupeBatchProgressText(progress) {
+      var source = progress && typeof progress === 'object' ? progress : {};
+      var completed = Math.max(0, Number(source.batchCompleted || 0));
+      var total = Math.max(0, Number(source.batchTotal || 0));
+      if (!total) return '';
+      return String(Math.min(completed, total)) + '/' + String(total);
     }
 
-    function getDedupeRunningHint(mode) {
-      return isDedupeSimplifyMode(mode)
+    function getDedupeRunningLabel(mode, progress) {
+      var label = isDedupeSimplifyMode(mode) ? 'AI 去重精简中' : 'AI 用例去重中';
+      var progressText = getDedupeBatchProgressText(progress);
+      return progressText ? (label + ' ' + progressText) : label;
+    }
+
+    function getDedupeRunningHint(mode, progress) {
+      var hint = isDedupeSimplifyMode(mode)
         ? '正在对当前页签 AI 生成用例执行去重并精简'
         : '正在对当前页签 AI 生成用例执行仅去重';
+      var progressText = getDedupeBatchProgressText(progress);
+      return progressText ? (hint + '，批次进度 ' + progressText) : hint;
     }
 
     function getDedupeRemovedSummaryText(count, mode) {
@@ -10171,10 +10260,15 @@
       return parts.join('\n\n');
     }
 
-    function callXmindModelWithGuard(executor) {
+    function getConfiguredXmindTimeoutSec() {
       var timeoutSec = state && state.settings && Number(state.settings.timeoutSec)
         ? Math.max(30, Math.min(1800, Math.round(Number(state.settings.timeoutSec))))
         : 300;
+      return timeoutSec;
+    }
+
+    function callXmindModelWithGuard(executor) {
+      var timeoutSec = getConfiguredXmindTimeoutSec();
       var timeoutMs = timeoutSec * 1000 + 1500;
       return new Promise(function(resolve, reject) {
         var settled = false;
@@ -10199,16 +10293,46 @@
       });
     }
 
-    async function buildRequirementPayload(contract, visibleContext, moduleEntry) {
+    async function buildRequirementPayload(contract, visibleContext, moduleEntry, options) {
+      var opts = options || {};
       var requirementSource = getSelectedRequirementSource();
       var generationOptions = buildXmindGenerationOptionsSnapshot();
       var hardConstraintText = buildXmindHardConstraintText(contract, generationOptions);
-      var aiLayerSnapshot = contract && (
-        contract.mode === 'regenerate_modules'
-        || (contract.scope === 'root' && contract.mode === 'full_cases')
-      )
+      var visibleModulesSnapshot = Array.isArray(opts.visibleModulesSnapshot)
+        ? cloneJson(opts.visibleModulesSnapshot, [])
+        : buildVisibleModuleSnapshot(visibleContext);
+      var isModuleScope = contract && String(contract.scope || '') === 'module';
+      var aiLayerSnapshot = isModuleScope
         ? []
-        : buildAiLayerSnapshot();
+        : (contract && (
+            contract.mode === 'regenerate_modules'
+            || (contract.scope === 'root' && contract.mode === 'full_cases')
+          )
+          ? []
+          : buildAiLayerSnapshot());
+      var targetModuleSnapshot = moduleEntry
+        ? {
+            module: moduleEntry.title,
+            visible_cases: getVisibleCasesForModuleEntry(moduleEntry).map(function(row) {
+              return normalizeCaseItem(row.item, moduleEntry.title);
+            }).filter(Boolean),
+          }
+        : null;
+      var payloadCore = window.app && window.app.xmindGenerationPayloadCore
+        ? window.app.xmindGenerationPayloadCore
+        : null;
+      var generationContext = payloadCore && typeof payloadCore.buildGenerationContext === 'function'
+        ? payloadCore.buildGenerationContext({
+            contract: contract,
+            visibleModules: visibleModulesSnapshot,
+            aiLayer: aiLayerSnapshot,
+            targetModule: targetModuleSnapshot,
+          })
+        : {
+            visibleModules: visibleModulesSnapshot,
+            aiLayer: aiLayerSnapshot,
+            targetModule: targetModuleSnapshot,
+          };
       var sections = [];
       sections.push('【需求标识】\n' + getRequirementLabelText());
       sections.push('【operation_contract(JSON)】\n' + JSON.stringify(contract, null, 2));
@@ -10217,15 +10341,10 @@
       if (hardConstraintText) {
         sections.push('【首轮生成硬约束】\n' + hardConstraintText);
       }
-      sections.push('【当前可见模块与用例(JSON)】\n' + JSON.stringify(buildVisibleModuleSnapshot(visibleContext), null, 2));
-      sections.push('【当前 AI 生成层(JSON)】\n' + JSON.stringify(aiLayerSnapshot, null, 2));
-      if (moduleEntry) {
-        sections.push('【当前操作模块】\n' + JSON.stringify({
-          module: moduleEntry.title,
-          visible_cases: getVisibleCasesForModuleEntry(moduleEntry).map(function(row) {
-            return normalizeCaseItem(row.item, moduleEntry.title);
-          }).filter(Boolean),
-        }, null, 2));
+      sections.push('【当前可见模块与用例(JSON)】\n' + JSON.stringify(generationContext.visibleModules, null, 2));
+      sections.push('【当前 AI 生成层(JSON)】\n' + JSON.stringify(generationContext.aiLayer, null, 2));
+      if (generationContext.targetModule) {
+        sections.push('【当前操作模块】\n' + JSON.stringify(generationContext.targetModule, null, 2));
       }
       if (requirementSource.mode === 'document') {
         sections.push('【需求正文】\n' + (requirementSource.text || '（无文本）'));
@@ -10793,7 +10912,9 @@
     async function buildXmindGenerationTaskInput(contract, visibleContext, moduleEntry, options) {
       var opts = options || {};
       var prompt = buildXmindPrompt(contract);
-      var payload = await buildRequirementPayload(contract, visibleContext, moduleEntry);
+      var payload = await buildRequirementPayload(contract, visibleContext, moduleEntry, {
+        visibleModulesSnapshot: opts.visibleModulesSnapshot,
+      });
       var model = xmindGenApi && typeof xmindGenApi.getAssignedModel === 'function'
         ? xmindGenApi.getAssignedModel('xmindcasegen')
         : null;
@@ -10892,6 +11013,10 @@
         requirementText: requirement.text,
         requirementSupplement: requirement.supplement,
         modules: modules,
+        referenceModules: Array.isArray(opts.referenceModules) ? opts.referenceModules : [],
+        batchMode: opts.batchMode === true,
+        batchIndex: Number(opts.batchIndex || 0),
+        batchCount: Number(opts.batchCount || 0),
         strength: DEDUPE_STRENGTH,
         dedupeMode: dedupeMode,
         source: opts.source || 'manual-toolbar',
@@ -10918,6 +11043,82 @@
         dedupeMode: normalizeDedupeMode(built && built.dedupeMode ? built.dedupeMode : dedupeMode),
         partialModulesResponseAllowed: built && built.partialModulesResponseAllowed === true,
         beforeCaseCount: Number(built && built.beforeCaseCount || 0),
+      };
+    }
+
+    function buildXmindDedupeExecutionInput(modules, options) {
+      var opts = options || {};
+      var batchCoreApi = getXmindDedupeBatchCoreApi();
+      if (!batchCoreApi || typeof batchCoreApi.buildBatchPlan !== 'function') {
+        return buildXmindDedupeTaskInput(modules, opts);
+      }
+      var plan = batchCoreApi.buildBatchPlan(modules, {
+        maxCasesPerBatch: 60,
+        maxConcurrentBatches: 5,
+      });
+      if (!plan || plan.enabled !== true || !Array.isArray(plan.batches) || plan.batches.length <= 1) {
+        return buildXmindDedupeTaskInput(modules, opts);
+      }
+      var batchInputs = plan.batches.map(function(batch) {
+        var taskInput = buildXmindDedupeTaskInput(batch.modules, {
+          source: opts.source,
+          dedupeMode: opts.dedupeMode,
+          referenceModules: batch.referenceModules,
+          batchMode: true,
+          batchIndex: Number(batch.index || 0),
+          batchCount: Number(plan.batchCount || plan.batches.length),
+        });
+        return {
+          id: String(batch.id || ''),
+          index: Number(batch.index || 0),
+          modules: cloneJson(taskInput.modules, []),
+          targetCaseCount: Number(batch.targetCaseCount || taskInput.beforeCaseCount || 0),
+          referenceCaseCount: Number(batch.referenceCaseCount || 0),
+          model: cloneJson(taskInput.model, null),
+          prompt: taskInput.prompt,
+          requestMode: taskInput.requestMode,
+          requestText: taskInput.requestText,
+          contentBlocks: taskInput.contentBlocks,
+          reasoning: taskInput.reasoning,
+          temperature: taskInput.temperature,
+        };
+      });
+      var firstInput = batchInputs[0] || {};
+      return {
+        prompt: '',
+        requestMode: 'text',
+        requestText: '',
+        contentBlocks: [],
+        degradedToTextOnly: false,
+        model: cloneJson(firstInput.model, null),
+        reasoning: String(firstInput.reasoning || ''),
+        temperature: Number(firstInput.temperature),
+        modules: cloneJson(modules, []),
+        dedupeMode: normalizeDedupeMode(opts.dedupeMode || getDedupeModeFromSettings()),
+        partialModulesResponseAllowed: true,
+        beforeCaseCount: Number(plan.totalCaseCount || 0),
+        dedupeBatches: batchInputs.map(function(item) {
+          return {
+            id: item.id,
+            index: item.index,
+            modules: cloneJson(item.modules, []),
+            targetCaseCount: item.targetCaseCount,
+            referenceCaseCount: item.referenceCaseCount,
+          };
+        }),
+        modelRequestBatch: batchInputs.map(function(item) {
+          return {
+            id: item.id,
+            index: item.index,
+            prompt: item.prompt,
+            requestMode: item.requestMode,
+            requestText: item.requestText,
+            contentBlocks: cloneJson(item.contentBlocks, []),
+            reasoning: item.reasoning,
+            temperature: item.temperature,
+          };
+        }),
+        modelRequestBatchConcurrency: Number(plan.maxConcurrentBatches || 1),
       };
     }
 
@@ -12244,6 +12445,8 @@
               scope: 'dedupe',
               actionId: DEDUPE_ACTION_ID,
               dedupeMode: normalizeDedupeMode(task.dedupeMode),
+              batchCompleted: Number(task.modelRequestBatchCompleted || 0),
+              batchTotal: Number(task.modelRequestBatchTotal || (Array.isArray(task.dedupeBatches) ? task.dedupeBatches.length : 0)),
               label: 'AI用例去重',
             };
           }
@@ -12275,6 +12478,8 @@
           scope: 'dedupe',
           actionId: DEDUPE_ACTION_ID,
           dedupeMode: normalizeDedupeMode(dedupeState.dedupeMode),
+          batchCompleted: Number(dedupeState.batchCompleted || 0),
+          batchTotal: Number(dedupeState.batchTotal || 0),
           label: 'AI用例去重',
         });
       } else if (
@@ -13688,6 +13893,7 @@
           detailMap[key] = {
             module: title || '未命名模块',
             caseCount: 0,
+            durationMs: normalizeHistoryDurationMs(durationMs),
           };
         }
         var nextCount = Number(caseCount);
@@ -13818,6 +14024,8 @@
       dedupeState.running = false;
       dedupeState.taskId = '';
       dedupeState.status = '';
+      dedupeState.batchCompleted = 0;
+      dedupeState.batchTotal = 0;
       var coverageState = ensureCoverageUiState();
       coverageState.running = false;
       coverageState.taskId = '';
@@ -13964,6 +14172,9 @@
           dedupeState.taskId = String(task.id || '');
           dedupeState.status = 'running';
           dedupeState.error = '';
+          dedupeState.dedupeMode = normalizeDedupeMode(task.dedupeMode);
+          dedupeState.batchCompleted = Number(task.modelRequestBatchCompleted || 0);
+          dedupeState.batchTotal = Number(task.modelRequestBatchTotal || (Array.isArray(task.dedupeBatches) ? task.dedupeBatches.length : 0));
           dedupeState.updatedAt = Date.now();
           var dedupeRootState = ensureRootUiState();
           dedupeRootState.running = true;
@@ -14150,7 +14361,11 @@
         dedupeStrength: DEDUPE_STRENGTH,
         dedupeMode: dedupeMode,
         dedupeModules: cloneJson(taskInput && taskInput.modules, []),
+        dedupeBatches: cloneJson(taskInput && taskInput.dedupeBatches, []),
         dedupeBeforeCount: Number(taskInput && taskInput.beforeCaseCount || 0),
+        modelRequestBatch: cloneJson(taskInput && taskInput.modelRequestBatch, []),
+        modelRequestBatchConcurrency: Number(taskInput && taskInput.modelRequestBatchConcurrency || 0),
+        modelRequestBatchCompleted: 0,
         dedupeVisibleStartedAt: Number(opts.dedupeVisibleStartedAt || 0) || 0,
         minVisibleUntil: Number(opts.minVisibleUntil || 0) || 0,
         contract: {
@@ -14933,6 +15148,11 @@
       dedupeState.status = 'running';
       dedupeState.error = '';
       dedupeState.dedupeMode = normalizeDedupeMode(task && task.dedupeMode);
+      dedupeState.batchCompleted = Number(task && task.modelRequestBatchCompleted || 0);
+      dedupeState.batchTotal = Number(
+        task && task.modelRequestBatchTotal
+        || (task && Array.isArray(task.dedupeBatches) ? task.dedupeBatches.length : 0)
+      );
       dedupeState.updatedAt = Date.now();
       var rootState = ensureRootUiState();
       rootState.running = true;
@@ -14951,6 +15171,8 @@
       dedupeState.status = errorText ? 'error' : '';
       dedupeState.error = errorText ? String(errorText || '') : '';
       dedupeState.dedupeMode = DEDUPE_MODE_ONLY;
+      dedupeState.batchCompleted = 0;
+      dedupeState.batchTotal = 0;
       dedupeState.updatedAt = Date.now();
       var rootState = ensureRootUiState();
       if (rootState.lastAction === DEDUPE_ACTION_ID) {
@@ -15094,7 +15316,7 @@
       }
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
       var dedupeMode = normalizeDedupeMode(opts.dedupeMode || getDedupeModeFromSettings());
-      var taskInput = buildXmindDedupeTaskInput(modules, { source: source, dedupeMode: dedupeMode });
+      var taskInput = buildXmindDedupeExecutionInput(modules, { source: source, dedupeMode: dedupeMode });
       var dedupeVisibleStartedAt = Date.now();
       clearDedupeOverviewSummary({ clearTerminalVisual: true, sync: false });
       var task = startManagedXmindTask(buildDedupeTaskPayload(taskInput, {
@@ -15176,7 +15398,12 @@
     function mergeRootPipelineDetails(pipeline, details) {
       (Array.isArray(details) ? details : []).forEach(function(item) {
         if (!item) return;
-        appendRootPipelineModuleDetail(pipeline, item.module || item.moduleTitle || '', Number(item.caseCount || 0));
+        appendRootPipelineModuleDetail(
+          pipeline,
+          item.module || item.moduleTitle || '',
+          Number(item.caseCount || 0),
+          Number(item.durationMs || 0)
+        );
       });
     }
 
@@ -15187,6 +15414,12 @@
       return normalizeHistoryDetails(Object.keys(detailMap).map(function(key) {
         return detailMap[key];
       }));
+    }
+
+    function countRootPipelineFallbackModules(pipeline) {
+      return normalizeHistoryDiagnostics(pipeline && pipeline.diagnostics ? pipeline.diagnostics : []).filter(function(item) {
+        return String(item || '').indexOf('已采用首轮备用用例') !== -1;
+      }).length;
     }
 
     function buildRootPipelineSuccessMessage(pipeline) {
@@ -15215,6 +15448,10 @@
           baseText += '，AI 用例去重失败，已保留原结果';
         } else if (pipeline && pipeline.dedupeStatus === 'cancelled') {
           baseText += '，AI 用例去重已中断，已保留当前结果';
+        }
+        var fallbackModuleCount = countRootPipelineFallbackModules(pipeline);
+        if (fallbackModuleCount > 0) {
+          baseText += '，' + String(fallbackModuleCount) + ' 个模块已使用备用结果';
         }
         return baseText;
       }
@@ -15277,7 +15514,15 @@
         && pipeline.cancelled !== true
         && !pipeline.dedupeStatus
       ) {
-        if (pipeline.restoredAfterRefresh === true) {
+        if (Number(pipeline.errorCount || 0) > 0) {
+          updateRootPipelineState(function(current) {
+            current.dedupeStatus = 'skipped';
+            current.dedupeError = '';
+            appendRootPipelineDiagnostics(current, '存在未成功模块，已跳过自动 AI 用例去重并保留已完成结果');
+          });
+          pipeline = getRootPipelineState() || pipeline;
+          diagnostics = normalizeHistoryDiagnostics((diagnostics || []).concat('存在未成功模块，已跳过自动 AI 用例去重'));
+        } else if (pipeline.restoredAfterRefresh === true) {
           updateRootPipelineState(function(current) {
             current.dedupeStatus = 'skipped';
           });
@@ -15532,7 +15777,7 @@
         diagnostics: {},
       };
       if (skeletonModules.length && skeletonActionId) {
-        skeletonApplied = applyRootOutput(skeletonActionId, skeletonModules, visibleContext, Number(task && task.durationMs || 0));
+        skeletonApplied = applyRootOutput(skeletonActionId, skeletonModules, visibleContext, getTaskModelRequestDurationMs(task));
       }
       if (actionId === ROOT_ACTIONS.FULL_CASES && skeletonApplied.changed) {
         rootState.hideAiLayer = false;
@@ -15610,7 +15855,7 @@
             actionId: MODULE_ACTIONS.FULL_CASES,
             rootPipelineNewModule: false,
             anchorNodeId: anchorNodeId,
-            fallbackCases: [],
+            fallbackCases: normalizeFallbackCaseList(item && item.cases, item && item.module ? item.module : ''),
           };
         }).filter(Boolean);
       }
@@ -15826,10 +16071,24 @@
               cases: nextList,
             });
           }
-          appendRootPipelineModuleDetail(current, historyModuleTitle, addedCount);
+          appendRootPipelineModuleDetail(
+            current,
+            historyModuleTitle,
+            addedCount,
+            getTaskModelRequestDurationMs(task)
+          );
         });
         clearDeleteHistoryStacks();
         syncCasesGenPageRender();
+      } else {
+        updateRootPipelineState(function(current) {
+          appendRootPipelineModuleDetail(
+            current,
+            historyModuleTitle,
+            0,
+            getTaskModelRequestDurationMs(task)
+          );
+        });
       }
       markRootPipelineModuleTaskCompleted(task);
       if (isDrawerOpen()) {
@@ -15849,6 +16108,74 @@
       var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
       var moduleId = task && task.moduleId ? String(task.moduleId || '') : '';
       var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
+      var resolvedEntry = resolveTaskModuleEntry(task, buildVisibleModuleContext());
+      var moduleTitle = normalizeModuleTitle(
+        resolvedEntry && resolvedEntry.title ? resolvedEntry.title : (task && task.moduleTitle ? task.moduleTitle : '')
+      );
+      var taskErrorText = getTaskErrorMessage(task, err);
+      var fallbackCases = normalizeFallbackCaseList(task && task.fallbackCases, moduleTitle);
+      var canUseTimeoutFallback = opts.resultKind !== 'cancelled'
+        && String(task && task.rootPipelineActionId ? task.rootPipelineActionId : '') === ROOT_ACTIONS.FULL_CASES
+        && taskErrorText.indexOf('模型调用超时') !== -1
+        && moduleId
+        && fallbackCases.length > 0;
+      if (canUseTimeoutFallback) {
+        commitCaseList(moduleId, fallbackCases, Number(task && task.durationMs || 0), '', '');
+        if (moduleState) {
+          moduleState.running = false;
+          moduleState.taskId = '';
+          moduleState.status = '';
+          moduleState.error = '';
+          moduleState.hideResults = false;
+          clearModuleRootPendingAction(moduleState);
+          clearModuleTopupHighlight(moduleState);
+          moduleState.updatedAt = Date.now();
+        }
+        updateRootPipelineState(function(current) {
+          current.addedCases += fallbackCases.length;
+          upsertRootPipelineDedupeModule(current, {
+            moduleId: moduleId,
+            moduleKey: String(task && task.moduleKey ? task.moduleKey : (resolvedEntry && resolvedEntry.moduleKey ? resolvedEntry.moduleKey : '')),
+            module: moduleTitle,
+            key_scenarios: resolvedEntry && resolvedEntry.aiModule && Array.isArray(resolvedEntry.aiModule.scenarios) ? resolvedEntry.aiModule.scenarios.slice() : [],
+            test_points: resolvedEntry && resolvedEntry.aiModule && Array.isArray(resolvedEntry.aiModule.points) ? resolvedEntry.aiModule.points.slice() : [],
+            coupled_modules: resolvedEntry && resolvedEntry.aiModule && Array.isArray(resolvedEntry.aiModule.coupled) ? resolvedEntry.aiModule.coupled.slice() : [],
+            cases: fallbackCases,
+          });
+          appendRootPipelineModuleDetail(
+            current,
+            moduleTitle,
+            fallbackCases.length,
+            getTaskModelRequestDurationMs(task)
+          );
+          var failureMeta = task && task.failureMeta && typeof task.failureMeta === 'object'
+            ? task.failureMeta
+            : {};
+          if (String(failureMeta.kind || '') === 'root-module-tail-fallback') {
+            appendRootPipelineDiagnostics(
+              current,
+              '模块「' + moduleTitle + '」成为尾部慢请求，实际耗时 '
+                + formatHistoryDuration(failureMeta.elapsedMs)
+                + '，同批 P80 基线 ' + formatHistoryDuration(failureMeta.baselineMs)
+                + '，超过动态阈值 ' + formatHistoryDuration(failureMeta.thresholdMs)
+                + '（参考 ' + String(Number(failureMeta.peerCount || 0)) + ' 个已完成模块，请求体约 '
+                + String(Number(failureMeta.requestPayloadChars || 0)) + ' 字符）'
+                + '，已采用首轮备用用例继续流程'
+            );
+          } else {
+            appendRootPipelineDiagnostics(current, '模块「' + moduleTitle + '」模型调用超时，已采用首轮备用用例继续流程');
+          }
+        });
+        markRootPipelineModuleTaskCompleted(task);
+        clearDeleteHistoryStacks();
+        syncCasesGenPageRender();
+        if (isDrawerOpen()) {
+          queueTerminalMindRender({ reason: 'root-pipeline-module-timeout-fallback', persist: false, anchorNodeId: anchorNodeId });
+        }
+        syncTerminalTaskRestoreContext(task);
+        persistManagedTaskWorkspaceState(true);
+        return true;
+      }
       if (moduleState) {
         moduleState.running = false;
         moduleState.taskId = '';
@@ -15861,11 +16188,11 @@
       if (task && task.createdModuleBeforeAction === true && task.rootPipelineNewModule !== true && moduleId) {
         removeAiModuleRecord(moduleId);
       }
-      var moduleTitle = normalizeModuleTitle(task && task.moduleTitle ? task.moduleTitle : '');
       var errorInfo = opts.resultKind === 'cancelled'
         ? buildGenerationCancelledInfo(task)
         : buildGenerationErrorInfo(new Error(moduleState && moduleState.error ? moduleState.error : getTaskErrorMessage(task, err)));
       updateRootPipelineState(function(current) {
+        appendRootPipelineModuleDetail(current, moduleTitle, 0, getTaskModelRequestDurationMs(task));
         if (opts.resultKind === 'cancelled') {
           current.cancelled = true;
           if (!current.cancelReason) current.cancelReason = errorInfo.reasonText;
@@ -15908,7 +16235,7 @@
           coverageGapInfo.retryStartError = retryErr && retryErr.message ? String(retryErr.message) : '自动补强未能启动';
         }
       }
-      var applied = applyRootOutput(actionId, modules, visibleContext, Number(task && task.durationMs || 0));
+      var applied = applyRootOutput(actionId, modules, visibleContext, getTaskModelRequestDurationMs(task));
       var historyDiagnostics = buildCoverageRetryHistoryDiagnostics(task);
       if (coverageGapInfo && coverageGapInfo.retryStartError) {
         historyDiagnostics.push('自动补强未启动：' + summarizeModelOutputText(coverageGapInfo.retryStartError, 80));
@@ -16100,7 +16427,11 @@
             actionId: actionId,
             actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, resolvedEntry, task && task.hadAiCasesBeforeAction),
             moduleCount: 1,
-            details: [{ module: historyModuleTitle, caseCount: 0 }],
+            details: [{
+              module: historyModuleTitle,
+              caseCount: 0,
+              durationMs: getTaskModelRequestDurationMs(task),
+            }],
             resultKind: appendNoChangeInfo.resultKind,
             reasonText: appendNoChangeInfo.reasonText,
             diagnostics: appendNoChangeInfo.diagnostics,
@@ -16138,7 +16469,11 @@
             actionId: actionId,
             actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, resolvedEntry, task && task.hadAiCasesBeforeAction),
             moduleCount: 1,
-            details: [{ module: historyModuleTitle, caseCount: 0 }],
+            details: [{
+              module: historyModuleTitle,
+              caseCount: 0,
+              durationMs: getTaskModelRequestDurationMs(task),
+            }],
             resultKind: fullNoChangeInfo.resultKind,
             reasonText: fullNoChangeInfo.reasonText,
             diagnostics: fullNoChangeInfo.diagnostics,
@@ -16171,6 +16506,7 @@
         details: [{
           module: historyModuleTitle,
           caseCount: actionId === MODULE_ACTIONS.APPEND ? appended.length : nextList.length,
+          durationMs: getTaskModelRequestDurationMs(task),
         }],
       });
       notifyStatus(
@@ -16224,8 +16560,12 @@
         actionId: actionId,
         actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, null, task && task.hadAiCasesBeforeAction),
         summaryText: failureLabel,
-        moduleCount: 0,
-        details: [],
+        moduleCount: 1,
+        details: [{
+          module: moduleTitle,
+          caseCount: 0,
+          durationMs: getTaskModelRequestDurationMs(task),
+        }],
         resultKind: errorInfo.resultKind,
         reasonText: errorInfo.reasonText,
         diagnostics: errorInfo.diagnostics,
@@ -16254,16 +16594,71 @@
       });
     }
 
-    function buildDedupeDetailMap(result) {
+    function buildDedupeDetailMap(result, previousDetailMap) {
       var map = {};
+      var previousMap = previousDetailMap && typeof previousDetailMap === 'object'
+        ? previousDetailMap
+        : {};
       buildDedupeHistoryDetails(result).forEach(function(item) {
         var key = normalizeModuleKey(item.module || '') || ('module-' + String(Object.keys(map).length + 1));
+        var previousDetail = previousMap[key] && typeof previousMap[key] === 'object'
+          ? previousMap[key]
+          : null;
         map[key] = {
           module: item.module || '未命名模块',
           caseCount: Number(item.caseCount || 0) || 0,
+          durationMs: normalizeHistoryDurationMs(previousDetail && previousDetail.durationMs),
         };
       });
       return map;
+    }
+
+    function normalizeManagedDedupeTaskResult(task, dedupeCoreApi, dedupeMode) {
+      var batches = task && Array.isArray(task.dedupeBatches) ? task.dedupeBatches : [];
+      if (!batches.length) {
+        return dedupeCoreApi.normalizeDedupeResult(
+          task && task.resultRaw ? task.resultRaw : '',
+          task && Array.isArray(task.dedupeModules) ? task.dedupeModules : [],
+          {
+            dedupeMode: dedupeMode,
+            allowPartialModulesResponse: task && task.dedupePartialModulesResponseAllowed === true,
+          }
+        );
+      }
+      var batchCoreApi = getXmindDedupeBatchCoreApi();
+      if (!batchCoreApi || typeof batchCoreApi.mergeBatchResults !== 'function') {
+        throw new Error('AI 用例去重批次聚合能力未就绪，请刷新后重试');
+      }
+      var rawResults = null;
+      try {
+        rawResults = JSON.parse(String(task && task.resultRaw ? task.resultRaw : ''));
+      } catch (err) {
+        rawResults = null;
+      }
+      if (!Array.isArray(rawResults) || rawResults.length !== batches.length) {
+        throw new Error('AI 用例去重批次结果不完整，已保留原用例');
+      }
+      var entries = batches.map(function(batch, index) {
+        return {
+          id: batch && batch.id ? String(batch.id || '') : '',
+          result: dedupeCoreApi.normalizeDedupeResult(
+            rawResults[index],
+            batch && Array.isArray(batch.modules) ? batch.modules : [],
+            {
+              dedupeMode: dedupeMode,
+              allowPartialModulesResponse: true,
+            }
+          ),
+        };
+      });
+      var merged = batchCoreApi.mergeBatchResults(
+        task && Array.isArray(task.dedupeModules) ? task.dedupeModules : [],
+        entries
+      );
+      merged.diagnostics = normalizeHistoryDiagnostics((merged.diagnostics || []).concat(
+        'AI 用例去重已拆分为 ' + String(batches.length) + ' 个有界批次并行完成'
+      ));
+      return merged;
     }
 
     function completeDedupeTaskSuccess(task) {
@@ -16272,14 +16667,7 @@
         throw new Error('AI 用例去重能力未就绪，请刷新后重试');
       }
       var dedupeMode = normalizeDedupeMode(task && task.dedupeMode);
-      var result = dedupeCoreApi.normalizeDedupeResult(
-        task && task.resultRaw ? task.resultRaw : '',
-        task && Array.isArray(task.dedupeModules) ? task.dedupeModules : [],
-        {
-          dedupeMode: dedupeMode,
-          allowPartialModulesResponse: task && task.dedupePartialModulesResponseAllowed === true,
-        }
-      );
+      var result = normalizeManagedDedupeTaskResult(task, dedupeCoreApi, dedupeMode);
       var diagnostics = normalizeHistoryDiagnostics(result && result.diagnostics ? result.diagnostics : []);
       var removedCount = Number(result && result.removedCount || 0) || 0;
       var executionSummary = getDedupeExecutionDiagnosticText(removedCount, dedupeMode);
@@ -16345,7 +16733,7 @@
           current.dedupeError = '';
           current.dedupeRecords = dedupeRecords;
           current.addedCases = Number(result && result.afterCount || current.addedCases || 0) || 0;
-          current.detailMap = buildDedupeDetailMap(result);
+          current.detailMap = buildDedupeDetailMap(result, current.detailMap);
           appendRootPipelineDiagnostics(current, diagnostics);
         });
       } else if (!(task && task.historySuppressed === true)) {
@@ -16764,6 +17152,94 @@
       }
     }
 
+    function resolveRootPipelineForManagedTask(task) {
+      var targetId = String(task && task.rootPipelineId ? task.rootPipelineId : '');
+      if (!targetId) return null;
+      var activePipeline = getRootPipelineState();
+      if (activePipeline && String(activePipeline.id || '') === targetId) return activePipeline;
+      var restorePipeline = task
+        && task.restoreContext
+        && task.restoreContext.rootPipeline
+        && typeof task.restoreContext.rootPipeline === 'object'
+        ? task.restoreContext.rootPipeline
+        : null;
+      return restorePipeline && String(restorePipeline.id || '') === targetId
+        ? restorePipeline
+        : null;
+    }
+
+    function collectRootPipelinePeerDurations(pipeline, task) {
+      var detailMap = pipeline && pipeline.detailMap && typeof pipeline.detailMap === 'object'
+        ? pipeline.detailMap
+        : {};
+      var targetKey = normalizeModuleKey(task && task.moduleTitle ? task.moduleTitle : '');
+      return Object.keys(detailMap).map(function(key) {
+        if (targetKey && key === targetKey) return 0;
+        return normalizeHistoryDurationMs(detailMap[key] && detailMap[key].durationMs);
+      }).filter(function(durationMs) {
+        return durationMs > 0;
+      });
+    }
+
+    function estimateManagedTaskRequestSize(task) {
+      if (task && task.requestMode === 'content') {
+        return estimateTaskContentBlocksSize(task.contentBlocks || []);
+      }
+      return String(task && task.requestText ? task.requestText : '').length;
+    }
+
+    function maybeRescueRootPipelineTailRequest(eventTask) {
+      if (!eventTask || eventTask.scope !== 'module' || !eventTask.rootPipelineId) return false;
+      var manager = getXmindTaskManager();
+      var timingCore = getXmindGenerationTimingCoreApi();
+      if (!manager || typeof manager.failTask !== 'function') return false;
+      if (!timingCore || typeof timingCore.evaluateTailRequest !== 'function') return false;
+      var targetPipelineId = String(eventTask.rootPipelineId || '');
+      var runningTasks = listManagedXmindTasks().filter(function(task) {
+        return Boolean(
+          task
+          && task.status === 'running'
+          && task.scope === 'module'
+          && String(task.rootPipelineId || '') === targetPipelineId
+        );
+      });
+      if (runningTasks.length !== 1) return false;
+      var candidate = runningTasks[0];
+      if (String(candidate.rootPipelineActionId || '') !== ROOT_ACTIONS.FULL_CASES) return false;
+      var pipeline = resolveRootPipelineForManagedTask(candidate);
+      if (!pipeline || pipeline.cancelled === true || pipeline.dedupeStatus) return false;
+      if (Array.isArray(pipeline.pendingQueue) && pipeline.pendingQueue.length > 0) return false;
+      var totalCount = normalizeRootPipelineTaskCount(pipeline.moduleTaskTotal);
+      var completedCount = normalizeRootPipelineTaskCount(pipeline.moduleTaskCompleted);
+      var remainingCount = Math.max(0, totalCount - completedCount);
+      var fallbackCases = normalizeFallbackCaseList(candidate.fallbackCases, candidate.moduleTitle || '');
+      var evaluation = timingCore.evaluateTailRequest({
+        timeoutMs: getConfiguredXmindTimeoutSec() * 1000,
+        requestStartedAt: Number(candidate.modelRequestStartedAt || 0),
+        now: Date.now(),
+        remainingCount: remainingCount,
+        fallbackCaseCount: fallbackCases.length,
+        peerDurationsMs: collectRootPipelinePeerDurations(pipeline, candidate),
+      });
+      if (!evaluation || evaluation.shouldRescue !== true) return false;
+      var moduleTitle = normalizeModuleTitle(candidate.moduleTitle || '') || '当前模块';
+      return manager.failTask(candidate.id, {
+        action: 'error',
+        abortReason: 'xmind-casegen-tail-fallback',
+        error: '模型调用超时（模块「' + moduleTitle + '」成为尾部慢请求，已按同批模块耗时动态提前收口）',
+        meta: {
+          kind: 'root-module-tail-fallback',
+          module: moduleTitle,
+          elapsedMs: Number(evaluation.elapsedMs || 0),
+          thresholdMs: Number(evaluation.thresholdMs || 0),
+          timeoutMs: Number(evaluation.timeoutMs || 0),
+          baselineMs: Number(evaluation.baselineMs || 0),
+          peerCount: Number(evaluation.peerCount || 0),
+          requestPayloadChars: estimateManagedTaskRequestSize(candidate),
+        },
+      });
+    }
+
     function bindManagedXmindTasks() {
       if (xmindTaskListenerBound === true) return;
       if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
@@ -16791,6 +17267,7 @@
             anchorNodeId: task ? getManagedTaskAnchorNodeId(task, null) : '',
           });
         } else {
+          maybeRescueRootPipelineTailRequest(task);
           syncInterruptButton();
         }
         if (!task) {
@@ -16986,6 +17463,7 @@
         var moduleTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, resolvedEntry, {
           workspaceId: taskWorkspaceId,
           knowledgeBaseActionKey: knowledgeBaseActionKey,
+          visibleModulesSnapshot: options.visibleModulesSnapshot,
         });
         var moduleTask = startManagedXmindTask(buildModuleTaskPayload(resolvedEntry, actionId, moduleTaskInput, moduleTaskMeta));
         moduleState.taskId = String(moduleTask && moduleTask.id ? moduleTask.id : '');
@@ -17071,6 +17549,13 @@
         return Boolean(descriptor && descriptor.moduleEntry && descriptor.actionId);
       });
       if (!validList.length) return 0;
+      var frozenVisibleModulesSnapshot = buildVisibleModuleSnapshot(buildVisibleModuleContext());
+      var payloadCore = window.app && window.app.xmindGenerationPayloadCore
+        ? window.app.xmindGenerationPayloadCore
+        : null;
+      if (payloadCore && typeof payloadCore.buildCompactVisibleModules === 'function') {
+        frozenVisibleModulesSnapshot = payloadCore.buildCompactVisibleModules(frozenVisibleModulesSnapshot);
+      }
       updateRootPipelineState(function(current) {
         if (String(current.id || '') !== targetId) return;
         current.moduleTaskTotal = Math.max(normalizeRootPipelineTaskCount(current.moduleTaskTotal), validList.length);
@@ -17093,6 +17578,7 @@
             ? String(descriptor.anchorNodeId || '')
             : '',
           renderReason: 'root-pipeline-module-running',
+          visibleModulesSnapshot: frozenVisibleModulesSnapshot,
         });
       });
       return (Array.isArray(startedResults) ? startedResults : []).filter(function(item) {

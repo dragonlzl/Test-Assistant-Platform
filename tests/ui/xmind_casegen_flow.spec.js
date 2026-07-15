@@ -483,21 +483,31 @@ async function installXmindModelStub(page, delayMs) {
           makeModule('支付模块'),
         ];
       } else if (mode === 'full_cases') {
-        responseModules = window.__xmindCasegenRootFullCasesModulesOnly === true
-          ? [
-            makeModule('登录模块'),
-            makeModule('支付模块'),
-          ]
-          : [
-            makeModule('登录模块', [
-              makeCase('登录模块', '登录成功校验', 1),
-              makeCase('登录模块', '登录失败提示', 2),
-            ]),
-            makeModule('支付模块', [
-              makeCase('支付模块', '支付成功校验', 1),
-              makeCase('支付模块', '支付失败提示', 2),
-            ]),
-          ];
+        var customRootModuleNames = Array.isArray(window.__xmindCasegenRootFullCasesModuleNames)
+          ? window.__xmindCasegenRootFullCasesModuleNames
+          : [];
+        responseModules = customRootModuleNames.length
+          ? customRootModuleNames.map(function(moduleName, index) {
+              var normalizedName = String(moduleName || ('模块' + String(index + 1)));
+              return makeModule(normalizedName, [
+                makeCase(normalizedName, normalizedName + '-首轮备用用例', 1),
+              ]);
+            })
+          : (window.__xmindCasegenRootFullCasesModulesOnly === true
+            ? [
+              makeModule('登录模块'),
+              makeModule('支付模块'),
+            ]
+            : [
+              makeModule('登录模块', [
+                makeCase('登录模块', '登录成功校验', 1),
+                makeCase('登录模块', '登录失败提示', 2),
+              ]),
+              makeModule('支付模块', [
+                makeCase('支付模块', '支付成功校验', 1),
+                makeCase('支付模块', '支付失败提示', 2),
+              ]),
+            ]);
       } else if (mode === 'existing_modules_cases') {
         var missingModules = Array.isArray(window.__xmindCasegenExistingCompletionMissingModules)
           ? window.__xmindCasegenExistingCompletionMissingModules
@@ -596,6 +606,12 @@ async function installXmindModelStub(page, delayMs) {
         content = JSON.stringify(buildCoverageResponse(userText));
       }
       var responseDelay = Number(delay) || 120;
+      if (mode === 'module_full_cases') {
+        var moduleDelayMap = window.__xmindCasegenModuleDelayMsByTitle;
+        if (moduleDelayMap && Object.prototype.hasOwnProperty.call(moduleDelayMap, targetModule)) {
+          responseDelay = Number(moduleDelayMap[targetModule]) || responseDelay;
+        }
+      }
       if (mode === 'ai_dedupe_simplify' && window.__xmindCasegenDedupeDelayMs !== undefined) {
         responseDelay = Number(window.__xmindCasegenDedupeDelayMs) || responseDelay;
       }
@@ -4803,6 +4819,7 @@ test.describe('XMind 用例生成抽屉', () => {
       useExistingWorkspace: true,
     });
     await createXmindWorkspaceByManualPrep(page, '页签二', '页签二 的描述');
+    await createXmindWorkspaceByManualPrep(page, '页签三', '页签三 的描述');
 
     const tabs = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]');
     const addButton = page.locator('#xmindCaseGenWorkspaceAddBtn');
@@ -4820,9 +4837,9 @@ test.describe('XMind 用例生成抽屉', () => {
     }).filter((item) => item.width > 5 && item.height > 5));
 
     await expect(addButton).toBeDisabled();
-    await expect(addButton).toHaveAttribute('title', '最多仅支持 2 个生成页签');
+    await expect(addButton).toHaveAttribute('title', '最多仅支持 3 个生成页签');
 
-    expect(visibleTabs.length).toBeGreaterThanOrEqual(2);
+    expect(visibleTabs.length).toBeGreaterThanOrEqual(3);
     const prevTab = visibleTabs[visibleTabs.length - 2];
     const lastTab = visibleTabs[visibleTabs.length - 1];
     const gapTabs = Math.round(lastTab.x - (prevTab.x + prevTab.width));
@@ -6950,6 +6967,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(latestCard).toContainText('生成模块 1 个');
     await expect(latestCard).toContainText('登录模块');
     await expect(latestCard).toContainText('2 条用例');
+    await expect(latestCard.locator('.xmind-casegen-history-detail-count')).toContainText('耗时');
 
     const previousCard = page.locator('.xmind-casegen-history-card').nth(1);
     await expect(previousCard).toContainText('根节点 · XMind生成记录需求');
@@ -6958,6 +6976,9 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(previousCard).toContainText('登录模块');
     await expect(previousCard).toContainText('支付模块');
     await expect(previousCard).toContainText('0 条用例');
+    await expect(previousCard.locator('.xmind-casegen-history-detail-count')).toHaveCount(2);
+    await expect(previousCard.locator('.xmind-casegen-history-detail-count').nth(0)).toContainText('耗时');
+    await expect(previousCard.locator('.xmind-casegen-history-detail-count').nth(1)).toContainText('耗时');
   });
 
   test('需求覆盖按钮会调用模型并按原文片段展示对应用例', async ({ page }) => {
@@ -7708,6 +7729,9 @@ test.describe('XMind 用例生成抽屉', () => {
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
     const latestAutoHistoryCard = page.locator('.xmind-casegen-history-card').nth(0);
     await expect(latestAutoHistoryCard).toContainText('去重记录');
+    await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-detail-count')).toHaveCount(2);
+    await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-detail-count').nth(0)).toContainText('耗时');
+    await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-detail-count').nth(1)).toContainText('耗时');
     await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-summary')).toHaveText('已去重 2 条用例');
     await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-module-block')).toHaveCount(2);
     await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-case')).toContainText([
@@ -7717,6 +7741,72 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-badge.is-duplicate')).toHaveCount(2);
     await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-reason').nth(0)).toContainText('与「登录成功校验」重复');
     await expect(latestAutoHistoryCard.locator('.xmind-casegen-history-dedupe-reason').nth(0)).toContainText('重复点：校验目标相同');
+  });
+
+  test('全量生成仅剩尾部慢请求时会按同批动态阈值采用首轮备用用例', async ({ page }) => {
+    const token = 'token-xmind-tail-fallback';
+    const user = { id: 243, username: 'demo_user_tail_fallback', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindModelStub(page, 100);
+    await page.evaluate(() => {
+      window.__xmindCasegenRootFullCasesModuleNames = ['模块甲', '模块乙', '模块丙', '尾部慢模块'];
+      window.__xmindCasegenModuleDelayMsByTitle = {
+        '模块甲': 100,
+        '模块乙': 110,
+        '模块丙': 120,
+        '尾部慢模块': 10000,
+      };
+      window.app.state.settings = window.app.state.settings || {};
+      window.app.state.settings.timeoutSec = 30;
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：验证同批模块中仅剩一个异常慢请求时，可使用首轮备用结果提前收口。',
+      requirementLabel: 'XMind尾部慢请求需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await openNodeContextMenu(page, 'XMind尾部慢请求需求');
+    await clickContextMenuAction(page, '生成全量用例');
+    await page.waitForFunction(() => {
+      var xmind = window.app && window.app.state && window.app.state.xmindCaseGen
+        ? window.app.state.xmindCaseGen
+        : null;
+      return Boolean(
+        xmind
+        && xmind.root
+        && xmind.root.running !== true
+        && Array.isArray(xmind.history)
+        && xmind.history.length > 0
+      );
+    }, {}, { timeout: 15000 });
+
+    const tailDetail = await page.evaluate(() => {
+      var history = window.app.state.xmindCaseGen.history || [];
+      var latest = history[0] || {};
+      var details = Array.isArray(latest.details) ? latest.details : [];
+      return details.find(function(item) {
+        return item && item.module === '尾部慢模块';
+      }) || null;
+    });
+    expect(tailDetail).toBeTruthy();
+    expect(Number(tailDetail.durationMs || 0)).toBeGreaterThanOrEqual(3000);
+    expect(Number(tailDetail.durationMs || 0)).toBeLessThan(10000);
+
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
+    await expect(latestCard).toContainText('1 个模块已使用备用结果');
+    await expect(latestCard).toContainText('尾部慢模块');
+    await expect(latestCard).toContainText('成为尾部慢请求');
+    await expect(latestCard).toContainText('超过动态阈值');
   });
 
   test('全量生成自动去重未删除任何用例时，仍会留下去重完成痕迹', async ({ page }) => {
@@ -12758,5 +12848,380 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(String(finalState['支付模块'] || '')).toContain('支付模块-尾批用例');
     expect(String(finalState['登录模块'] || '')).toContain('登录模块-首批用例');
     expect(routeCtl.getCalls().length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('模块生成载荷保留目标完整用例并移除非目标用例与重复 AI 层', async ({ page }) => {
+    const token = 'token-xmind-payload-policy';
+    const user = { id: 401, username: 'demo_user_payload_policy', role: 'user', level: 'member' };
+    await mockCaseGenApisWithModel(page, token, user);
+    await gotoCasesgenWorkflow(page);
+
+    const result = await page.evaluate(() => {
+      var api = window.app && window.app.xmindGenerationPayloadCore
+        ? window.app.xmindGenerationPayloadCore
+        : null;
+      if (!api || typeof api.buildGenerationContext !== 'function') return null;
+      var visibleModules = [
+        {
+          module: '登录模块',
+          key_scenarios: ['登录主流程'],
+          test_points: ['登录状态'],
+          coupled_modules: ['账号模块'],
+          cases: [{ title: '登录成功', steps: ['1、登录'] }],
+        },
+        {
+          module: '支付模块',
+          key_scenarios: ['支付主流程'],
+          test_points: ['扣款状态'],
+          coupled_modules: ['订单模块'],
+          cases: [{ title: '支付成功', steps: ['1、支付'] }],
+        },
+      ];
+      var aiLayer = [{ module: '登录模块', cases: [{ title: 'AI 登录用例' }] }];
+      var targetModule = {
+        module: '登录模块',
+        visible_cases: [{ title: '登录成功', steps: ['1、登录'] }],
+      };
+      return {
+        moduleContext: api.buildGenerationContext({
+          contract: { scope: 'module', mode: 'module_full_cases' },
+          visibleModules: visibleModules,
+          aiLayer: aiLayer,
+          targetModule: targetModule,
+        }),
+        rootContext: api.buildGenerationContext({
+          contract: { scope: 'root', mode: 'full_cases' },
+          visibleModules: visibleModules,
+          aiLayer: aiLayer,
+          targetModule: null,
+        }),
+      };
+    });
+
+    expect(result).not.toBeNull();
+    expect(result.moduleContext.visibleModules).toHaveLength(2);
+    expect(result.moduleContext.visibleModules.every((item) => item.cases.length === 0)).toBe(true);
+    expect(result.moduleContext.aiLayer).toEqual([]);
+    expect(result.moduleContext.targetModule.visible_cases).toHaveLength(1);
+    expect(result.moduleContext.targetModule.visible_cases[0].title).toBe('登录成功');
+    expect(result.rootContext.visibleModules[0].cases).toHaveLength(1);
+    expect(result.rootContext.aiLayer[0].cases).toHaveLength(1);
+  });
+
+  test('每个 XMind 页签独立限制 5 个模块模型请求，两个页签合计可达到 10', async ({ page }) => {
+    const token = 'token-xmind-workspace-module-concurrency';
+    const user = { id: 402, username: 'demo_user_workspace_concurrency', role: 'user', level: 'member' };
+    await mockCaseGenApisWithModel(page, token, user);
+    await gotoCasesgenWorkflow(page);
+
+    const metrics = await page.evaluate(async () => {
+      var manager = window.app && window.app.xmindCaseGenTaskManager
+        ? window.app.xmindCaseGenTaskManager
+        : null;
+      var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (!manager || !client) return null;
+      var activeTotal = 0;
+      var peakTotal = 0;
+      var activeByWorkspace = {
+        'workspace-a': 0,
+        'workspace-b': 0,
+      };
+      var peakByWorkspace = {
+        'workspace-a': 0,
+        'workspace-b': 0,
+      };
+      var calls = 0;
+      client.proxyModelRequest = function(payload) {
+        var requestPayload = payload && payload.payload ? payload.payload : {};
+        var messages = Array.isArray(requestPayload.messages) ? requestPayload.messages : [];
+        var userText = messages[1] && messages[1].content ? String(messages[1].content || '') : '';
+        var workspaceId = userText.indexOf('[workspace-a]') !== -1 ? 'workspace-a' : 'workspace-b';
+        activeTotal += 1;
+        activeByWorkspace[workspaceId] += 1;
+        calls += 1;
+        peakTotal = Math.max(peakTotal, activeTotal);
+        peakByWorkspace[workspaceId] = Math.max(
+          peakByWorkspace[workspaceId],
+          activeByWorkspace[workspaceId]
+        );
+        return new Promise(function(resolve) {
+          setTimeout(function() {
+            activeTotal -= 1;
+            activeByWorkspace[workspaceId] -= 1;
+            resolve({
+              ok: true,
+              status: 200,
+              text: function() {
+                return Promise.resolve(JSON.stringify({
+                  choices: [{ message: { content: '{"modules":[]}' } }],
+                }));
+              },
+            });
+          }, 80);
+        });
+      };
+      var tasks = [];
+      for (var i = 0; i < 12; i += 1) {
+        var workspaceId = i % 2 === 0 ? 'workspace-a' : 'workspace-b';
+        var task = manager.createTask({
+          scope: 'module',
+          workspaceId: workspaceId,
+          moduleId: 'module-' + String(i + 1),
+          moduleTitle: '模块' + String(i + 1),
+          actionId: 'module_full_cases',
+          requestText: '[' + workspaceId + '] 模块并发测试 ' + String(i + 1),
+          prompt: '返回 JSON',
+          model: {
+            id: 'concurrency-model',
+            name: 'concurrency-model',
+            baseUrl: 'https://mock-model.local/v1/chat/completions',
+            model: 'mock-model',
+            maxTokens: 128,
+          },
+        });
+        tasks.push(manager.startTask(task, { force: true }));
+      }
+      await Promise.all(tasks);
+      manager.clearAllTasks('test-cleanup');
+      return {
+        activeTotal: activeTotal,
+        peakTotal: peakTotal,
+        activeByWorkspace: activeByWorkspace,
+        peakByWorkspace: peakByWorkspace,
+        calls: calls,
+      };
+    });
+
+    expect(metrics).not.toBeNull();
+    expect(metrics.calls).toBe(12);
+    expect(metrics.peakByWorkspace['workspace-a']).toBe(5);
+    expect(metrics.peakByWorkspace['workspace-b']).toBe(5);
+    expect(metrics.peakTotal).toBe(10);
+    expect(metrics.activeByWorkspace['workspace-a']).toBe(0);
+    expect(metrics.activeByWorkspace['workspace-b']).toBe(0);
+    expect(metrics.activeTotal).toBe(0);
+  });
+
+  test('同一 XMind 页签的根模块覆盖与去重批次真实请求峰值不超过 5', async ({ page }) => {
+    const token = 'token-xmind-workspace-mixed-concurrency';
+    const user = { id: 404, username: 'demo_user_workspace_mixed_concurrency', role: 'user', level: 'member' };
+    await mockCaseGenApisWithModel(page, token, user);
+    await gotoCasesgenWorkflow(page);
+
+    const metrics = await page.evaluate(async () => {
+      var manager = window.app && window.app.xmindCaseGenTaskManager
+        ? window.app.xmindCaseGenTaskManager
+        : null;
+      var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (!manager || !client) return null;
+      var active = 0;
+      var peak = 0;
+      var calls = 0;
+      client.proxyModelRequest = function() {
+        active += 1;
+        calls += 1;
+        peak = Math.max(peak, active);
+        return new Promise(function(resolve) {
+          setTimeout(function() {
+            active -= 1;
+            resolve({
+              ok: true,
+              status: 200,
+              text: function() {
+                return Promise.resolve(JSON.stringify({
+                  choices: [{ message: { content: '{"modules":[]}' } }],
+                }));
+              },
+            });
+          }, 80);
+        });
+      };
+      var model = {
+        id: 'mixed-concurrency-model',
+        name: 'mixed-concurrency-model',
+        baseUrl: 'https://mock-model.local/v1/chat/completions',
+        model: 'mock-model',
+        maxTokens: 128,
+      };
+      function startSingleTask(id, scope, actionId) {
+        var task = manager.createTask({
+          id: id,
+          scope: scope,
+          workspaceId: 'workspace-mixed',
+          moduleId: scope === 'module' ? id + '-module' : '',
+          moduleTitle: scope === 'module' ? id : '',
+          actionId: actionId,
+          requestText: '同页签混合并发 ' + id,
+          prompt: '返回 JSON',
+          model: model,
+        });
+        return manager.startTask(task, { force: true });
+      }
+      var batchRequests = [];
+      for (var batchIndex = 0; batchIndex < 4; batchIndex += 1) {
+        batchRequests.push({
+          requestMode: 'text',
+          requestText: '同页签去重批次 ' + String(batchIndex + 1),
+          prompt: '返回 JSON',
+        });
+      }
+      var dedupeTask = manager.createTask({
+        id: 'mixed-dedupe',
+        scope: 'dedupe',
+        workspaceId: 'workspace-mixed',
+        actionId: 'ai_dedupe_simplify',
+        requestText: '同页签去重任务',
+        prompt: '返回 JSON',
+        model: model,
+        modelRequestBatch: batchRequests,
+        modelRequestBatchConcurrency: 4,
+      });
+      var tasks = [
+        startSingleTask('mixed-root', 'root', 'full_modules'),
+        startSingleTask('mixed-module-a', 'module', 'module_full_cases'),
+        startSingleTask('mixed-module-b', 'module', 'module_full_cases'),
+        startSingleTask('mixed-coverage', 'coverage', 'requirement_coverage'),
+        manager.startTask(dedupeTask, { force: true }),
+      ];
+      await Promise.all(tasks);
+      manager.clearAllTasks('test-cleanup');
+      return { active: active, peak: peak, calls: calls };
+    });
+
+    expect(metrics).not.toBeNull();
+    expect(metrics.calls).toBe(8);
+    expect(metrics.peak).toBe(5);
+    expect(metrics.active).toBe(0);
+  });
+
+  test('网络异常和临时 HTTP 网关错误会真实重试并在成功或耗尽后进入终态', async ({ page }) => {
+    const token = 'token-xmind-real-retry';
+    const user = { id: 403, username: 'demo_user_real_retry', role: 'user', level: 'member' };
+    await mockCaseGenApisWithModel(page, token, user);
+    await gotoCasesgenWorkflow(page);
+
+    await page.evaluate(() => {
+      var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      window.__xmindRetryAttempts = {};
+      window.__xmindRetryEvents = [];
+      window.addEventListener('xmind-casegen-task', function(event) {
+        var detail = event && event.detail ? event.detail : {};
+        var task = detail && detail.task ? detail.task : null;
+        if (!task || String(task.id || '').indexOf('retry-test-') !== 0) return;
+        window.__xmindRetryEvents.push({
+          id: String(task.id || ''),
+          action: String(detail.action || ''),
+          status: String(task.status || ''),
+          retryCount: Number(task.retryCount || 0),
+        });
+      });
+      client.proxyModelRequest = function(payload) {
+        var requestPayload = payload && payload.payload ? payload.payload : {};
+        var messages = Array.isArray(requestPayload.messages) ? requestPayload.messages : [];
+        var userText = messages[1] && messages[1].content ? String(messages[1].content || '') : '';
+        var taskKey = userText.indexOf('always-fail') !== -1
+          ? 'always-fail'
+          : (userText.indexOf('gateway-520') !== -1 ? 'gateway-520' : 'eventual-success');
+        window.__xmindRetryAttempts[taskKey] = Number(window.__xmindRetryAttempts[taskKey] || 0) + 1;
+        var attempt = window.__xmindRetryAttempts[taskKey];
+        var shouldFail = taskKey === 'always-fail' || attempt <= 2;
+        if (taskKey === 'gateway-520' && shouldFail) {
+          return Promise.resolve({
+            ok: false,
+            status: 520,
+            text: function() {
+              return Promise.resolve(JSON.stringify({
+                detail: 'The origin web server sent an invalid response',
+              }));
+            },
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: function() {
+            if (shouldFail) return Promise.reject(new Error('Failed to fetch'));
+            return Promise.resolve(JSON.stringify({
+              choices: [{ message: { content: '{"modules":[]}' } }],
+            }));
+          },
+        });
+      };
+    });
+
+    const taskIds = await page.evaluate(() => {
+      var manager = window.app && window.app.xmindCaseGenTaskManager
+        ? window.app.xmindCaseGenTaskManager
+        : null;
+      function start(id, requestText) {
+        var task = manager.createTask({
+          id: id,
+          scope: 'module',
+          workspaceId: 'retry-workspace',
+          moduleId: id + '-module',
+          moduleTitle: id,
+          actionId: 'module_full_cases',
+          requestText: requestText,
+          prompt: '返回 JSON',
+          model: {
+            id: 'retry-model',
+            name: 'retry-model',
+            baseUrl: 'https://mock-model.local/v1/chat/completions',
+            model: 'mock-model',
+            maxTokens: 128,
+          },
+        });
+        manager.startTask(task, { force: true });
+        return task.id;
+      }
+      return {
+        success: start('retry-test-success', 'eventual-success'),
+        gateway: start('retry-test-gateway', 'gateway-520'),
+        failure: start('retry-test-failure', 'always-fail'),
+      };
+    });
+
+    await page.waitForFunction((ids) => {
+      var events = Array.isArray(window.__xmindRetryEvents) ? window.__xmindRetryEvents : [];
+      var successDone = events.some(function(item) {
+        return item.id === ids.success && item.action === 'done' && item.status === 'done';
+      });
+      var gatewayDone = events.some(function(item) {
+        return item.id === ids.gateway && item.action === 'done' && item.status === 'done';
+      });
+      var failureDone = events.some(function(item) {
+        return item.id === ids.failure && item.action === 'error' && item.status === 'error';
+      });
+      return successDone && gatewayDone && failureDone;
+    }, taskIds, { timeout: 15000 });
+
+    const retryResult = await page.evaluate((ids) => {
+      var manager = window.app && window.app.xmindCaseGenTaskManager
+        ? window.app.xmindCaseGenTaskManager
+        : null;
+      var tasks = manager ? manager.getTasks() : [];
+      var runningIds = (Array.isArray(tasks) ? tasks : []).filter(function(item) {
+        return item && item.status === 'running';
+      }).map(function(item) {
+        return String(item.id || '');
+      });
+      return {
+        attempts: window.__xmindRetryAttempts || {},
+        events: window.__xmindRetryEvents || [],
+        successRunning: runningIds.indexOf(ids.success) !== -1,
+        gatewayRunning: runningIds.indexOf(ids.gateway) !== -1,
+        failureRunning: runningIds.indexOf(ids.failure) !== -1,
+      };
+    }, taskIds);
+
+    expect(retryResult.attempts['eventual-success']).toBe(3);
+    expect(retryResult.attempts['gateway-520']).toBe(3);
+    expect(retryResult.attempts['always-fail']).toBe(3);
+    expect(retryResult.events.filter((item) => item.id === taskIds.success && item.action === 'retry')).toHaveLength(2);
+    expect(retryResult.events.filter((item) => item.id === taskIds.gateway && item.action === 'retry')).toHaveLength(2);
+    expect(retryResult.events.filter((item) => item.id === taskIds.failure && item.action === 'retry')).toHaveLength(2);
+    expect(retryResult.successRunning).toBe(false);
+    expect(retryResult.gatewayRunning).toBe(false);
+    expect(retryResult.failureRunning).toBe(false);
   });
 });

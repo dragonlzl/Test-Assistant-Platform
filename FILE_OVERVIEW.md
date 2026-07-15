@@ -16,7 +16,7 @@
 - `scripts/vendor/jszip.min.js`：XMind/压缩依赖。
 - `scripts/base/state.js`：状态占位与初始化。
 - `scripts/base/utils.js`：通用工具（下载、状态提示等）。
-- `scripts/core/*.js`：拆分/清洗/对比/生成/执行等核心纯函数（`splitCore`、`cleanCore`、`compareCore`、`reviewCore`、`casesCore`、`autoCore`、`xmindCore`、`tempexecCore`、`casesGenCore`、`debugCore`、`requirementCore`），由 `app.js` 通过依赖注入使用。
+- `scripts/core/*.js`：拆分/清洗/对比/生成/执行等核心能力（`splitCore`、`cleanCore`、`compareCore`、`reviewCore`、`casesCore`、`autoCore`、`xmindCore`、`xmindRequestSchedulerCore`、`xmindGenerationPayloadCore`、`xmindGenerationTimingCore`、`xmindDedupeBatchCore`、`tempexecCore`、`casesGenCore`、`debugCore`、`requirementCore`）；其中 `xmindRequestSchedulerCore` 维护按 XMind 页签隔离的真实模型请求队列与并发槽，其余规则优先保持纯函数，由 `app.js` 或对应功能模块通过依赖注入使用。
 - `scripts/handlers/*.js`：事件与布局交互（功能指派、拆分、清洗、用例生成、布局等）。
 - `scripts/modules/*.js`：模块入口与编排（`app.js` 主逻辑、`assign.js` 功能指派、`review.js` 评审、`clean.js` 清洗、`compare.js` 覆盖对比、`split.js` 拆分、`casesgen.js` 用例生成、`tempexec.js` 执行视图、`auto.js` 一键执行、`upload.js` 上传、`settings.js` 设置、`models.js` 模型管理、`casegenProgress.js` 进度面板、`bootstrap.js` 启动）。
 - `services/storage.js`、`services/modelClient.js`、`services/apiClient.js`：存储/模型/后端 API 请求封装。

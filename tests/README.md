@@ -7,6 +7,12 @@
   - `npm run test:ui:install`（安装 Playwright 浏览器与依赖）
 
 ## 运行方式
+- XMind 页签请求调度回归（不启动浏览器）：
+  - `node tests/node/xmind_request_scheduler_core.test.js`
+- XMind 去重批次纯函数回归（不启动浏览器）：
+  - `node tests/node/xmind_dedupe_batch_core.test.js`
+- XMind 尾部慢请求动态阈值回归（不启动浏览器）：
+  - `node tests/node/xmind_generation_timing_core.test.js`
 - 启动静态服务器并跑测试（配置已在 `tests/playwright.config.js` 内自动启动 `python3 -m http.server 8080`）：
   - `npm run test:ui`
 - 若需可视化调试：
