@@ -5717,6 +5717,83 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   align-items: center;
   gap: 6px;
 }
+.xmind-casegen-coverage-case-detail-tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 21020;
+  box-sizing: border-box;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(62vh, 480px);
+  overflow: hidden auto;
+  padding: 12px 14px;
+  border: 1px solid rgba(14,165,233,0.32);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.98);
+  color: var(--text);
+  box-shadow: 0 18px 42px rgba(15,23,42,0.24);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s linear 0.12s;
+}
+.xmind-casegen-coverage-case-detail-tooltip.is-open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+.xmind-casegen-coverage-case-detail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid rgba(148,163,184,0.22);
+}
+.xmind-casegen-coverage-case-detail-title {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.xmind-casegen-coverage-case-detail-module {
+  flex: 0 0 auto;
+  max-width: 42%;
+  color: #0369a1;
+  font-size: 11px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xmind-casegen-coverage-case-detail-section {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  padding-top: 10px;
+}
+.xmind-casegen-coverage-case-detail-label {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.xmind-casegen-coverage-case-detail-value,
+.xmind-casegen-coverage-case-detail-steps {
+  min-width: 0;
+  color: #1e293b;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.xmind-casegen-coverage-case-detail-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .xmind-casegen-coverage-case-relation {
   flex: 0 0 auto;
   display: inline-flex;
@@ -13749,6 +13826,28 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .xmind-casegen-coverage-case-relation.is-related {
   background: rgba(88,28,135,0.48);
   color: #ddd6fe;
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-detail-tooltip {
+  border-color: rgba(56,189,248,0.34);
+  background: rgba(15,23,42,0.98);
+  color: #e2e8f0;
+  box-shadow: 0 20px 46px rgba(2,6,23,0.5);
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-detail-head {
+  border-bottom-color: rgba(148,163,184,0.24);
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-detail-title {
+  color: #f8fafc;
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-detail-module {
+  color: #7dd3fc;
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-detail-label {
+  color: #94a3b8;
+}
+:root[data-theme="dark"] .xmind-casegen-coverage-case-detail-value,
+:root[data-theme="dark"] .xmind-casegen-coverage-case-detail-steps {
+  color: #e2e8f0;
 }
 :root[data-theme="dark"] .xmind-casegen-coverage-notice {
   border-color: rgba(71,85,105,0.5);

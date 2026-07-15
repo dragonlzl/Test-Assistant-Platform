@@ -15,6 +15,8 @@
   - `node tests/node/xmind_generation_timing_core.test.js`
 - XMind 画布装饰与追加高亮调度策略回归（不启动浏览器）：
   - `node tests/node/xmind_render_policy_core.test.js`
+- XMind 需求覆盖用例详情悬浮层回归（不启动浏览器）：
+  - `node tests/node/xmind_coverage_case_tooltip_core.test.js`
 - XMind 跨页面任务恢复守卫回归（不启动浏览器）：
   - `node tests/node/xmind_task_resume_guard.test.js`
 - 启动静态服务器并跑测试（配置已在 `tests/playwright.config.js` 内自动启动 `python3 -m http.server 8080`）：

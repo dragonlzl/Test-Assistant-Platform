@@ -11,6 +11,8 @@
     var xmindKnowledgeBaseApi = ctx.xmindKnowledgeBaseApi || {};
     var renderPolicyCore = ctx.renderPolicyCore
       || (window.app && window.app.xmindRenderPolicyCore ? window.app.xmindRenderPolicyCore : null);
+    var coverageCaseTooltipCore = ctx.coverageCaseTooltipCore
+      || (window.app && window.app.xmindCoverageCaseTooltipCore ? window.app.xmindCoverageCaseTooltipCore : null);
 
     function getRenderPolicyCore() {
       if (renderPolicyCore) return renderPolicyCore;
@@ -113,6 +115,7 @@
     };
     var mindInstance = null;
     var coverageHighlightedCaseId = '';
+    var coverageCaseTooltipController = null;
     var coverageRequirementImageObjectUrls = [];
     var pendingCasesGenPageRender = false;
     var mindApiReadyPromise = null;
@@ -7018,6 +7021,7 @@
 
     function renderOpenedSummaryDialog() {
       if (summaryDialogOpen !== true) return;
+      hideCoverageCaseDetailTooltip();
       if (!hasActiveWorkspace()) {
         closeSummaryDialog({ skipPersist: true });
         return;
@@ -7806,6 +7810,30 @@
       return map;
     }
 
+    function getCoverageCaseDetail(caseId) {
+      var coverageState = ensureCoverageUiState();
+      var result = coverageState.result && typeof coverageState.result === 'object' ? coverageState.result : null;
+      return buildCoverageCaseMap(result)[String(caseId || '')] || null;
+    }
+
+    function ensureCoverageCaseDetailTooltip() {
+      if (coverageCaseTooltipController || !summaryDialogBodyEl) return coverageCaseTooltipController;
+      if (!coverageCaseTooltipCore && window.app && window.app.xmindCoverageCaseTooltipCore) {
+        coverageCaseTooltipCore = window.app.xmindCoverageCaseTooltipCore;
+      }
+      if (!coverageCaseTooltipCore || typeof coverageCaseTooltipCore.init !== 'function') return null;
+      coverageCaseTooltipController = coverageCaseTooltipCore.init({
+        root: summaryDialogBodyEl,
+        getCaseDetail: getCoverageCaseDetail,
+      });
+      return coverageCaseTooltipController;
+    }
+
+    function hideCoverageCaseDetailTooltip() {
+      var controller = coverageCaseTooltipController;
+      if (controller && typeof controller.hide === 'function') controller.hide();
+    }
+
     function getCoverageSegmentCaseIds(segment) {
       var direct = Array.isArray(segment && segment.directCaseIds) ? segment.directCaseIds : [];
       var related = Array.isArray(segment && segment.relatedCaseIds) ? segment.relatedCaseIds : [];
@@ -8305,7 +8333,7 @@
         var relation = getCoverageCaseRelation(selected, id);
         var relationLabel = relation === 'related' ? '关联' : '直接';
         var priority = getCoverageCasePriorityMeta(item);
-        return '<button type="button" class="xmind-casegen-coverage-case ' + (active ? 'is-active ' : '') + (relation === 'related' ? 'is-related' : 'is-direct') + '" data-coverage-case="' + escapeHtml(id) + '">'
+        return '<button type="button" class="xmind-casegen-coverage-case ' + (active ? 'is-active ' : '') + (relation === 'related' ? 'is-related' : 'is-direct') + '" data-coverage-case="' + escapeHtml(id) + '" data-coverage-case-detail-trigger>'
           + '<span class="xmind-casegen-coverage-case-module">' + escapeHtml(item.module || '未命名模块') + '</span>'
           + '<span class="xmind-casegen-coverage-case-title-wrap">'
           +   '<span class="xmind-casegen-coverage-case-title">' + escapeHtml(item.title || '未命名用例') + '</span>'
@@ -8393,6 +8421,7 @@
 
     function renderCoverageDialog(options) {
       if (!summaryDialogBodyEl) return;
+      hideCoverageCaseDetailTooltip();
       var opts = options || {};
       var sourceAnchorState = opts.sourceAnchorState || null;
       var sourceScrollState = opts.resetSourceScroll === true || sourceAnchorState ? null : readCoverageSourceScrollState();
@@ -8433,7 +8462,7 @@
         +     '<section class="xmind-casegen-coverage-cases" aria-label="对应用例">'
         +       '<div class="xmind-casegen-coverage-column-head">'
         +         '<strong>对应用例</strong>'
-        +         '<span>仅展示模块和用例名</span>'
+        +         '<span>悬停用例查看详情</span>'
         +       '</div>'
         +       (result ? buildCoverageCaseListHtml(result, coverageState) : '<div class="xmind-casegen-coverage-empty">请选择或等待左侧片段分析结果。</div>')
         +     '</section>'
@@ -8677,6 +8706,7 @@
     }
 
     function closeSummaryDialog(options) {
+      hideCoverageCaseDetailTooltip();
       syncSummaryDraftIntoState();
       summaryDialogOpen = false;
       if (!(options && options.skipPersist === true)) persistXmindState(true);
@@ -18646,6 +18676,7 @@
     }
 
     function bindButtons() {
+      ensureCoverageCaseDetailTooltip();
       if (openBtn) {
         openBtn.addEventListener('click', function() {
           open();
