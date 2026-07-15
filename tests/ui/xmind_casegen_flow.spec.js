@@ -1810,7 +1810,7 @@ async function selectXmindNode(page, topicText) {
       var label = textEl
         ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      var stableLabel = label;
       return stableLabel === topic || label === topic;
     });
   }, topicText, { timeout: 15000 });
@@ -1822,7 +1822,7 @@ async function selectXmindNode(page, topicText) {
       var label = textEl
         ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      var stableLabel = label;
       if (!(stableLabel === topic || label === topic)) return false;
       target = textEl || node;
       return true;
@@ -1864,7 +1864,7 @@ async function selectXmindNodeText(page, topicText) {
       var label = textEl
         ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      var stableLabel = label;
       return stableLabel === topic || label === topic;
     });
   }, topicText, { timeout: 15000 });
@@ -1878,7 +1878,7 @@ async function selectXmindNodeText(page, topicText) {
       var label = currentTextEl
         ? String((typeof currentTextEl.innerText === 'string' ? currentTextEl.innerText : currentTextEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      var stableLabel = label;
       if (!(stableLabel === topic || label === topic)) return false;
       textEl = currentTextEl;
       return true;
@@ -1906,65 +1906,6 @@ async function selectXmindNodeText(page, topicText) {
   expect(Boolean(selectionState.isCollapsed)).toBe(false);
 }
 
-async function clickXmindNodeQuickAction(page, topicText) {
-  await page.waitForFunction((topic) => {
-    var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
-    return Array.prototype.some.call(nodes, function(node) {
-      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
-      var label = textEl
-        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
-        : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
-      var btn = node.querySelector && node.querySelector('.xmind-node-quick-action');
-      return (stableLabel === topic || label === topic) && Boolean(btn && btn.disabled !== true);
-    });
-  }, topicText, { timeout: 15000 });
-  const clicked = await page.evaluate((topic) => {
-    var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
-    var target = null;
-    Array.prototype.some.call(nodes, function(node) {
-      var textEl = node && node.querySelector ? node.querySelector('.text') : null;
-      var label = textEl
-        ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
-        : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
-      if (!(stableLabel === topic || label === topic)) return false;
-      if (!node.querySelector || !node.querySelector('.xmind-node-quick-action')) return false;
-      target = node;
-      return true;
-    });
-    if (!target || !target.querySelector) return false;
-    var btn = target.querySelector('.xmind-node-quick-action');
-    if (!btn || btn.disabled || typeof btn.click !== 'function') return false;
-    btn.click();
-    return true;
-  }, topicText);
-  expect(clicked).toBeTruthy();
-}
-
-async function getNodeQuickActionId(page, topicText) {
-  await page.waitForFunction((topic) => {
-    var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
-    return Array.prototype.some.call(nodes, function(node) {
-      var content = node && node.textContent ? String(node.textContent).replace(/\s+/g, ' ').trim() : '';
-      return content.indexOf(topic) !== -1 && Boolean(node.querySelector && node.querySelector('.xmind-node-quick-action'));
-    });
-  }, topicText, { timeout: 15000 });
-  return page.evaluate((topic) => {
-    var nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
-    var found = '';
-    Array.prototype.some.call(nodes, function(node) {
-      var content = node && node.textContent ? String(node.textContent).replace(/\s+/g, ' ').trim() : '';
-      if (content.indexOf(topic) === -1) return false;
-      var btn = node && node.querySelector ? node.querySelector('.xmind-node-quick-action') : null;
-      if (!btn) return false;
-      found = btn && btn.getAttribute ? String(btn.getAttribute('data-mind-node-quick') || '') : '';
-      return Boolean(found);
-    });
-    return found;
-  }, topicText);
-}
-
 async function openNodeContextMenu(page, topicText) {
   async function dispatchContextMenu(candidateIndex) {
     const result = await page.evaluate(({ topic, index }) => {
@@ -1978,7 +1919,7 @@ async function openNodeContextMenu(page, topicText) {
         var label = textEl
           ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
           : '';
-        var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+        var stableLabel = label;
         var content = node.textContent ? String(node.textContent).replace(/\s+/g, ' ').trim() : label;
         var isStructuralNode = Boolean(
           node.classList
@@ -2537,7 +2478,7 @@ async function ctrlClickXmindNodes(page, topics) {
           var label = textEl
             ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
             : '';
-          var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+          var stableLabel = label;
           if (!(stableLabel === needle || label === needle)) return false;
           target = textEl && textEl.getBoundingClientRect ? textEl : node;
           return true;
@@ -2569,7 +2510,7 @@ async function clickXmindNode(page, topicText) {
       var label = textEl
         ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      var stableLabel = label;
       return stableLabel === topic || label === topic;
     });
   }, topicText, { timeout: 15000 });
@@ -2581,7 +2522,7 @@ async function clickXmindNode(page, topicText) {
       var label = textEl
         ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      var stableLabel = label;
       if (!(stableLabel === topic || label === topic)) return false;
       target = node;
       return true;
@@ -2632,7 +2573,7 @@ async function dragBoxSelectXmindNodes(page, topics) {
           var label = textEl
             ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
             : '';
-          var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+          var stableLabel = label;
           if (!(stableLabel === topic || label === topic)) return false;
           var targetRect = textEl && textEl.getBoundingClientRect ? textEl.getBoundingClientRect() : node.getBoundingClientRect();
           minLeft = Math.min(minLeft, targetRect.left);
@@ -2727,7 +2668,7 @@ async function beginHeldDragBoxSelectXmindNodes(page, topics) {
           var label = textEl
             ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
             : '';
-          var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+          var stableLabel = label;
           if (!(stableLabel === topic || label === topic)) return false;
           var targetRect = textEl && textEl.getBoundingClientRect ? textEl.getBoundingClientRect() : node.getBoundingClientRect();
           minLeft = Math.min(minLeft, targetRect.left);
@@ -2835,7 +2776,7 @@ async function readSelectedXmindNodeCount(page) {
       var label = textEl
         ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      var stableLabel = label;
       if (!stableLabel) return;
       seen[stableLabel] = true;
     });
@@ -2854,7 +2795,7 @@ async function readSelectedXmindNodeLabels(page) {
       var label = textEl
         ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      var stableLabel = label;
       if (!stableLabel || seen[stableLabel]) return;
       seen[stableLabel] = true;
       labels.push(stableLabel);
@@ -2875,7 +2816,7 @@ async function readSelectedXmindVisualState(page, topics) {
       var label = textEl
         ? String((typeof textEl.innerText === 'string' ? textEl.innerText : textEl.textContent) || '').replace(/\s+/g, ' ').trim()
         : '';
-      var stableLabel = label.replace(/\s*\+AI\s*$/, '').trim();
+      var stableLabel = label;
       if (!stableLabel || targets.indexOf(stableLabel) === -1 || result[stableLabel]) return;
       var selectedCarrier = node.classList && node.classList.contains('xmind-box-selected')
         ? node
@@ -9944,7 +9885,8 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '登录模块');
     await waitForNodeText(page, '支付模块');
 
-    await clickXmindNodeQuickAction(page, '登录模块');
+    await openNodeContextMenu(page, '登录模块');
+    await clickContextMenuAction(page, '生成全量用例');
     await waitForNodeStatus(page, '登录模块', '生成中');
 
     await openNodeContextMenu(page, 'XMind并发需求');
@@ -10155,27 +10097,7 @@ test.describe('XMind 用例生成抽屉', () => {
       });
       return moduleBadges.length === 0 && casePendingCount === 2;
     }, {}, { timeout: 15000 });
-    const pendingQuickActionOverlap = await page.evaluate(() => {
-      function intersects(a, b) {
-        if (!a || !b) return false;
-        return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
-      }
-      var quickButtons = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-module .xmind-node-quick-action');
-      var placeholders = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-topup-placeholder');
-      var placeholderRects = [];
-      Array.prototype.forEach.call(placeholders, function(node) {
-        if (!node || !node.getBoundingClientRect) return;
-        var text = String(node.textContent || '');
-        if (text.indexOf('补全用例中') === -1) return;
-        placeholderRects.push(node.getBoundingClientRect());
-      });
-      return Array.prototype.some.call(quickButtons, function(node) {
-        if (!node || !node.getBoundingClientRect) return false;
-        var rect = node.getBoundingClientRect();
-        return placeholderRects.some(function(target) { return intersects(rect, target); });
-      });
-    });
-    expect(pendingQuickActionOverlap).toBe(false);
+    await expect(page.locator('#xmindCaseGenMindContainer .xmind-node-quick-action')).toHaveCount(0);
 
     await waitForNodeText(page, '登录模块-追加-1');
     await waitForNodeText(page, '支付模块-追加-1');
@@ -10523,7 +10445,7 @@ test.describe('XMind 用例生成抽屉', () => {
     }
   });
 
-  test('模块节点 +AI 默认动作会从全量生成切换为追加生成，并支持追加高亮与放弃回滚', async ({ page }) => {
+  test('模块右键动作支持全量与追加生成，并在稳定后停止持续 DOM 写入', async ({ page }) => {
     const token = 'token-xmind-module';
     const user = { id: 4, username: 'demo_user_4', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
@@ -10551,16 +10473,27 @@ test.describe('XMind 用例生成抽屉', () => {
 
     await openXmindCaseGenDrawer(page);
     await waitForNodeText(page, '登录模块');
-    const quickActionScope = await page.evaluate(() => {
-      var allButtons = document.querySelectorAll('#xmindCaseGenMindContainer .xmind-node-quick-action');
-      var nonModuleButtons = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc:not(.xmind-casegen-node-module) .xmind-node-quick-action');
-      return {
-        all: allButtons.length,
-        nonModule: nonModuleButtons.length,
-      };
-    });
-    expect(quickActionScope.all).toBeGreaterThan(0);
-    expect(quickActionScope.nonModule).toBe(0);
+    await expect(page.locator('#xmindCaseGenMindContainer .xmind-node-quick-action')).toHaveCount(0);
+    await page.waitForTimeout(260);
+    const stableMutationCount = await page.evaluate(() => new Promise((resolve) => {
+      var viewer = document.querySelector('#xmindCaseGenMindContainer .xmind-structure-viewer');
+      if (!viewer || typeof MutationObserver === 'undefined') {
+        resolve(-1);
+        return;
+      }
+      var count = 0;
+      var observer = new MutationObserver(function(mutations) {
+        count += mutations.filter(function(item) {
+          return item && item.type === 'childList';
+        }).length;
+      });
+      observer.observe(viewer, { childList: true, subtree: true });
+      setTimeout(function() {
+        observer.disconnect();
+        resolve(count);
+      }, 360);
+    }));
+    expect(stableMutationCount).toBe(0);
 
     await openNodeContextMenu(page, '登录模块');
     const emptyModuleItems = await getContextMenuItems(page);
@@ -10574,10 +10507,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(emptyModuleItems.find((item) => item.label === '追加生成').disabled).toBe(true);
     expect(emptyModuleItems.find((item) => item.label === '放弃本次生成').disabled).toBe(true);
 
-    let quickActionId = await getNodeQuickActionId(page, '登录模块');
-    expect(quickActionId).toBe('module-full-cases');
-
-    await clickXmindNodeQuickAction(page, '登录模块');
+    await clickContextMenuAction(page, '生成全量用例');
     await waitForNodeStatus(page, '登录模块', '生成中');
     await waitForNodeText(page, '登录模块-完整-1');
     await waitForNodeStatusAbsent(page, '登录模块');
@@ -10602,10 +10532,9 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitForNodeText(page, '登录模块-完整-1');
     await waitForNodeStatusAbsent(page, '登录模块');
 
-    quickActionId = await getNodeQuickActionId(page, '登录模块');
-    expect(quickActionId).toBe('module-append');
-
     await openNodeContextMenu(page, '登录模块');
+    const appendReadyItems = await getContextMenuItems(page);
+    expect(appendReadyItems.find((item) => item.label === '追加生成').disabled).toBe(false);
     await clickContextMenuAction(page, '追加生成');
     await waitForNodeText(page, '追加生成中');
     await page.waitForFunction(() => {
@@ -10682,7 +10611,8 @@ test.describe('XMind 用例生成抽屉', () => {
     });
 
     await openXmindCaseGenDrawer(page);
-    await clickXmindNodeQuickAction(page, '登录模块');
+    await openNodeContextMenu(page, '登录模块');
+    await clickContextMenuAction(page, '生成全量用例');
     await waitForNodeText(page, '登录模块-完整-1');
     await waitForNodeText(page, '登录模块前置条件');
     await autoAcceptXmindConfirm(page);

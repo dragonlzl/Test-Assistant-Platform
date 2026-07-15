@@ -264,32 +264,6 @@ async function installCaseGenPromptCapture(page) {
   });
 }
 
-async function clickXmindNodeQuickAction(page, topicText) {
-  await page.waitForFunction((topic) => {
-    const nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
-    return Array.prototype.some.call(nodes, function(node) {
-      const content = node && node.textContent ? String(node.textContent).replace(/\s+/g, ' ').trim() : '';
-      return content.indexOf(topic) !== -1 && Boolean(node.querySelector && node.querySelector('.xmind-node-quick-action'));
-    });
-  }, topicText, { timeout: 15000 });
-  const clicked = await page.evaluate((topic) => {
-    const nodes = document.querySelectorAll('#xmindCaseGenMindContainer me-tpc');
-    let target = null;
-    Array.prototype.some.call(nodes, function(node) {
-      const content = node && node.textContent ? String(node.textContent).replace(/\s+/g, ' ').trim() : '';
-      if (content.indexOf(topic) === -1) return false;
-      target = node;
-      return true;
-    });
-    if (!target || !target.querySelector) return false;
-    const btn = target.querySelector('.xmind-node-quick-action');
-    if (!btn || btn.disabled || typeof btn.click !== 'function') return false;
-    btn.click();
-    return true;
-  }, topicText);
-  expect(clicked).toBeTruthy();
-}
-
 async function openXmindRootContextMenu(page) {
   const target = page.locator('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root .text').first();
   await expect(target).toBeVisible();

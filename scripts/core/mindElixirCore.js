@@ -3,9 +3,20 @@
     var xmindApi = deps && deps.xmindApi
       ? deps.xmindApi
       : (window.app && window.app.xmindCoreApi ? window.app.xmindCoreApi : null);
+    var renderPolicyCore = deps && deps.renderPolicyCore
+      ? deps.renderPolicyCore
+      : (window.app && window.app.xmindRenderPolicyCore ? window.app.xmindRenderPolicyCore : null);
     var defaultScaleStep = 0.15;
     var minScale = 0.1;
     var maxScale = 2.5;
+
+    function getRenderPolicyCore() {
+      if (renderPolicyCore) return renderPolicyCore;
+      if (window.app && window.app.xmindRenderPolicyCore) {
+        renderPolicyCore = window.app.xmindRenderPolicyCore;
+      }
+      return renderPolicyCore;
+    }
     var activeContextMenuHider = function() {};
 
     function forceHideAllNodeContextMenus() {
@@ -993,6 +1004,7 @@
       var inputSelectionGuardPoint = null;
       var nodeDecorateTimer = 0;
       var nodeDecorateObserver = null;
+      var nodeDecorationApplying = false;
       var drawerEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer') : null;
       var drawerPanelEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer-panel') : null;
       var drawerFullscreenClassName = 'xmind-drawer-fullscreen';
@@ -1141,27 +1153,6 @@
           return normalizeActionList(opts.getNodeActions(ensureActionContext(nodeMeta)));
         } catch (err) {
           return [];
-        }
-      }
-
-      function getNodeQuickActionForMeta(nodeMeta) {
-        if (!nodeMeta || !opts || typeof opts.getNodeQuickAction !== 'function') return null;
-        try {
-          var action = opts.getNodeQuickAction(nodeMeta);
-          if (!action) return null;
-          if (typeof action === 'string') {
-            return { id: action, label: '+AI', disabled: false };
-          }
-          if (typeof action !== 'object') return null;
-          var actionId = action.id === undefined || action.id === null ? '' : String(action.id);
-          if (!actionId) return null;
-          return {
-            id: actionId,
-            label: action.label === undefined || action.label === null ? '+AI' : String(action.label),
-            disabled: action.disabled === true,
-          };
-        } catch (err) {
-          return null;
         }
       }
 
@@ -2238,38 +2229,31 @@
 
       function applyNodeDecorations() {
         if (!viewerEl || !viewerEl.querySelectorAll) return;
+        if (nodeDecorationApplying) return;
         var nodes = viewerEl.querySelectorAll('me-tpc');
         if (!nodes || !nodes.length) return;
-        Array.prototype.forEach.call(nodes, function(nodeEl) {
-          if (!nodeEl || !nodeEl.nodeObj) return;
-          var quickButtons = nodeEl.querySelectorAll ? nodeEl.querySelectorAll('.xmind-node-quick-action') : [];
-          if (quickButtons && quickButtons.length) {
-            Array.prototype.forEach.call(quickButtons, function(btn) {
-              if (!btn || !btn.parentNode) return;
-              btn.parentNode.removeChild(btn);
-            });
-          }
-          var nodeMeta = buildNodeMeta(nodeEl);
-          if (!nodeMeta) return;
-          var quickAction = getNodeQuickActionForMeta(nodeMeta);
-          if (quickAction && nodeEl.appendChild && !(editing && allowEdit)) {
-            var quickBtn = document.createElement('button');
-            quickBtn.type = 'button';
-            quickBtn.className = 'xmind-node-quick-action';
-            quickBtn.textContent = quickAction.label || '+AI';
-            quickBtn.setAttribute('data-mind-node-quick', quickAction.id);
-            if (quickAction.disabled) quickBtn.disabled = true;
-            nodeEl.appendChild(quickBtn);
-          }
-          if (opts && typeof opts.decorateNodeElement === 'function') {
-            try {
-              opts.decorateNodeElement(nodeEl, nodeMeta);
-            } catch (err) {
-              // ignore
+        nodeDecorationApplying = true;
+        if (nodeDecorateObserver && typeof nodeDecorateObserver.disconnect === 'function') {
+          nodeDecorateObserver.disconnect();
+        }
+        try {
+          Array.prototype.forEach.call(nodes, function(nodeEl) {
+            if (!nodeEl || !nodeEl.nodeObj) return;
+            var nodeMeta = buildNodeMeta(nodeEl);
+            if (!nodeMeta) return;
+            if (opts && typeof opts.decorateNodeElement === 'function') {
+              try {
+                opts.decorateNodeElement(nodeEl, nodeMeta);
+              } catch (err) {
+                // ignore
+              }
             }
-          }
-          applyDefaultSelectionGroup(nodeEl, nodeMeta);
-        });
+            applyDefaultSelectionGroup(nodeEl, nodeMeta);
+          });
+        } finally {
+          nodeDecorationApplying = false;
+          observeNodeDecorationMutations();
+        }
       }
 
       function scheduleNodeDecorations() {
@@ -4082,7 +4066,6 @@
         if (isEventInsideMindControls(target)) return null;
         if (isMindNodeExpanderTarget(target)) return null;
         if (target.closest && target.closest('.xmind-node-context-menu')) return null;
-        if (target.closest && target.closest('.xmind-node-quick-action')) return null;
         if (
           e
           && typeof e.clientX === 'number'
@@ -4195,18 +4178,6 @@
           else if (e && e.stopPropagation) e.stopPropagation();
           boxSuppressClickUntil = 0;
           updateEditButtons();
-          return;
-        }
-        var quickBtn = e && e.target && e.target.closest
-          ? e.target.closest('.xmind-node-quick-action')
-          : null;
-        if (quickBtn) {
-          if (e.preventDefault) e.preventDefault();
-          if (e.stopPropagation) e.stopPropagation();
-          var hostNode = quickBtn.closest ? quickBtn.closest('me-tpc') : null;
-          var quickMeta = buildNodeMeta(hostNode);
-          var actionId = quickBtn.getAttribute ? quickBtn.getAttribute('data-mind-node-quick') : '';
-          requestNodeAction(actionId, quickMeta);
           return;
         }
         var nodeEl = resolveViewerEventNode(e);
@@ -5353,13 +5324,66 @@
           return setDrawerFullscreen(enabled === true);
         };
       }
+      function getDecorationNodeClassName(node) {
+        if (!node) return '';
+        if (typeof node.className === 'string') return node.className;
+        if (node.className && typeof node.className.baseVal === 'string') return node.className.baseVal;
+        return '';
+      }
+
+      function isManagedDecorationNode(node) {
+        var policyCore = getRenderPolicyCore();
+        if (!node || Number(node.nodeType) !== 1) return false;
+        if (node.matches && node.matches('[data-xmind-casegen-topup-layer]')) return true;
+        if (node.closest && node.closest('[data-xmind-casegen-topup-layer]')) return true;
+        if (!policyCore || typeof policyCore.isManagedDecorationClassName !== 'function') return false;
+        return policyCore.isManagedDecorationClassName(getDecorationNodeClassName(node));
+      }
+
+      function isManagedDecorationMutationOnly(mutation) {
+        var nodes = [];
+        Array.prototype.forEach.call(mutation && mutation.addedNodes ? mutation.addedNodes : [], function(node) {
+          nodes.push(node);
+        });
+        Array.prototype.forEach.call(mutation && mutation.removedNodes ? mutation.removedNodes : [], function(node) {
+          nodes.push(node);
+        });
+        var elementNodes = nodes.filter(function(node) {
+          return Boolean(node && Number(node.nodeType) === 1);
+        });
+        return Boolean(elementNodes.length && elementNodes.every(isManagedDecorationNode));
+      }
+
+      function buildNodeDecorationMutationChanges(mutations) {
+        return Array.prototype.map.call(mutations || [], function(mutation) {
+          return {
+            type: mutation && mutation.type ? String(mutation.type || '') : '',
+            targetRole: isManagedDecorationNode(mutation && mutation.target ? mutation.target : null) ? 'managed' : 'tree',
+            insideManaged: isManagedDecorationNode(mutation && mutation.target ? mutation.target : null),
+            managedOnly: isManagedDecorationMutationOnly(mutation),
+          };
+        });
+      }
+
+      function shouldScheduleNodeDecorationsForMutations(mutations) {
+        var policyCore = getRenderPolicyCore();
+        if (!policyCore || typeof policyCore.shouldScheduleNodeDecorations !== 'function') return true;
+        return policyCore.shouldScheduleNodeDecorations(buildNodeDecorationMutationChanges(mutations));
+      }
+
+      function observeNodeDecorationMutations() {
+        if (!nodeDecorateObserver || !canvasEl || nodeDecorationApplying) return;
+        nodeDecorateObserver.observe(canvasEl, { childList: true, subtree: true });
+      }
+
       if (typeof MutationObserver !== 'undefined' && canvasEl) {
-        nodeDecorateObserver = new MutationObserver(function() {
+        nodeDecorateObserver = new MutationObserver(function(mutations) {
+          if (nodeDecorationApplying || !shouldScheduleNodeDecorationsForMutations(mutations)) return;
           syncEditingInputBoxElement();
           scheduleNodeDecorations();
         });
         try {
-          nodeDecorateObserver.observe(canvasEl, { childList: true, subtree: true });
+          observeNodeDecorationMutations();
         } catch (err3) {
           nodeDecorateObserver = null;
         }

@@ -9,6 +9,16 @@
     var prepApi = ctx.prepApi || {};
     var xmindGenApi = ctx.xmindGenApi || {};
     var xmindKnowledgeBaseApi = ctx.xmindKnowledgeBaseApi || {};
+    var renderPolicyCore = ctx.renderPolicyCore
+      || (window.app && window.app.xmindRenderPolicyCore ? window.app.xmindRenderPolicyCore : null);
+
+    function getRenderPolicyCore() {
+      if (renderPolicyCore) return renderPolicyCore;
+      if (window.app && window.app.xmindRenderPolicyCore) {
+        renderPolicyCore = window.app.xmindRenderPolicyCore;
+      }
+      return renderPolicyCore;
+    }
 
     var debounce = utils.debounce || function(fn) { return fn; };
     var showCenterToast = typeof utils.showCenterToast === 'function'
@@ -4759,6 +4769,7 @@
         if (restoreView.skipAnchorAlign !== true && restoreView.anchorState) {
           applyCurrentMindAnchorState(restoreView.anchorState);
         }
+        scheduleTopupHighlightSync();
       };
       if (typeof window !== 'undefined' && window && typeof window.requestAnimationFrame === 'function') {
         window.requestAnimationFrame(function() {
@@ -5547,6 +5558,7 @@
         var fallbackCentered = centerRootNodeElementFallback();
         var centered = fallbackCentered === true || coreCentered === true;
         if (centered) {
+          scheduleTopupHighlightSync();
           if (shouldPersist) persistViewportActionViewState();
         }
       }
@@ -12088,6 +12100,72 @@
       }, Number(delayMs) || 120);
     }
 
+    function getTopupMutationNodeClassName(node) {
+      if (!node) return '';
+      if (typeof node.className === 'string') return node.className;
+      if (node.className && typeof node.className.baseVal === 'string') return node.className.baseVal;
+      return '';
+    }
+
+    function isManagedTopupMutationNode(node) {
+      var policyCore = getRenderPolicyCore();
+      if (!node || Number(node.nodeType) !== 1) return false;
+      if (node.matches && node.matches('[data-xmind-casegen-topup-layer]')) return true;
+      if (node.closest && node.closest('[data-xmind-casegen-topup-layer]')) return true;
+      if (!policyCore || typeof policyCore.isManagedDecorationClassName !== 'function') return false;
+      return policyCore.isManagedDecorationClassName(getTopupMutationNodeClassName(node));
+    }
+
+    function isManagedTopupMutationOnly(mutation) {
+      var nodes = [];
+      Array.prototype.forEach.call(mutation && mutation.addedNodes ? mutation.addedNodes : [], function(node) {
+        nodes.push(node);
+      });
+      Array.prototype.forEach.call(mutation && mutation.removedNodes ? mutation.removedNodes : [], function(node) {
+        nodes.push(node);
+      });
+      var elementNodes = nodes.filter(function(node) {
+        return Boolean(node && Number(node.nodeType) === 1);
+      });
+      return Boolean(elementNodes.length && elementNodes.every(isManagedTopupMutationNode));
+    }
+
+    function resolveTopupMutationTargetRole(target) {
+      if (!target || Number(target.nodeType) !== 1) return 'tree';
+      if (isManagedTopupMutationNode(target)) return 'overlay';
+      if (target.matches && target.matches('me-tpc')) return 'topic';
+      if (target.closest && target.closest('me-tpc')) return 'topic';
+      if (target === topupHighlightMapEl) return 'map';
+      if (target.classList && target.classList.contains('map-canvas')) return 'map';
+      if (target.matches && target.matches('svg, path')) return 'connector';
+      if (target.closest && target.closest('svg')) return 'connector';
+      return 'tree';
+    }
+
+    function buildTopupHighlightMutationChanges(mutations) {
+      return Array.prototype.map.call(mutations || [], function(mutation) {
+        var target = mutation && mutation.target ? mutation.target : null;
+        return {
+          type: mutation && mutation.type ? String(mutation.type || '') : '',
+          attributeName: mutation && mutation.attributeName ? String(mutation.attributeName || '') : '',
+          targetRole: resolveTopupMutationTargetRole(target),
+          insideManaged: isManagedTopupMutationNode(target),
+          managedOnly: isManagedTopupMutationOnly(mutation),
+        };
+      });
+    }
+
+    function shouldScheduleTopupHighlightForMutations(mutations) {
+      var policyCore = getRenderPolicyCore();
+      if (!policyCore || typeof policyCore.shouldScheduleTopupHighlightSync !== 'function') return true;
+      return policyCore.shouldScheduleTopupHighlightSync(buildTopupHighlightMutationChanges(mutations));
+    }
+
+    function handleTopupHighlightMutations(mutations) {
+      if (!shouldScheduleTopupHighlightForMutations(mutations)) return;
+      scheduleTopupHighlightSync();
+    }
+
     function syncTopupHighlightPresentation() {
       var viewerEl = getTopupHighlightViewerElement();
       var mapEl = getTopupHighlightMapElement(viewerEl);
@@ -12330,8 +12408,18 @@
       }
       if (window) window.addEventListener('resize', topupHighlightResizeHandler, { passive: true });
       if (typeof MutationObserver !== 'undefined') {
-        topupHighlightMutationObserver = new MutationObserver(scheduleTopupHighlightSync);
-        topupHighlightMutationObserver.observe(viewerEl, { childList: true, subtree: true, attributes: true });
+        topupHighlightMutationObserver = new MutationObserver(handleTopupHighlightMutations);
+        topupHighlightMutationObserver.observe(viewerEl, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: [
+            'class',
+            'data-xmind-topup-highlight-token',
+            'data-xmind-topup-highlight-label',
+            'data-xmind-topup-highlight-scope',
+          ],
+        });
       }
       if (typeof ResizeObserver !== 'undefined') {
         topupHighlightResizeObserver = new ResizeObserver(scheduleTopupHighlightSync);
@@ -13377,30 +13465,6 @@
       return [];
     }
 
-    function getNodeQuickAction(nodeMeta) {
-      var meta = nodeMeta && nodeMeta.meta ? nodeMeta.meta : null;
-      if (!meta || meta.type !== 'module') return null;
-      var actions = getNodeActions(nodeMeta);
-      if (!actions.length) return null;
-      var context = ensureVisibleModuleContext(buildVisibleModuleContext());
-      var contextMap = context.map || {};
-      var entry = contextMap[meta.moduleKey] || null;
-      var preferredActionId = entry && Array.isArray(entry.aiCases) && entry.aiCases.length > 0
-        ? MODULE_ACTIONS.APPEND
-        : MODULE_ACTIONS.FULL_CASES;
-      var first = actions.filter(function(item) {
-        return item && item.id === preferredActionId;
-      })[0] || actions.filter(function(item) {
-        return item && item.disabled !== true;
-      })[0] || actions[0] || null;
-      if (!first) return null;
-      return {
-        id: first.id,
-        label: '+AI',
-        disabled: first.disabled === true,
-      };
-    }
-
     function findConnectorSvgPaths(parentEl) {
       if (!parentEl || !parentEl.children) return [];
       var paths = [];
@@ -13754,10 +13818,10 @@
           getNodeActions: getNodeActions,
           onNodeAction: handleNodeAction,
           onDeleteSelection: handleDeleteSelection,
-          getNodeQuickAction: getNodeQuickAction,
           decorateNodeElement: decorateNodeElement,
           onViewStateChange: function(detail) {
             var reason = detail && detail.reason ? String(detail.reason || '') : '';
+            scheduleTopupHighlightSync();
             if (
               reason === 'zoom-in'
               || reason === 'zoom-out'

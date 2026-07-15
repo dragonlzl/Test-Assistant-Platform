@@ -13,6 +13,8 @@
   - `node tests/node/xmind_dedupe_batch_core.test.js`
 - XMind 尾部慢请求动态阈值回归（不启动浏览器）：
   - `node tests/node/xmind_generation_timing_core.test.js`
+- XMind 画布装饰与追加高亮调度策略回归（不启动浏览器）：
+  - `node tests/node/xmind_render_policy_core.test.js`
 - 启动静态服务器并跑测试（配置已在 `tests/playwright.config.js` 内自动启动 `python3 -m http.server 8080`）：
   - `npm run test:ui`
 - 若需可视化调试：

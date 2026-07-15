@@ -4659,6 +4659,7 @@
     const mindElixirCore = window.app && window.app.mindElixirCore && typeof window.app.mindElixirCore.init === 'function'
       ? window.app.mindElixirCore.init({
         xmindApi: xmindCore,
+        renderPolicyCore: window.app.xmindRenderPolicyCore || null,
       })
       : null;
     const formatXmindNodeValue = xmindCore && xmindCore.formatXmindNodeValue
@@ -4805,7 +4806,12 @@
       return window.app.__tapScriptLoaders[src];
     };
     const ensureMindElixirCoreApi = function() {
-      if (window.app && window.app.mindElixirCoreApi && typeof window.app.mindElixirCoreApi.renderMindMap === 'function') {
+      if (
+        window.app
+        && window.app.xmindRenderPolicyCore
+        && window.app.mindElixirCoreApi
+        && typeof window.app.mindElixirCoreApi.renderMindMap === 'function'
+      ) {
         return Promise.resolve(window.app.mindElixirCoreApi);
       }
       window.app = window.app || {};
@@ -4820,6 +4826,11 @@
           });
         })
         .then(function() {
+          return loadLocalScriptOnce('./scripts/core/xmindRenderPolicyCore.js', function() {
+            return Boolean(window.app && window.app.xmindRenderPolicyCore);
+          });
+        })
+        .then(function() {
           return loadLocalScriptOnce('./scripts/core/mindElixirCore.js', function() {
             return Boolean(window.app && window.app.mindElixirCore && typeof window.app.mindElixirCore.init === 'function');
           });
@@ -4831,6 +4842,7 @@
           if (!window.app.mindElixirCoreApi || typeof window.app.mindElixirCoreApi.renderMindMap !== 'function') {
             window.app.mindElixirCoreApi = window.app.mindElixirCore.init({
               xmindApi: window.app.xmindCoreApi || xmindCore || null,
+              renderPolicyCore: window.app.xmindRenderPolicyCore || null,
             });
           }
           return window.app.mindElixirCoreApi || null;
