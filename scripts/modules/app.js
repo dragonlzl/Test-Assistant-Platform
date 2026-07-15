@@ -2935,15 +2935,24 @@
         return runTask(active);
       }
 
+      function canResumeTaskRequests() {
+        return Boolean(requestScheduler && typeof requestScheduler.acquire === 'function');
+      }
+
       function resumeTasks(options) {
+        if (!canResumeTaskRequests()) return 0;
+        var resumed = 0;
         getTasks().forEach(function(task) {
           if (!task || task.status !== 'running') return;
           if (retryTimers[String(task.id || '')]) return;
           startTask(task, options);
+          resumed += 1;
         });
+        return resumed;
       }
 
       function resumeOrphanedTasks() {
+        if (!canResumeTaskRequests()) return 0;
         if (pageUnloading) return 0;
         if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return 0;
         var resumed = 0;
