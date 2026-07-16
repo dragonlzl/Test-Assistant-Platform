@@ -432,6 +432,7 @@
         id: stableId,
         seq: Number(source.seq || 0) || 0,
         name: String(source.name || ''),
+        generationId: String(source.generationId || ''),
         pendingOpenPrep: source.pendingOpenPrep === true,
         updatedAt: Number(source.updatedAt || 0) || 0,
         createdAt: Number(source.createdAt || 0) || 0,

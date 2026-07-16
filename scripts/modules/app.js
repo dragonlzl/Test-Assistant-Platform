@@ -2027,6 +2027,9 @@
         if (!source) return null;
         var next = {
           workspaceId: String(source.workspaceId || ''),
+          workspaceGenerationId: String(source.workspaceGenerationId || ''),
+          workspaceCreatedAt: Number(source.workspaceCreatedAt || 0) || 0,
+          requirementFingerprint: String(source.requirementFingerprint || ''),
           requirementLabel: String(source.requirementLabel || ''),
           requirementLabelSource: String(source.requirementLabelSource || ''),
           lastRawImportName: String(source.lastRawImportName || ''),
@@ -2346,6 +2349,39 @@
           abortByOwner(removed.requestOwner, 'xmind-casegen-cleared');
         }
         return true;
+      }
+
+      function clearTasksForWorkspace(workspaceId, options) {
+        var targetWorkspaceId = workspaceId ? String(workspaceId || '') : '';
+        if (!targetWorkspaceId) return 0;
+        var opts = options && typeof options === 'object' ? options : {};
+        var targetGenerationId = opts.workspaceGenerationId
+          ? String(opts.workspaceGenerationId || '')
+          : '';
+        var includeRunning = opts.includeRunning === true;
+        var taskIds = readTasks().filter(function(task) {
+          if (!task || !task.id) return false;
+          if (task.status === 'running' && !includeRunning) return false;
+          var restoreContext = task.restoreContext && typeof task.restoreContext === 'object'
+            ? task.restoreContext
+            : {};
+          var taskWorkspaceId = task.workspaceId
+            ? String(task.workspaceId || '')
+            : String(restoreContext.workspaceId || '');
+          if (taskWorkspaceId !== targetWorkspaceId) return false;
+          var taskGenerationId = restoreContext.workspaceGenerationId
+            ? String(restoreContext.workspaceGenerationId || '')
+            : String(task.workspaceGenerationId || '');
+          if (targetGenerationId && taskGenerationId && taskGenerationId !== targetGenerationId) return false;
+          return true;
+        }).map(function(task) {
+          return String(task.id || '');
+        }).filter(Boolean);
+        var cleared = 0;
+        taskIds.forEach(function(taskId) {
+          if (clearTask(taskId, opts.action || 'workspace-clear')) cleared += 1;
+        });
+        return cleared;
       }
 
       function clearAllTasks(action) {
@@ -3109,6 +3145,7 @@
         getTask: getTask,
         getTasks: getTasks,
         clearTask: clearTask,
+        clearTasksForWorkspace: clearTasksForWorkspace,
         clearAllTasks: clearAllTasks,
         cancelTask: cancelTask,
         failTask: failTask,

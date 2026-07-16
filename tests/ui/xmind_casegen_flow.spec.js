@@ -4234,61 +4234,6 @@ test.describe('XMind 用例生成抽屉', () => {
       completePrep: true,
     });
 
-    const tabA = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
-      hasText: '生成中切回页签-A',
-    }).first();
-    const tabB = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
-      hasText: '已完成入库页签-B',
-    }).first();
-
-    await tabA.click();
-    await waitForNodeText(page, '生成中切回页签-A');
-    await openRootContextMenu(page);
-    await clickContextMenuAction(page, '生成全量用例');
-    await page.waitForFunction(() => {
-      var root = window.app && window.app.state && window.app.state.xmindCaseGen
-        ? window.app.state.xmindCaseGen.root
-        : null;
-      return Boolean(root && root.running === true);
-    }, {}, { timeout: 15000 });
-    const panResultBeforeStore = await panXmindCasegenCanvas(page, 240, 130);
-    expect(panResultBeforeStore.dispatched).toBeTruthy();
-    await page.waitForFunction((beforeTransform) => {
-      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
-      return Boolean(map && map.style && String(map.style.transform || '') !== String(beforeTransform || ''));
-    }, panResultBeforeStore.before || '', { timeout: 10000 });
-    await waitForPaintFrames(page, 2);
-    const rootCenterBeforeStore = await readXmindRootCenter(page);
-    expect(rootCenterBeforeStore).not.toBeNull();
-    const rootOffsetBeforeStore = await readXmindRootOffsetFromViewer(page);
-    expect(rootOffsetBeforeStore).not.toBeNull();
-
-    await tabB.click();
-    await waitForNodeText(page, '已完成入库页签-B');
-    const workspaceASnapshotView = await page.evaluate(() => {
-      var host = window.app && window.app.state ? window.app.state.xmindCaseGen : null;
-      if (!host || !host.workspaces) return null;
-      var targetId = '';
-      Object.keys(host.workspaces).forEach(function(id) {
-        var record = host.workspaces[id];
-        if (!record || targetId) return;
-        if (String(record.name || '').trim() === '生成中切回页签-A') {
-          targetId = id;
-        }
-      });
-      var record = targetId ? host.workspaces[targetId] : null;
-      var snapshot = record && record.snapshot ? record.snapshot : null;
-      var xmind = snapshot && snapshot.xmind ? snapshot.xmind : null;
-      var view = xmind && xmind.viewState ? xmind.viewState : null;
-      return {
-        transform: view ? String(view.transform || '') : '',
-        drawerOpen: Boolean(view && view.drawerOpen === true),
-        viewTreeSignature: view ? String(view.treeSourceSignature || '') : '',
-        treeSignature: xmind ? String(xmind.treeSourceSignature || '') : '',
-      };
-    });
-    expect(workspaceASnapshotView).not.toBeNull();
-    expect(String(workspaceASnapshotView.transform || '')).toContain('translate3d(');
     await seedAiSkeleton(page, [{
       id: 'xmind-store-stable-login',
       title: '登录模块',
@@ -4327,6 +4272,64 @@ test.describe('XMind 用例生成抽屉', () => {
     });
     await waitForNodeText(page, '登录模块');
     await waitForNodeText(page, '支付模块');
+
+    const tabA = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
+      hasText: '生成中切回页签-A',
+    }).first();
+    const tabB = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
+      hasText: '已完成入库页签-B',
+    }).first();
+
+    await tabA.click();
+    await waitForNodeText(page, '生成中切回页签-A');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await page.waitForFunction(() => {
+      var root = window.app && window.app.state && window.app.state.xmindCaseGen
+        ? window.app.state.xmindCaseGen.root
+        : null;
+      return Boolean(root && root.running === true);
+    }, {}, { timeout: 15000 });
+    const panResultBeforeStore = await panXmindCasegenCanvas(page, 240, 130);
+    expect(panResultBeforeStore.dispatched).toBeTruthy();
+    await page.waitForFunction((beforeTransform) => {
+      var map = document.querySelector('#xmindCaseGenMindContainer .map-canvas');
+      return Boolean(map && map.style && String(map.style.transform || '') !== String(beforeTransform || ''));
+    }, panResultBeforeStore.before || '', { timeout: 10000 });
+    await waitForPaintFrames(page, 2);
+    const rootCenterBeforeStore = await readXmindRootCenter(page);
+    expect(rootCenterBeforeStore).not.toBeNull();
+    const rootOffsetBeforeStore = await readXmindRootOffsetFromViewer(page);
+    expect(rootOffsetBeforeStore).not.toBeNull();
+
+    await tabB.click();
+    await waitForNodeText(page, '已完成入库页签-B');
+    await waitForNodeText(page, '登录模块');
+    await waitForNodeText(page, '支付模块');
+    const workspaceASnapshotView = await page.evaluate(() => {
+      var host = window.app && window.app.state ? window.app.state.xmindCaseGen : null;
+      if (!host || !host.workspaces) return null;
+      var targetId = '';
+      Object.keys(host.workspaces).forEach(function(id) {
+        var record = host.workspaces[id];
+        if (!record || targetId) return;
+        if (String(record.name || '').trim() === '生成中切回页签-A') {
+          targetId = id;
+        }
+      });
+      var record = targetId ? host.workspaces[targetId] : null;
+      var snapshot = record && record.snapshot ? record.snapshot : null;
+      var xmind = snapshot && snapshot.xmind ? snapshot.xmind : null;
+      var view = xmind && xmind.viewState ? xmind.viewState : null;
+      return {
+        transform: view ? String(view.transform || '') : '',
+        drawerOpen: Boolean(view && view.drawerOpen === true),
+        viewTreeSignature: view ? String(view.treeSourceSignature || '') : '',
+        treeSignature: xmind ? String(xmind.treeSourceSignature || '') : '',
+      };
+    });
+    expect(workspaceASnapshotView).not.toBeNull();
+    expect(String(workspaceASnapshotView.transform || '')).toContain('translate3d(');
 
     await clickElementById(page, 'xmindCaseGenStoreBtn');
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
@@ -4682,6 +4685,166 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('清理后新建页签');
     await waitForNodeText(page, '清理后新建页签');
     await expect(page.locator('#xmindCaseGenWorkspaceList')).not.toContainText('旧任务恢复需求');
+  });
+
+  test('刷新恢复会丢弃同 workspaceId 下属于旧需求的终态任务结果', async ({ page }) => {
+    const token = 'xmind-stale-task-requirement-isolation-token';
+    const user = { id: 8126, username: 'xmind-stale-task-requirement-isolation' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：超界者二技能命中目标后触发新的伤害效果。',
+      requirementLabel: '超界者二技能',
+    });
+    await seedAiSkeleton(page, [{
+      id: 'xmind-mod-current',
+      title: '二技能伤害模块',
+      scenarios: ['技能命中'],
+      points: ['伤害效果'],
+      coupled: ['角色属性'],
+    }]);
+    await seedAiCases(page, {
+      'xmind-mod-current': [{
+        module: '二技能伤害模块',
+        title: '二技能命中后触发伤害',
+        priority: 'P1',
+        preconditions: '角色已解锁二技能',
+        steps: ['1、释放二技能', '2、命中目标'],
+        expected: '触发新的伤害效果',
+      }],
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+    await openXmindCaseGenDrawer(page);
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      requirementLabel: '超界者二技能',
+      rawText: '需求：超界者二技能命中目标后触发新的伤害效果。',
+      workspaceName: '超界者二技能',
+    });
+
+    const injectedState = await page.evaluate(() => {
+      var app = window.app || {};
+      var state = app.state || {};
+      var host = state.xmindCaseGen || {};
+      var workspaceId = String(host.activeWorkspaceId || '');
+      var record = workspaceId && host.workspaces ? host.workspaces[workspaceId] : null;
+      var workspaceCreatedAt = Number(record && record.createdAt || Date.now());
+      var staleTask = {
+        id: 'xmind-stale-gold-shop-task',
+        status: 'done',
+        scope: 'root',
+        actionId: 'root-full-cases',
+        historyActionLabel: '生成全量用例',
+        workspaceId: workspaceId,
+        resultRaw: '{"modules":[]}',
+        createdAt: Math.max(1, workspaceCreatedAt - 5000),
+        updatedAt: Date.now() - 2000,
+        endedAt: Date.now() - 1000,
+        restoreContext: {
+          workspaceId: workspaceId,
+          requirementLabel: '金框商店需求',
+          requirementLabelSource: 'ui-test-stale',
+          lastRawImportName: 'gold-shop.docx',
+          rawText: '需求：展示金框商店入口、积分和购买状态。',
+          caseText: '',
+          importedCases: [],
+          caseGenModules: [{
+            id: 'xmind-mod-current',
+            title: '金框商店入口',
+            scenarios: ['商店进入'],
+            points: ['入口展示'],
+            coupled: ['图鉴'],
+          }, {
+            id: 'xmind-mod-gold-points',
+            title: '金框积分',
+            scenarios: ['积分展示'],
+            points: ['积分状态'],
+            coupled: ['账户'],
+          }],
+          caseGenResults: {
+            'xmind-mod-current': JSON.stringify([{
+              module: '金框商店入口',
+              title: '进入金框商店',
+              priority: 'P0',
+              preconditions: '已进入图鉴界面',
+              steps: ['1、点击金框奖励商店按钮'],
+              expected: '进入金框商店',
+            }]),
+          },
+          operationSnapshots: [],
+          nextSnapshotId: 1,
+          history: [],
+          rootPipeline: null,
+          prep: {
+            step: 3,
+            requirementMode: 'document',
+            requirementSupplement: '',
+            manualRequirementLabel: '',
+            manualRequirementBlocks: [],
+            caseImportMode: 'skip',
+            completed: true,
+            baseLocked: true,
+          },
+          viewState: {
+            drawerOpen: true,
+            fullscreen: false,
+            transform: '',
+            scaleVal: 1,
+            scrollLeft: 0,
+            scrollTop: 0,
+            collapsedNodeKeys: [],
+            treeSourceSignature: '',
+            updatedAt: Date.now() - 1000,
+          },
+        },
+      };
+      localStorage.setItem('tap-xmind-casegen-tasks', JSON.stringify([staleTask]));
+      return {
+        workspaceId: workspaceId,
+        generationId: record ? String(record.generationId || '') : '',
+      };
+    });
+    expect(injectedState.workspaceId).toBeTruthy();
+    expect(injectedState.generationId).toBeTruthy();
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 25000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await page.waitForTimeout(800);
+
+    const restoredState = await page.evaluate(() => {
+      var app = window.app || {};
+      var state = app.state || {};
+      var host = state.xmindCaseGen || {};
+      var taskRaw = localStorage.getItem('tap-xmind-casegen-tasks') || '';
+      var tasks = taskRaw ? JSON.parse(taskRaw) : [];
+      return {
+        workspaceCount: Array.isArray(host.workspaceOrder) ? host.workspaceOrder.length : 0,
+        requirementLabel: String(state.requirementLabel || ''),
+        moduleTitles: (Array.isArray(state.caseGenModules) ? state.caseGenModules : []).map(function(item) {
+          return String(item && (item.title || item.module) || '');
+        }),
+        resultText: Object.keys(state.caseGenResults || {}).map(function(key) {
+          return String(state.caseGenResults[key] || '');
+        }).join('\n'),
+        staleTaskExists: Array.isArray(tasks) && tasks.some(function(task) {
+          return task && String(task.id || '') === 'xmind-stale-gold-shop-task';
+        }),
+      };
+    });
+    expect(restoredState.workspaceCount).toBe(1);
+    expect(restoredState.requirementLabel).toBe('超界者二技能');
+    expect(restoredState.moduleTitles).toContain('二技能伤害模块');
+    expect(restoredState.moduleTitles).not.toContain('金框商店入口');
+    expect(restoredState.resultText).toContain('二技能命中后触发伤害');
+    expect(restoredState.resultText).not.toContain('进入金框商店');
+    expect(restoredState.staleTaskExists).toBe(false);
   });
 
   test('两个已生成的 XMind 页签在刷新后切换查看时，都会保留各自根节点与用例结果', async ({ page }) => {
@@ -11369,7 +11532,42 @@ test.describe('XMind 用例生成抽屉', () => {
     const importRequestPromise = page.waitForRequest((request) => {
       return request.url().indexOf('/api/case-files/import') !== -1 && request.method() === 'POST';
     });
-    await page.click('#caseGenDbStoreConfirmBtn');
+    await page.evaluate(() => {
+      var app = window.app || {};
+      var state = app.state || {};
+      var host = state.xmindCaseGen || {};
+      var workspaceId = String(host.activeWorkspaceId || '');
+      var record = workspaceId && host.workspaces ? host.workspaces[workspaceId] : null;
+      localStorage.setItem('tap-xmind-casegen-tasks', JSON.stringify([{
+        id: 'xmind-store-close-terminal-task',
+        status: 'done',
+        scope: 'coverage',
+        actionId: 'xmind-requirement-coverage',
+        workspaceId: workspaceId,
+        createdAt: Date.now() - 2000,
+        updatedAt: Date.now() - 1000,
+        endedAt: Date.now() - 500,
+        restoreContext: {
+          workspaceId: workspaceId,
+          workspaceGenerationId: record ? String(record.generationId || '') : '',
+          workspaceCreatedAt: Number(record && record.createdAt || 0),
+          requirementLabel: 'XMind默认全量入库需求',
+          requirementLabelSource: 'ui-test',
+          rawText: '需求：XMind 入库默认按当前保留结果入库，不应再提示未选择用例。',
+          caseGenModules: [],
+          prep: {
+            step: 3,
+            requirementMode: 'document',
+            caseImportMode: 'skip',
+            completed: true,
+            baseLocked: true,
+          },
+          viewState: {},
+        },
+      }]));
+      var confirmBtn = document.getElementById('caseGenDbStoreConfirmBtn');
+      if (confirmBtn && typeof confirmBtn.click === 'function') confirmBtn.click();
+    });
     const importRequest = await importRequestPromise;
     const importPayload = importRequest.postDataJSON ? importRequest.postDataJSON() : {};
 
@@ -11417,6 +11615,44 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(resetState.prep.completed).toBe(false);
     expect(resetState.prep.baseLocked).toBe(false);
     await expect(page.locator('#xmindCaseGenMindContainer')).toContainText('暂无生成页签');
+
+    const persistedAfterStore = await page.evaluate(() => {
+      var workflowRaw = localStorage.getItem('usecase-workflow-state-v1') || '';
+      var workflow = workflowRaw ? JSON.parse(workflowRaw) : null;
+      var xmind = workflow && workflow.data && workflow.data.xmindCaseGen
+        ? workflow.data.xmindCaseGen
+        : null;
+      var taskRaw = localStorage.getItem('tap-xmind-casegen-tasks') || '';
+      var tasks = taskRaw ? JSON.parse(taskRaw) : [];
+      return {
+        workspaceCount: xmind && xmind.workspaces ? Object.keys(xmind.workspaces).length : 0,
+        taskCount: Array.isArray(tasks) ? tasks.length : 0,
+      };
+    });
+    expect(persistedAfterStore.workspaceCount).toBe(0);
+    expect(persistedAfterStore.taskCount).toBe(0);
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 25000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    const drawerOpenAfterReload = await page.locator('#xmindCaseGenDrawer').evaluate((el) => {
+      return Boolean(el && el.classList && el.classList.contains('open'));
+    });
+    if (!drawerOpenAfterReload) {
+      await page.click('#caseGenModulesTabBtn');
+      await page.waitForTimeout(320);
+      const drawerOpenedDuringRestore = await page.locator('#xmindCaseGenDrawer').evaluate((el) => {
+        return Boolean(el && el.classList && el.classList.contains('open'));
+      });
+      if (!drawerOpenedDuringRestore) {
+        await clickElementById(page, 'xmindCaseGenOpenBtn');
+      }
+      await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+    }
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(0);
+    await expect(page.locator('#xmindCaseGenWorkspaceAddBtn')).toHaveText('新建生成');
+    await expect(page.locator('#xmindCaseGenMindContainer')).toContainText('暂无生成页签');
+    await expect(page.locator('#xmindCaseGenMindContainer')).not.toContainText('登录成功校验');
   });
 
   test('XMind 生成在刷新后会自动恢复并继续完成，不再卡死在生成中', async ({ page }) => {

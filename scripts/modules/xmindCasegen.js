@@ -13,6 +13,8 @@
       || (window.app && window.app.xmindRenderPolicyCore ? window.app.xmindRenderPolicyCore : null);
     var coverageCaseTooltipCore = ctx.coverageCaseTooltipCore
       || (window.app && window.app.xmindCoverageCaseTooltipCore ? window.app.xmindCoverageCaseTooltipCore : null);
+    var workspaceRecoveryCore = ctx.workspaceRecoveryCore
+      || (window.app && window.app.xmindWorkspaceRecoveryCore ? window.app.xmindWorkspaceRecoveryCore : null);
 
     function getRenderPolicyCore() {
       if (renderPolicyCore) return renderPolicyCore;
@@ -20,6 +22,14 @@
         renderPolicyCore = window.app.xmindRenderPolicyCore;
       }
       return renderPolicyCore;
+    }
+
+    function getWorkspaceRecoveryCore() {
+      if (workspaceRecoveryCore) return workspaceRecoveryCore;
+      if (window.app && window.app.xmindWorkspaceRecoveryCore) {
+        workspaceRecoveryCore = window.app.xmindWorkspaceRecoveryCore;
+      }
+      return workspaceRecoveryCore;
     }
 
     var debounce = utils.debounce || function(fn) { return fn; };
@@ -3564,16 +3574,27 @@
       };
     }
 
+    function buildWorkspaceGenerationId() {
+      var recoveryCore = getWorkspaceRecoveryCore();
+      if (recoveryCore && typeof recoveryCore.createWorkspaceGenerationId === 'function') {
+        return recoveryCore.createWorkspaceGenerationId(Date.now(), Math.random());
+      }
+      return 'xmind-generation-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    }
+
     function createWorkspaceRecord(id, options) {
       var opts = options || {};
       var now = Date.now();
+      var createdAt = Number(opts.createdAt || now);
+      if (!Number.isFinite(createdAt) || createdAt <= 0) createdAt = now;
       return {
         id: String(id || ''),
         seq: Number(opts.seq || 0) || 0,
         name: String(opts.name || ''),
+        generationId: String(opts.generationId || '') || buildWorkspaceGenerationId(),
         pendingOpenPrep: opts.pendingOpenPrep === true,
         updatedAt: now,
-        createdAt: now,
+        createdAt: createdAt,
         snapshot: normalizeWorkspaceSnapshot(opts.snapshot),
       };
     }
@@ -3583,6 +3604,8 @@
       var normalized = createWorkspaceRecord(id, {
         seq: source.seq,
         name: source.name,
+        generationId: source.generationId,
+        createdAt: source.createdAt,
         pendingOpenPrep: source.pendingOpenPrep === true,
         snapshot: source.snapshot,
       });
@@ -3819,6 +3842,25 @@
       var stableId = workspaceId ? String(workspaceId || '') : getActiveWorkspaceId();
       if (!stableId) return null;
       return host.workspaces && host.workspaces[stableId] ? host.workspaces[stableId] : null;
+    }
+
+    function clearManagedTasksForWorkspace(workspaceId, options) {
+      var stableId = String(workspaceId || '');
+      var manager = getXmindTaskManager();
+      if (!stableId || !manager || typeof manager.clearTasksForWorkspace !== 'function') return 0;
+      var opts = options || {};
+      return Number(manager.clearTasksForWorkspace(stableId, {
+        includeRunning: opts.includeRunning === true,
+        action: opts.action || 'workspace-clear',
+      }) || 0);
+    }
+
+    function rotateWorkspaceGeneration(workspaceId) {
+      var record = getWorkspaceRecord(workspaceId);
+      if (!record) return '';
+      record.generationId = buildWorkspaceGenerationId();
+      record.updatedAt = Date.now();
+      return record.generationId;
     }
 
     function ensureWorkspaceRecordFromCurrentContent(options) {
@@ -4058,6 +4100,13 @@
           notifyFloatingStatus('当前仍有生成任务进行中，请等待完成后再重置', 'warn', 5000);
         }
         return false;
+      }
+      var resetWorkspaceId = getActiveWorkspaceId();
+      if (resetWorkspaceId) {
+        clearManagedTasksForWorkspace(resetWorkspaceId, {
+          action: 'workspace-reset',
+        });
+        rotateWorkspaceGeneration(resetWorkspaceId);
       }
       var drawerOpen = isDrawerOpen();
       var fullscreen = drawerEl && drawerEl.classList
@@ -14109,6 +14158,46 @@
       });
     }
 
+    function getManagedTaskRestoreDecision(task) {
+      var workspaceId = getTaskWorkspaceId(task);
+      var record = workspaceId ? getWorkspaceRecord(workspaceId) : null;
+      var recoveryCore = getWorkspaceRecoveryCore();
+      if (!recoveryCore || typeof recoveryCore.evaluateTaskRestore !== 'function') {
+        return {
+          allowed: Boolean(record || (task && task.status === 'running')),
+          recreateWorkspace: !record && Boolean(task && task.status === 'running'),
+          reason: record ? 'compatible-fallback' : 'workspace-missing-fallback',
+        };
+      }
+      return recoveryCore.evaluateTaskRestore(task, record ? {
+        id: workspaceId,
+        generationId: String(record.generationId || ''),
+        createdAt: Number(record.createdAt || 0) || 0,
+        restoreContext: buildRestoreContextFromWorkspaceSnapshot(record.snapshot, workspaceId, {
+          record: record,
+        }),
+      } : null);
+    }
+
+    function filterRestorableManagedTasks(tasks, options) {
+      var opts = options || {};
+      var manager = getXmindTaskManager();
+      return (Array.isArray(tasks) ? tasks : []).filter(function(task) {
+        var decision = getManagedTaskRestoreDecision(task);
+        if (decision && decision.allowed === true) return true;
+        if (
+          opts.clearInvalid === true
+          && task
+          && task.id
+          && manager
+          && typeof manager.clearTask === 'function'
+        ) {
+          manager.clearTask(task.id, 'stale-workspace');
+        }
+        return false;
+      });
+    }
+
     function clearManagedRunningUiState() {
       var rootState = ensureRootUiState();
       rootState.running = false;
@@ -14549,6 +14638,29 @@
       };
     }
 
+    function enrichWorkspaceRestoreContext(context, workspaceId, record) {
+      var result = context && typeof context === 'object' ? context : {};
+      var workspaceRecord = record && typeof record === 'object' ? record : null;
+      result.workspaceId = String(workspaceId || result.workspaceId || '');
+      result.workspaceGenerationId = String(
+        result.workspaceGenerationId
+        || (workspaceRecord && workspaceRecord.generationId ? workspaceRecord.generationId : '')
+        || ''
+      );
+      result.workspaceCreatedAt = Number(
+        result.workspaceCreatedAt
+        || (workspaceRecord ? workspaceRecord.createdAt : 0)
+        || 0
+      ) || 0;
+      var recoveryCore = getWorkspaceRecoveryCore();
+      if (recoveryCore && typeof recoveryCore.buildRequirementFingerprint === 'function') {
+        result.requirementFingerprint = recoveryCore.buildRequirementFingerprint(result);
+      } else {
+        result.requirementFingerprint = String(result.requirementFingerprint || '');
+      }
+      return result;
+    }
+
     function buildManagedTaskRestoreContext(options) {
       var opts = options || {};
       var targetWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
@@ -14563,6 +14675,7 @@
         if (targetRecord && targetRecord.snapshot) {
           return buildRestoreContextFromWorkspaceSnapshot(targetRecord.snapshot, targetWorkspaceId, {
             compact: compact,
+            record: targetRecord,
           });
         }
       }
@@ -14622,7 +14735,7 @@
         result.history = cloneJson(ensureState().history, []);
         result.rootPipeline = cloneRootPipelineSnapshot(getRootPipelineState());
       }
-      return result;
+      return enrichWorkspaceRestoreContext(result, targetWorkspaceId, getWorkspaceRecord(targetWorkspaceId));
     }
 
     function isMeaningfulRestoreResult(raw) {
@@ -14709,6 +14822,16 @@
     }
 
     function mergeTaskRestoreContext(baseContext, incomingContext) {
+      var recoveryCore = getWorkspaceRecoveryCore();
+      if (
+        baseContext
+        && incomingContext
+        && recoveryCore
+        && typeof recoveryCore.areRestoreContextsCompatible === 'function'
+        && recoveryCore.areRestoreContextsCompatible(baseContext, incomingContext) !== true
+      ) {
+        return cloneJson(baseContext, {});
+      }
       var base = baseContext && typeof baseContext === 'object' ? cloneJson(baseContext, {}) : {};
       var incoming = incomingContext && typeof incomingContext === 'object' ? cloneJson(incomingContext, {}) : {};
 
@@ -14719,6 +14842,9 @@
       }
 
       base.workspaceId = pickString(base.workspaceId, incoming.workspaceId);
+      base.workspaceGenerationId = pickString(base.workspaceGenerationId, incoming.workspaceGenerationId);
+      base.workspaceCreatedAt = Number(base.workspaceCreatedAt || incoming.workspaceCreatedAt || 0) || 0;
+      base.requirementFingerprint = pickString(base.requirementFingerprint, incoming.requirementFingerprint);
       base.requirementLabel = normalizePersistedRequirementLabel(pickString(base.requirementLabel, incoming.requirementLabel));
       base.requirementLabelSource = pickString(base.requirementLabelSource, incoming.requirementLabelSource);
       base.lastRawImportName = pickString(base.lastRawImportName, incoming.lastRawImportName);
@@ -14848,24 +14974,6 @@
       });
     }
 
-    function pickLatestManagedTaskRestoreContext(tasks) {
-      var latest = null;
-      (Array.isArray(tasks) ? tasks : []).forEach(function(task) {
-        var restoreContext = task && task.restoreContext && typeof task.restoreContext === 'object'
-          ? task.restoreContext
-          : null;
-        if (!restoreContext) return;
-        if (!latest) {
-          latest = task;
-          return;
-        }
-        var prevTime = Number(latest.updatedAt || latest.endedAt || latest.createdAt || 0);
-        var nextTime = Number(task.updatedAt || task.endedAt || task.createdAt || 0);
-        if (nextTime >= prevTime) latest = task;
-      });
-      return latest;
-    }
-
     function buildMergedManagedTaskRestoreContext(tasks) {
       var merged = null;
       (Array.isArray(tasks) ? tasks : []).forEach(function(task) {
@@ -14928,19 +15036,22 @@
         result.nextSnapshotId = Number(xmindSnapshot.nextSnapshotId || 1);
         result.history = cloneJson(xmindSnapshot.history, []);
       }
-      return result;
+      return enrichWorkspaceRestoreContext(result, workspaceId, opts.record || getWorkspaceRecord(workspaceId));
     }
 
-    function ensureWorkspaceRecordForTask(workspaceId) {
+    function ensureWorkspaceRecordForTask(workspaceId, restoreContext) {
       var stableId = String(workspaceId || '');
       if (!stableId) return null;
       var host = ensureWorkspaceHostState();
       if (!host.workspaces[stableId]) {
+        var context = restoreContext && typeof restoreContext === 'object' ? restoreContext : {};
         var seq = Number(host.nextWorkspaceSeq || 1);
         host.nextWorkspaceSeq = seq + 1;
         host.workspaces[stableId] = createWorkspaceRecord(stableId, {
           seq: seq,
           name: buildDefaultWorkspaceRecordName(seq),
+          generationId: context.workspaceGenerationId,
+          createdAt: context.workspaceCreatedAt,
           snapshot: createWorkspaceSnapshot(),
         });
         if (host.workspaceOrder.indexOf(stableId) === -1) {
@@ -14953,10 +15064,23 @@
     function applyRestoreContextToWorkspaceRecord(workspaceId, restoreContext) {
       var stableId = String(workspaceId || '');
       if (!stableId || !restoreContext) return false;
-      var record = ensureWorkspaceRecordForTask(stableId);
+      var record = ensureWorkspaceRecordForTask(stableId, restoreContext);
       if (!record) return false;
+      var incomingContext = enrichWorkspaceRestoreContext(
+        cloneJson(restoreContext, {}),
+        stableId,
+        record
+      );
       var baseContext = buildRestoreContextFromWorkspaceSnapshot(record.snapshot, stableId);
-      var merged = mergeTaskRestoreContext(baseContext, restoreContext);
+      var recoveryCore = getWorkspaceRecoveryCore();
+      if (
+        recoveryCore
+        && typeof recoveryCore.areRestoreContextsCompatible === 'function'
+        && recoveryCore.areRestoreContextsCompatible(baseContext, incomingContext) !== true
+      ) {
+        return false;
+      }
+      var merged = mergeTaskRestoreContext(baseContext, incomingContext);
       record.snapshot = {
         xmind: (function() {
           var xmindSnapshot = normalizeWorkspaceSnapshot(record.snapshot).xmind;
@@ -14999,10 +15123,13 @@
 
     function restoreWorkflowContextFromManagedTasks(tasks, options) {
       var opts = options || {};
+      var restorableTasks = filterRestorableManagedTasks(tasks, {
+        clearInvalid: opts.clearInvalidTasks === true,
+      });
       var currentWorkspaceId = getActiveWorkspaceId();
       var shouldApplyLiveRestore = shouldXmindOwnLiveWorkspaceState();
-      var scopedTasks = filterTasksByWorkspace(tasks, currentWorkspaceId);
-      var otherWorkspaceTasks = (Array.isArray(tasks) ? tasks : []).filter(function(task) {
+      var scopedTasks = filterTasksByWorkspace(restorableTasks, currentWorkspaceId);
+      var otherWorkspaceTasks = restorableTasks.filter(function(task) {
         var workspaceId = getTaskWorkspaceId(task);
         return Boolean(workspaceId && workspaceId !== currentWorkspaceId);
       });
@@ -15021,7 +15148,6 @@
         if (merged) applyRestoreContextToWorkspaceRecord(workspaceId, merged);
       });
       var restoreContext = buildMergedManagedTaskRestoreContext(scopedTasks);
-      var latestTask = pickLatestManagedTaskRestoreContext(scopedTasks);
       if (opts.markRestoredAfterRefresh === true) {
         markRestoreContextRootPipelineRestoredAfterRefresh(restoreContext);
       }
@@ -17020,11 +17146,9 @@
             : null,
         });
       }
-      var targetRecord = ensureWorkspaceRecordForTask(targetId);
+      var targetRecord = getWorkspaceRecord(targetId);
       if (!targetRecord) {
-        return Promise.resolve().then(function() {
-          return handler(false);
-        });
+        return Promise.resolve(false);
       }
       workspaceShadowDepth += 1;
       workspaceUiMutedDepth += 1;
@@ -17116,6 +17240,14 @@
     function consumeManagedXmindTask(task) {
       if (!task || !task.id || !isManagedTaskTerminal(task)) return Promise.resolve(false);
       if (xmindTaskProcessingMap[task.id]) return xmindTaskProcessingMap[task.id];
+      var initialRestoreDecision = getManagedTaskRestoreDecision(task);
+      if (!initialRestoreDecision || initialRestoreDecision.allowed !== true) {
+        var staleManager = getXmindTaskManager();
+        if (staleManager && typeof staleManager.clearTask === 'function') {
+          staleManager.clearTask(task.id, 'stale-workspace');
+        }
+        return Promise.resolve(false);
+      }
       var promise = runInWorkspaceContext(getTaskWorkspaceId(task), function() {
         return Promise.resolve()
           .then(function() {
@@ -17127,6 +17259,8 @@
             return null;
           })
           .then(function() {
+            var currentRestoreDecision = getManagedTaskRestoreDecision(task);
+            if (!currentRestoreDecision || currentRestoreDecision.allowed !== true) return false;
             if (task.status === 'done') {
               if (task.scope === 'coverage') return completeCoverageTaskSuccess(task);
               if (task.scope === 'dedupe') return completeDedupeTaskSuccess(task);
@@ -17166,16 +17300,18 @@
             manager.clearTask(task.id, 'handled');
           }
           delete xmindTaskProcessingMap[task.id];
-          await runInWorkspaceContext(getTaskWorkspaceId(task), async function() {
-            if (task && task.rootPipelineId) {
-              await pumpRootPipelineModuleQueue(String(task.rootPipelineId || ''), {
-                workspaceId: getTaskWorkspaceId(task),
-              });
-              finalizeRootPipelineIfReady(String(task.rootPipelineId || ''), {
-                anchorNodeId: getManagedTaskAnchorNodeId(task, null),
-              });
-            }
-          });
+          if (getWorkspaceRecord(getTaskWorkspaceId(task))) {
+            await runInWorkspaceContext(getTaskWorkspaceId(task), async function() {
+              if (task && task.rootPipelineId) {
+                await pumpRootPipelineModuleQueue(String(task.rootPipelineId || ''), {
+                  workspaceId: getTaskWorkspaceId(task),
+                });
+                finalizeRootPipelineIfReady(String(task.rootPipelineId || ''), {
+                  anchorNodeId: getManagedTaskAnchorNodeId(task, null),
+                });
+              }
+            });
+          }
           syncManagedRunningUiState({
             tasks: listManagedXmindTasks(),
             render: false,
@@ -17223,7 +17359,9 @@
       }
       restoreWorkflowContextFromManagedTasks(tasks, {
         markRestoredAfterRefresh: opts.resume === true && opts.reason === 'workflow-ready',
+        clearInvalidTasks: true,
       });
+      tasks = listManagedXmindTasks();
       if (opts.resume !== false && typeof manager.resumeTasks === 'function') {
         manager.resumeTasks({ force: true });
         tasks = listManagedXmindTasks();
@@ -17342,8 +17480,18 @@
         var task = detail && detail.task ? detail.task : null;
         var action = detail && detail.action ? String(detail.action || '') : '';
         var tasks = detail && Array.isArray(detail.tasks) ? detail.tasks : listManagedXmindTasks();
+        var isRemovalAction = action === 'handled'
+          || action === 'clear'
+          || action === 'workspace-clear'
+          || action === 'workspace-reset'
+          || action === 'workspace-delete'
+          || action === 'stale-workspace';
         if (workspaceShadowDepth > 0) {
           scheduleManagedTaskReconcile('task-event-' + (action || 'update'));
+          return;
+        }
+        if (isRemovalAction) {
+          syncInterruptButton();
           return;
         }
         var isTerminalEventTask = Boolean(task && isManagedTaskTerminal(task));
@@ -18060,7 +18208,11 @@
     }
 
     function buildWorkspaceId(seq) {
-      return 'xmind-workspace-' + String(seq || 1);
+      var recoveryCore = getWorkspaceRecoveryCore();
+      if (recoveryCore && typeof recoveryCore.createWorkspaceId === 'function') {
+        return recoveryCore.createWorkspaceId(seq, Date.now(), Math.random());
+      }
+      return 'xmind-workspace-' + String(seq || 1) + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
     }
 
     function createWorkspaceSnapshotFromCurrent(options) {
@@ -18407,6 +18559,10 @@
             orderBefore: currentHost.workspaceOrder.slice(),
           },
         });
+        clearManagedTasksForWorkspace(targetId, {
+          includeRunning: true,
+          action: 'workspace-delete',
+        });
         delete currentHost.workspaces[targetId];
         currentHost.workspaceOrder.splice(currentIndex, 1);
         if (!currentHost.workspaceOrder.length) {
@@ -18421,9 +18577,8 @@
           updateSummary();
           if (isDrawerOpen()) {
             render({ reason: 'workspace-delete-empty', persist: false });
-          } else {
-            persistXmindState(true);
           }
+          persistXmindState(true);
           return true;
         }
         if (wasActive) {
