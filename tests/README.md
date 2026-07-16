@@ -19,6 +19,8 @@
   - `node tests/node/xmind_coverage_case_tooltip_core.test.js`
 - XMind 跨页面任务恢复守卫回归（不启动浏览器）：
   - `node tests/node/xmind_task_resume_guard.test.js`
+- 复用预设获取/解锁方式规则回归（不启动浏览器）：
+  - `node tests/node/reuse_applicability_core.test.js`
 - 启动静态服务器并跑测试（配置已在 `tests/playwright.config.js` 内自动启动 `python3 -m http.server 8080`）：
   - `npm run test:ui`
 - 若需可视化调试：
@@ -26,7 +28,10 @@
 - 可用环境变量 `PLAYWRIGHT_BASE_URL` 覆盖默认地址（默认 `http://localhost:8080`）。
 - 后端 API 测试（需先启动 FastAPI 服务，默认 `http://127.0.0.1:8080`）：
   - `npx playwright test --config tests/api/playwright.api.config.js tests/api/auth_change_password.spec.js`
+  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_reuse_applicability.spec.js`
   - 可用环境变量：`API_BASE_URL`、`ADMIN_USER`、`ADMIN_PASS`。
+- 复用预设获取/解锁方式 UI 回归：
+  - `npm run test:ui -- tests/ui/tempexec_reuse_applicability.spec.js`
 
 ## 覆盖范围
 - 冒烟用例：页面可加载、主导航可见、切换“功能工作流”“用例执行”标签后对应区域可见（`tests/ui/smoke.spec.js`）。

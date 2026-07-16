@@ -7800,6 +7800,11 @@
           }
           return;
         }
+        var applicabilityApplyBtn = e.target.closest('[data-temp-reuse-applicability-apply]');
+        if (applicabilityApplyBtn && api.applyTempExecReuseApplicability) {
+          api.applyTempExecReuseApplicability(applicabilityApplyBtn.dataset.tempReuseApplicabilityApply);
+          return;
+        }
         var presetCancelBtn = e.target.closest('[data-temp-reuse-preset-cancel]');
         if (presetCancelBtn && api.cancelTempExecPresetDraft) {
           api.cancelTempExecPresetDraft();
@@ -8101,6 +8106,14 @@
         }
         if (target.dataset.tempReuseToggle !== undefined && api.handleTempExecReuseToggle) {
           api.handleTempExecReuseToggle(target.dataset.tempReuseToggle, target.checked, target);
+          return;
+        }
+        if (target.dataset.tempReusePresetApplicability !== undefined && api.updateTempExecPresetApplicability) {
+          api.updateTempExecPresetApplicability(
+            target.dataset.tempReusePresetApplicability,
+            target.dataset.preset,
+            target.value
+          );
           return;
         }
         if (target.dataset.tempReuseStatus !== undefined && api.updateTempExecReuseStatus) {

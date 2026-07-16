@@ -6937,3 +6937,11 @@
   - `npx playwright test --config tests/playwright.config.js tests/ui/workflow_cache_recovery.spec.js --grep '异常过大的本地流程缓存不会阻塞页面启动|主流程缓存超限时，大量残留的 XMind 任务会被整仓清理，不会在启动时逐条清理卡死'`（通过，2/2）
   - `node --check scripts/core/appRuntime.js scripts/modules/xmindCasegen.js`（通过）
   - `npx playwright test --config tests/playwright.config.js tests/ui/workflow_cache_recovery.spec.js tests/ui/xmind_casegen_flow.spec.js --grep '异常过大的本地流程缓存不会阻塞页面启动|主流程缓存超限时，大量残留的 XMind 任务会被整仓清理，不会在启动时逐条清理卡死|XMind 生成在刷新后会自动恢复并继续完成，不再卡死在生成中'`（通过，3/3）
+
+- 功能名称：复用预设按获取/解锁方式自动标记不适用
+- 功能描述：元气骑士项目的角色皮肤与武器进化皮肤执行集，在复用预设中可为每个皮肤选择获取/解锁方式；应用后，系统按当前用例模块或获取途径自动将不匹配的复用子项设为“不适用”。
+- 使用效果：保留全集用例和既有状态筛选能力，减少逐个皮肤手工选择“不适用”的重复操作；通用用例保持未执行，已有人工结果不会被覆盖。
+- 规则范围：角色皮肤按碎片、宝石、付费、小鱼干、赛季商店、老皮肤赠送、条件解锁匹配；武器进化皮肤按扭蛋、小鱼干商店、盲盒、邮箱匹配；仅在项目名与用例结构同时满足时展示。
+- 数据与接口：预设 JSON 增加 `applicability`，自动结果增加 `statusOrigin`；新增执行集级批量应用接口，在单个事务中保存预设和变更用例，无数据库迁移。
+- 测试与验证：纯规则、执行页交互、人工结果接管、批量保存和失败原子性均新增自动化覆盖；明暗主题完成浏览器视觉检查。
+- 更新记录：2026-07-16 复用预设按获取/解锁方式自动标记不适用。

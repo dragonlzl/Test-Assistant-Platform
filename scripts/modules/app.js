@@ -4986,6 +4986,7 @@
         downloadBlob,
         scrollElementIntoView,
         tempExecResultOptions,
+        reuseApplicabilityCore: window.app && window.app.reuseApplicabilityCore,
         buildXmindPackageFromCases: lazyBuildCasesXmindPackage,
         openConfirmDrawer: appUtils.openConfirmDrawer,
         buildMindDataFromCases: mindElixirCore && mindElixirCore.buildMindDataFromCases,

@@ -168,6 +168,7 @@
         return Promise.resolve({ ok: ok });
       };
     var tempExecResultOptions = deps && deps.tempExecResultOptions ? deps.tempExecResultOptions : ['未执行', '通过', '失败', '阻塞', '不适用'];
+    var reuseApplicabilityCore = deps && deps.reuseApplicabilityCore ? deps.reuseApplicabilityCore : null;
     var deriveCaseListFromText = deps && deps.deriveCaseListFromText ? deps.deriveCaseListFromText : function() { return []; };
     var parseXmindFile = deps && deps.parseXmindFile ? deps.parseXmindFile : function() { return Promise.resolve({ text: '', list: [] }); };
     var parseXlsxFileToRows = deps && deps.parseXlsxFileToRows ? deps.parseXlsxFileToRows : null;
@@ -927,6 +928,22 @@
       return Boolean(detail && detail.removed);
     }
 
+    function normalizeReuseApplicability(value) {
+      if (reuseApplicabilityCore && typeof reuseApplicabilityCore.normalizeApplicability === 'function') {
+        return reuseApplicabilityCore.normalizeApplicability(value);
+      }
+      if (!value || typeof value !== 'object') return null;
+      var profile = value.profile ? String(value.profile).trim() : '';
+      var optionValue = value.value ? String(value.value).trim() : '';
+      return profile && optionValue ? { profile: profile, value: optionValue } : null;
+    }
+
+    function clearReuseDetailAutoStatus(detail) {
+      if (!detail || typeof detail !== 'object') return;
+      delete detail.statusOrigin;
+      delete detail.statusOriginProfile;
+    }
+
     function normalizeReuseDetails(list) {
       if (!Array.isArray(list)) return [];
       return list
@@ -936,7 +953,7 @@
           var removed = isReuseDetailRemoved(detail);
           if (!text && (!removed || !presetId)) return null;
           var id = detail && detail.id ? detail.id : generateReuseDetailId();
-          return {
+          var normalized = {
             id: id,
             text: text,
             note: detail && detail.note ? detail.note : '',
@@ -944,6 +961,11 @@
             presetId: presetId,
             removed: removed,
           };
+          var statusOrigin = detail && detail.statusOrigin ? String(detail.statusOrigin).trim() : '';
+          var statusOriginProfile = detail && detail.statusOriginProfile ? String(detail.statusOriginProfile).trim() : '';
+          if (statusOrigin) normalized.statusOrigin = statusOrigin;
+          if (statusOriginProfile) normalized.statusOriginProfile = statusOriginProfile;
+          return normalized;
         })
         .filter(Boolean);
     }
@@ -955,7 +977,10 @@
           var text = item && item.text ? String(item.text).trim() : '';
           if (!text) return null;
           var id = item && item.id ? String(item.id) : generateReusePresetId();
-          return { id: id, text: text };
+          var normalized = { id: id, text: text };
+          var applicability = normalizeReuseApplicability(item && item.applicability);
+          if (applicability) normalized.applicability = applicability;
+          return normalized;
         })
         .filter(Boolean);
     }
@@ -1073,10 +1098,13 @@
         versionId: file.versionId || '',
         reusePresets: Array.isArray(file.reusePresets)
           ? file.reusePresets.map(function(preset) {
-            return {
+            var normalizedPreset = {
               id: preset && preset.id ? preset.id : generateReusePresetId(),
               text: preset && preset.text ? preset.text : '',
             };
+            var applicability = normalizeReuseApplicability(preset && preset.applicability);
+            if (applicability) normalizedPreset.applicability = applicability;
+            return normalizedPreset;
           })
           : [],
         cases: (file.cases || []).map(function(item) {
@@ -1091,7 +1119,7 @@
             remark: item.remark,
             reuseDetails: Array.isArray(item.reuseDetails)
               ? item.reuseDetails.map(function(detail) {
-                return {
+                var normalizedDetail = {
                   id: detail && detail.id ? detail.id : generateReuseDetailId(),
                   text: detail && detail.text ? detail.text : '',
                   note: detail && detail.note ? detail.note : '',
@@ -1099,6 +1127,9 @@
                   presetId: detail && detail.presetId ? detail.presetId : '',
                   removed: Boolean(detail && detail.removed),
                 };
+                if (detail && detail.statusOrigin) normalizedDetail.statusOrigin = detail.statusOrigin;
+                if (detail && detail.statusOriginProfile) normalizedDetail.statusOriginProfile = detail.statusOriginProfile;
+                return normalizedDetail;
               })
               : [],
             defectLinks: Array.isArray(item.defectLinks)
@@ -2876,6 +2907,15 @@
       return file.reusePresets;
     }
 
+    function getTempExecReuseApplicabilityProfile(file) {
+      if (!file || !reuseApplicabilityCore || typeof reuseApplicabilityCore.detectProfile !== 'function') return null;
+      return reuseApplicabilityCore.detectProfile({
+        projectName: resolveProjectName(file.projectId),
+        cases: Array.isArray(file.cases) ? file.cases : [],
+        presets: ensureReusePresets(file),
+      });
+    }
+
     function buildReuseDetailsFromPresets(file) {
       if (!file || !file.reuseEnabled) return [];
       var presets = ensureReusePresets(file);
@@ -3029,6 +3069,118 @@
       }
       persistTempExecState();
       renderTempExecView();
+    }
+
+    function updateTempExecPresetApplicability(fileId, presetId, value) {
+      var file = getTempExecFile(fileId);
+      if (!file) return;
+      var profile = getTempExecReuseApplicabilityProfile(file);
+      if (!profile) return;
+      var nextValue = value === null || value === undefined ? '' : String(value).trim();
+      var valid = !nextValue || profile.options.some(function(option) { return option && option.value === nextValue; });
+      if (!valid) return;
+      var preset = ensureReusePresets(file).find(function(item) { return item && item.id === presetId; });
+      if (!preset) return;
+      if (nextValue) preset.applicability = { profile: profile.key, value: nextValue };
+      else delete preset.applicability;
+      file._reuseApplicabilityDirty = true;
+      persistTempExecState();
+      renderTempExecView();
+      if (tempExecStatus) setStatus(tempExecStatus, '获取/解锁方式已修改，请应用不适用规则', 'warn');
+    }
+
+    function buildTempExecReuseApplicabilityMessage(profile, summary) {
+      var parts = [
+        '将按“' + profile.label + '”设置不适用 ' + String(summary.autoSet || 0) + ' 项',
+        '恢复未执行 ' + String(summary.autoCleared || 0) + ' 项',
+      ];
+      if (summary.conflicts) parts.push('保留人工结果 ' + String(summary.conflicts) + ' 项');
+      return parts.join('，') + '。是否应用？';
+    }
+
+    function applyTempExecReuseApplicability(fileId) {
+      var file = getTempExecFile(fileId);
+      if (!file || !file.reuseEnabled) return Promise.resolve(false);
+      var profile = getTempExecReuseApplicabilityProfile(file);
+      if (!profile || !reuseApplicabilityCore || typeof reuseApplicabilityCore.planApplication !== 'function') {
+        if (tempExecStatus) setStatus(tempExecStatus, '当前用例不支持获取/解锁方式自动匹配', 'warn');
+        return Promise.resolve(false);
+      }
+      var plan = reuseApplicabilityCore.planApplication({
+        profileKey: profile.key,
+        presets: ensureReusePresets(file),
+        cases: Array.isArray(file.cases) ? file.cases : [],
+      });
+      if (!plan.summary.configuredPresets) {
+        if (tempExecStatus) setStatus(tempExecStatus, '请至少为一个预设子项选择获取/解锁方式', 'warn');
+        return Promise.resolve(false);
+      }
+      if (!plan.changes.length && !file._reuseApplicabilityDirty) {
+        if (tempExecStatus) setStatus(tempExecStatus, '当前不适用结果已是最新', 'ok');
+        return Promise.resolve(true);
+      }
+
+      var preparedChanges = plan.changes.map(function(change) {
+        var nextCase = plan.cases[change.caseIndex];
+        var aggregateStatus = resolveReuseAggregateStatus(change.reuseDetails);
+        nextCase.actual = aggregateStatus;
+        return {
+          case_id: Number(change.caseId),
+          reuse_details: change.reuseDetails,
+          status: aggregateStatus,
+        };
+      });
+      if (isDbMode()) {
+        var hasPendingCase = preparedChanges.some(function(change) {
+          return !Number.isFinite(change.case_id) || change.case_id <= 0;
+        });
+        if (hasPendingCase) {
+          if (tempExecStatus) setStatus(tempExecStatus, '部分用例仍在保存，请稍后再应用', 'warn');
+          return Promise.resolve(false);
+        }
+      }
+
+      return openConfirmDrawer({
+        title: '应用不适用规则',
+        message: buildTempExecReuseApplicabilityMessage(profile, plan.summary),
+        hint: plan.summary.conflicts ? '已有人工执行结果不会被覆盖' : '',
+        confirmText: '确认应用',
+        cancelText: '取消',
+      }).then(function(result) {
+        if (!result || result.ok !== true) return false;
+        var finalize = function(serverResult) {
+          file.reusePresets = serverResult && Array.isArray(serverResult.reuse_presets)
+            ? normalizeReusePresets(serverResult.reuse_presets)
+            : plan.presets;
+          file.cases = plan.cases;
+          file._reuseApplicabilityDirty = false;
+          persistTempExecState();
+          renderTempExecView();
+          if (tempExecStatus) {
+            var text = '已设置不适用 ' + String(plan.summary.autoSet || 0) + ' 项';
+            if (plan.summary.autoCleared) text += '，恢复未执行 ' + String(plan.summary.autoCleared) + ' 项';
+            if (plan.summary.conflicts) text += '，保留人工结果 ' + String(plan.summary.conflicts) + ' 项';
+            setStatus(tempExecStatus, text, 'ok');
+          }
+          return true;
+        };
+        if (!isDbMode()) return finalize(null);
+        var client = getApiClient();
+        var execSetId = Number(file.execSetId || file.id);
+        if (!client || typeof client.applyExecReuseApplicability !== 'function' || !execSetId) {
+          if (tempExecStatus) setStatus(tempExecStatus, '批量保存接口不可用', 'err');
+          return false;
+        }
+        if (tempExecStatus) setStatus(tempExecStatus, '正在应用不适用规则...', '');
+        return client.applyExecReuseApplicability(execSetId, {
+          reuse_presets: plan.presets,
+          cases: preparedChanges,
+        }).then(finalize).catch(function(err) {
+          var message = err && err.message ? err.message : '应用失败';
+          if (tempExecStatus) setStatus(tempExecStatus, message, 'err');
+          return false;
+        });
+      });
     }
 
     function removeTempExecPreset(fileId, presetId) {
@@ -9670,14 +9822,27 @@
 
     function renderReusePresetPanel(file) {
       var presets = ensureReusePresets(file);
+      var applicabilityProfile = getTempExecReuseApplicabilityProfile(file);
       var draft = state.tempExecPresetDraft && state.tempExecPresetDraft.fileId === file.id
         ? state.tempExecPresetDraft.value || ''
         : null;
       var chips = presets.map(function(preset) {
         var presetText = preset && preset.text ? preset.text : '';
+        var applicability = normalizeReuseApplicability(preset && preset.applicability);
+        var selectedValue = applicability && applicabilityProfile && applicability.profile === applicabilityProfile.key
+          ? applicability.value
+          : '';
+        var applicabilitySelect = '';
+        if (applicabilityProfile) {
+          var applicabilityOptions = ['<option value="">未设置</option>'].concat(applicabilityProfile.options.map(function(option) {
+            return '<option value="' + escapeHtml(option.value) + '" ' + (selectedValue === option.value ? 'selected' : '') + '>' + escapeHtml(option.label) + '</option>';
+          })).join('');
+          applicabilitySelect = '<select class="preset-applicability-select" data-temp-reuse-preset-applicability="' + file.id + '" data-preset="' + preset.id + '" title="获取/解锁方式">' + applicabilityOptions + '</select>';
+        }
         return (
           '<span class="preset-chip">' +
             '<span class="preset-text" data-temp-reuse-preset-edit="' + file.id + '" data-preset="' + preset.id + '" title="点击编辑">' + escapeHtml(presetText) + '</span>' +
+            applicabilitySelect +
             '<span class="remove" data-temp-reuse-preset-remove="' + file.id + '" data-preset="' + preset.id + '" title="删除预设子项">×</span>' +
           '</span>'
         );
@@ -9694,9 +9859,16 @@
       var placeholder = !chips && draft === null
         ? '<span class="hint">暂无预设子项，可提前配置常用测试项</span>'
         : '';
+      var applicabilityActions = applicabilityProfile
+        ? (
+          '<span class="preset-profile-label">' + escapeHtml(applicabilityProfile.label) + '</span>' +
+          '<button type="button" class="preset-apply" data-temp-reuse-applicability-apply="' + file.id + '">应用不适用</button>'
+        )
+        : '';
       return (
         '<div class="reuse-presets">' +
           '<button type="button" class="preset-add" data-temp-reuse-preset-add="' + file.id + '">＋ 预设子项</button>' +
+          applicabilityActions +
           inputHtml +
           (chips || placeholder) +
         '</div>'
@@ -10184,6 +10356,7 @@
       if (isReuseDetailRemoved(entry)) return;
       var nextStatus = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
       entry.status = nextStatus;
+      clearReuseDetailAutoStatus(entry);
       targetCase.actual = resolveReuseAggregateStatus(targetCase.reuseDetails);
       if (isDbMode()) {
         queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
@@ -10330,8 +10503,10 @@
       var changed = false;
       for (var i = 0; i < visibleDetails.length; i += 1) {
         var detail = visibleDetails[i];
-        if (detail.status !== syncStatus) {
+        var hadAutoStatus = Boolean(detail.statusOrigin || detail.statusOriginProfile);
+        if (detail.status !== syncStatus || hadAutoStatus) {
           detail.status = syncStatus;
+          clearReuseDetailAutoStatus(detail);
           changed = true;
         }
       }
@@ -10621,6 +10796,8 @@
       updateTempExecPresetDraft: updateTempExecPresetDraft,
       confirmTempExecPresetDraft: confirmTempExecPresetDraft,
       renameTempExecPreset: renameTempExecPreset,
+      updateTempExecPresetApplicability: updateTempExecPresetApplicability,
+      applyTempExecReuseApplicability: applyTempExecReuseApplicability,
       removeTempExecPreset: removeTempExecPreset,
       toggleTempExecReusePanel: toggleTempExecReusePanel,
       addTempExecReuseEntry: addTempExecReuseEntry,

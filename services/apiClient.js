@@ -753,6 +753,14 @@
     }).then(handleResponse);
   }
 
+  function applyExecReuseApplicability(execSetId, payload) {
+    return fetch('/api/exec/sets/' + execSetId + '/reuse-applicability', {
+      method: 'PATCH',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
   function deleteExecCase(caseId) {
     return fetch('/api/exec/cases/' + caseId, {
       method: 'DELETE',
@@ -1057,6 +1065,7 @@
     upsertExecSetFromCaseFile: upsertExecSetFromCaseFile,
     createExecCase: createExecCase,
     updateExecCase: updateExecCase,
+    applyExecReuseApplicability: applyExecReuseApplicability,
     deleteExecCase: deleteExecCase,
     addExecCasesFromLibrary: addExecCasesFromLibrary,
     listSettings: listSettings,

@@ -81,6 +81,11 @@
 - `POST /api/exec/sets/from-case-file`（需登录）  
   - 入参：`{ case_file_id, exec_version_id?, mode?, preserve_results?, prefer_result_source?, import_cases?, requirement?, reuse_enabled?, reuse_presets? }`  
   - 说明：从用例库同步/创建执行集；`exec_version_id` 为“执行版本”，可传 `null` 表示未分配版本；不传则默认沿用用例库的导入版本。
+- `PATCH /api/exec/sets/{exec_set_id}/reuse-applicability`（需登录；仅 owner 或管理员）
+  - 入参：`{ reuse_presets: any[], cases: [{ case_id, reuse_details: any[], status }] }`
+  - 说明：在单个事务中保存复用预设的适用性配置和发生变化的复用子项结果；服务端会先校验全部 `case_id` 均属于目标执行集，任一用例无效时整批不写入。
+  - 限制：执行集必须已开启用例复用；单次最多更新 2000 条用例；`status` 仅支持未执行、通过、失败、阻塞、不适用。
+  - 出参：`{ exec_set_id, updated_cases, updated_case_ids, reuse_presets }`。
 
 ### 7.1 列表与过滤
 - `GET /api/exec/sets`（需登录）  

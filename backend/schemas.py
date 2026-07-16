@@ -495,6 +495,24 @@ class ExecSetUpdate(BaseModel):
     association_enabled: Optional[bool] = None
 
 
+class ExecReuseApplicabilityCaseUpdate(BaseModel):
+    case_id: int
+    reuse_details: List[Any]
+    status: str
+
+
+class ExecReuseApplicabilityApply(BaseModel):
+    reuse_presets: List[Any]
+    cases: List[ExecReuseApplicabilityCaseUpdate]
+
+
+class ExecReuseApplicabilityApplyOut(BaseModel):
+    exec_set_id: int
+    updated_cases: int
+    updated_case_ids: List[int]
+    reuse_presets: List[Any]
+
+
 class ExecSetArchiveRequest(BaseModel):
     reason: Optional[str] = None
 

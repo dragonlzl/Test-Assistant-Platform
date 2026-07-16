@@ -606,6 +606,126 @@ def update_exec_set(
     return exec_set
 
 
+@router.patch(
+    "/sets/{exec_set_id}/reuse-applicability",
+    response_model=schemas.ExecReuseApplicabilityApplyOut,
+)
+def apply_exec_reuse_applicability(
+    exec_set_id: int,
+    payload: schemas.ExecReuseApplicabilityApply,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    exec_set = _ensure_exec_set_access(db, user, exec_set_id)
+    if not bool(getattr(exec_set, "reuse_enabled", False)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请先开启用例复用再应用适用性规则",
+        )
+    if len(payload.cases) > 2000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="单次最多更新 2000 条执行用例",
+        )
+
+    requested_ids = [int(item.case_id) for item in payload.cases]
+    if len(set(requested_ids)) != len(requested_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="批量更新中存在重复用例",
+        )
+    allowed_statuses = {"未执行", "通过", "失败", "阻塞", "不适用"}
+    invalid_status = next(
+        (item.status for item in payload.cases if str(item.status or "").strip() not in allowed_statuses),
+        None,
+    )
+    if invalid_status is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="批量更新包含不支持的执行结果",
+        )
+
+    case_by_id = {}
+    if requested_ids:
+        rows = (
+            db.query(models.ExecCase)
+            .filter(models.ExecCase.exec_set_id == exec_set.id)
+            .filter(models.ExecCase.id.in_(requested_ids))
+            .all()
+        )
+        case_by_id = {int(row.id): row for row in rows}
+        missing_ids = [case_id for case_id in requested_ids if case_id not in case_by_id]
+        if missing_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="批量更新包含不属于当前执行集的用例",
+            )
+
+    now = datetime.now(timezone.utc)
+    updated_case_ids = []
+    for item in payload.cases:
+        exec_case = case_by_id[int(item.case_id)]
+        changed = False
+        fields = {
+            "reuse_details": item.reuse_details,
+            "status": str(item.status or "").strip(),
+        }
+        for field, value in fields.items():
+            old_value = getattr(exec_case, field)
+            if old_value == value:
+                continue
+            old_text = old_value
+            new_text = value
+            if old_value is not None and not isinstance(old_value, str):
+                old_text = json.dumps(old_value, ensure_ascii=False)
+            if value is not None and not isinstance(value, str):
+                new_text = json.dumps(value, ensure_ascii=False)
+            db.add(
+                models.ExecCaseHistory(
+                    exec_case_id=exec_case.id,
+                    field_changed=field,
+                    old_value=old_text,
+                    new_value=new_text,
+                    changed_by=user.id,
+                    changed_at=now,
+                )
+            )
+            setattr(exec_case, field, value)
+            changed = True
+        if changed:
+            exec_case.updated_by = user.id
+            exec_case.updated_at = now
+            db.add(exec_case)
+            updated_case_ids.append(int(exec_case.id))
+
+    presets_changed = exec_set.reuse_presets != payload.reuse_presets
+    if presets_changed:
+        exec_set.reuse_presets = payload.reuse_presets
+    if presets_changed or updated_case_ids:
+        exec_set.updated_at = now
+        db.add(exec_set)
+        log_operation(
+            db=db,
+            user_id=user.id,
+            action="apply_reuse_applicability",
+            target_type="exec_set",
+            target_id=exec_set.id,
+            detail={
+                "requested_cases": len(requested_ids),
+                "updated_cases": len(updated_case_ids),
+                "preset_count": len(payload.reuse_presets),
+            },
+        )
+        db.commit()
+
+    return schemas.ExecReuseApplicabilityApplyOut(
+        exec_set_id=int(exec_set.id),
+        updated_cases=len(updated_case_ids),
+        updated_case_ids=updated_case_ids,
+        reuse_presets=list(exec_set.reuse_presets or []),
+    )
+
+
 @router.delete("/sets/{exec_set_id}")
 def delete_exec_set(
     exec_set_id: int,
