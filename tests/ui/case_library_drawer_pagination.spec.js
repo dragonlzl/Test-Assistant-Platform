@@ -42,6 +42,45 @@ test.describe('用例库抽屉分页', () => {
     return list;
   }
 
+  function buildHistoryRowKeys(start, count) {
+    const keys = [];
+    for (let i = 0; i < count; i += 1) {
+      const name = `历史用例${start + i}`;
+      keys.push(`history-file:1:11:name:${encodeURIComponent(name)}`);
+    }
+    return keys;
+  }
+
+  async function readHistoryQueryRowKeys(page) {
+    return page.evaluate(() => {
+      const tableHost = window.app && window.app.ui ? window.app.ui.VTableHost : null;
+      const controller = tableHost && typeof tableHost.get === 'function'
+        ? tableHost.get('case-library-history-query')
+        : null;
+      const model = controller && typeof controller.getModel === 'function'
+        ? controller.getModel()
+        : null;
+      return model && Array.isArray(model.records)
+        ? model.records.map((record) => record.__rowKey)
+        : [];
+    });
+  }
+
+  async function readSelectExecRows(page) {
+    return page.evaluate(() => {
+      const tableHost = window.app && window.app.ui ? window.app.ui.VTableHost : null;
+      const controller = tableHost && typeof tableHost.get === 'function'
+        ? tableHost.get('case-library-select-exec')
+        : null;
+      const model = controller && typeof controller.getModel === 'function'
+        ? controller.getModel()
+        : null;
+      return model && Array.isArray(model.records)
+        ? model.records.map((record) => ({ rowKey: record.__rowKey, selected: record.selected === true }))
+        : [];
+    });
+  }
+
   async function waitForAppReady(page) {
     await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 30000 });
     await page.waitForFunction(() => window.app && window.app.state && window.app.apiClient, null, { timeout: 30000 });
@@ -149,8 +188,17 @@ test.describe('用例库抽屉分页', () => {
     const selectInfo = page.locator('[data-case-lib-drawer-pagination="select"] .temp-pagination-info').first();
     await expect(selectInfo).toContainText('每页 10 条');
     await expect(selectInfo).toContainText('显示 1-10 / 23 条');
+    await expect.poll(() => readSelectExecRows(page)).toHaveLength(10);
+    await page.check('#caseLibrarySelectSelectAll');
+    await expect.poll(async () => (await readSelectExecRows(page)).every((row) => row.selected)).toBe(true);
     await page.click('[data-case-lib-drawer-page="next"][data-case-lib-drawer-scope="select"]');
     await expect(selectInfo).toContainText('显示 11-20 / 23 条');
+    await expect.poll(async () => (await readSelectExecRows(page)).every((row) => !row.selected)).toBe(true);
+    await expect(page.locator('#caseLibrarySelectSelectAll')).not.toBeChecked();
+    await page.click('[data-case-lib-drawer-page="prev"][data-case-lib-drawer-scope="select"]');
+    await expect(selectInfo).toContainText('显示 1-10 / 23 条');
+    await expect.poll(async () => (await readSelectExecRows(page)).every((row) => row.selected)).toBe(true);
+    await expect(page.locator('#caseLibrarySelectSelectAll')).toBeChecked();
     await page.click('#caseLibrarySelectExecDrawer .drawer-header [data-drawer-close="caseLibrarySelectExecDrawer"]');
 
     await page.evaluate(() => {
@@ -167,8 +215,15 @@ test.describe('用例库抽屉分页', () => {
     await page.click('#caseLibraryHistoryQueryBtn');
     const historyInfo = page.locator('[data-case-lib-drawer-pagination="history-query"] .temp-pagination-info').first();
     await expect(historyInfo).toContainText('每页 10 条');
-    await expect(historyInfo).toContainText('显示 1-10 / 23 条');
+    await expect(historyInfo).toContainText('显示 1-10 / 共 23 条');
+    const historyTableHost = page.locator('#caseLibraryHistoryDrawerTableHost');
+    await expect(historyTableHost.locator('.tap-vtable-shell.is-ready')).toHaveCount(1);
+    const historySemanticRows = historyTableHost.locator('.tap-vtable-semantic tr[data-row-key]');
+    await expect(historySemanticRows).toHaveCount(10);
+    await expect.poll(() => readHistoryQueryRowKeys(page)).toEqual(buildHistoryRowKeys(1, 10));
     await page.click('[data-case-lib-drawer-page="next"][data-case-lib-drawer-scope="history-query"]');
-    await expect(historyInfo).toContainText('显示 11-20 / 23 条');
+    await expect(historyInfo).toContainText('显示 11-20 / 共 23 条');
+    await expect(historySemanticRows).toHaveCount(10);
+    await expect.poll(() => readHistoryQueryRowKeys(page)).toEqual(buildHistoryRowKeys(11, 10));
   });
 });

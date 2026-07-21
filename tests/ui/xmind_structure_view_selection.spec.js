@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 async function ensureMindElixirReady(page, url) {
   var maxRetry = 3;
@@ -315,7 +316,7 @@ test.describe('XMind 只读态节点选择', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click('#caseLibraryEditListBody [data-case-lib-edit="' + String(caseFileId) + '"]');
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="' + String(caseFileId) + '"]');
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
 
     await page.click('#caseLibraryXmindViewBtn');
@@ -482,7 +483,7 @@ test.describe('XMind 只读态节点选择', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click('#caseLibraryEditListBody [data-case-lib-edit="' + String(caseFileId) + '"]');
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="' + String(caseFileId) + '"]');
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await page.click('#caseLibraryXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);

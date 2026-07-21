@@ -1,0 +1,11 @@
+This distribution includes @visactor/vtable 1.26.1.
+
+Project: VTable
+Publisher: VisActor
+Homepage: https://visactor.io/vtable
+Source: https://github.com/VisActor/VTable
+License: MIT (see vtable.LICENSE.txt)
+
+The local vtable.es2019.min.js file is built from the package's
+dist/vtable.min.js artifact with an ES2019 target. No project-specific business
+logic is included in the vendor bundle.

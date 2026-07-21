@@ -1,0 +1,188 @@
+- generic [ref=f2e2]:
+  - complementary:
+    - generic:
+      - generic "用例助手": TA
+      - navigation "主功能导航":
+        - button "AI 功能":
+          - generic: AI
+        - button "用例相关":
+          - generic: TC
+        - button "管理":
+          - generic: AD
+        - button "设置":
+          - generic: ST
+      - button "收起二级导航" [expanded]: <
+    - generic:
+      - generic:
+        - strong: 用例相关
+      - generic:
+        - generic: 当前用户
+        - strong: demo_admin
+        - generic: 管理员
+        - button "用户菜单": 个人
+        - generic:
+          - button "登出"
+      - generic:
+        - generic:
+          - button "用例相关"
+          - button "用例库"
+      - navigation:
+        - generic:
+          - button "AI 功能 需先配置模型/指派":
+            - generic: AI 功能
+            - generic: 需先配置模型/指派
+        - generic:
+          - button "用例相关"
+          - generic:
+            - button "用例执行"
+            - button "用例库"
+            - button "用例归档"
+            - button "执行总览"
+        - generic:
+          - button "管理"
+        - generic:
+          - button "设置"
+      - button "回到顶部"
+      - button "跳到底部"
+      - generic:
+        - generic:
+          - button "xmind用例生成进度"
+          - button "个人备忘"
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic: xmind用例生成进度
+                  - button "收起" [expanded]
+                - generic: 点击打开对应 XMind 生成页签
+              - generic:
+                - paragraph: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - generic:
+        - generic:
+          - generic: 用例库导航
+          - button "收起" [expanded]
+        - generic:
+          - paragraph: 用例库相关入口汇总于此，点击卡片快速打开。
+          - generic:
+            - button "编写用例"
+            - button "导入用例"
+            - button "查看&编辑" [active]
+            - button "易漏用例"
+            - button "选择用例执行"
+            - button "用例改动历史"
+    - main [ref=f2e5]:
+      - generic [ref=f2e6]:
+        - heading "用例库" [level=2] [ref=f2e7]
+        - generic [ref=f2e9]:
+          - paragraph [ref=f2e10]: 提示：请使用顶部导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=f2e11]
+          - generic [ref=f2e12]:
+            - heading "用例编辑视图" [level=3] [ref=f2e13]
+            - generic [ref=f2e14]:
+              - generic [ref=f2e15]:
+                - generic [ref=f2e16]:
+                  - generic [ref=f2e17]: 项目
+                  - generic [ref=f2e18]: "--"
+                - generic [ref=f2e19]:
+                  - generic [ref=f2e20]: 版本
+                  - generic [ref=f2e21]: "--"
+                - generic [ref=f2e22]:
+                  - generic [ref=f2e23]: 用例名
+                  - generic [ref=f2e24]: "--"
+              - generic [ref=f2e25]:
+                - generic [ref=f2e26]:
+                  - button "清空搜索" [ref=f2e27] [cursor=pointer]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=f2e29]
+                  - button "AI 用例生成" [ref=f2e30]
+                  - button "XMind结构展示" [disabled] [ref=f2e31]
+                - generic [ref=f2e32]:
+                  - textbox "批量新增数量" [ref=f2e33]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=f2e34] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=f2e35]
+                  - button "转到执行" [ref=f2e36] [cursor=pointer]
+              - paragraph [ref=f2e37]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - generic [ref=f2e184]:
+        - generic [ref=f2e185]:
+          - heading "查看&编辑" [level=3] [ref=f2e186]
+          - button "全屏" [ref=f2e187] [cursor=pointer]: "[]"
+          - button "关闭" [ref=f2e188] [cursor=pointer]: x
+        - generic [ref=f2e189]:
+          - generic [ref=f2e191]:
+            - generic [ref=f2e192]: 搜索过滤
+            - generic [ref=f2e193]: 项目
+            - combobox "项目" [ref=f2e194] [cursor=pointer]:
+              - option "请选择项目" [selected]
+              - option "战魂铭人"
+            - generic [ref=f2e195]: 版本
+            - combobox "版本" [disabled] [ref=f2e196]:
+              - option "全部版本" [selected]
+            - generic [ref=f2e197]: 归属
+            - combobox "归属" [ref=f2e198] [cursor=pointer]:
+              - option "全部" [selected]
+              - option "其他项目导入"
+              - option "demo_admin"
+            - generic [ref=f2e199]: 用例名
+            - textbox "用例名" [ref=f2e200]:
+              - /placeholder: 搜索用例名
+            - button "刷新" [ref=f2e201] [cursor=pointer]
+          - generic [ref=f2e202]:
+            - generic [ref=f2e203]:
+              - generic [ref=f2e204]: 全局操作
+              - generic [ref=f2e205]: 请选择用例变更版本
+              - combobox "请选择用例变更版本" [disabled] [ref=f2e206]:
+                - option "请选择版本" [selected]
+              - button "确认更换版本" [disabled] [ref=f2e207]
+            - generic [ref=f2e208]:
+              - button "共享" [disabled] [ref=f2e209]
+              - button "导出XMind" [disabled] [ref=f2e210]
+              - button "导出Excel" [disabled] [ref=f2e211]
+              - button "删除所选" [disabled] [ref=f2e212]
+          - paragraph [ref=f2e213]
+          - generic [ref=f2e214]:
+            - checkbox "全选/全不选当前页" [disabled] [ref=f2e215]
+            - generic [ref=f2e216]: 全选当前页
+          - generic [ref=f2e218]:
+            - generic [ref=f2e220]:
+              - generic:
+                - textbox
+            - table [ref=f2e223]:
+              - caption [ref=f2e224]: 查看与编辑用例文件
+              - rowgroup [ref=f2e225]:
+                - row [ref=f2e226]:
+                  - columnheader "选择" [ref=f2e227]
+                  - columnheader "所属项目" [ref=f2e228]
+                  - columnheader "版本" [ref=f2e229]
+                  - columnheader "用例名" [ref=f2e230]
+                  - columnheader "执行页状态" [ref=f2e231]
+                  - columnheader "用例条目数" [ref=f2e232]
+                  - columnheader "复用类型" [ref=f2e233]
+                  - columnheader "导入人员" [ref=f2e234]
+                  - columnheader "导入时间" [ref=f2e235]
+                  - columnheader "最近更新人员" [ref=f2e236]
+                  - columnheader "更新时间" [ref=f2e237]
+                  - columnheader "关联用例" [ref=f2e238]
+                  - columnheader "操作" [ref=f2e239]
+              - rowgroup [ref=f2e240]:
+                - row [ref=f2e241]:
+                  - cell "请选择项目后自动刷新。" [ref=f2e242]
+          - button "关闭" [ref=f2e244] [cursor=pointer]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"

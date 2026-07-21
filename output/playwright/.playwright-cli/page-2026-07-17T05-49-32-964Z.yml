@@ -1,0 +1,120 @@
+- generic [ref=f6e2]:
+  - complementary:
+    - generic:
+      - generic "用例助手": TA
+      - navigation "主功能导航":
+        - button "AI 功能":
+          - generic: AI
+        - button "用例相关":
+          - generic: TC
+        - button "管理":
+          - generic: AD
+        - button "设置":
+          - generic: ST
+      - button "展开二级导航": ">"
+  - generic [ref=f6e3]:
+    - generic [ref=f6e4]:
+      - generic:
+        - generic:
+          - generic: 用例库导航
+          - button "收起" [expanded]
+        - generic:
+          - paragraph: 用例库相关入口汇总于此，点击卡片快速打开。
+          - generic:
+            - button "编写用例"
+            - button "导入用例"
+            - button "查看&编辑"
+            - button "易漏用例"
+            - button "选择用例执行"
+            - button "用例改动历史"
+    - main [ref=f6e5]:
+      - generic [ref=f6e6]:
+        - heading "用例库" [level=2] [ref=f6e7]
+        - generic [ref=f6e9]:
+          - paragraph [ref=f6e10]: 提示：请使用顶部导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=f6e11]
+          - generic [ref=f6e12]:
+            - heading "用例编辑视图" [level=3] [ref=f6e13]
+            - generic [ref=f6e14]:
+              - generic [ref=f6e15]:
+                - generic [ref=f6e16]:
+                  - generic [ref=f6e17]: 项目
+                  - generic [ref=f6e18]: "--"
+                - generic [ref=f6e19]:
+                  - generic [ref=f6e20]: 版本
+                  - generic [ref=f6e21]: "--"
+                - generic [ref=f6e22]:
+                  - generic [ref=f6e23]: 用例名
+                  - generic [ref=f6e24]: "--"
+              - generic [ref=f6e25]:
+                - generic [ref=f6e26]:
+                  - button "清空搜索" [ref=f6e27] [cursor=pointer]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=f6e29]
+                  - button "AI 用例生成" [ref=f6e30]
+                  - button "XMind结构展示" [disabled] [ref=f6e31]
+                - generic [ref=f6e32]:
+                  - textbox "批量新增数量" [ref=f6e33]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=f6e34] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=f6e35]
+                  - button "转到执行" [ref=f6e36] [cursor=pointer]
+              - paragraph [ref=f6e37]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - generic [ref=f6e41]:
+        - generic [ref=f6e42]:
+          - heading "用例库说明" [level=3] [ref=f6e43]
+          - button "关闭" [ref=f6e44] [cursor=pointer]: x
+        - generic [ref=f6e46]:
+          - generic [ref=f6e47]:
+            - heading "页面功能简介" [level=4] [ref=f6e48]
+            - paragraph [ref=f6e49]: 集中管理用例库文件与条目，支持导入、编辑、转执行与历史查看。
+          - generic [ref=f6e50]:
+            - heading "操作流程" [level=4] [ref=f6e51]
+            - list [ref=f6e52]:
+              - listitem [ref=f6e53]: 点击顶部导航 【导入用例】，选择文件、项目与版本后点击 【确认入库】。
+              - listitem [ref=f6e54]: 点击 【查看&编辑】，搜索并编辑用例条目。
+              - listitem [ref=f6e55]: 点击 【选择用例执行】，在当前页抽屉勾选用例并转到执行。
+              - listitem [ref=f6e56]: 点击 【用例改动历史】 查看导入、覆盖、编辑记录。
+          - generic [ref=f6e57]:
+            - heading "必要说明" [level=4] [ref=f6e58]
+            - list [ref=f6e59]:
+              - listitem [ref=f6e60]: 【确认入库】：完成导入写库，支持同名差异对比。
+              - listitem [ref=f6e61]: 【转到执行】 / 【批量转到执行】：将选中用例同步到执行页。
+              - listitem [ref=f6e62]: 编辑或删除会记录历史，可在历史视图回溯。
+          - generic [ref=f6e63]:
+            - heading "用例导入模板" [level=4] [ref=f6e64]
+            - generic [ref=f6e65]:
+              - paragraph [ref=f6e66]: 可在【用例库】的【用例导入】页面，下载用例模板，也可以在此处下载模板。
+              - generic [ref=f6e67]:
+                - button "Excel导入模板" [ref=f6e68] [cursor=pointer]
+                - button "XMind导入模板" [ref=f6e69] [cursor=pointer]
+          - generic [ref=f6e70]:
+            - heading "XMind 用例结构" [level=4] [ref=f6e71]
+            - generic [ref=f6e72]:
+              - paragraph [ref=f6e73]: 点击下方按钮查看 XMind 用例结构要求，确保层级完整便于系统解析。
+              - button "? 查看 XMind 用例结构" [ref=f6e74] [cursor=pointer]:
+                - generic [ref=f6e75]: "?"
+                - generic [ref=f6e76]: 查看 XMind 用例结构
+          - generic [ref=f6e77]:
+            - heading "提示" [level=3] [ref=f6e78]
+            - list [ref=f6e79]:
+              - listitem [ref=f6e80]:
+                - strong [ref=f6e81]: 进入设置的“其他设置”页可以关闭每次进入的提示。
+                - text: 如不需要自动弹出，可取消勾选对应页面。

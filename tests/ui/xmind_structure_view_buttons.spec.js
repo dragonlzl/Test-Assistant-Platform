@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 async function ensureMindElixirReady(page, url) {
   var maxRetry = 3;
@@ -95,6 +96,20 @@ async function getDrawerWidthRatio(page) {
     var vw = window.innerWidth || document.documentElement.clientWidth || 1;
     if (!vw) return 0;
     return rect.width / vw;
+  });
+}
+
+async function getFullscreenDrawerWidthRatio(page) {
+  return page.evaluate(() => {
+    var rootStyle = typeof getComputedStyle === 'function'
+      ? getComputedStyle(document.documentElement)
+      : null;
+    var railWidth = rootStyle
+      ? parseFloat(rootStyle.getPropertyValue('--tap-nav-rail-width'))
+      : 0;
+    var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1;
+    if (!isFinite(railWidth) || railWidth < 0) railWidth = 0;
+    return Math.max(0, viewportWidth - railWidth) / viewportWidth;
   });
 }
 
@@ -488,7 +503,8 @@ test.describe('XMind 结构展示按钮', () => {
     await page.click('#tempExecXmindStructureViewer [data-mind-action="drawer-fullscreen"]');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
     var execFullscreenRatio = await getDrawerWidthRatio(page);
-    expect(execFullscreenRatio).toBeGreaterThanOrEqual(0.97);
+    var execExpectedFullscreenRatio = await getFullscreenDrawerWidthRatio(page);
+    expect(Math.abs(execFullscreenRatio - execExpectedFullscreenRatio)).toBeLessThanOrEqual(0.01);
     await expect(execFullscreenBtn).toHaveText('复原');
     await page.click('#tempExecXmindStructureViewer [data-mind-action="drawer-fullscreen"]');
     await expect(page.locator('#xmindStructureDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
@@ -982,7 +998,7 @@ test.describe('XMind 结构展示按钮', () => {
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`)).toBeVisible();
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
 
     await expect(page.locator('#caseLibraryXmindViewBtn')).toBeEnabled();
@@ -1003,7 +1019,8 @@ test.describe('XMind 结构展示按钮', () => {
     await page.click('#caseLibraryXmindStructureViewer [data-mind-action="drawer-fullscreen"]');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
     var caseLibFullscreenRatio = await getDrawerWidthRatio(page);
-    expect(caseLibFullscreenRatio).toBeGreaterThanOrEqual(0.97);
+    var caseLibExpectedFullscreenRatio = await getFullscreenDrawerWidthRatio(page);
+    expect(Math.abs(caseLibFullscreenRatio - caseLibExpectedFullscreenRatio)).toBeLessThanOrEqual(0.01);
     await expect(caseLibraryFullscreenBtn).toHaveText('复原');
     await page.keyboard.press('Escape');
     await expect(page.locator('#xmindStructureDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
@@ -1066,7 +1083,7 @@ test.describe('XMind 结构展示按钮', () => {
     expect(locatedEditor.field).toBeTruthy();
     expect(locatedEditor.index).toBe('1');
     const caseLocateHighlight = await page.evaluate(() => {
-      var cell = document.querySelector('#caseLibraryEditView [data-case-lib-edit-field="module"][data-index="1"]');
+      var cell = document.querySelector('#caseLibraryEditView .tap-vtable-semantic [data-case-lib-edit-field="module"][data-index="1"]');
       var row = cell && cell.closest ? cell.closest('tr') : null;
       return Boolean(row && row.classList && row.classList.contains('xmind-locate-highlight'));
     });

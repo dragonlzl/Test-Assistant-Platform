@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/case-library.html');
 }
 
 async function waitAppReady(page, timeoutMs) {
@@ -16,12 +17,17 @@ async function waitAppReady(page, timeoutMs) {
       return {
         hasApp: Boolean(window.app),
         authReady: Boolean(window.app && window.app.authReady === true),
+        caseLibraryBound: Boolean(window.app && window.app.caseLibraryBound === true),
         hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
+        tabGroupBound: Boolean(window.app && window.app.tabGroupBound === true),
         tab: window.app && window.app.state ? window.app.state.activeTab : '',
         token: token,
       };
     });
-    if (last && last.hasApp && last.authReady && last.hasSwitchTab) return;
+    if (
+      last && last.hasApp && last.authReady && last.caseLibraryBound &&
+      last.hasSwitchTab && last.tabGroupBound
+    ) return;
     await page.waitForTimeout(200);
   }
   throw new Error('waitAppReady timeout: ' + JSON.stringify(last || {}));
@@ -165,10 +171,10 @@ test.describe('用例库编辑视图单条删除确认抽屉', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
-    await page.click('#caseLibraryEditView button[data-case-lib-remove][data-index="0"]');
+    await clickSemantic(page, '#caseLibraryEditView button[data-case-lib-remove][data-index="0"]');
     await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
     await page.click('#appConfirmDrawerConfirmBtn');
     await page.waitForFunction(() => {

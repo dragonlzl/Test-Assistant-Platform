@@ -1,11 +1,15 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
 
 async function waitForAppReady(page) {
   await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 30000 });
   await page.waitForFunction(() => window.app && window.app.state && window.app.apiClient, null, { timeout: 30000 });
-  await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 30000 });
+  await page.waitForFunction(() => {
+    return window.app && window.app.caseLibraryBound === true &&
+      window.app.tabGroupBound === true && typeof window.app.switchTab === 'function';
+  }, null, { timeout: 30000 });
 }
 
 test.describe('用例视图字号设置', () => {
@@ -49,6 +53,37 @@ test.describe('用例视图字号设置', () => {
 
   function createApiHandler(serverState) {
     let settingSeq = 20;
+    const execSet = {
+      id: 9301,
+      name: '字号验证执行集',
+      status: 'active',
+      project_id: project.id,
+      version_id: versions[0].id,
+      case_count: 1,
+      created_at: now,
+      updated_at: now,
+    };
+    const execCases = [{
+      id: 9401,
+      exec_set_id: execSet.id,
+      case_item_id: 9101,
+      module: '模块A',
+      title: '用例1',
+      expected: '期望1',
+      priority: 'P1',
+      precondition: '',
+      steps: '步骤1',
+      actual_result: '',
+      defect_link: null,
+      reuse_details: null,
+      defect_links: null,
+      remark: '',
+      status: '未执行',
+      order_no: 1,
+      executor_id: user.id,
+      created_at: now,
+      updated_at: now,
+    }];
     return async function(route) {
       const url = new URL(route.request().url());
       const path = url.pathname;
@@ -107,7 +142,13 @@ test.describe('用例视图字号设置', () => {
       if (path === '/api/exec/overview' && method === 'GET') return respond(200, {});
       if (path === '/api/exec/overview/cases' && method === 'GET') return respond(200, []);
       if (path === '/api/exec/overview/layout' && method === 'GET') return respond(200, {});
-      if (path === '/api/exec/sets' && method === 'GET') return respond(200, []);
+      if (path === '/api/exec/sets' && method === 'GET') {
+        if (url.searchParams.get('status_filter') === 'archived') return respond(200, []);
+        return respond(200, [execSet]);
+      }
+      if (path === `/api/exec/sets/${execSet.id}/cases` && method === 'GET') {
+        return respond(200, execCases);
+      }
       if (path === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
       if (path.startsWith('/api/')) return respond(200, []);
       return respond(404, { detail: 'not found' });
@@ -162,11 +203,15 @@ test.describe('用例视图字号设置', () => {
     });
     await page.route('**/api/**', apiHandler);
 
-    await page.goto(base + '/index.html');
+    await page.goto(base + '/case-library.html');
     await page.waitForLoadState('domcontentloaded');
     await waitForAppReady(page);
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await page.waitForURL(/\/settings\.html(?:\?|$)/, { timeout: 30000 });
+    await page.waitForFunction(() => {
+      return window.app && window.app._inited === true && window.app.settingsReady === true;
+    }, null, { timeout: 30000 });
     await expect(page.locator('#caseViewFontSizeInput')).toBeVisible();
     await page.fill('#caseViewFontSizeInput', '15');
     await page.click('#saveCaseViewFontSize');
@@ -178,7 +223,15 @@ test.describe('用例视图字号设置', () => {
     });
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await page.waitForURL(/\/case-exec\.html(?:\?|$)/, { timeout: 30000 });
+    await page.waitForFunction(() => {
+      var size = getComputedStyle(document.documentElement).getPropertyValue('--case-view-font-size').trim();
+      return window.app && window.app._inited === true && document.body &&
+        document.body.getAttribute('data-page') === 'case-exec' && size === '15px';
+    }, null, { timeout: 30000 });
     await page.waitForSelector('#tempExecView table');
+    await page.waitForSelector('#tempExecView select.status-select');
+    await page.waitForSelector('#tempExecView .remark-toggle');
     const execSizes = await page.evaluate(() => {
       const table = document.querySelector('#tempExecView table');
       const status = document.querySelector('#tempExecView select.status-select');
@@ -194,11 +247,13 @@ test.describe('用例视图字号设置', () => {
     expect(execSizes.remark).toBe('14px');
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
+    await page.waitForURL(/\/case-library\.html(?:\?|$)/, { timeout: 30000 });
+    await waitForAppReady(page);
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await page.waitForSelector(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await page.waitForSelector('#caseLibraryEditView table');
     const editFont = await page.evaluate(() => {
       const table = document.querySelector('#caseLibraryEditView table');

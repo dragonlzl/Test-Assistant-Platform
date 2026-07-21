@@ -1,0 +1,278 @@
+.tap-vtable-shell {
+  position: relative;
+  width: 100%;
+  height: min(68vh, 720px);
+  min-height: 240px;
+  overflow: hidden;
+  border: 1px solid var(--tap-table-border);
+  border-radius: 0;
+  background: var(--tap-surface);
+}
+
+.tap-vtable-canvas {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  outline: 0;
+}
+
+.tap-vtable-editor {
+  padding: 0 10px !important;
+  border: 1px solid var(--tap-accent) !important;
+  border-radius: 0 !important;
+  outline: 0 !important;
+  background: var(--tap-surface) !important;
+  color: var(--tap-text) !important;
+  box-shadow: inset 0 0 0 1px var(--tap-ring) !important;
+  font-family: var(--tap-font) !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+}
+
+textarea.tap-vtable-editor {
+  padding-block: 6px !important;
+  resize: none !important;
+}
+
+.tap-vtable-status {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--tap-surface);
+  color: var(--tap-muted);
+  font-size: 13px;
+}
+
+.tap-vtable-shell.is-loading .tap-vtable-status,
+.tap-vtable-shell.is-fallback .tap-vtable-status {
+  display: flex;
+}
+
+.tap-vtable-shell.is-fallback .tap-vtable-status {
+  inset: 0 0 auto;
+  height: 32px;
+  border-bottom: 1px solid var(--tap-border);
+}
+
+.tap-vtable-semantic:not(.is-fallback) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.tap-vtable-semantic.is-fallback {
+  position: absolute;
+  inset: 32px 0 0;
+  overflow: auto;
+  background: var(--tap-surface);
+}
+
+.tap-vtable-semantic-table,
+.admin-table,
+.table-view,
+.clean-view-table,
+.clarify-table,
+.temp-case-view table,
+.missing-reminder-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  background: var(--tap-surface);
+  color: var(--tap-text);
+  font-family: var(--tap-font);
+  font-size: 14px;
+}
+
+.tap-vtable-semantic-table th,
+.admin-table th,
+.table-view th,
+.clean-view-table th,
+.clarify-table th,
+.temp-case-view th,
+.missing-reminder-table th {
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-right: 1px solid var(--tap-table-border);
+  border-bottom: 1px solid var(--tap-table-border);
+  background: var(--tap-surface);
+  color: #344054;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1;
+  text-align: left;
+}
+
+.tap-vtable-semantic-table td,
+.admin-table td,
+.table-view td,
+.clean-view-table td,
+.clarify-table td,
+.temp-case-view td,
+.missing-reminder-table td {
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 0;
+  border-right: 1px solid var(--tap-table-border);
+  border-bottom: 1px solid var(--tap-table-border);
+  background: var(--tap-surface);
+  color: var(--tap-text);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.tap-vtable-semantic-table tbody tr:hover td,
+.admin-table tbody tr:hover td,
+.table-view tbody tr:hover td,
+.clean-view-table tbody tr:hover td,
+.clarify-table tbody tr:hover td,
+.temp-case-view tbody tr:hover td,
+.missing-reminder-table tbody tr:hover td {
+  background: #f8fafc;
+}
+
+.admin-table-wrapper,
+.temp-case-view {
+  border: 1px solid var(--tap-table-border);
+  border-radius: 0;
+  background: var(--tap-surface);
+  box-shadow: none;
+}
+
+.tap-table-action-menu {
+  position: fixed;
+  z-index: 10020;
+  display: flex;
+  min-width: 128px;
+  max-width: 220px;
+  padding: 4px;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--tap-border);
+  border-radius: 6px;
+  background: var(--tap-surface);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.tap-table-action-menu button {
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--tap-text);
+  text-align: left;
+}
+
+.tap-table-action-menu button:hover:not(:disabled) {
+  background: var(--tap-surface-hover);
+}
+
+.tap-table-action-menu button[data-tone="danger"] {
+  color: var(--tap-danger);
+}
+
+.drawer[data-drawer-kind="table"] .tap-vtable-shell,
+.drawer[data-drawer-kind="diff"] .tap-vtable-shell {
+  height: calc(100vh - 220px);
+  min-height: 320px;
+}
+
+.tap-table-select-all {
+  display: inline-flex;
+  width: auto;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 6px;
+  color: var(--tap-muted);
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.case-library-editor-vtable-view {
+  min-width: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.case-library-editor-vtable-view > .tap-table-select-all {
+  margin: 8px 0;
+}
+
+.case-library-editor-table-host {
+  width: 100%;
+  min-width: 0;
+}
+
+.case-library-editor-table-host .tap-vtable-shell {
+  height: min(68vh, 720px);
+  min-height: 360px;
+}
+
+.temp-exec-case-library-diff-table {
+  width: 100%;
+  min-width: 0;
+}
+
+.temp-exec-case-library-diff-table .tap-vtable-semantic-table td[data-tone] {
+  font-weight: 600;
+}
+
+.temp-exec-case-library-diff-table .tap-vtable-semantic-table td.case-lib-diff-kind {
+  font-weight: 700;
+}
+
+.case-library-drawer-actions .tap-table-select-all input[type="checkbox"] {
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
+  min-height: 14px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 14px;
+}
+
+:root[data-theme="dark"] .tap-vtable-semantic-table th,
+:root[data-theme="dark"] .admin-table th,
+:root[data-theme="dark"] .table-view th,
+:root[data-theme="dark"] .clean-view-table th,
+:root[data-theme="dark"] .clarify-table th,
+:root[data-theme="dark"] .temp-case-view th,
+:root[data-theme="dark"] .missing-reminder-table th {
+  background: #151d2a;
+  color: #f3f4f6;
+  border-color: var(--tap-table-border);
+}
+
+:root[data-theme="dark"] .tap-vtable-semantic-table td,
+:root[data-theme="dark"] .admin-table td,
+:root[data-theme="dark"] .table-view td,
+:root[data-theme="dark"] .clean-view-table td,
+:root[data-theme="dark"] .clarify-table td,
+:root[data-theme="dark"] .temp-case-view td,
+:root[data-theme="dark"] .missing-reminder-table td {
+  background: var(--tap-surface);
+  color: var(--tap-text);
+  border-color: var(--tap-table-border);
+}
+
+:root[data-theme="dark"] .tap-vtable-semantic-table tbody tr:hover td,
+:root[data-theme="dark"] .admin-table tbody tr:hover td,
+:root[data-theme="dark"] .table-view tbody tr:hover td,
+:root[data-theme="dark"] .clean-view-table tbody tr:hover td,
+:root[data-theme="dark"] .clarify-table tbody tr:hover td,
+:root[data-theme="dark"] .temp-case-view tbody tr:hover td,
+:root[data-theme="dark"] .missing-reminder-table tbody tr:hover td {
+  background: var(--tap-surface-hover);
+}

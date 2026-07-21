@@ -22,7 +22,8 @@ test.describe('用例助手基础冒烟', () => {
   });
 
   test('页面加载与导航存在', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: '用例助手' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: '主功能导航' })).toBeVisible();
+    await expect(page.locator('.tap-nav-brand')).toHaveAttribute('title', '用例助手');
     await page.click('[data-group="ai"]');
     await expect(page.locator('[data-tab-btn="auto"]')).toBeVisible();
     await expect(page.locator('[data-tab-btn="casesgen"]')).toBeVisible();
@@ -64,9 +65,13 @@ test.describe('用例助手基础冒烟', () => {
         await page.click(`[data-tab-btn="${tabId}"]`);
       }
     }
-    const steps = await page.$$('#flowNav .step');
-    for (const step of steps) {
-      await step.click();
+    await page.click('[data-group="ai"]');
+    await page.click('[data-tab-btn="auto"]');
+    const steps = page.locator('#flowNav .step:visible');
+    const stepCount = await steps.count();
+    expect(stepCount).toBeGreaterThan(0);
+    for (let index = 0; index < stepCount; index += 1) {
+      await steps.nth(index).click();
     }
   });
 });

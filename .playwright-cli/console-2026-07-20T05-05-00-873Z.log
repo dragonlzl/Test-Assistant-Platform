@@ -1,0 +1,21 @@
+[     115ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/projects:0
+[     115ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/settings?scope=all&owner_id=0:0
+[     115ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/models?scope=all&owner_id=0:0
+[     115ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/features?scope=all&owner_id=0:0
+[     122ms] [WARNING] 加载设置失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/settings.js:576
+[     122ms] [WARNING] 加载远端模型失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:499
+[     122ms] [WARNING] 加载功能指派失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:699
+[     168ms] Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19
+[     264ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/settings?scope=all&owner_id=0:0
+[     264ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/models?scope=all&owner_id=0:0
+[     264ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/features?scope=all&owner_id=0:0
+[     271ms] [WARNING] 加载设置失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/settings.js:576
+[     272ms] [WARNING] 加载远端模型失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:499
+[     272ms] [WARNING] 加载功能指派失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:699

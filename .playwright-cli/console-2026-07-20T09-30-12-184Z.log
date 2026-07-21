@@ -1,0 +1,9 @@
+[     405ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:8080/api/settings?scope=all&owner_id=0:0
+[     406ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:8080/api/models?scope=all&owner_id=0:0
+[     406ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:8080/api/features?scope=all&owner_id=0:0
+[     428ms] [WARNING] 加载设置失败 Error: 未登录
+    at http://127.0.0.1:8080/services/apiClient.js:193:19 @ http://127.0.0.1:8080/scripts/modules/settings.js:576
+[     429ms] [WARNING] 加载远端模型失败 Error: 未登录
+    at http://127.0.0.1:8080/services/apiClient.js:193:19 @ http://127.0.0.1:8080/scripts/modules/models.js:499
+[     429ms] [WARNING] 加载功能指派失败 Error: 未登录
+    at http://127.0.0.1:8080/services/apiClient.js:193:19 @ http://127.0.0.1:8080/scripts/modules/models.js:699

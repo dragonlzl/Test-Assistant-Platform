@@ -34,7 +34,7 @@ test.describe('侧边分级菜单', () => {
     await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
   });
 
-  test('点击一级菜单展开二级并可关闭', async ({ page }) => {
+  test('点击一级菜单展开二级并保持当前业务组', async ({ page }) => {
     const bound = await page.evaluate(() => window.app && window.app.tabGroupBound);
     console.log('tab group bound', bound);
     const groupBtn = page.locator('.tab-group-btn', { hasText: 'AI 功能' });
@@ -90,7 +90,8 @@ test.describe('侧边分级菜单', () => {
     expect(hoverCleared.hoveringGroup).toBe('');
 
     await page.locator('main').click();
-    await expect(submenu).toBeHidden();
+    await expect(submenu).toBeVisible();
+    await expect(page.locator('.tap-nav-rail-item[data-nav-group="ai"]')).toHaveClass(/active/);
   });
 
   test('抽屉打开时侧边导航不可点击', async ({ page }) => {

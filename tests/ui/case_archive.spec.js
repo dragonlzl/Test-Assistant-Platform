@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -245,8 +246,10 @@ test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
     await page.click('#openCaseArchiveDrawerBtn');
     await expect(page.locator('#caseArchiveDrawer')).toHaveClass(/open/);
 
-    await expect(page.locator('#caseArchiveListBody')).toContainText('用例1', { timeout: 8000 });
-    await page.click('#caseArchiveListBody [data-case-archive-action="view"]');
+    const archiveListTable = page.locator('#caseArchiveListTableHost .tap-vtable-semantic-table');
+    await expect(archiveListTable).toContainText('用例1', { timeout: 8000 });
+    await expect(page.locator('#caseArchiveListTableHost .tap-vtable-canvas canvas')).toHaveCount(1);
+    await clickSemantic(page, '#caseArchiveListTableHost [data-case-archive-action="view"]');
 
     // 抽屉关闭，主页展示详情
     await expect(page.locator('#caseArchiveDrawer')).not.toHaveClass(/open/);
@@ -402,8 +405,9 @@ test.describe('用例归档（个人总览归档 + 归档页查看）', () => {
     await page.click('#openCaseArchiveDrawerBtn');
     await expect(page.locator('#caseArchiveDrawer')).toHaveClass(/open/);
 
-    await expect(page.locator('#caseArchiveListBody')).toContainText('复用用例集', { timeout: 8000 });
-    await page.click('#caseArchiveListBody [data-case-archive-action="view"]');
+    await expect(page.locator('#caseArchiveListTableHost .tap-vtable-semantic-table')).toContainText('复用用例集', { timeout: 8000 });
+    await expect(page.locator('#caseArchiveListTableHost .tap-vtable-canvas canvas')).toHaveCount(1);
+    await clickSemantic(page, '#caseArchiveListTableHost [data-case-archive-action="view"]');
 
     await expect(page.locator('#caseArchiveDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#caseArchiveDetailCard')).toBeVisible();

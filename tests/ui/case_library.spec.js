@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { test, expect } = require('@playwright/test');
+const { setSemanticValue } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -61,6 +62,13 @@ async function waitCaseLibraryReady(page, timeoutMs) {
           caseLibraryBound: Boolean(window.app && window.app.caseLibraryBound === true),
           hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
           tabGroupBound: Boolean(window.app && window.app.tabGroupBound === true),
+          execVersionDrawerReady: Boolean(
+            window.app && window.app.execVersionDrawer &&
+            typeof window.app.execVersionDrawer.open === 'function'
+          ),
+          page: document.body && document.body.getAttribute
+            ? String(document.body.getAttribute('data-page') || '')
+            : '',
           path: (window.location && window.location.pathname) ? String(window.location.pathname) : '',
           token: token,
         };
@@ -74,7 +82,11 @@ async function waitCaseLibraryReady(page, timeoutMs) {
       throw err;
     }
 
-    if (last && last.hasApp && last.authReady && last.caseLibraryBound && last.hasSwitchTab && last.tabGroupBound) return;
+    if (
+      last && last.hasApp && last.authReady && last.caseLibraryBound &&
+      last.hasSwitchTab && last.tabGroupBound && last.execVersionDrawerReady &&
+      last.page === 'case-library'
+    ) return;
 
     // 兜底：偶发跳转到 login.html（通常因 token 注入/接口链路抖动），补 token 后回到 index.html 再等一次。
     if (!retriedGoto && last && last.path && last.path.indexOf('login') !== -1) {
@@ -160,6 +172,62 @@ async function openDrawer(page, buttonSelector, drawerSelector) {
     }
   }
   throw lastErr || new Error('openDrawer failed: ' + drawerSelector);
+}
+
+function selectExecSemanticTable(page) {
+  return page.locator('#caseLibrarySelectExecTableHost .tap-vtable-semantic');
+}
+
+async function setSelectExecSelected(page, fileId, checked) {
+  const result = await page.locator('#caseLibrarySelectExecTableHost').evaluate((host, target) => {
+    const row = host.querySelector(
+      '.tap-vtable-semantic tr[data-row-key="case-library-select:' + target.fileId + '"]'
+    );
+    const input = row ? row.querySelector('[data-field="selected"] input') : null;
+    if (!input) return false;
+    if (input.checked !== target.checked) input.click();
+    return true;
+  }, { fileId: Number(fileId), checked: checked === true });
+  expect(result).toBe(true);
+}
+
+async function clickSelectExecAction(page, fileId, action) {
+  const result = await page.locator('#caseLibrarySelectExecTableHost').evaluate((host, target) => {
+    const row = host.querySelector(
+      '.tap-vtable-semantic tr[data-row-key="case-library-select:' + target.fileId + '"]'
+    );
+    const button = row ? row.querySelector('[data-table-action="' + target.action + '"]') : null;
+    if (!button) return false;
+    button.click();
+    return true;
+  }, { fileId: Number(fileId), action });
+  expect(result).toBe(true);
+}
+
+async function setEditListSelected(page, fileId, checked) {
+  const result = await page.locator('#caseLibraryEditListBody').evaluate((host, target) => {
+    const row = host.querySelector(
+      '.tap-vtable-semantic tr[data-row-key="case-library-edit:' + target.fileId + '"]'
+    );
+    const input = row ? row.querySelector('[data-field="selected"] input') : null;
+    if (!input) return false;
+    if (input.checked !== target.checked) input.click();
+    return true;
+  }, { fileId: Number(fileId), checked: checked === true });
+  expect(result).toBe(true);
+}
+
+async function clickEditListAction(page, fileId) {
+  const result = await page.locator('#caseLibraryEditListBody').evaluate((host, targetId) => {
+    const row = host.querySelector(
+      '.tap-vtable-semantic tr[data-row-key="case-library-edit:' + targetId + '"]'
+    );
+    const button = row ? row.querySelector('[data-table-action="edit"]') : null;
+    if (!button) return false;
+    button.click();
+    return true;
+  }, Number(fileId));
+  expect(result).toBe(true);
 }
 
 async function switchToTab(page, tabName) {
@@ -569,9 +637,13 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryImportStatus')).toContainText('同名用例已存在');
     await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#caseLibraryImportDiffStatus')).toContainText('对比完成');
-    await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('新增用例');
-    await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('点击登录（修改）');
-	    await expect(page.locator('#caseLibraryImportDiffBody')).toContainText('点击登录');
+    const diffTableHost = page.locator('#caseLibraryImportDiffTableHost');
+    await expect(diffTableHost.locator('.tap-vtable-shell.is-ready')).toHaveCount(1);
+    const diffSemanticMirror = diffTableHost.locator('.tap-vtable-semantic');
+    await expect(diffSemanticMirror).toContainText('新增用例');
+    await expect(diffSemanticMirror).toContainText('点击登录（修改）');
+	    await expect(diffSemanticMirror).toContainText('点击登录');
+	    await expect(page.locator('script[data-tap-vtable-editors="1"]')).toHaveCount(0);
 	    await expect(page.locator('#caseLibraryImportDiffLocateBar')).toContainText('差异定位');
 
 	    const diffDrawerBody = page.locator('#caseLibraryImportDiffDrawer .drawer-body');
@@ -580,7 +652,15 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 	    });
 	    await expect(page.locator('#caseLibraryImportDiffLocateBar')).toBeVisible();
 	    await page.click('#caseLibraryImportDiffLocateBar [data-diff-locate-action="next"]');
-	    await expect(page.locator('#caseLibraryImportDiffBody tr.diff-locate-active')).toHaveCount(1);
+	    await expect(diffTableHost).toHaveAttribute('data-active-row-key', /.+/);
+	    await expect(page.locator('#caseLibraryImportDiffLocateBar [data-diff-locate-pos]')).toHaveText(/^位置 1\/\d+$/);
+	    const activeDiffRowKey = await diffTableHost.getAttribute('data-active-row-key');
+	    expect(activeDiffRowKey).toBeTruthy();
+	    await expect.poll(async () => diffTableHost.evaluate((host, rowKey) => {
+	      const rows = Array.prototype.slice.call(host.querySelectorAll('.tap-vtable-semantic tbody tr[data-row-key]'));
+	      const selected = rows.find((row) => row.getAttribute('data-row-key') === rowKey);
+	      return selected ? selected.getAttribute('aria-selected') : '';
+	    }, activeDiffRowKey)).toBe('true');
     await page.click('#caseLibraryImportDiffOverwriteBtn');
     await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
     await expect(page.locator('#appConfirmDrawerMessage')).toContainText('覆盖导入用例');
@@ -673,7 +753,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibraryEditChangeVersionSelect')).toBeVisible();
     await expect(page.locator('#caseLibraryEditChangeVersionBtn')).toBeDisabled();
     await page.selectOption('#caseLibraryEditChangeVersionSelect', String(versions[1].id));
-    await page.click('#caseLibraryEditListBody input[data-case-lib-edit-select]');
+    await setEditListSelected(page, 100, true);
     await expect(page.locator('#caseLibraryEditChangeVersionBtn')).toBeEnabled();
     await page.click('#caseLibraryEditChangeVersionBtn');
     await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
@@ -683,7 +763,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(changedRow).toContainText(versions[1].name);
 
     // 抽屉内勾选后可导出 XMind/Excel（不含执行结果，使用原名）
-    await page.click('#caseLibraryEditListBody input[data-case-lib-edit-select]');
+    await setEditListSelected(page, 100, true);
     await page.locator('#caseLibraryEditExportXmindBtn').scrollIntoViewIfNeeded();
     await expect(page.locator('#caseLibraryEditExportXmindBtn')).toBeEnabled();
     const [xmindDownload] = await Promise.all([
@@ -697,7 +777,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     ]);
     expect(await excelDownload.suggestedFilename()).toBe('case_library_import.xlsx');
 
-    await page.click('#caseLibraryEditListBody [data-case-lib-edit]');
+    await clickEditListAction(page, 100);
 
     await expect(page.locator('#caseLibraryEditDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
@@ -718,10 +798,12 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     const editPatch = page.waitForResponse((res) => {
       return res.url().includes('/api/case-files/items/') && res.request().method() === 'PATCH';
     });
-    await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').click();
-    await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').fill('正常登录（已更新）');
-    // 保存依赖 focusout，这里点击标题触发 blur（清空按钮在无搜索时会禁用）
-    await page.click('#caseLibraryEditCardTitle');
+    await setSemanticValue(
+      page,
+      '#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]',
+      '正常登录（已更新）',
+      { blur: true }
+    );
     await editPatch;
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录（已更新）');
 
@@ -769,6 +851,8 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.waitForTimeout(600);
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
+    await waitCaseLibraryReady(page, 30000);
+    await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await page.click('#caseLibraryEditToExecBtn');
     await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
     await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
@@ -1548,7 +1632,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
       await expect(nonReuseRow).toContainText('否');
 
 	    // 先打开“用例A”的编辑视图，再回到抽屉删除，编辑视图应被清空/隐藏。
-	    await page.click('#caseLibraryEditListBody [data-case-lib-edit="100"]');
+	    await clickEditListAction(page, 100);
 	    await expect(page.locator('#caseLibraryEditDrawer')).not.toHaveClass(/open/);
 	    await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
 	    await expect(page.locator('#caseLibraryEditFileName')).toContainText('用例A');
@@ -1960,7 +2044,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例A');
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例B');
-    await page.click('#caseLibraryEditListBody input[data-case-lib-edit-select="100"]');
+    await setEditListSelected(page, 100, true);
     await expect(page.locator('#caseLibraryEditExportXmindBtn')).toBeEnabled();
     await expect(page.locator('#caseLibraryEditExportExcelBtn')).toBeEnabled();
 
@@ -2052,19 +2136,19 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
       return el && el.options && el.options.length > 0;
     });
     await expect(page.locator('#caseLibrarySelectVersionSelect option').first()).toHaveText('全部版本');
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v2');
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('人员A：执');
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('人员B：执');
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('未');
+    await expect(selectExecSemanticTable(page)).toContainText('用例v1');
+    await expect(selectExecSemanticTable(page)).toContainText('用例v2');
+    await expect(selectExecSemanticTable(page)).toContainText('人员A：执');
+    await expect(selectExecSemanticTable(page)).toContainText('人员B：执');
+    await expect(selectExecSemanticTable(page)).toContainText('未');
 
     await page.selectOption('#caseLibrarySelectVersionSelect', String(versions[0].id));
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
-    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v2');
+    await expect(selectExecSemanticTable(page)).toContainText('用例v1');
+    await expect(selectExecSemanticTable(page)).not.toContainText('用例v2');
 
     await page.fill('#caseLibrarySelectSearchInput', '用例v2');
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v2');
-    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v1');
+    await expect(selectExecSemanticTable(page)).toContainText('用例v2');
+    await expect(selectExecSemanticTable(page)).not.toContainText('用例v1');
   });
 
   test('选择用例执行：项目/版本选择持久化', async ({ page }) => {
@@ -2136,8 +2220,8 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await openDrawer(page, '#openCaseLibrarySelectExecDrawerBtn', '#caseLibrarySelectExecDrawer');
     await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
     await page.selectOption('#caseLibrarySelectVersionSelect', String(versions[0].id));
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
-    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v2');
+    await expect(selectExecSemanticTable(page)).toContainText('用例v1');
+    await expect(selectExecSemanticTable(page)).not.toContainText('用例v2');
     await page.click('#caseLibrarySelectExecDrawer .drawer-panel [data-drawer-close="caseLibrarySelectExecDrawer"]');
 
     await gotoIndex(page);
@@ -2155,8 +2239,8 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect
       .poll(() => page.$eval('#caseLibrarySelectVersionSelect', (el) => el.value))
       .toBe(String(versions[0].id));
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例v1');
-    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例v2');
+    await expect(selectExecSemanticTable(page)).toContainText('用例v1');
+    await expect(selectExecSemanticTable(page)).not.toContainText('用例v2');
   });
 
   test('选择用例执行：支持勾选并批量转到执行', async ({ page }) => {
@@ -2320,15 +2404,15 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 
     await openDrawer(page, '#openCaseLibrarySelectExecDrawerBtn', '#caseLibrarySelectExecDrawer');
     await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例A');
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例B');
+    await expect(selectExecSemanticTable(page)).toContainText('用例A');
+    await expect(selectExecSemanticTable(page)).toContainText('用例B');
 
     await expect(page.locator('#caseLibrarySelectBatchExecBtn')).toBeDisabled();
-    await page.click('#caseLibrarySelectListBody input[data-case-lib-select-select="100"]');
+    await setSelectExecSelected(page, 100, true);
     await page.fill('#caseLibrarySelectSearchInput', 'B');
-    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('鐢ㄤ緥A');
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('鐢ㄤ緥B');
-    await page.click('#caseLibrarySelectListBody input[data-case-lib-select-select="101"]');
+    await expect(selectExecSemanticTable(page)).not.toContainText('用例A');
+    await expect(selectExecSemanticTable(page)).toContainText('用例B');
+    await setSelectExecSelected(page, 101, true);
     await expect(page.locator('#caseLibrarySelectBatchExecBtn')).toBeEnabled();
 
     await page.click('#caseLibrarySelectBatchExecBtn');
@@ -2477,9 +2561,9 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
 
     await openDrawer(page, '#openCaseLibrarySelectExecDrawerBtn', '#caseLibrarySelectExecDrawer');
     await page.selectOption('#caseLibrarySelectProjectSelect', String(project.id));
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例A');
+    await expect(selectExecSemanticTable(page)).toContainText('用例A');
 
-    await page.click('#caseLibrarySelectListBody [data-case-lib-exec="100"]');
+    await clickSelectExecAction(page, 100, 'exec');
     await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
     await page.click('#execVersionSelectDrawerConfirmBtn');
 

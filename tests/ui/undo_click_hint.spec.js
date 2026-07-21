@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -271,13 +272,11 @@ test.describe('增删用例：点击位置提示', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click('#caseLibraryEditListBody [data-case-lib-edit="100"]');
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="100"]');
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
-    const addBtn = page.locator('#caseLibraryEditView [data-case-lib-insert]').first();
-    await addBtn.click();
-
-    await addBtn.click();
+    await clickSemantic(page, '#caseLibraryEditView [data-case-lib-insert][data-index="0"]');
+    await clickSemantic(page, '#caseLibraryEditView [data-case-lib-insert][data-index="0"]');
     const hint = page.locator('.temp-click-hint');
     await expect(hint).toBeVisible();
     await expect(hint).toContainText('当前有待确认的增删操作，请先撤回或等待入库');

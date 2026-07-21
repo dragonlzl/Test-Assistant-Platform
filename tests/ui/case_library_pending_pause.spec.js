@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic, focusSemantic } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -11,6 +12,28 @@ async function waitAppReady(page, timeoutMs) {
     timeout,
   });
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout });
+}
+
+async function waitCaseLibraryReady(page, timeoutMs) {
+  const timeout = Number(timeoutMs) || 30000;
+  await page.waitForFunction(() => {
+    return window.app && window.app._inited === true && window.app.authReady === true &&
+      window.app.caseLibraryBound === true &&
+      window.app.tabGroupBound === true && typeof window.app.switchTab === 'function';
+  }, null, { timeout });
+}
+
+async function openCaseLibrary(page, timeoutMs) {
+  const timeout = Number(timeoutMs) || 30000;
+  await waitAppReady(page, timeout);
+  await Promise.all([
+    page.waitForURL(/\/case-library\.html(?:[?#].*)?$/, { timeout }),
+    page.evaluate(() => {
+      window.app.switchTab('case-library');
+    }),
+  ]);
+  await waitCaseLibraryReady(page, timeout);
+  await expect(page.locator('#caseLibraryHead')).toBeVisible();
 }
 
 test.describe('用例库撤回计时编辑不中断', () => {
@@ -140,30 +163,20 @@ test.describe('用例库撤回计时编辑不中断', () => {
     }, token);
 
     await gotoIndex(page);
-    await waitAppReady(page, 30000);
-
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('case-library');
-    });
-    await expect(page.locator('#caseLibraryHead')).toBeVisible();
+    await openCaseLibrary(page, 30000);
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
-    await page.click('#caseLibraryEditView button[data-case-lib-insert][data-index="0"]');
+    await clickSemantic(page, '#caseLibraryEditView button[data-case-lib-insert][data-index="0"]');
     const titleCell = page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="1"]');
-    await expect(titleCell).toBeVisible();
-    await titleCell.click();
+    await expect(titleCell).toHaveCount(1);
+    await focusSemantic(page, '#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="1"]');
 
-    await page.evaluate(() => {
-      if (window.app && window.app.state && window.app.state.editor) {
-        window.app.state.editor.pendingRemaining = 1;
-      }
-    });
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(8500);
     expect(createCalls).toBe(1);
 
     const activeKey = await page.evaluate(() => {
@@ -291,32 +304,22 @@ test.describe('用例库撤回计时编辑不中断', () => {
     }, token);
 
     await gotoIndex(page);
-    await waitAppReady(page, 30000);
-
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('case-library');
-    });
-    await expect(page.locator('#caseLibraryHead')).toBeVisible();
+    await openCaseLibrary(page, 30000);
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
-    await page.click('#caseLibraryEditView button[data-case-lib-remove][data-index="0"]');
+    await clickSemantic(page, '#caseLibraryEditView button[data-case-lib-remove][data-index="0"]');
     await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
     await page.click('#appConfirmDrawerConfirmBtn');
 
     const titleCell = page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]');
-    await expect(titleCell).toBeVisible();
-    await titleCell.click();
-    await page.evaluate(() => {
-      if (window.app && window.app.state && window.app.state.editor) {
-        window.app.state.editor.pendingRemaining = 1;
-      }
-    });
-    await page.waitForTimeout(1500);
+    await expect(titleCell).toHaveCount(1);
+    await focusSemantic(page, '#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]');
+    await page.waitForTimeout(8500);
     expect(deleteCalls).toBe(1);
   });
 });

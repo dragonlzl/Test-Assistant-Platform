@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 async function ensureMindElixirReady(page, url) {
   var maxRetry = 3;
@@ -187,7 +188,7 @@ test.describe('XMind 编辑模式', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
 
     await page.click('#caseLibraryXmindViewBtn');
@@ -408,7 +409,7 @@ test.describe('XMind 编辑模式', () => {
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await page.click('#caseLibraryXmindViewBtn');
     const restoredToast = page.locator('.temp-center-toast', { hasText: '检测到上次未保存的内容编辑，已进行恢复，请继续完成编辑。' });
     await expect(restoredToast).toBeVisible({ timeout: 3000 });
@@ -493,7 +494,7 @@ test.describe('XMind 编辑模式', () => {
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await page.click('#caseLibraryXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
 
@@ -612,7 +613,7 @@ test.describe('XMind 编辑模式', () => {
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await page.click('#caseLibraryXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
 
@@ -754,7 +755,7 @@ test.describe('XMind 编辑模式', () => {
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await page.click('#caseLibraryXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
 
@@ -925,7 +926,7 @@ test.describe('XMind 编辑模式', () => {
 
     await page.click('#openCaseLibraryEditDrawerBtn');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await page.click('#caseLibraryXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
 

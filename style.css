@@ -2192,34 +2192,6 @@ body {
       text-align: center;
     }
 
-    /* 用例库编辑视图：字段列宽与换行（按“中文字符宽度”近似 em） */
-    #caseLibraryEditView table {
-      table-layout: fixed;
-    }
-    #caseLibraryEditView td,
-    #caseLibraryEditView th {
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    #caseLibraryEditView th:nth-child(1),
-    #caseLibraryEditView td:nth-child(1) { width: 36px; }
-    #caseLibraryEditView th:nth-child(2),
-    #caseLibraryEditView td:nth-child(2) { width: 50px; }
-    #caseLibraryEditView th:nth-child(3),
-    #caseLibraryEditView td:nth-child(3) { width: 104px; }
-    #caseLibraryEditView th:nth-child(4),
-    #caseLibraryEditView td:nth-child(4) { width: 130px; }
-    #caseLibraryEditView th:nth-child(5),
-    #caseLibraryEditView td:nth-child(5) { width: 65px; }
-    #caseLibraryEditView th:nth-child(6),
-    #caseLibraryEditView td:nth-child(6) { width: 195px; }
-    #caseLibraryEditView th:nth-child(7),
-    #caseLibraryEditView td:nth-child(7) { width: 195px; }
-    #caseLibraryEditView th:nth-child(8),
-    #caseLibraryEditView td:nth-child(8) { width: 260px; }
-    #caseLibraryEditView th:nth-child(9),
-    #caseLibraryEditView td:nth-child(9) { width: 72px; }
-
     /* 归档用例详情：字段间距/列宽对齐用例库展示风格 */
     .case-archive-cases-view {
       overflow-x: hidden;
@@ -6888,11 +6860,6 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   max-width: 96vw;
   min-width: 860px;
 }
-.drawer.xmind-drawer-fullscreen .drawer-panel.drawer-panel-xmind {
-  width: 100vw;
-  max-width: 100vw;
-  min-width: 0;
-}
 .drawer.open .drawer-panel {
   pointer-events: auto;
   transform: translateX(0);
@@ -6944,9 +6911,6 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .drawer .drawer-body#xmindStructureDrawerBody.is-mind-viewer {
   overflow: hidden;
 }
-.drawer.xmind-drawer-fullscreen .drawer-body#xmindStructureDrawerBody {
-  padding: 8px 10px 12px;
-}
 .drawer .drawer-body#xmindCaseGenDrawerBody {
   padding: 10px 12px 14px;
   overflow: hidden;
@@ -6956,9 +6920,6 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 }
 .drawer .drawer-body#xmindCaseGenDrawerBody > .xmind-casegen-shell {
   flex: 1 1 auto;
-}
-.drawer.xmind-drawer-fullscreen .drawer-body#xmindCaseGenDrawerBody {
-  padding: 8px 10px 12px;
 }
 .guide-entry-card {
   width: 100%;

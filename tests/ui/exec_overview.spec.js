@@ -15,6 +15,13 @@ test.describe('执行总览页（DB 接口接入）', () => {
   });
 
   test('项目列表 -> 版本筛选 -> 人员汇总 -> 用例明细', async ({ page }) => {
+    const vtableVendorRequests = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith('/scripts/vendor/vtable.es2019.min.js')) {
+        vtableVendorRequests.push(request.url());
+      }
+    });
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
     const projects = [
       { id: 1, name: '战魂铭人', description: '用于执行总览' },
@@ -344,9 +351,12 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await expect(page.locator('#execOverviewVersionSummary')).toContainText('v1（9条）');
     await expect(page.locator('#execOverviewVersionSummary')).not.toContainText('v2');
 
+    expect(vtableVendorRequests).toHaveLength(0);
     await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
     await expect(page.locator('#execOverviewExecSetDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('正常登录');
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table')).toContainText('正常登录');
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-canvas canvas')).toHaveCount(1);
+    await expect.poll(() => vtableVendorRequests.length).toBe(1);
 
     const hasLayoutLiteNoVersion = layoutCalls.some(function(call) {
       if (!call) return false;
@@ -643,7 +653,10 @@ test.describe('执行总览页（DB 接口接入）', () => {
     const v6Summary = page.locator('#execOverviewVersionSummary .exec-overview-version-summary-row', { hasText: 'v6' });
     await expect(v6Summary).not.toHaveClass(/placeholder/);
 
-    await layout.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
+    await layout.evaluate((el) => {
+      el.scrollLeft = el.scrollWidth;
+      el.dispatchEvent(new Event('scroll'));
+    });
     await page.waitForTimeout(100);
     const v6Box = page.locator('#execOverviewUserCards .exec-overview-version-box', { hasText: 'v6' }).first();
     await expect(v6Box).not.toHaveClass(/placeholder/);
@@ -904,10 +917,10 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await page.click('#execOverviewNavProjects [data-project-id="1"]');
     await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
 
-    const row = page.locator('#execOverviewExecSetTableBody tr').first();
-    const headers = page.locator('#execOverviewExecSetDrawer thead th');
+    const row = page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table tbody tr').first();
+    const headers = page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table thead th');
     await expect(headers).toHaveCount(4);
-    await expect(page.locator('#execOverviewExecSetDrawer thead')).not.toContainText('状态');
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table thead')).not.toContainText('状态');
     const actualCell = row.locator('td').nth(2);
     await expect(actualCell).toContainText('通过');
   });
@@ -1127,21 +1140,21 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await page.click('#execOverviewUserCards .exec-overview-file-chip[data-exec-set-id="200"]');
     await expect(page.locator('#execOverviewExecSetDrawer')).toHaveClass(/open/);
     await expect(page.locator('#execOverviewExecSetPaginationTop')).toContainText('每页 ' + String(pageSize) + ' 条');
-    await expect(page.locator('#execOverviewExecSetTableBody tr')).toHaveCount(pageSize);
-    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('用例 1');
-    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('用例 ' + String(pageSize));
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table tbody tr')).toHaveCount(pageSize);
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table')).toContainText('用例 1');
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table')).toContainText('用例 ' + String(pageSize));
 
     await page.locator('[data-exec-overview-page="next"]').first().click();
-    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('用例 ' + String(pageSize + 1));
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table')).toContainText('用例 ' + String(pageSize + 1));
 
     await page.fill('#execOverviewExecSetSearchInput', '用例 12');
     await expect(page.locator('#execOverviewExecSetSearchClearBtn')).not.toBeDisabled();
-    await expect(page.locator('#execOverviewExecSetTableBody tr')).toHaveCount(1);
-    await expect(page.locator('#execOverviewExecSetTableBody')).toContainText('用例 12');
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table tbody tr')).toHaveCount(1);
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table')).toContainText('用例 12');
 
     await page.click('#execOverviewExecSetSearchClearBtn');
     await expect(page.locator('#execOverviewExecSetSearchInput')).toHaveValue('');
     await expect(page.locator('#execOverviewExecSetSearchClearBtn')).toBeDisabled();
-    await expect(page.locator('#execOverviewExecSetTableBody tr')).toHaveCount(pageSize);
+    await expect(page.locator('#execOverviewExecSetTableHost .tap-vtable-semantic-table tbody tr')).toHaveCount(pageSize);
   });
 });

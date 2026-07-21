@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
 
@@ -152,6 +153,7 @@ async function setupTempExecReminderPage(page, options) {
     const url = new URL(route.request().url());
     const pathName = url.pathname;
     const method = route.request().method();
+    if (pathName === '/api/model-proxy' && method === 'POST') return route.fallback();
     const respond = (status, body) =>
       route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
@@ -372,7 +374,7 @@ test.describe('易漏用例参考区域', () => {
     await page.locator('#caseLibraryEditProjectSelect').selectOption(String(project.id));
     const editFirst = page.locator('[data-case-lib-edit="11"]');
     await expect(editFirst).toBeVisible();
-    await editFirst.click();
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="11"]');
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     const reminderBottom = page.locator('#caseLibraryMissingReminderBottom');
@@ -391,7 +393,7 @@ test.describe('易漏用例参考区域', () => {
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     const editSecond = page.locator('[data-case-lib-edit="12"]');
     await expect(editSecond).toBeVisible();
-    await editSecond.click();
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="12"]');
     await expect(reminderTop).toBeHidden();
     await expect(reminderBottom).toBeHidden();
   });
@@ -493,7 +495,7 @@ test.describe('易漏用例参考区域', () => {
     await page.locator('#caseLibraryEditProjectSelect').selectOption(String(project.id));
     const editFirst = page.locator('[data-case-lib-edit="21"]');
     await expect(editFirst).toBeVisible();
-    await editFirst.click();
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="21"]');
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderTop).toBeVisible();
@@ -874,7 +876,7 @@ test.describe('易漏用例参考区域', () => {
     await page.locator('#caseLibraryEditProjectSelect').selectOption(String(project.id));
     const editFirst = page.locator('[data-case-lib-edit="51"]');
     await expect(editFirst).toBeVisible();
-    await editFirst.click();
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="51"]');
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderTop).toBeVisible();
@@ -967,6 +969,7 @@ test.describe('易漏用例参考区域', () => {
       const url = new URL(route.request().url());
       const pathName = url.pathname;
       const method = route.request().method();
+      if (pathName === '/api/model-proxy' && method === 'POST') return route.fallback();
       const tokenHeader = route.request().headers().authorization || '';
       const authed = tokenHeader === `Bearer ${token}`;
       const respond = (status, body) =>
@@ -1020,11 +1023,16 @@ test.describe('易漏用例参考区域', () => {
 
     await page.goto(base + '/case-library.html');
     await waitCaseLibraryReady(page);
+    await waitForAppReady(page);
+    await page.waitForFunction(() => {
+      const manager = window.app && window.app.missingReminderAi;
+      return Boolean(manager && typeof manager.createTask === 'function' && typeof manager.startTask === 'function');
+    }, null, { timeout: 20000 });
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.locator('#caseLibraryEditProjectSelect').selectOption(String(project.id));
     const editFirst = page.locator('[data-case-lib-edit="31"]');
     await expect(editFirst).toBeVisible();
-    await editFirst.click();
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="31"]');
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderTop).toBeVisible();
@@ -1142,6 +1150,7 @@ test.describe('易漏用例参考区域', () => {
       const url = new URL(route.request().url());
       const pathName = url.pathname;
       const method = route.request().method();
+      if (pathName === '/api/model-proxy' && method === 'POST') return route.fallback();
       const tokenHeader = route.request().headers().authorization || '';
       const authed = tokenHeader === `Bearer ${token}`;
       const respond = (status, body) =>
@@ -1196,11 +1205,16 @@ test.describe('易漏用例参考区域', () => {
 
     await page.goto(base + '/case-library.html');
     await waitCaseLibraryReady(page);
+    await waitForAppReady(page);
+    await page.waitForFunction(() => {
+      const manager = window.app && window.app.missingReminderAi;
+      return Boolean(manager && typeof manager.createTask === 'function' && typeof manager.startTask === 'function');
+    }, null, { timeout: 20000 });
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.locator('#caseLibraryEditProjectSelect').selectOption(String(project.id));
     const editFirst = page.locator('[data-case-lib-edit="91"]');
     await expect(editFirst).toBeVisible();
-    await editFirst.click();
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="91"]');
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderTop).toBeVisible();
@@ -1248,7 +1262,7 @@ test.describe('易漏用例参考区域', () => {
     await page.locator('#caseLibraryEditProjectSelect').selectOption(String(project.id));
     const editAgain = page.locator('[data-case-lib-edit="91"]');
     await expect(editAgain).toBeVisible();
-    await editAgain.click();
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="91"]');
 
     const reminderAgain = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderAgain).toContainText('工程师角色二技能效果', { timeout: 10000 });
@@ -1258,7 +1272,7 @@ test.describe('易漏用例参考区域', () => {
 
   test('执行视图AI推荐按钮可生成建议', async ({ page }) => {
     const token = 'token-missing-reminder-ai-exec';
-    const user = { id: 21, username: 'missing_ai_exec', role: 'user', level: 'member' };
+    const user = { id: 0, username: 'missing_ai_exec', role: 'user', level: 'member' };
     const project = { id: 4, name: 'AI执行项目', description: 'missing reminder ai exec' };
     const missingModules = [{ id: 701, project_id: 4, name: '支付', item_count: 1 }];
     const missingTypes = [{ id: 801, project_id: 4, name: '异常' }];

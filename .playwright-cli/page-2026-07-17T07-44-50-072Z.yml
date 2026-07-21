@@ -1,0 +1,266 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e192]:
+    - generic [ref=f3e193]:
+      - generic "用例助手" [ref=f3e194]: TA
+      - navigation "主功能导航" [ref=f3e195]:
+        - button "AI 功能" [ref=f3e196] [cursor=pointer]:
+          - generic [ref=f3e197]: AI
+        - button "用例相关" [ref=f3e199] [cursor=pointer]:
+          - generic [ref=f3e200]: TC
+        - button "管理" [ref=f3e202] [cursor=pointer]:
+          - generic [ref=f3e203]: AD
+        - button "设置" [ref=f3e205] [cursor=pointer]:
+          - generic [ref=f3e206]: ST
+      - button "收起二级导航" [expanded] [ref=f3e208] [cursor=pointer]: <
+    - generic [ref=f3e209]:
+      - strong [ref=f3e211]: 用例相关
+      - generic [ref=f3e212]:
+        - generic [ref=f3e213]: 当前用户
+        - strong [ref=f3e214]: demo_admin
+        - generic [ref=f3e215]: 管理员
+        - button "用户菜单" [ref=f3e216] [cursor=pointer]: 个人
+        - generic:
+          - button "登出"
+      - generic [ref=f3e218]:
+        - button "用例相关" [ref=f3e219] [cursor=pointer]
+        - button "用例库" [ref=f3e220] [cursor=pointer]
+      - navigation [ref=f3e221]:
+        - button "AI 功能 需先配置模型/指派" [ref=f3e222] [cursor=pointer]:
+          - generic [ref=f3e223]: AI 功能
+          - generic [ref=f3e224]: 需先配置模型/指派
+        - generic [ref=f3e225]:
+          - button "用例相关" [ref=f3e226] [cursor=pointer]
+          - generic [ref=f3e227]:
+            - button "用例执行" [ref=f3e228] [cursor=pointer]
+            - button "用例库" [ref=f3e229] [cursor=pointer]
+            - button "用例归档" [ref=f3e230] [cursor=pointer]
+            - button "执行总览" [ref=f3e231] [cursor=pointer]
+        - button "管理" [ref=f3e232] [cursor=pointer]
+        - button "设置" [ref=f3e233] [cursor=pointer]
+      - button "回到顶部" [ref=f3e234] [cursor=pointer]
+      - button "跳到底部" [ref=f3e235] [cursor=pointer]
+      - generic [ref=f3e236]:
+        - generic [ref=f3e237]:
+          - button "xmind用例生成进度" [ref=f3e238] [cursor=pointer]
+          - button "个人备忘" [ref=f3e240] [cursor=pointer]
+        - generic [ref=f3e243]:
+          - generic [ref=f3e244]:
+            - generic [ref=f3e245]:
+              - generic [ref=f3e246]: xmind用例生成进度
+              - button "收起" [expanded] [ref=f3e247] [cursor=pointer]
+            - generic [ref=f3e248]: 点击打开对应 XMind 生成页签
+          - paragraph [ref=f3e250]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f3e3]:
+    - generic [ref=f3e251]:
+      - generic [ref=f3e252]:
+        - generic [ref=f3e253]: 用例库导航
+        - button "收起" [expanded] [ref=f3e254] [cursor=pointer]
+      - generic [ref=f3e255]:
+        - paragraph [ref=f3e256]: 用例库相关入口汇总于此，点击卡片快速打开。
+        - generic [ref=f3e257]:
+          - button "编写用例" [ref=f3e258] [cursor=pointer]
+          - button "导入用例" [ref=f3e264] [cursor=pointer]
+          - button "查看&编辑" [ref=f3e270] [cursor=pointer]
+          - button "易漏用例" [ref=f3e276] [cursor=pointer]
+          - button "选择用例执行" [ref=f3e281] [cursor=pointer]
+          - button "用例改动历史" [ref=f3e286] [cursor=pointer]
+    - main [ref=f3e5]:
+      - generic [ref=f3e6]:
+        - heading "用例库" [level=2] [ref=f3e7]
+        - generic [ref=f3e9]:
+          - paragraph [ref=f3e10]: 提示：请使用顶部导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=f3e11]
+          - generic [ref=f3e12]:
+            - heading "用例编辑视图：编辑详情视觉验收" [level=3] [ref=f3e292]
+            - generic [ref=f3e14]:
+              - generic [ref=f3e15]:
+                - generic [ref=f3e16]:
+                  - generic [ref=f3e17]: 项目
+                  - generic [ref=f3e18]: 战魂铭人
+                - generic [ref=f3e19]:
+                  - generic [ref=f3e20]: 版本
+                  - generic [ref=f3e21]: v1
+                - generic [ref=f3e22]:
+                  - generic [ref=f3e23]: 用例名
+                  - generic [ref=f3e24]: 编辑详情视觉验收
+              - generic [ref=f3e25]:
+                - generic [ref=f3e26]:
+                  - button "清空搜索" [disabled] [ref=f3e27]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=f3e29]
+                  - button "AI 用例生成" [ref=f3e30]
+                  - button "XMind结构展示" [ref=f3e31] [cursor=pointer]
+                - generic [ref=f3e32]:
+                  - textbox "批量新增数量" [ref=f3e33]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=f3e34] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=f3e35]
+                  - button "转到执行" [ref=f3e36] [cursor=pointer]
+              - paragraph [ref=f3e37]: 已保存
+              - generic [ref=f3e38]:
+                - generic [ref=f3e679]:
+                  - generic [ref=f3e680]: 显示 1-4 / 4 条，每页 20 条
+                  - generic [ref=f3e681]:
+                    - button "上一页" [disabled] [ref=f3e682]
+                    - generic [ref=f3e683]: 第 1 / 1 页
+                    - button "下一页" [disabled] [ref=f3e684]
+                    - generic [ref=f3e685]:
+                      - text: 跳至
+                      - spinbutton "跳至 页" [ref=f3e686]: "1"
+                      - text: 页
+                - generic [ref=f3e39]:
+                  - checkbox "全选/全不选当前页" [ref=f3e40]
+                  - generic [ref=f3e41]: 全选当前页
+                - generic [ref=f3e303]:
+                  - generic [active] [ref=f3e305]:
+                    - generic:
+                      - textbox: 账号密码正常登录
+                    - generic: 账号密码正常登录
+                  - table [ref=f3e687]:
+                    - caption [ref=f3e688]: 用例编辑详情
+                    - rowgroup [ref=f3e689]:
+                      - row [ref=f3e690]:
+                        - columnheader "选择" [ref=f3e691]
+                        - columnheader "编号" [ref=f3e692]
+                        - columnheader "模块" [ref=f3e693]
+                        - columnheader "用例标题" [ref=f3e694]
+                        - columnheader "优先级" [ref=f3e695]
+                        - columnheader "前提条件" [ref=f3e696]
+                        - columnheader "操作步骤" [ref=f3e697]
+                        - columnheader "预期结果" [ref=f3e698]
+                        - columnheader "增删" [ref=f3e699]
+                    - rowgroup [ref=f3e700]:
+                      - row [selected] [ref=f3e701]:
+                        - cell [ref=f3e702]:
+                          - checkbox "选择" [ref=f3e703]
+                        - cell "1" [ref=f3e704]
+                        - cell [ref=f3e705]:
+                          - text: 登录模块
+                          - textbox "模块" [ref=f3e706]: 登录模块
+                        - cell [ref=f3e707]:
+                          - text: 账号密码正常登录-视觉更新
+                          - textbox "用例标题" [ref=f3e708]: 账号密码正常登录-视觉更新
+                        - cell [ref=f3e709]:
+                          - text: P0
+                          - textbox "优先级" [ref=f3e710]: P0
+                        - cell [ref=f3e711]:
+                          - text: 用户已注册且账号正常
+                          - textbox "前提条件" [ref=f3e712]: 用户已注册且账号正常
+                        - cell [ref=f3e713]:
+                          - text: 1. 输入账号和密码 2. 点击登录
+                          - textbox "操作步骤" [ref=f3e714]: 1. 输入账号和密码 2. 点击登录
+                        - cell [ref=f3e715]:
+                          - text: 进入工作台首页
+                          - textbox "预期结果" [ref=f3e716]: 进入工作台首页
+                        - cell [ref=f3e717]:
+                          - button "下方插入" [ref=f3e718] [cursor=pointer]
+                          - button "删除" [ref=f3e719] [cursor=pointer]
+                      - row [ref=f3e720]:
+                        - cell [ref=f3e721]:
+                          - checkbox "选择" [ref=f3e722]
+                        - cell "2" [ref=f3e723]
+                        - cell [ref=f3e724]:
+                          - text: 登录模块
+                          - textbox "模块" [ref=f3e725]: 登录模块
+                        - cell [ref=f3e726]:
+                          - text: 密码错误登录失败
+                          - textbox "用例标题" [ref=f3e727]: 密码错误登录失败
+                        - cell [ref=f3e728]:
+                          - text: P1
+                          - textbox "优先级" [ref=f3e729]: P1
+                        - cell [ref=f3e730]:
+                          - text: 用户已注册
+                          - textbox "前提条件" [ref=f3e731]: 用户已注册
+                        - cell [ref=f3e732]:
+                          - text: 1. 输入错误密码 2. 点击登录
+                          - textbox "操作步骤" [ref=f3e733]: 1. 输入错误密码 2. 点击登录
+                        - cell [ref=f3e734]:
+                          - text: 提示账号或密码错误
+                          - textbox "预期结果" [ref=f3e735]: 提示账号或密码错误
+                        - cell [ref=f3e736]:
+                          - button "下方插入" [ref=f3e737] [cursor=pointer]
+                          - button "删除" [ref=f3e738] [cursor=pointer]
+                      - row [ref=f3e739]:
+                        - cell [ref=f3e740]:
+                          - checkbox "选择" [ref=f3e741]
+                        - cell "3" [ref=f3e742]
+                        - cell [ref=f3e743]:
+                          - text: 用例库
+                          - textbox "模块" [ref=f3e744]: 用例库
+                        - cell [ref=f3e745]:
+                          - text: 批量新增用例
+                          - textbox "用例标题" [ref=f3e746]: 批量新增用例
+                        - cell [ref=f3e747]:
+                          - text: P1
+                          - textbox "优先级" [ref=f3e748]: P1
+                        - cell [ref=f3e749]:
+                          - text: 已打开编辑详情
+                          - textbox "前提条件" [ref=f3e750]: 已打开编辑详情
+                        - cell [ref=f3e751]:
+                          - text: 1. 输入新增数量 2. 点击批量新增
+                          - textbox "操作步骤" [ref=f3e752]: 1. 输入新增数量 2. 点击批量新增
+                        - cell [ref=f3e753]:
+                          - text: 新增记录并高亮显示
+                          - textbox "预期结果" [ref=f3e754]: 新增记录并高亮显示
+                        - cell [ref=f3e755]:
+                          - button "下方插入" [ref=f3e756] [cursor=pointer]
+                          - button "删除" [ref=f3e757] [cursor=pointer]
+                      - row [ref=f3e758]:
+                        - cell [ref=f3e759]:
+                          - checkbox "选择" [ref=f3e760]
+                        - cell "4" [ref=f3e761]
+                        - cell [ref=f3e762]:
+                          - text: XMind
+                          - textbox "模块" [ref=f3e763]: XMind
+                        - cell [ref=f3e764]:
+                          - text: 定位指定用例节点
+                          - textbox "用例标题" [ref=f3e765]: 定位指定用例节点
+                        - cell [ref=f3e766]:
+                          - text: P2
+                          - textbox "优先级" [ref=f3e767]: P2
+                        - cell [ref=f3e768]:
+                          - text: 当前文件已有思维导图
+                          - textbox "前提条件" [ref=f3e769]: 当前文件已有思维导图
+                        - cell [ref=f3e770]:
+                          - text: 1. 点击结构展示 2. 定位用例
+                          - textbox "操作步骤" [ref=f3e771]: 1. 点击结构展示 2. 定位用例
+                        - cell [ref=f3e772]:
+                          - text: 画布聚焦到目标节点
+                          - textbox "预期结果" [ref=f3e773]: 画布聚焦到目标节点
+                        - cell [ref=f3e774]:
+                          - button "下方插入" [ref=f3e775] [cursor=pointer]
+                          - button "删除" [ref=f3e776] [cursor=pointer]
+                - generic [ref=f3e777]:
+                  - generic [ref=f3e778]: 显示 1-4 / 4 条，每页 20 条
+                  - generic [ref=f3e779]:
+                    - button "上一页" [disabled] [ref=f3e780]
+                    - generic [ref=f3e781]: 第 1 / 1 页
+                    - button "下一页" [disabled] [ref=f3e782]
+                    - generic [ref=f3e783]:
+                      - text: 跳至
+                      - spinbutton "跳至 页" [ref=f3e784]: "1"
+                      - text: 页
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择项目"
+      - option "战魂铭人" [selected]
+      - option "全部版本" [selected]
+      - option "v1"
+      - option "全部" [selected]
+      - option "其他项目导入"
+      - option "demo_admin"
+      - option "请选择版本" [selected]
+      - option "v1"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"

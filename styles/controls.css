@@ -1,0 +1,140 @@
+button,
+input,
+select,
+textarea {
+  font-family: var(--tap-font);
+  letter-spacing: 0;
+}
+
+button,
+.pill,
+.ghost-btn,
+.link-toggle,
+button.secondary,
+button.primary {
+  border-radius: var(--tap-radius-control);
+  box-shadow: none;
+}
+
+button.primary,
+.pill.primary,
+.primary {
+  border: 1px solid var(--tap-accent);
+  background: var(--tap-accent);
+  color: #ffffff;
+}
+
+button.primary:hover:not(:disabled),
+.pill.primary:hover:not(:disabled),
+.primary:hover:not(:disabled) {
+  border-color: var(--tap-accent-strong);
+  background: var(--tap-accent-strong);
+  box-shadow: none;
+  transform: none;
+}
+
+.ghost-btn,
+button.secondary,
+.pill.secondary,
+.link-toggle {
+  border: 1px solid var(--tap-border-strong);
+  background: var(--tap-surface);
+  color: var(--tap-text-soft);
+}
+
+.ghost-btn:hover:not(:disabled),
+button.secondary:hover:not(:disabled),
+.pill.secondary:hover:not(:disabled),
+.link-toggle:hover:not(:disabled) {
+  border-color: var(--tap-border-strong);
+  background: var(--tap-surface-hover);
+  color: var(--tap-text);
+  box-shadow: none;
+  transform: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--tap-ring);
+  outline-offset: 1px;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+select,
+textarea {
+  border-color: var(--tap-border-strong);
+  border-radius: var(--tap-radius-control);
+  background: var(--tap-surface);
+  color: var(--tap-text);
+  box-shadow: none;
+}
+
+.nav-entry-grid {
+  gap: 6px;
+}
+
+.nav-entry-card {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: none;
+  min-height: 34px;
+  padding: 4px 9px;
+  gap: 7px;
+  border: 1px solid var(--tap-border-strong);
+  border-left-width: 1px;
+  border-radius: var(--tap-radius-control);
+  background: var(--tap-surface);
+  color: var(--tap-text-soft);
+  box-shadow: none;
+}
+
+.nav-entry-card:hover,
+.nav-entry-card.active {
+  border-color: rgba(21, 94, 239, 0.34);
+  background: var(--tap-accent-soft);
+  color: var(--tap-accent-strong);
+  box-shadow: none;
+  transform: none;
+}
+
+.nav-entry-icon,
+.nav-entry-card.nav-entry-write .nav-entry-icon,
+.nav-entry-card.nav-entry-import .nav-entry-icon,
+.nav-entry-card.nav-entry-view .nav-entry-icon,
+.nav-entry-card.nav-entry-overview .nav-entry-icon,
+.nav-entry-card.nav-entry-backup .nav-entry-icon {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: currentColor;
+  box-shadow: none;
+}
+
+.nav-entry-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.nav-entry-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.nav-entry-desc {
+  display: none;
+}
+
+:root[data-theme="dark"] .ghost-btn,
+:root[data-theme="dark"] button.secondary,
+:root[data-theme="dark"] .pill.secondary,
+:root[data-theme="dark"] .link-toggle,
+:root[data-theme="dark"] .nav-entry-card {
+  background: var(--tap-surface);
+  border-color: var(--tap-border-strong);
+  color: var(--tap-text-soft);
+}

@@ -1,0 +1,125 @@
+- generic [ref=f6e2]:
+  - complementary:
+    - generic:
+      - generic "用例助手": TA
+      - navigation "主功能导航":
+        - button "AI 功能":
+          - generic: AI
+        - button "用例相关":
+          - generic: TC
+        - button "管理":
+          - generic: AD
+        - button "设置":
+          - generic: ST
+      - button "展开二级导航": ">"
+  - generic [ref=f6e3]:
+    - generic [ref=f6e4]:
+      - generic:
+        - generic:
+          - generic: 用例库导航
+          - button "收起" [expanded]
+        - generic:
+          - paragraph: 用例库相关入口汇总于此，点击卡片快速打开。
+          - generic:
+            - button "编写用例"
+            - button "导入用例"
+            - button "查看&编辑"
+            - button "易漏用例"
+            - button "选择用例执行" [active]
+            - button "用例改动历史"
+    - main [ref=f6e5]:
+      - generic [ref=f6e6]:
+        - heading "用例库" [level=2] [ref=f6e7]
+        - generic [ref=f6e9]:
+          - paragraph [ref=f6e10]: 提示：请使用顶部导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=f6e11]
+          - generic [ref=f6e12]:
+            - heading "用例编辑视图" [level=3] [ref=f6e13]
+            - generic [ref=f6e14]:
+              - generic [ref=f6e15]:
+                - generic [ref=f6e16]:
+                  - generic [ref=f6e17]: 项目
+                  - generic [ref=f6e18]: "--"
+                - generic [ref=f6e19]:
+                  - generic [ref=f6e20]: 版本
+                  - generic [ref=f6e21]: "--"
+                - generic [ref=f6e22]:
+                  - generic [ref=f6e23]: 用例名
+                  - generic [ref=f6e24]: "--"
+              - generic [ref=f6e25]:
+                - generic [ref=f6e26]:
+                  - button "清空搜索" [ref=f6e27] [cursor=pointer]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=f6e29]
+                  - button "AI 用例生成" [ref=f6e30]
+                  - button "XMind结构展示" [disabled] [ref=f6e31]
+                - generic [ref=f6e32]:
+                  - textbox "批量新增数量" [ref=f6e33]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=f6e34] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=f6e35]
+                  - button "转到执行" [ref=f6e36] [cursor=pointer]
+              - paragraph [ref=f6e37]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - generic [ref=f6e142]:
+        - generic [ref=f6e143]:
+          - heading "选择用例执行" [level=3] [ref=f6e144]
+          - button "全屏" [ref=f6e145] [cursor=pointer]: "[]"
+          - button "关闭" [ref=f6e146] [cursor=pointer]: x
+        - generic [ref=f6e147]:
+          - generic [ref=f6e148]:
+            - generic [ref=f6e149]:
+              - generic [ref=f6e150]: 项目
+              - combobox "项目" [ref=f6e151] [cursor=pointer]:
+                - option "请选择项目" [selected]
+                - option "战魂铭人"
+              - generic [ref=f6e152]: 版本
+              - combobox "版本" [disabled] [ref=f6e153]:
+                - option "全部版本" [selected]
+              - generic [ref=f6e154]: 用例名
+              - textbox "用例名" [ref=f6e155]:
+                - /placeholder: 搜索用例名
+            - generic [ref=f6e156]:
+              - button "刷新" [ref=f6e157] [cursor=pointer]
+              - button "批量转到执行" [disabled] [ref=f6e158]
+          - paragraph [ref=f6e159]
+          - generic [ref=f6e162]:
+            - checkbox "全选/全不选当前页" [disabled] [ref=f6e163]
+            - text: 全选当前页
+          - generic [ref=f6e165]:
+            - generic [ref=f6e167]:
+              - generic:
+                - textbox
+            - table [ref=f6e170]:
+              - caption [ref=f6e171]: 选择用例执行
+              - rowgroup [ref=f6e172]:
+                - row [ref=f6e173]:
+                  - columnheader "选择" [ref=f6e174]
+                  - columnheader "所属项目" [ref=f6e175]
+                  - columnheader "版本" [ref=f6e176]
+                  - columnheader "用例名" [ref=f6e177]
+                  - columnheader "执行页状态" [ref=f6e178]
+                  - columnheader "导入人员" [ref=f6e179]
+                  - columnheader "导入时间" [ref=f6e180]
+                  - columnheader "更新时间" [ref=f6e181]
+                  - columnheader "关联用例" [ref=f6e182]
+                  - columnheader "启用关联" [ref=f6e183]
+                  - columnheader "操作" [ref=f6e184]
+              - rowgroup [ref=f6e185]:
+                - row [ref=f6e186]:
+                  - cell "请选择项目后自动刷新。" [ref=f6e187]
+          - button "关闭" [ref=f6e189] [cursor=pointer]
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"

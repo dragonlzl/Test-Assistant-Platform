@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -394,7 +395,7 @@ test.describe('用例库 AI 用例生成', () => {
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`)).toBeVisible();
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryEditView')).toContainText('登录成功');
 
@@ -606,7 +607,7 @@ test.describe('用例库 AI 用例生成', () => {
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`)).toBeVisible();
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryEditView')).toContainText('登录成功');
 
@@ -633,12 +634,12 @@ test.describe('用例库 AI 用例生成', () => {
     await expect(page.locator('#openCaseLibraryEditDrawerBtn')).not.toHaveClass(/case-library-ai-gen-dot/);
     const editBtnSelector = `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`;
     await expect(page.locator(editBtnSelector)).not.toHaveClass(/case-library-ai-gen-dot/);
-    await page.click(editBtnSelector);
+    await clickSemantic(page, editBtnSelector);
     await expect(page.locator('#caseLibraryEditDrawer')).not.toHaveClass(/open/);
 
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await expect(page.locator(editBtnSelector)).not.toHaveClass(/case-library-ai-gen-dot/);
-    await page.click(editBtnSelector);
+    await clickSemantic(page, editBtnSelector);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
 
     await page.click('#caseLibraryAiGenBtn');
@@ -653,7 +654,7 @@ test.describe('用例库 AI 用例生成', () => {
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator(editBtnSelector)).toBeVisible();
-    await page.click(editBtnSelector);
+    await clickSemantic(page, editBtnSelector);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await page.click('#caseLibraryAiGenBtn');
     await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
@@ -718,7 +719,7 @@ test.describe('用例库 AI 用例生成', () => {
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator(editBtnSelector)).toBeVisible();
-    await page.click(editBtnSelector);
+    await clickSemantic(page, editBtnSelector);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryAiGenBtn')).not.toHaveClass(/has-badge/);
 
@@ -859,7 +860,7 @@ test.describe('用例库 AI 用例生成', () => {
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await expect(page.locator(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileIdA}"]`)).toBeVisible();
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileIdA}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileIdA}"]`);
     await expect(page.locator('#caseLibraryEditCard')).toContainText('用例库A');
 
     await startCaseLibraryAiGeneration(page, '需求：支付流程');
@@ -868,7 +869,7 @@ test.describe('用例库 AI 用例生成', () => {
 
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await expect(page.locator(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileIdB}"]`)).toBeVisible();
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileIdB}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileIdB}"]`);
     await expect(page.locator('#caseLibraryEditCard')).toContainText('用例库B');
 
     await page.waitForFunction(() => {
@@ -883,7 +884,7 @@ test.describe('用例库 AI 用例生成', () => {
     }, null, { timeout: 10000 });
 
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileIdA}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileIdA}"]`);
     await expect(page.locator('#caseLibraryEditCard')).toContainText('用例库A');
 
     await page.click('#caseLibraryAiGenBtn');

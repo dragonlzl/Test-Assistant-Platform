@@ -1,0 +1,6 @@
+{
+  "package": "@visactor/vtable-editors",
+  "version": "1.26.1",
+  "target": "es2019",
+  "source": "dist/vtable-editors.min.js"
+}

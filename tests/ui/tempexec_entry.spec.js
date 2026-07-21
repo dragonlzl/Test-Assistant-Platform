@@ -1,5 +1,20 @@
 const { test, expect } = require('@playwright/test');
 
+async function getDrawerWidthMetrics(page, selector) {
+  return page.$eval(selector, function(panel) {
+    var rect = panel.getBoundingClientRect();
+    var viewport = window.innerWidth || document.documentElement.clientWidth || 0;
+    var railWidth = parseFloat(
+      window.getComputedStyle(document.documentElement).getPropertyValue('--tap-nav-rail-width')
+    ) || 0;
+    return {
+      width: rect.width,
+      expectedWidth: Math.min(560, Math.max(0, viewport - railWidth)),
+      viewport: viewport,
+    };
+  });
+}
+
 test.describe('临时执行入口导航', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -37,15 +52,9 @@ test.describe('临时执行入口导航', () => {
 	    await page.click('#openTempExecImportDrawerBtn');
 	    const drawer = page.locator('#tempExecImportDrawer');
 	    await expect(drawer).toHaveClass(/open/);
-    const widthRatio = await page.$eval('#tempExecImportDrawer .drawer-panel', function(panel) {
-      if (!panel || !panel.getBoundingClientRect) return 0;
-      var rect = panel.getBoundingClientRect();
-      var viewport = window.innerWidth || document.documentElement.clientWidth || 0;
-      if (!viewport) return 0;
-      return rect.width / viewport;
-    });
-    expect(widthRatio).toBeGreaterThan(0.6);
-    expect(widthRatio).toBeLessThan(1);
+    const widthMetrics = await getDrawerWidthMetrics(page, '#tempExecImportDrawer .drawer-panel');
+    expect(Math.abs(widthMetrics.width - widthMetrics.expectedWidth)).toBeLessThanOrEqual(2);
+    expect(widthMetrics.width).toBeLessThan(widthMetrics.viewport);
 
 	    await page.click('#tempExecImportDrawer .drawer-mask', { position: { x: 10, y: 10 } });
 	    await expect(drawer).not.toHaveClass(/open/);
@@ -112,15 +121,9 @@ test.describe('临时执行入口导航', () => {
     await page.click('#openTempExecOverviewNavBtn');
     const overviewDrawer = page.locator('#tempExecOverviewDrawer');
     await expect(overviewDrawer).toHaveClass(/open/);
-    const widthRatio = await page.$eval('#tempExecOverviewDrawer .drawer-panel', function(panel) {
-      if (!panel || !panel.getBoundingClientRect) return 0;
-      var rect = panel.getBoundingClientRect();
-      var viewport = window.innerWidth || document.documentElement.clientWidth || 0;
-      if (!viewport) return 0;
-      return rect.width / viewport;
-    });
-    expect(widthRatio).toBeGreaterThan(0.6);
-    expect(widthRatio).toBeLessThan(1);
+    const widthMetrics = await getDrawerWidthMetrics(page, '#tempExecOverviewDrawer .drawer-panel');
+    expect(Math.abs(widthMetrics.width - widthMetrics.expectedWidth)).toBeLessThanOrEqual(2);
+    expect(widthMetrics.width).toBeLessThan(widthMetrics.viewport);
     await expect(page.locator('#tempExecOverview')).toContainText('暂无用例执行数据');
     await page.click('#closeTempExecOverviewDrawerBtn');
     await expect(overviewDrawer).not.toHaveClass(/open/);

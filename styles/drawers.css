@@ -1,0 +1,129 @@
+.drawer .drawer-mask {
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: none;
+}
+
+.drawer .drawer-panel {
+  width: min(560px, calc(100vw - var(--tap-nav-rail-width)));
+  min-width: 0;
+  box-sizing: border-box;
+  border-left: 1px solid var(--tap-border);
+  border-radius: 0;
+  background: var(--tap-surface);
+  box-shadow: -12px 0 30px rgba(15, 23, 42, 0.10);
+}
+
+.drawer .drawer-panel.drawer-panel-wide {
+  width: min(1120px, calc(100vw - var(--tap-nav-rail-width)));
+  min-width: 0;
+}
+
+.drawer .drawer-panel.drawer-panel-xmind,
+.drawer[data-drawer-kind="canvas"] .drawer-panel {
+  width: calc(100vw - var(--tap-nav-rail-width));
+  max-width: none;
+  min-width: 0;
+}
+
+.drawer.tap-drawer-fullscreen .drawer-panel,
+.drawer.xmind-drawer-fullscreen .drawer-panel {
+  width: calc(100vw - var(--tap-nav-rail-width));
+  max-width: none;
+  min-width: 0;
+}
+
+.drawer.tap-drawer-fullscreen .drawer-body,
+.drawer.xmind-drawer-fullscreen .drawer-body {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.drawer .drawer-header {
+  min-height: 56px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--tap-border);
+  background: var(--tap-surface);
+  box-shadow: none;
+}
+
+.drawer .drawer-header h3 {
+  margin: 0;
+  color: var(--tap-text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.drawer .drawer-body {
+  min-width: 0;
+  padding: 16px;
+  background: var(--tap-surface);
+}
+
+.tap-drawer-close {
+  display: inline-flex;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--tap-muted);
+  font-size: 24px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.tap-drawer-close:hover {
+  border: 0;
+  background: var(--tap-surface-hover);
+  color: var(--tap-text);
+}
+
+.tap-drawer-fullscreen-toggle {
+  display: inline-flex;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  margin-left: auto;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--tap-muted);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.tap-drawer-fullscreen-toggle:hover,
+.tap-drawer-fullscreen-toggle[aria-pressed="true"] {
+  border: 0;
+  background: var(--tap-surface-hover);
+  color: var(--tap-text);
+}
+
+.drawer .card,
+.drawer [class*="-card"]:not(.status-card) {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .drawer .drawer-mask {
+  background: rgba(4, 8, 14, 0.66);
+}
+
+:root[data-theme="dark"] .drawer .drawer-panel,
+:root[data-theme="dark"] .drawer .drawer-header,
+:root[data-theme="dark"] .drawer .drawer-body {
+  background: var(--tap-surface);
+  border-color: var(--tap-border);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .tap-drawer-fullscreen-toggle {
+  color: var(--tap-muted);
+}

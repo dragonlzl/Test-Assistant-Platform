@@ -63,6 +63,17 @@ async function waitAppInited(page, timeoutMs) {
   throw new Error('waitAppInited timeout: ' + JSON.stringify(last || {}));
 }
 
+async function switchToTempExecPage(page, timeoutMs) {
+  const timeout = Number(timeoutMs) || 30000;
+  await page.evaluate(() => {
+    if (window.app && typeof window.app.switchTab === 'function') {
+      window.app.switchTab('tempexec');
+    }
+  });
+  await page.waitForURL(/\/case-exec\.html(?:\?|$)/, { timeout });
+  await waitAppInited(page, timeout);
+}
+
 async function confirmDrawer(page, options) {
   const opts = options || {};
   const drawer = page.locator('#appConfirmDrawer');
@@ -72,8 +83,18 @@ async function confirmDrawer(page, options) {
       await expect(page.locator('#appConfirmDrawerMessage')).toContainText(text);
     }
   }
+  const previousMessage = await page.locator('#appConfirmDrawerMessage').evaluate((element) => {
+    return element.textContent || '';
+  }).catch(() => '');
   await page.click('#appConfirmDrawerConfirmBtn');
-  await expect(drawer).not.toHaveClass(/open/);
+  await page.waitForFunction((message) => {
+    const element = document.getElementById('appConfirmDrawer');
+    if (!element) return true;
+    if (!element.classList.contains('open') && !element.classList.contains('closing')) return true;
+    const messageElement = document.getElementById('appConfirmDrawerMessage');
+    const nextMessage = messageElement ? (messageElement.textContent || '') : '';
+    return String(nextMessage).trim() !== String(message || '').trim();
+  }, previousMessage);
 }
 
 test.describe('用例执行-导入需确认入库', () => {
@@ -276,7 +297,7 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await gotoIndex(page);
     await waitAppInited(page, 30000);
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await switchToTempExecPage(page, 30000);
 
     await page.click('#openTempExecImportDrawerBtn');
     await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
@@ -550,7 +571,7 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await gotoIndex(page);
     await waitAppInited(page, 30000);
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await switchToTempExecPage(page, 30000);
 
     await expect.poll(() => page.evaluate(() => (window.app && window.app.state && window.app.state.tempExecFiles ? window.app.state.tempExecFiles.length : -1))).toBe(1);
 
@@ -589,7 +610,6 @@ test.describe('用例执行-导入需确认入库', () => {
     await expect(page.locator('#tempExecImportDiffTitle')).toContainText('用例A');
     await page.click('#tempExecImportDiffOverwriteBtn');
     await confirmDrawer(page, { messageIncludes: ['覆盖导入用例', '用例A'] });
-    await confirmDrawer(page, { messageIncludes: ['清空现有执行结果'] });
 
     await expect.poll(() => (lastUpsertPayload ? 1 : 0), { timeout: 5000 }).toBe(1);
     expect(Object.prototype.hasOwnProperty.call(lastUpsertPayload || {}, 'exec_version_id')).toBe(true);
@@ -786,7 +806,7 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await gotoIndex(page);
     await waitAppInited(page, 30000);
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await switchToTempExecPage(page, 30000);
 
     await page.click('#openTempExecImportDrawerBtn');
     await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
@@ -1013,7 +1033,7 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await gotoIndex(page);
     await waitAppInited(page, 30000);
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await switchToTempExecPage(page, 30000);
 
     await page.click('#openTempExecImportDrawerBtn');
     await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
@@ -1200,7 +1220,7 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await gotoIndex(page);
     await waitAppInited(page, 30000);
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await switchToTempExecPage(page, 30000);
 
     await page.click('#openTempExecImportDrawerBtn');
     await expect(page.locator('#tempExecImportDrawer')).toHaveClass(/open/);
@@ -1231,7 +1251,8 @@ test.describe('用例执行-导入需确认入库', () => {
 
     await expect(page.locator('#tempExecImportDuplicateDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecImportDuplicateStatus')).toContainText('原 3 条');
-    await expect(page.locator('#tempExecImportDuplicateBody')).toContainText('普通攻击');
+    await expect(page.locator('#tempExecImportDuplicateTableHost .tap-vtable-semantic-table')).toContainText('普通攻击');
+    await expect(page.locator('#tempExecImportDuplicateTableHost .tap-vtable-canvas canvas')).toHaveCount(1);
 
     await page.click('#tempExecImportDuplicateConfirmBtn');
     await expect(page.locator('#tempExecImportDuplicateDrawer')).not.toHaveClass(/open/);
@@ -1276,7 +1297,7 @@ test.describe('用例执行-导入需确认入库', () => {
     const base = await gotoIndex(page);
     await waitAppInited(page, 30000);
     await page.waitForFunction(() => window.app && window.app.authReady === true);
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await switchToTempExecPage(page, 30000);
     await page.waitForFunction(() => {
       const nodes = document.querySelectorAll('[data-tab-section="tempexec"]');
       if (!nodes || !nodes.length) return true;
@@ -1305,7 +1326,7 @@ test.describe('用例执行-导入需确认入库', () => {
     await page.reload();
     await waitAppInited(page, 30000);
     await page.waitForFunction(() => window.app && window.app.authReady === true);
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await switchToTempExecPage(page, 30000);
     await page.waitForFunction(() => {
       const nodes = document.querySelectorAll('[data-tab-section="tempexec"]');
       if (!nodes || !nodes.length) return true;

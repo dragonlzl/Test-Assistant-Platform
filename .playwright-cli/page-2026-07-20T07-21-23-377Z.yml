@@ -1,0 +1,22 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - paragraph [ref=e4]: Test Assistant Platform
+    - heading "用例助手" [level=1] [ref=e5]
+    - paragraph [ref=e6]: 需求清洗、覆盖对比、用例生成与执行，一站式管理。请先登录后使用。
+    - generic [ref=e7]:
+      - generic [ref=e8]: AI 一键评审
+      - generic [ref=e9]: 覆盖率对比
+      - generic [ref=e10]: 用例生成
+      - generic [ref=e11]: 执行总览
+  - generic [ref=e12]:
+    - heading "登录" [level=2] [ref=e13]
+    - generic [ref=e14]:
+      - generic [ref=e15]: 账号
+      - textbox "账号" [ref=e16]:
+        - /placeholder: 请输入账号
+      - generic [ref=e17]: 密码
+      - textbox "密码" [ref=e18]:
+        - /placeholder: 请输入密码
+      - paragraph [ref=e19]
+      - button "登录" [ref=e20] [cursor=pointer]
+      - button "修改密码" [ref=e21] [cursor=pointer]

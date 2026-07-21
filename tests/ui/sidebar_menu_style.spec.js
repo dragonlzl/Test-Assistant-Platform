@@ -44,7 +44,7 @@ async function setupRoutes(page) {
 }
 
 test.describe('侧边栏一级菜单样式', () => {
-  test('个人按钮文案、一级菜单描边与滚动按钮描边（白色/黑色主题）', async ({ page }) => {
+  test('个人按钮文案、主导航代理与滚动按钮样式（白色/黑色主题）', async ({ page }) => {
     await setupRoutes(page);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(base + '/index.html');
@@ -53,6 +53,10 @@ test.describe('侧边栏一级菜单样式', () => {
     await expect(page.locator('#userMenuToggle')).toHaveText('个人');
 
     const styleSnapshot = await page.evaluate(() => {
+      var stableStyle = document.createElement('style');
+      stableStyle.textContent = '* { transition: none !important; }';
+      document.head.appendChild(stableStyle);
+
       function resolveColor(value) {
         var temp = document.createElement('span');
         temp.style.color = value;
@@ -62,42 +66,16 @@ test.describe('侧边栏一级菜单样式', () => {
         return color;
       }
 
-      function parseColor(colorText) {
-        var raw = String(colorText || '').trim();
-        if (!raw || raw === 'transparent') return { r: 0, g: 0, b: 0, a: 0 };
-        var match = raw.match(/rgba?\(([^)]+)\)/);
-        if (match) {
-          var parts = match[1].split(',').map(function(item) { return parseFloat(String(item).trim()); });
-          return {
-            r: parts[0] || 0,
-            g: parts[1] || 0,
-            b: parts[2] || 0,
-            a: parts.length > 3 ? (parts[3] || 0) : 1,
-          };
-        }
-        var srgb = raw.match(/color\(\s*srgb\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)(?:\s*\/\s*([0-9.]+))?\s*\)/);
-        if (srgb) {
-          return {
-            r: Math.round((parseFloat(srgb[1]) || 0) * 255),
-            g: Math.round((parseFloat(srgb[2]) || 0) * 255),
-            b: Math.round((parseFloat(srgb[3]) || 0) * 255),
-            a: srgb[4] !== undefined ? (parseFloat(srgb[4]) || 0) : 1,
-          };
-        }
-        return { r: 0, g: 0, b: 0, a: 0 };
-      }
-
       function readStyles(theme) {
         if (theme) {
           document.documentElement.setAttribute('data-theme', theme);
         }
-        var btn = document.querySelector('.tab-group-btn[data-group="ai"]') || document.querySelector('.tab-group-btn');
-        if (btn && btn.classList) {
-          btn.classList.remove('active');
-          btn.classList.remove('hovering');
-        }
+        var btn = document.querySelector('.tap-nav-rail-item[data-nav-group="ai"]') ||
+          document.querySelector('.tap-nav-rail-item');
+        var label = btn ? btn.querySelector('.tap-nav-rail-label') : null;
         var rootStyle = getComputedStyle(document.documentElement);
-        var navColor = rootStyle.getPropertyValue('--nav-main-color').trim();
+        var navColor = rootStyle.getPropertyValue('--tap-accent-strong').trim();
+        var navBackground = rootStyle.getPropertyValue('--tap-accent-soft').trim();
         var baseBorder = rootStyle.getPropertyValue('--border').trim();
         var scrollButtons = Array.prototype.slice.call(document.querySelectorAll('.scroll-top-btn'));
         var scrollColors = scrollButtons.map(function(item) {
@@ -105,43 +83,54 @@ test.describe('侧边栏一级菜单样式', () => {
         });
         return {
           theme: theme || 'light',
-          fontFamily: getComputedStyle(btn).fontFamily,
-          fontSize: getComputedStyle(btn).fontSize,
+          fontFamily: getComputedStyle(label || btn).fontFamily,
+          expectedFontFamily: getComputedStyle(document.body).fontFamily,
+          fontSize: getComputedStyle(label || btn).fontSize,
           color: getComputedStyle(btn).color,
-          borderColor: getComputedStyle(btn).borderTopColor,
-          borderRgba: parseColor(getComputedStyle(btn).borderTopColor),
+          active: btn.classList.contains('active'),
           borderWidth: getComputedStyle(btn).borderTopWidth,
+          borderRadius: getComputedStyle(btn).borderRadius,
+          backgroundColor: getComputedStyle(btn).backgroundColor,
+          width: Math.round(btn.getBoundingClientRect().width),
+          height: Math.round(btn.getBoundingClientRect().height),
           expectedColor: resolveColor(navColor),
+          expectedBackground: resolveColor(navBackground),
           expectedBaseBorder: resolveColor(baseBorder),
           scrollBorderColors: scrollColors,
         };
       }
 
-      return {
+      var snapshot = {
         light: readStyles('light'),
         dark: readStyles('dark'),
       };
+      stableStyle.remove();
+      return snapshot;
     });
 
-    expect(styleSnapshot.light.fontFamily).toContain('Noto Sans SC');
-    expect(styleSnapshot.light.fontSize).toBe('15px');
+    expect(styleSnapshot.light.fontFamily).toBe(styleSnapshot.light.expectedFontFamily);
+    expect(styleSnapshot.light.fontSize).toBe('10px');
+    expect(styleSnapshot.light.active).toBe(true);
     expect(styleSnapshot.light.color).toBe(styleSnapshot.light.expectedColor);
-    expect(styleSnapshot.light.borderRgba.a).toBeGreaterThan(0.3);
-    expect(styleSnapshot.light.borderRgba.b).toBeGreaterThan(styleSnapshot.light.borderRgba.g);
-    expect(styleSnapshot.light.borderRgba.b).toBeGreaterThan(styleSnapshot.light.borderRgba.r);
-    expect(styleSnapshot.light.borderWidth).toBe('1px');
+    expect(styleSnapshot.light.borderWidth).toBe('0px');
+    expect(styleSnapshot.light.borderRadius).toBe('6px');
+    expect(styleSnapshot.light.backgroundColor).toBe(styleSnapshot.light.expectedBackground);
+    expect(styleSnapshot.light.width).toBe(56);
+    expect(styleSnapshot.light.height).toBe(48);
     expect(styleSnapshot.light.scrollBorderColors.length).toBeGreaterThan(0);
     styleSnapshot.light.scrollBorderColors.forEach((color) => {
       expect(color).toBe(styleSnapshot.light.expectedBaseBorder);
     });
 
-    expect(styleSnapshot.dark.fontFamily).toContain('Noto Sans SC');
-    expect(styleSnapshot.dark.fontSize).toBe('15px');
+    expect(styleSnapshot.dark.fontFamily).toBe(styleSnapshot.dark.expectedFontFamily);
+    expect(styleSnapshot.dark.fontSize).toBe('10px');
+    expect(styleSnapshot.dark.active).toBe(true);
     expect(styleSnapshot.dark.color).toBe(styleSnapshot.dark.expectedColor);
-    expect(styleSnapshot.dark.borderRgba.a).toBeGreaterThan(0.3);
-    expect(styleSnapshot.dark.borderRgba.b).toBeGreaterThan(styleSnapshot.dark.borderRgba.g);
-    expect(styleSnapshot.dark.borderRgba.b).toBeGreaterThan(styleSnapshot.dark.borderRgba.r);
-    expect(styleSnapshot.dark.borderWidth).toBe('1px');
+    expect(styleSnapshot.dark.borderWidth).toBe('0px');
+    expect(styleSnapshot.dark.borderRadius).toBe('6px');
+    expect(styleSnapshot.dark.backgroundColor).toBe(styleSnapshot.dark.expectedBackground);
+    expect(styleSnapshot.dark.width).toBe(56);
+    expect(styleSnapshot.dark.height).toBe(48);
     expect(styleSnapshot.dark.scrollBorderColors.length).toBeGreaterThan(0);
     styleSnapshot.dark.scrollBorderColors.forEach((color) => {
       expect(color).toBe(styleSnapshot.dark.expectedBaseBorder);

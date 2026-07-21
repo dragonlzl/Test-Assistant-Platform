@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -10,8 +11,22 @@ async function gotoIndex(page) {
 async function openArchiveDrawer(page) {
   await page.click('[data-group="cases"]');
   await page.click('[data-tab-btn="case-archive"]');
+  await page.waitForFunction(() => {
+    var button = document.getElementById('openCaseArchiveDrawerBtn');
+    var drawer = document.getElementById('caseArchiveDrawer');
+    return Boolean(
+      button && !button.disabled && drawer &&
+      drawer.getAttribute('data-drawer-shell') === '1'
+    );
+  }, {}, { timeout: 20000 });
   await page.click('#openCaseArchiveDrawerBtn');
   await expect(page.locator('#caseArchiveDrawer')).toHaveClass(/open/);
+}
+
+async function clickArchiveAction(page, action) {
+  const selector = '#caseArchiveListTableHost [data-case-archive-action="' + action + '"]';
+  await expect(page.locator(selector)).toHaveCount(1);
+  await clickSemantic(page, selector);
 }
 
 test.describe('归档恢复按钮', () => {
@@ -87,8 +102,7 @@ test.describe('归档恢复按钮', () => {
     await gotoIndex(page);
     await openArchiveDrawer(page);
 
-    await page.waitForSelector('[data-case-archive-action="restore"]');
-    await page.click('[data-case-archive-action="restore"]');
+    await clickArchiveAction(page, 'restore');
     await expect(page.locator('.temp-center-toast')).toContainText('恢复请联系 组长 或 管理员！！', { timeout: 3000 });
     expect(restoreCalled).toBeFalsy();
   });
@@ -162,8 +176,7 @@ test.describe('归档恢复按钮', () => {
     await gotoIndex(page);
     await openArchiveDrawer(page);
 
-    await page.waitForSelector('[data-case-archive-action="restore"]');
-    await page.click('[data-case-archive-action="restore"]');
+    await clickArchiveAction(page, 'restore');
     const drawer = page.locator('#appConfirmDrawer');
     await expect(drawer).toHaveClass(/open/);
     await page.click('#appConfirmDrawerConfirmBtn');
@@ -253,8 +266,7 @@ test.describe('归档恢复按钮', () => {
     await gotoIndex(page);
     await openArchiveDrawer(page);
 
-    await page.waitForSelector('[data-case-archive-action="restore"]');
-    await page.click('[data-case-archive-action="restore"]');
+    await clickArchiveAction(page, 'restore');
     await expect(page.locator('.temp-center-toast')).toContainText('执行页面已有相同执行用例，无法恢复。如需恢复，请先解散或者归档当前执行的同名用例', { timeout: 3000 });
     expect(restoreCalled).toBeFalsy();
   });
@@ -319,8 +331,7 @@ test.describe('归档恢复按钮', () => {
     await gotoIndex(page);
     await openArchiveDrawer(page);
 
-    await page.waitForSelector('[data-case-archive-action="restore"]');
-    await page.click('[data-case-archive-action="restore"]');
+    await clickArchiveAction(page, 'restore');
     const drawer = page.locator('#appConfirmDrawer');
     await expect(drawer).toHaveClass(/open/);
     await page.click('#appConfirmDrawerConfirmBtn');
@@ -384,8 +395,7 @@ test.describe('归档恢复按钮', () => {
     await gotoIndex(page);
     await openArchiveDrawer(page);
 
-    await page.waitForSelector('[data-case-archive-action="restore"]');
-    await page.click('[data-case-archive-action="restore"]');
+    await clickArchiveAction(page, 'restore');
     await expect(page.locator('.temp-center-toast')).toContainText('该用例已从用例库中删除，无法进行恢复！！！', { timeout: 3000 });
   });
 });

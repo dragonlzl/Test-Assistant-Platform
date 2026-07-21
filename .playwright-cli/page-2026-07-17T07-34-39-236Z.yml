@@ -1,0 +1,169 @@
+- generic [ref=f2e2]:
+  - complementary:
+    - generic:
+      - generic "用例助手": TA
+      - navigation "主功能导航":
+        - button "AI 功能":
+          - generic: AI
+        - button "用例相关":
+          - generic: TC
+        - button "管理":
+          - generic: AD
+        - button "设置":
+          - generic: ST
+      - button "收起二级导航" [expanded]: <
+    - generic:
+      - generic:
+        - strong: 用例相关
+      - generic:
+        - generic: 当前用户
+        - strong: demo_admin
+        - generic: 管理员
+        - button "用户菜单": 个人
+        - generic:
+          - button "登出"
+      - generic:
+        - generic:
+          - button "用例相关"
+          - button "用例库"
+      - navigation:
+        - generic:
+          - button "AI 功能 需先配置模型/指派":
+            - generic: AI 功能
+            - generic: 需先配置模型/指派
+        - generic:
+          - button "用例相关"
+          - generic:
+            - button "用例执行"
+            - button "用例库"
+            - button "用例归档"
+            - button "执行总览"
+        - generic:
+          - button "管理"
+        - generic:
+          - button "设置"
+      - button "回到顶部"
+      - button "跳到底部"
+      - generic:
+        - generic:
+          - button "xmind用例生成进度"
+          - button "个人备忘"
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic: xmind用例生成进度
+                  - button "收起" [expanded]
+                - generic: 点击打开对应 XMind 生成页签
+              - generic:
+                - paragraph: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - generic:
+        - generic:
+          - generic: 用例库导航
+          - button "收起" [expanded]
+        - generic:
+          - paragraph: 用例库相关入口汇总于此，点击卡片快速打开。
+          - generic:
+            - button "编写用例"
+            - button "导入用例"
+            - button "查看&编辑"
+            - button "易漏用例"
+            - button "选择用例执行"
+            - button "用例改动历史"
+    - main [ref=f2e5]:
+      - generic [ref=f2e6]:
+        - heading "用例库" [level=2] [ref=f2e7]
+        - generic [ref=f2e9]:
+          - paragraph [ref=f2e10]: 提示：请使用顶部导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=f2e11]
+          - generic [ref=f2e12]:
+            - heading "用例编辑视图" [level=3] [ref=f2e13]
+            - generic [ref=f2e14]:
+              - generic [ref=f2e15]:
+                - generic [ref=f2e16]:
+                  - generic [ref=f2e17]: 项目
+                  - generic [ref=f2e18]: "--"
+                - generic [ref=f2e19]:
+                  - generic [ref=f2e20]: 版本
+                  - generic [ref=f2e21]: "--"
+                - generic [ref=f2e22]:
+                  - generic [ref=f2e23]: 用例名
+                  - generic [ref=f2e24]: "--"
+              - generic [ref=f2e25]:
+                - generic [ref=f2e26]:
+                  - button "清空搜索" [ref=f2e27] [cursor=pointer]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=f2e29]
+                  - button "AI 用例生成" [ref=f2e30]
+                  - button "XMind结构展示" [disabled] [ref=f2e31]
+                - generic [ref=f2e32]:
+                  - textbox "批量新增数量" [ref=f2e33]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=f2e34] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=f2e35]
+                  - button "转到执行" [ref=f2e36] [cursor=pointer]
+              - paragraph [ref=f2e37]
+              - generic [ref=f2e39]:
+                - checkbox "全选/全不选当前页" [ref=f2e40]
+                - generic [ref=f2e41]: 全选当前页
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - generic [ref=f2e44]:
+        - generic [ref=f2e45]:
+          - heading "用例库说明" [level=3] [ref=f2e46]
+          - button "关闭" [ref=f2e47] [cursor=pointer]: x
+        - generic [ref=f2e49]:
+          - generic [ref=f2e50]:
+            - heading "页面功能简介" [level=4] [ref=f2e51]
+            - paragraph [ref=f2e52]: 集中管理用例库文件与条目，支持导入、编辑、转执行与历史查看。
+          - generic [ref=f2e53]:
+            - heading "操作流程" [level=4] [ref=f2e54]
+            - list [ref=f2e55]:
+              - listitem [ref=f2e56]: 点击顶部导航 【导入用例】，选择文件、项目与版本后点击 【确认入库】。
+              - listitem [ref=f2e57]: 点击 【查看&编辑】，搜索并编辑用例条目。
+              - listitem [ref=f2e58]: 点击 【选择用例执行】，在当前页抽屉勾选用例并转到执行。
+              - listitem [ref=f2e59]: 点击 【用例改动历史】 查看导入、覆盖、编辑记录。
+          - generic [ref=f2e60]:
+            - heading "必要说明" [level=4] [ref=f2e61]
+            - list [ref=f2e62]:
+              - listitem [ref=f2e63]: 【确认入库】：完成导入写库，支持同名差异对比。
+              - listitem [ref=f2e64]: 【转到执行】 / 【批量转到执行】：将选中用例同步到执行页。
+              - listitem [ref=f2e65]: 编辑或删除会记录历史，可在历史视图回溯。
+          - generic [ref=f2e66]:
+            - heading "用例导入模板" [level=4] [ref=f2e67]
+            - generic [ref=f2e68]:
+              - paragraph [ref=f2e69]: 可在【用例库】的【用例导入】页面，下载用例模板，也可以在此处下载模板。
+              - generic [ref=f2e70]:
+                - button "Excel导入模板" [ref=f2e71] [cursor=pointer]
+                - button "XMind导入模板" [ref=f2e72] [cursor=pointer]
+          - generic [ref=f2e73]:
+            - heading "XMind 用例结构" [level=4] [ref=f2e74]
+            - generic [ref=f2e75]:
+              - paragraph [ref=f2e76]: 点击下方按钮查看 XMind 用例结构要求，确保层级完整便于系统解析。
+              - button "? 查看 XMind 用例结构" [ref=f2e77] [cursor=pointer]:
+                - generic [ref=f2e78]: "?"
+                - generic [ref=f2e79]: 查看 XMind 用例结构
+          - generic [ref=f2e80]:
+            - heading "提示" [level=3] [ref=f2e81]
+            - list [ref=f2e82]:
+              - listitem [ref=f2e83]:
+                - strong [ref=f2e84]: 进入设置的“其他设置”页可以关闭每次进入的提示。
+                - text: 如不需要自动弹出，可取消勾选对应页面。

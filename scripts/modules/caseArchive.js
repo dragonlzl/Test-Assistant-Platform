@@ -2,6 +2,13 @@
   var api = window.app && window.app.apiClient;
   if (!api) return;
 
+  var archiveListModel = window.app && window.app.caseArchive
+    ? window.app.caseArchive.listModel
+    : null;
+  var archiveListControllerFactory = window.app && window.app.caseArchive
+    ? window.app.caseArchive.listController
+    : null;
+
   var utils = window.app && window.app.utils ? window.app.utils : {};
   var escapeHtml = typeof utils.escapeHtml === 'function' ? utils.escapeHtml : function(text) {
     if (text === null || text === undefined) return '';
@@ -41,7 +48,7 @@
     searchInput: document.getElementById('caseArchiveSearchInput'),
     searchBtn: document.getElementById('caseArchiveSearchBtn'),
     clearBtn: document.getElementById('caseArchiveSearchClearBtn'),
-    listBody: document.getElementById('caseArchiveListBody'),
+    listHost: document.getElementById('caseArchiveListTableHost'),
     listEmpty: document.getElementById('caseArchiveListEmpty'),
     detailCard: document.getElementById('caseArchiveDetailCard'),
     detailTitle: document.getElementById('caseArchiveDetailTitle'),
@@ -74,7 +81,6 @@
     rows: [],
     currentUser: null,
     selected: null,
-    listPageIndex: 0,
     casesPageIndex: 0,
     restoringDetail: null,
     casesSearchText: '',
@@ -83,6 +89,7 @@
   };
 
   var detailPersistKey = 'tap-case-archive-detail';
+  var archiveListController = null;
 
   function getCurrentUserId() {
     var globalState = window.app && window.app.state ? window.app.state : null;
@@ -255,17 +262,11 @@
     setStatus(dom.drawerStatus, message, type || '');
   }
 
-  function normalizeArchiveState(value) {
-    var raw = value === null || value === undefined ? '' : String(value || '').trim().toLowerCase();
-    if (!raw) return 'archived';
-    if (raw === 'rerun' || raw === 'reexec' || raw === 're-run' || raw === '重执') return 'rerun';
-    if (raw === 'archived' || raw === '已归') return 'archived';
-    return raw;
-  }
-
   function getArchiveRowState(row) {
-    if (!row || typeof row !== 'object') return 'archived';
-    return normalizeArchiveState(row.archive_state || row.archiveState || row.archive_status || row.archiveStatus);
+    if (archiveListModel && typeof archiveListModel.getArchiveState === 'function') {
+      return archiveListModel.getArchiveState(row);
+    }
+    return 'archived';
   }
 
   function findArchiveRow(execSetId) {
@@ -466,6 +467,28 @@
     );
   }
 
+  function initArchiveListController() {
+    if (archiveListController || !dom.listHost) return archiveListController;
+    if (!archiveListControllerFactory || typeof archiveListControllerFactory.create !== 'function') return null;
+    archiveListController = archiveListControllerFactory.create({
+      hostEl: dom.listHost,
+      emptyEl: dom.listEmpty,
+      paginationTopEl: dom.listPaginationTop,
+      paginationBottomEl: dom.listPaginationBottom,
+      eventRoot: dom.drawer,
+      pageSize: getPageSize(),
+      formatTime: formatTime,
+      onAction: function(action, record) {
+        var id = record && record.execSetId !== undefined ? record.execSetId : '';
+        if (!id && id !== 0) return;
+        if (action === 'view') openDetail(id);
+        else if (action === 'restore') restoreArchive(id);
+        else if (action === 'delete') deleteArchive(id);
+      },
+    });
+    return archiveListController;
+  }
+
   function ensureDrawer() {
     if (state.drawer) return state.drawer;
     if (!window.app || !window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return null;
@@ -473,7 +496,6 @@
       drawerId: 'caseArchiveDrawer',
       openButtons: ['openCaseArchiveDrawerBtn'],
       onOpen: function() {
-        state.listPageIndex = 0;
         setStatus(dom.drawerStatus, '加载归档列表中...', '');
         loadProjects().then(function() {
           syncProjectSelect();
@@ -583,7 +605,6 @@
     var pid = state.currentProjectId ? String(state.currentProjectId || '') : '';
     if (!pid) {
       state.rows = [];
-      state.listPageIndex = 0;
       renderList();
       setStatus(dom.drawerStatus, '请先选择项目', 'warn');
       return Promise.resolve([]);
@@ -601,102 +622,24 @@
       })
       .then(function(rows) {
         state.rows = Array.isArray(rows) ? rows : [];
-        state.listPageIndex = 0;
         renderList();
         setStatus(dom.drawerStatus, '', '');
         return state.rows;
       })
       .catch(function(err) {
         state.rows = [];
-        state.listPageIndex = 0;
         renderList();
         setStatus(dom.drawerStatus, err && err.message ? err.message : '归档列表加载失败', 'err');
         return [];
       });
   }
 
-  function setListPagination(html) {
-    if (dom.listPaginationTop) dom.listPaginationTop.innerHTML = html || '';
-    if (dom.listPaginationBottom) dom.listPaginationBottom.innerHTML = html || '';
-  }
-
-  function buildListPagination(total, pageIndex, totalPages, start, end) {
-    total = Number(total) || 0;
-    pageIndex = Number(pageIndex) || 0;
-    totalPages = Number(totalPages) || 1;
-    start = Number(start) || 0;
-    end = Number(end) || 0;
-    var currentPage = totalPages ? pageIndex + 1 : 1;
-    var maxPage = totalPages || 1;
-    var rangeInfo = total ? ('显示 ' + (start + 1) + '-' + end + ' / 共 ' + total + ' 条') : '暂无记录';
-    return (
-      '<div class="temp-pagination" data-case-archive-list-pagination>' +
-        '<div class="temp-pagination-info">' + escapeHtml(rangeInfo) + '，每页 ' + getPageSize() + ' 条</div>' +
-        '<div class="temp-pagination-controls">' +
-          '<button type="button" class="secondary" data-case-archive-list-page="first" ' + (pageIndex <= 0 ? 'disabled' : '') + '>首页</button>' +
-          '<button type="button" class="secondary" data-case-archive-list-page="prev" ' + (pageIndex <= 0 ? 'disabled' : '') + '>上一页</button>' +
-          '<button type="button" class="secondary" data-case-archive-list-page="next" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>下一页</button>' +
-          '<button type="button" class="secondary" data-case-archive-list-page="last" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>末页</button>' +
-          '<label>跳转</label>' +
-          '<input type="number" min="1" max="' + maxPage + '" value="' + Math.min(currentPage, maxPage) + '" data-case-archive-list-page-input>' +
-        '</div>' +
-      '</div>'
-    );
-  }
-
   function renderList() {
-    if (!dom.listBody) return;
-    var rows = Array.isArray(state.rows) ? state.rows : [];
-    if (!rows.length) {
-      dom.listBody.innerHTML = '';
-      if (dom.listEmpty) dom.listEmpty.classList.remove('hidden');
-      setListPagination(buildListPagination(0, 0, 1, 0, 0));
-      return;
-    }
-    if (dom.listEmpty) dom.listEmpty.classList.add('hidden');
+    var controller = initArchiveListController();
+    if (!controller) return;
     var user = state.currentUser || getCurrentUser();
-    var isAdmin = isAdminUser(user);
-    var pageSize = getPageSize();
-    var total = rows.length;
-    var totalPages = total ? Math.ceil(total / pageSize) : 1;
-    if (!Number.isFinite(state.listPageIndex) || state.listPageIndex < 0) state.listPageIndex = 0;
-    if (state.listPageIndex >= totalPages) state.listPageIndex = Math.max(totalPages - 1, 0);
-    var start = state.listPageIndex * pageSize;
-    var end = Math.min(total, start + pageSize);
-    var view = rows.slice(start, end);
-    setListPagination(buildListPagination(total, state.listPageIndex, totalPages, start, end));
-    dom.listBody.innerHTML = view.map(function(row, idx) {
-      var reuseText = row && row.reuse_enabled ? '复用' : '非复用';
-      var archiveState = getArchiveRowState(row);
-      var stateLabel = archiveState === 'rerun' ? '重执' : '已归';
-      var stateClass = archiveState === 'rerun' ? 'tag case-archive-rerun' : 'tag tag-archived';
-      var rearchiveCount = row && (row.rearchive_count || row.rearchiveCount);
-      if (rearchiveCount === undefined || rearchiveCount === null || rearchiveCount === '') rearchiveCount = 0;
-      var ops = [
-        '<button type="button" class="pill secondary tiny" data-case-archive-action="view" data-case-archive-id="' + escapeHtml(String(row.exec_set_id)) + '">查看</button>',
-        '<button type="button" class="pill secondary tiny" data-case-archive-action="restore" data-case-archive-id="' + escapeHtml(String(row.exec_set_id)) + '">恢复</button>',
-      ];
-      if (isAdmin) {
-        ops.push('<button type="button" class="pill secondary tiny danger" data-case-archive-action="delete" data-case-archive-id="' + escapeHtml(String(row.exec_set_id)) + '">删除</button>');
-      }
-      return (
-        '<tr>' +
-          '<td>' + (start + idx + 1) + '</td>' +
-          '<td>' + escapeHtml(row.project_name || '') + '</td>' +
-          '<td>' + escapeHtml(row.version_name || '--') + '</td>' +
-          '<td title="' + escapeHtml(row.name || '') + '">' + escapeHtml(row.name || '') + '</td>' +
-          '<td>' + escapeHtml(String(row.case_count || 0)) + '</td>' +
-          '<td>' + escapeHtml(String(rearchiveCount || 0)) + '</td>' +
-          '<td><span class="' + escapeHtml(stateClass) + '">' + escapeHtml(stateLabel) + '</span></td>' +
-          '<td>' + escapeHtml(reuseText) + '</td>' +
-          '<td>' + escapeHtml(row.imported_by_name || '--') + '</td>' +
-          '<td>' + escapeHtml(formatTime(row.imported_at || '')) + '</td>' +
-          '<td>' + escapeHtml(row.archived_by_name || '--') + '</td>' +
-          '<td>' + escapeHtml(formatTime(row.archived_at || '')) + '</td>' +
-          '<td class="ops">' + ops.join(' ') + '</td>' +
-        '</tr>'
-      );
-    }).join('');
+    controller.setPageSize(getPageSize());
+    controller.setData(state.rows, { isAdmin: isAdminUser(user) });
   }
 
   function showDetail(detail) {
@@ -1102,7 +1045,6 @@
       dom.projectSelect.addEventListener('change', function() {
         state.currentProjectId = dom.projectSelect.value || '';
         state.currentVersionId = '';
-        state.listPageIndex = 0;
         setStatus(dom.drawerStatus, '加载版本中...', '');
         loadVersions(state.currentProjectId).then(function() {
           return loadArchives();
@@ -1112,14 +1054,12 @@
     if (dom.versionSelect) {
       dom.versionSelect.addEventListener('change', function() {
         state.currentVersionId = dom.versionSelect.value || '';
-        state.listPageIndex = 0;
         loadArchives();
       });
     }
     if (dom.searchBtn) {
       dom.searchBtn.addEventListener('click', function() {
         state.q = dom.searchInput ? String(dom.searchInput.value || '').trim() : '';
-        state.listPageIndex = 0;
         loadArchives();
       });
     }
@@ -1127,7 +1067,6 @@
       dom.clearBtn.addEventListener('click', function() {
         if (dom.searchInput) dom.searchInput.value = '';
         state.q = '';
-        state.listPageIndex = 0;
         loadArchives();
       });
     }
@@ -1135,30 +1074,7 @@
       dom.searchInput.addEventListener('keydown', function(e) {
         if (!e || e.key !== 'Enter') return;
         state.q = String(dom.searchInput.value || '').trim();
-        state.listPageIndex = 0;
         loadArchives();
-      });
-    }
-    if (dom.listBody) {
-      dom.listBody.addEventListener('click', function(e) {
-        var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-archive-action]') : null;
-        if (!btn || !btn.dataset) return;
-        var action = btn.dataset.caseArchiveAction || '';
-        var id = btn.dataset.caseArchiveId || '';
-        if (!id) return;
-        if (action === 'view') {
-          if (e && typeof e.preventDefault === 'function') e.preventDefault();
-          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-          openDetail(id);
-        } else if (action === 'restore') {
-          if (e && typeof e.preventDefault === 'function') e.preventDefault();
-          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-          restoreArchive(id);
-        } else if (action === 'delete') {
-          if (e && typeof e.preventDefault === 'function') e.preventDefault();
-          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-          deleteArchive(id);
-        }
       });
     }
     if (dom.casesBody) {
@@ -1215,64 +1131,6 @@
           if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
           return;
         }
-      });
-    }
-    if (dom.listPaginationTop) {
-      dom.listPaginationTop.addEventListener('click', function(e) {
-        var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-archive-list-page]') : null;
-        if (!btn || !btn.dataset) return;
-        var action = btn.dataset.caseArchiveListPage || '';
-        var total = Array.isArray(state.rows) ? state.rows.length : 0;
-        var pageSize = getPageSize();
-        var totalPages = total ? Math.ceil(total / pageSize) : 1;
-        if (action === 'prev') state.listPageIndex -= 1;
-        else if (action === 'next') state.listPageIndex += 1;
-        else if (action === 'first') state.listPageIndex = 0;
-        else if (action === 'last') state.listPageIndex = totalPages - 1;
-        if (state.listPageIndex < 0) state.listPageIndex = 0;
-        if (state.listPageIndex >= totalPages) state.listPageIndex = Math.max(totalPages - 1, 0);
-        renderList();
-      });
-      dom.listPaginationTop.addEventListener('change', function(e) {
-        var input = e && e.target && e.target.closest ? e.target.closest('[data-case-archive-list-page-input]') : null;
-        if (!input) return;
-        var total = Array.isArray(state.rows) ? state.rows.length : 0;
-        var pageSize = getPageSize();
-        var totalPages = total ? Math.ceil(total / pageSize) : 1;
-        var n = Number(input.value);
-        if (!isFinite(n)) return;
-        var idx = Math.max(0, Math.min(totalPages - 1, Math.floor(n - 1)));
-        state.listPageIndex = idx;
-        renderList();
-      });
-    }
-    if (dom.listPaginationBottom) {
-      dom.listPaginationBottom.addEventListener('click', function(e) {
-        var btn = e && e.target && e.target.closest ? e.target.closest('[data-case-archive-list-page]') : null;
-        if (!btn || !btn.dataset) return;
-        var action = btn.dataset.caseArchiveListPage || '';
-        var total = Array.isArray(state.rows) ? state.rows.length : 0;
-        var pageSize = getPageSize();
-        var totalPages = total ? Math.ceil(total / pageSize) : 1;
-        if (action === 'prev') state.listPageIndex -= 1;
-        else if (action === 'next') state.listPageIndex += 1;
-        else if (action === 'first') state.listPageIndex = 0;
-        else if (action === 'last') state.listPageIndex = totalPages - 1;
-        if (state.listPageIndex < 0) state.listPageIndex = 0;
-        if (state.listPageIndex >= totalPages) state.listPageIndex = Math.max(totalPages - 1, 0);
-        renderList();
-      });
-      dom.listPaginationBottom.addEventListener('change', function(e) {
-        var input = e && e.target && e.target.closest ? e.target.closest('[data-case-archive-list-page-input]') : null;
-        if (!input) return;
-        var total = Array.isArray(state.rows) ? state.rows.length : 0;
-        var pageSize = getPageSize();
-        var totalPages = total ? Math.ceil(total / pageSize) : 1;
-        var n = Number(input.value);
-        if (!isFinite(n)) return;
-        var idx = Math.max(0, Math.min(totalPages - 1, Math.floor(n - 1)));
-        state.listPageIndex = idx;
-        renderList();
       });
     }
     if (dom.casesPaginationTop) {
@@ -1414,9 +1272,7 @@
   }
 
   function handlePageSizeChanged() {
-    if (Array.isArray(state.rows) && state.rows.length) {
-      renderList();
-    }
+    if (archiveListController) archiveListController.setPageSize(getPageSize());
     if (state.selected) {
       renderCases(state.selected);
     }
@@ -1456,6 +1312,7 @@
 
   function init() {
     if (!dom.root) return;
+    initArchiveListController();
     ensureDrawer();
     bindEvents();
     bindTabActivation();

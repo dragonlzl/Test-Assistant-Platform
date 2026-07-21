@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic, setSemanticChecked } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -271,15 +272,15 @@ test.describe('＋新增用例高亮（绿色描边）', () => {
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
 
     await expect(page.locator('#caseLibraryEditListBody')).toContainText('用例库A');
-    await page.click('#caseLibraryEditListBody [data-case-lib-edit="100"]');
+    await clickSemantic(page, '#caseLibraryEditListBody [data-case-lib-edit="100"]');
 
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
-    await page.locator('#caseLibraryEditView [data-case-lib-insert][data-index="0"]').click();
+    await clickSemantic(page, '#caseLibraryEditView [data-case-lib-insert][data-index="0"]');
     await expect(page.locator('#caseLibraryEditView tr.case-row.new-added')).toHaveCount(1);
 
-    await page.locator('#caseLibraryEditView tr.case-row.new-added input[data-case-lib-select]').click();
+    await setSemanticChecked(page, '#caseLibraryEditView tr.case-row.new-added input[data-case-lib-select]', true);
     await expect(page.locator('#caseLibraryEditView tr.case-row.new-added')).toHaveCount(1);
   });
 });

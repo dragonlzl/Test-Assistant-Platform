@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic, readSemanticValues } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/case-library.html');
 }
 
 async function waitAppReady(page, timeoutMs) {
@@ -194,7 +195,7 @@ test.describe('用例库编辑视图批量新增', () => {
 
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryEditView')).toContainText('用例1');
 
@@ -206,7 +207,7 @@ test.describe('用例库编辑视图批量新增', () => {
     await switchToTab(page, 'case-library');
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditBatchAddCountInput')).toHaveValue('3');
 
     await page.fill('#caseLibraryEditBatchAddCountInput', '');
@@ -316,9 +317,9 @@ test.describe('用例库编辑视图批量新增', () => {
     await switchToTab(page, 'case-library');
     await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
 
-    const modules = await page.locator('#caseLibraryEditView tr.case-row [data-case-lib-edit-field="module"]').allInnerTexts();
+    const modules = await readSemanticValues(page, '#caseLibraryEditView tr.case-row [data-case-lib-edit-field="module"]');
     expect(modules.slice(0, 3)).toEqual(['模块A', '模块A', '模块B']);
   });
 });

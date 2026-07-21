@@ -1,0 +1,51 @@
+[     118ms] ReferenceError: Cannot access 'setStepInProgress' before initialization
+    at http://127.0.0.1:8090/scripts/modules/app.js:614:11
+[     111ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8090/index.html:0
+[     111ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8090/index.html:0
+[     111ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8090/index.html:0
+[     115ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/settings?scope=all&owner_id=0:0
+[     116ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/projects:0
+[     116ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/models?scope=all&owner_id=0:0
+[     116ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/features?scope=all&owner_id=0:0
+[     116ms] [WARNING] 加载设置失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/settings.js:576
+[     117ms] [WARNING] 加载远端模型失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:499
+[     118ms] [WARNING] 加载功能指派失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:699
+[     126ms] Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19
+[    2027ms] ReferenceError: Cannot access 'setStepInProgress' before initialization
+    at http://127.0.0.1:8090/scripts/modules/app.js:614:11
+[    2013ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8090/index.html:0
+[    2013ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8090/index.html:0
+[    2013ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8090/index.html:0
+[    2014ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/projects:0
+[    2014ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/settings?scope=all&owner_id=0:0
+[    2015ms] [WARNING] 加载设置失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/settings.js:576
+[    2015ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/models?scope=all&owner_id=0:0
+[    2028ms] Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19
+[    2015ms] [WARNING] 加载远端模型失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:499
+[    2016ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/features?scope=all&owner_id=0:0
+[    2016ms] [WARNING] 加载功能指派失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:699
+[    3902ms] ReferenceError: Cannot access 'setStepInProgress' before initialization
+    at http://127.0.0.1:8090/scripts/modules/app.js:614:11
+[    3905ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8090/index.html:0
+[    3905ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8090/index.html:0
+[    3905ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8090/index.html:0
+[    3907ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/projects:0
+[    3907ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/settings?scope=all&owner_id=0:0
+[    3907ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/models?scope=all&owner_id=0:0
+[    3907ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/features?scope=all&owner_id=0:0
+[    3907ms] [WARNING] 加载设置失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/settings.js:576
+[    3907ms] [WARNING] 加载远端模型失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:499
+[    3907ms] [WARNING] 加载功能指派失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:699
+[    3910ms] Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19

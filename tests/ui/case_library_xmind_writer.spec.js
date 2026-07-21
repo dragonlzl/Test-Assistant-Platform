@@ -36,9 +36,12 @@ async function gotoCaseLibrary(page) {
 }
 
 async function waitCaseLibraryReady(page) {
-  await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-  await page.waitForFunction(() => window.app && window.app.caseLibraryBound === true, {}, { timeout: 30000 });
-  await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', {}, { timeout: 30000 });
+  await page.waitForFunction(() => {
+    return window.app && window.app._inited === true && window.app.authReady === true &&
+      window.app.caseLibraryBound === true && window.app.tabGroupBound === true &&
+      typeof window.app.switchTab === 'function' && document.body &&
+      document.body.getAttribute('data-page') === 'case-library';
+  }, {}, { timeout: 30000 });
 }
 
 async function switchToTab(page, tabName) {
@@ -47,6 +50,41 @@ async function switchToTab(page, tabName) {
       window.app.switchTab(name);
     }
   }, tabName);
+}
+
+async function readDiffVTableVisualState(page) {
+  return page.locator('#caseLibraryImportDiffTableHost').evaluate((host) => {
+    var tableShell = host.querySelector('.tap-vtable-shell');
+    var locateBar = document.getElementById('caseLibraryImportDiffLocateBar');
+    var locateInfo = locateBar ? locateBar.querySelector('.diff-locate-info') : null;
+    var canvases = Array.prototype.slice.call(host.querySelectorAll('canvas'));
+    var coloredPixels = 0;
+    var canvasHash = 2166136261;
+    canvases.forEach(function(canvas) {
+      var context = canvas.getContext('2d');
+      if (!context || !canvas.width || !canvas.height) return;
+      var width = Math.min(canvas.width, 1000);
+      var height = Math.min(canvas.height, 360);
+      var data = context.getImageData(0, 0, width, height).data;
+      for (var index = 0; index < data.length; index += 16) {
+        if (data[index + 3] > 0) coloredPixels += 1;
+        canvasHash ^= data[index];
+        canvasHash = Math.imul(canvasHash, 16777619);
+        canvasHash ^= data[index + 1];
+        canvasHash = Math.imul(canvasHash, 16777619);
+        canvasHash ^= data[index + 2];
+        canvasHash = Math.imul(canvasHash, 16777619);
+      }
+    });
+    return {
+      locateBarBg: locateBar ? getComputedStyle(locateBar).backgroundColor : '',
+      locateInfoColor: locateInfo ? getComputedStyle(locateInfo).color : '',
+      underlayBackground: tableShell ? getComputedStyle(tableShell).backgroundColor : '',
+      canvasCount: canvases.length,
+      coloredPixels: coloredPixels,
+      canvasHash: canvasHash >>> 0,
+    };
+  });
 }
 
 function buildWriterRoutes(page, options) {
@@ -219,8 +257,7 @@ test.describe('用例库 XMind 编写用例', () => {
     }, { token, user });
 
     await gotoCaseLibrary(page);
-    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-    await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', {}, { timeout: 30000 });
+    await waitCaseLibraryReady(page);
     await switchToTab(page, 'case-library');
 
     await page.click('#openCaseLibraryWriterDrawerBtn');
@@ -403,6 +440,12 @@ test.describe('用例库 XMind 编写用例', () => {
     await page.click('#caseLibraryWriterPublishConfirmBtn');
 
     await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
+    const diffTableHost = page.locator('#caseLibraryImportDiffTableHost');
+    await expect(diffTableHost.locator('.tap-vtable-shell.is-ready')).toHaveCount(1);
+    const diffSemanticMirror = diffTableHost.locator('.tap-vtable-semantic');
+    await expect(diffSemanticMirror).toContainText('导入：');
+    await expect(diffSemanticMirror).toContainText('库中：');
+    await expect(page.locator('script[data-tap-vtable-editors="1"]')).toHaveCount(0);
     const layerState = await page.evaluate(() => {
       var diff = document.getElementById('caseLibraryImportDiffDrawer');
       var xmind = document.getElementById('xmindStructureDrawer');
@@ -420,55 +463,26 @@ test.describe('用例库 XMind 编写用例', () => {
       expect(layerState.diffZ).toBeGreaterThan(layerState.publishZ);
     }
 
-    const lightThemeStyles = await page.evaluate(() => {
-      var drawer = document.getElementById('caseLibraryImportDiffDrawer');
-      if (!drawer || !drawer.querySelector) return null;
-      var locateBar = drawer.querySelector('.diff-locate-bar');
-      var locateInfo = drawer.querySelector('.diff-locate-info');
-      var firstCell = drawer.querySelector('.diff-table tbody td');
-      var pairTag = drawer.querySelector('.diff-pair-tag');
-      return {
-        locateBarBg: locateBar ? getComputedStyle(locateBar).backgroundColor : '',
-        locateInfoColor: locateInfo ? getComputedStyle(locateInfo).color : '',
-        firstCellColor: firstCell ? getComputedStyle(firstCell).color : '',
-        pairTagBg: pairTag ? getComputedStyle(pairTag).backgroundColor : '',
-        pairTagColor: pairTag ? getComputedStyle(pairTag).color : '',
-      };
-    });
-    expect(lightThemeStyles).toBeTruthy();
+    const lightThemeStyles = await readDiffVTableVisualState(page);
+    expect(lightThemeStyles.canvasCount).toBeGreaterThan(0);
+    expect(lightThemeStyles.coloredPixels).toBeGreaterThan(100);
+    expect(lightThemeStyles.underlayBackground).not.toBe('');
 
     await page.evaluate(() => {
       document.documentElement.setAttribute('data-theme', 'dark');
     });
-    await page.waitForTimeout(180);
+    await expect.poll(async () => {
+      const current = await readDiffVTableVisualState(page);
+      return current.canvasHash;
+    }).not.toBe(lightThemeStyles.canvasHash);
 
-    const darkThemeStyles = await page.evaluate(() => {
-      var drawer = document.getElementById('caseLibraryImportDiffDrawer');
-      if (!drawer || !drawer.querySelector) return null;
-      var locateBar = drawer.querySelector('.diff-locate-bar');
-      var locateInfo = drawer.querySelector('.diff-locate-info');
-      var firstCell = drawer.querySelector('.diff-table tbody td');
-      var pairTag = drawer.querySelector('.diff-pair-tag');
-      return {
-        locateBarBg: locateBar ? getComputedStyle(locateBar).backgroundColor : '',
-        locateInfoColor: locateInfo ? getComputedStyle(locateInfo).color : '',
-        firstCellColor: firstCell ? getComputedStyle(firstCell).color : '',
-        pairTagBg: pairTag ? getComputedStyle(pairTag).backgroundColor : '',
-        pairTagColor: pairTag ? getComputedStyle(pairTag).color : '',
-      };
-    });
-    expect(darkThemeStyles).toBeTruthy();
-    if (lightThemeStyles && darkThemeStyles) {
-      expect(lightThemeStyles.locateBarBg).not.toBe(darkThemeStyles.locateBarBg);
-      expect(lightThemeStyles.locateInfoColor).not.toBe(darkThemeStyles.locateInfoColor);
-      expect(lightThemeStyles.firstCellColor).not.toBe(darkThemeStyles.firstCellColor);
-      if (lightThemeStyles.pairTagBg && darkThemeStyles.pairTagBg) {
-        expect(lightThemeStyles.pairTagBg).not.toBe(darkThemeStyles.pairTagBg);
-      }
-      if (lightThemeStyles.pairTagColor && darkThemeStyles.pairTagColor) {
-        expect(lightThemeStyles.pairTagColor).not.toBe(darkThemeStyles.pairTagColor);
-      }
-    }
+    const darkThemeStyles = await readDiffVTableVisualState(page);
+    expect(darkThemeStyles.canvasCount).toBeGreaterThan(0);
+    expect(darkThemeStyles.coloredPixels).toBeGreaterThan(100);
+    expect(lightThemeStyles.locateBarBg).not.toBe(darkThemeStyles.locateBarBg);
+    expect(lightThemeStyles.locateInfoColor).not.toBe(darkThemeStyles.locateInfoColor);
+    expect(lightThemeStyles.underlayBackground).not.toBe(darkThemeStyles.underlayBackground);
+    expect(lightThemeStyles.canvasHash).not.toBe(darkThemeStyles.canvasHash);
   });
 
   test('取消编辑二次确认提示包含恢复默认结构说明', async ({ page }) => {

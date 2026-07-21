@@ -1,0 +1,227 @@
+- generic [ref=f3e2]:
+  - complementary:
+    - generic:
+      - generic "用例助手": TA
+      - navigation "主功能导航":
+        - button "AI 功能":
+          - generic: AI
+        - button "用例相关":
+          - generic: TC
+        - button "管理":
+          - generic: AD
+        - button "设置":
+          - generic: ST
+      - button "收起二级导航" [expanded]: <
+    - generic:
+      - generic:
+        - strong: 用例相关
+      - generic:
+        - generic: 当前用户
+        - strong: demo_admin
+        - generic: 管理员
+        - button "用户菜单": 个人
+        - generic:
+          - button "登出"
+      - generic:
+        - generic:
+          - button "用例相关"
+          - button "用例库"
+      - navigation:
+        - generic:
+          - button "AI 功能 需先配置模型/指派":
+            - generic: AI 功能
+            - generic: 需先配置模型/指派
+        - generic:
+          - button "用例相关"
+          - generic:
+            - button "用例执行"
+            - button "用例库"
+            - button "用例归档"
+            - button "执行总览"
+        - generic:
+          - button "管理"
+        - generic:
+          - button "设置"
+      - button "回到顶部"
+      - button "跳到底部"
+      - generic:
+        - generic:
+          - button "xmind用例生成进度"
+          - button "个人备忘"
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic: xmind用例生成进度
+                  - button "收起" [expanded]
+                - generic: 点击打开对应 XMind 生成页签
+              - generic:
+                - paragraph: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f3e3]:
+    - generic [ref=f3e4]:
+      - generic:
+        - generic:
+          - generic: 用例库导航
+          - button "收起" [expanded]
+        - generic:
+          - paragraph: 用例库相关入口汇总于此，点击卡片快速打开。
+          - generic:
+            - button "编写用例"
+            - button "导入用例"
+            - button "查看&编辑"
+            - button "易漏用例"
+            - button "选择用例执行"
+            - button "用例改动历史"
+    - main [ref=f3e5]:
+      - generic [ref=f3e6]:
+        - heading "用例库" [level=2] [ref=f3e7]
+        - generic [ref=f3e9]:
+          - paragraph [ref=f3e10]: 提示：请使用顶部导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=f3e11]
+          - generic [ref=f3e12]:
+            - heading "用例编辑视图" [level=3] [ref=f3e13]
+            - generic [ref=f3e14]:
+              - generic [ref=f3e15]:
+                - generic [ref=f3e16]:
+                  - generic [ref=f3e17]: 项目
+                  - generic [ref=f3e18]: "--"
+                - generic [ref=f3e19]:
+                  - generic [ref=f3e20]: 版本
+                  - generic [ref=f3e21]: "--"
+                - generic [ref=f3e22]:
+                  - generic [ref=f3e23]: 用例名
+                  - generic [ref=f3e24]: "--"
+              - generic [ref=f3e25]:
+                - generic [ref=f3e26]:
+                  - button "清空搜索" [ref=f3e27] [cursor=pointer]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=f3e29]
+                  - button "AI 用例生成" [ref=f3e30]
+                  - button "XMind结构展示" [disabled] [ref=f3e31]
+                - generic [ref=f3e32]:
+                  - textbox "批量新增数量" [ref=f3e33]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=f3e34] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=f3e35]
+                  - button "转到执行" [ref=f3e36] [cursor=pointer]
+              - paragraph [ref=f3e37]
+              - generic [ref=f3e39]:
+                - checkbox "全选/全不选当前页" [ref=f3e40]
+                - generic [ref=f3e41]: 全选当前页
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - generic [ref=f3e44]:
+        - generic [ref=f3e45]:
+          - heading "查看&编辑" [level=3] [ref=f3e46]
+          - button "全屏" [ref=f3e47] [cursor=pointer]: "[]"
+          - button "关闭" [ref=f3e48] [cursor=pointer]: x
+        - generic [ref=f3e49]:
+          - generic [ref=f3e51]:
+            - generic [ref=f3e52]: 搜索过滤
+            - generic [ref=f3e53]: 项目
+            - combobox "项目" [ref=f3e54] [cursor=pointer]:
+              - option "请选择项目"
+              - option "战魂铭人" [selected]
+            - generic [ref=f3e55]: 版本
+            - combobox "版本" [ref=f3e56] [cursor=pointer]:
+              - option "全部版本" [selected]
+              - option "v1"
+            - generic [ref=f3e57]: 归属
+            - combobox "归属" [ref=f3e58] [cursor=pointer]:
+              - option "全部" [selected]
+              - option "其他项目导入"
+              - option "demo_admin"
+            - generic [ref=f3e59]: 用例名
+            - textbox "用例名" [ref=f3e60]:
+              - /placeholder: 搜索用例名
+            - button "刷新" [ref=f3e61] [cursor=pointer]
+          - generic [ref=f3e62]:
+            - generic [ref=f3e63]:
+              - generic [ref=f3e64]: 全局操作
+              - generic [ref=f3e65]: 请选择用例变更版本
+              - combobox "请选择用例变更版本" [ref=f3e66] [cursor=pointer]:
+                - option "请选择版本" [selected]
+                - option "v1"
+              - button "确认更换版本" [disabled] [ref=f3e67]
+            - generic [ref=f3e68]:
+              - button "共享" [disabled] [ref=f3e69]
+              - button "导出XMind" [disabled] [ref=f3e70]
+              - button "导出Excel" [disabled] [ref=f3e71]
+              - button "删除所选" [disabled] [ref=f3e72]
+          - paragraph [ref=f3e73]
+          - generic [ref=f3e75]:
+            - generic [ref=f3e76]: 显示 1-1 / 1 条，每页 20 条
+            - generic [ref=f3e77]:
+              - button "上一页" [disabled] [ref=f3e78]
+              - generic [ref=f3e79]: 第 1 / 1 页
+              - button "下一页" [disabled] [ref=f3e80]
+              - generic [ref=f3e81]:
+                - text: 跳至
+                - spinbutton "跳至 页" [ref=f3e82]: "1"
+                - text: 页
+          - generic [ref=f3e83]:
+            - checkbox "全选/全不选当前页" [ref=f3e84]
+            - generic [ref=f3e85]: 全选当前页
+          - generic [ref=f3e87]:
+            - generic [ref=f3e89]:
+              - generic:
+                - textbox
+            - table [ref=f3e92]:
+              - caption [ref=f3e93]: 查看与编辑用例文件
+              - rowgroup [ref=f3e94]:
+                - row [ref=f3e95]:
+                  - columnheader "选择" [ref=f3e96]
+                  - columnheader "所属项目" [ref=f3e97]
+                  - columnheader "版本" [ref=f3e98]
+                  - columnheader "用例名" [ref=f3e99]
+                  - columnheader "执行页状态" [ref=f3e100]
+                  - columnheader "用例条目数" [ref=f3e101]
+                  - columnheader "复用类型" [ref=f3e102]
+                  - columnheader "导入人员" [ref=f3e103]
+                  - columnheader "导入时间" [ref=f3e104]
+                  - columnheader "最近更新人员" [ref=f3e105]
+                  - columnheader "更新时间" [ref=f3e106]
+                  - columnheader "关联用例" [ref=f3e107]
+                  - columnheader "操作" [ref=f3e108]
+              - rowgroup [ref=f3e109]:
+                - row [ref=f3e110]:
+                  - cell [ref=f3e111]:
+                    - checkbox "选择" [ref=f3e112]
+                  - cell "战魂铭人" [ref=f3e113]
+                  - cell "v1" [ref=f3e114]
+                  - cell "编辑详情视觉验收" [ref=f3e115]
+                  - cell "未" [ref=f3e116]
+                  - cell "4" [ref=f3e117]
+                  - cell "否" [ref=f3e118]
+                  - cell "demo_admin" [ref=f3e119]
+                  - cell "2026/7/17 14:00:00" [ref=f3e120]
+                  - cell "demo_admin" [ref=f3e121]
+                  - cell "2026/7/17 14:30:00" [ref=f3e122]
+                  - cell "无关联" [ref=f3e123]
+                  - cell [ref=f3e124]:
+                    - button "编辑" [ref=f3e125] [cursor=pointer]
+          - generic [ref=f3e127]:
+            - generic [ref=f3e128]: 显示 1-1 / 1 条，每页 20 条
+            - generic [ref=f3e129]:
+              - button "上一页" [disabled] [ref=f3e130]
+              - generic [ref=f3e131]: 第 1 / 1 页
+              - button "下一页" [disabled] [ref=f3e132]
+              - generic [ref=f3e133]:
+                - text: 跳至
+                - spinbutton "跳至 页" [ref=f3e134]: "1"
+                - text: 页
+          - button "关闭" [ref=f3e136] [cursor=pointer]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "战魂铭人"
+      - option "请选择项目" [selected]
+      - option "战魂铭人"

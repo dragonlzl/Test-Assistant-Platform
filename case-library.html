@@ -161,6 +161,12 @@
 </script>
 <link rel="stylesheet" href="./style.css"/>
 <link rel="stylesheet" href="./scripts/vendor/mind-elixir.css"/>
+<link rel="stylesheet" href="./styles/tokens.css"/>
+<link rel="stylesheet" href="./styles/controls.css"/>
+<link rel="stylesheet" href="./styles/navigation.css"/>
+<link rel="stylesheet" href="./styles/tables.css"/>
+<link rel="stylesheet" href="./styles/drawers.css"/>
+<link rel="stylesheet" href="./styles/pages.css"/>
 </head>
 <body data-page="case-library">
 <div class="app-layout">
@@ -487,7 +493,7 @@ xmind用例生成进度
 
 
 
-<div class="drawer" id="caseArchiveDrawer" data-tab-section="case-archive">
+<div class="drawer" id="caseArchiveDrawer" data-tab-section="case-archive" data-drawer-kind="table">
 <div class="drawer-mask" data-drawer-close="caseArchiveDrawer"></div>
 <div class="drawer-panel">
 <div class="drawer-header">
@@ -516,28 +522,7 @@ xmind用例生成进度
 </div>
 <p class="status" id="caseArchiveDrawerStatus"></p>
 <div id="caseArchiveListPaginationTop"></div>
-<div class="admin-table-wrapper" style="margin-top:10px;">
-<table class="admin-table">
-  <thead>
-    <tr>
-      <th>编号</th>
-      <th>所属项目</th>
-      <th>版本</th>
-      <th>用例名</th>
-      <th>用例条目数</th>
-      <th>重归档次数</th>
-      <th>状态</th>
-      <th>复用类型</th>
-      <th>导入人员</th>
-      <th>导入时间</th>
-      <th>归档人</th>
-      <th>归档时间</th>
-      <th>操作</th>
-    </tr>
-  </thead>
-  <tbody id="caseArchiveListBody"></tbody>
-</table>
-</div>
+<div id="caseArchiveListTableHost" style="margin-top:10px;"></div>
 <div id="caseArchiveListPaginationBottom"></div>
 <p class="hint hidden" id="caseArchiveListEmpty">暂无归档记录</p>
 </div>
@@ -654,7 +639,15 @@ xmind用例生成进度
         </div>
       </div>
       <p class="status" id="caseLibraryEditStatus"></p>
-      <div class="temp-case-view" id="caseLibraryEditView"></div>
+      <div class="temp-case-view case-library-editor-vtable-view" id="caseLibraryEditView">
+        <div id="caseLibraryEditorPaginationTop"></div>
+        <label class="tap-table-select-all" for="caseLibraryEditorSelectAll">
+          <input type="checkbox" id="caseLibraryEditorSelectAll" data-case-lib-select-all aria-label="全选/全不选当前页"/>
+          <span>全选当前页</span>
+        </label>
+        <div class="case-library-editor-table-host" id="caseLibraryEditorTableHost" data-vtable-id="case-library-editor"></div>
+        <div id="caseLibraryEditorPaginationBottom"></div>
+      </div>
       <div class="missing-reminder-card hidden" id="caseLibraryMissingReminderBottom"></div>
     </div>
   </div>
@@ -708,26 +701,7 @@ xmind用例生成进度
         <button type="button" class="summary-pill case-lib-diff-pill file-deleted" data-case-lib-history-filter="file_deleted" id="caseLibraryHistoryFileDeletedPill">整份删除 0</button>
       </div>
       <div id="caseLibraryHistoryPaginationTop"></div>
-      <div class="admin-table-wrapper">
-	        <table class="admin-table case-lib-diff-table">
-	          <thead>
-	            <tr>
-	              <th style="width:70px;">类型</th>
-	              <th style="width:160px;">修改时间</th>
-	              <th style="width:120px;">操作人员</th>
-	              <th style="width:220px;">用例名</th>
-	              <th style="width:180px;">模块</th>
-	              <th style="width:220px;">用例标题</th>
-	              <th>前提条件</th>
-	              <th>操作步骤</th>
-	              <th>预期结果</th>
-	            </tr>
-	          </thead>
-	          <tbody id="caseLibraryHistoryBody">
-	            <tr><td colspan="9"><p class="hint">暂无记录</p></td></tr>
-	          </tbody>
-	        </table>
-	      </div>
+      <div id="caseLibraryHistoryTableHost"></div>
       <div id="caseLibraryHistoryPaginationBottom"></div>
     </div>
   </div>
@@ -775,7 +749,7 @@ xmind用例生成进度
 </div>
 	  <div class="drawer" id="caseLibraryImportDiffDrawer" data-tab-section="case-library">
 	    <div class="drawer-mask" data-drawer-close="caseLibraryImportDiffDrawer"></div>
-	    <div class="drawer-panel">
+	    <div class="drawer-panel drawer-panel-wide">
 	    <div class="drawer-header">
 	      <h3 id="caseLibraryImportDiffTitle">同名用例差异对比</h3>
 	      <button class="link-toggle" data-drawer-close="caseLibraryImportDiffDrawer">收起</button>
@@ -787,24 +761,7 @@ xmind用例生成进度
         <p class="hint" id="caseLibraryImportDiffMeta"></p>
       </div>
       <div class="diff-locate-bar" id="caseLibraryImportDiffLocateBar"></div>
-      <div class="admin-table-wrapper">
-        <table class="admin-table diff-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>模块</th>
-              <th>用例标题</th>
-              <th>优先级</th>
-              <th>前提条件</th>
-              <th>操作步骤</th>
-              <th>预期结果</th>
-            </tr>
-          </thead>
-          <tbody id="caseLibraryImportDiffBody">
-            <tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div id="caseLibraryImportDiffTableHost"></div>
       <div class="actions user-form-actions">
         <button class="primary" id="caseLibraryImportDiffOverwriteBtn" type="button">确认覆盖导入</button>
         <button class="ghost-btn" data-drawer-close="caseLibraryImportDiffDrawer" type="button">关闭</button>
@@ -886,30 +843,11 @@ xmind用例生成进度
       </div>
       <p class="status" id="caseLibraryEditDrawerStatus"></p>
       <div id="caseLibraryEditDrawerPaginationTop"></div>
-      <div class="admin-table-wrapper">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th><input type="checkbox" id="caseLibraryEditSelectAll" aria-label="全选/全不选"/></th>
-              <th>所属项目</th>
-              <th>版本</th>
-              <th>用例名</th>
-              <th>执行页状态</th>
-              <th>用例条目数</th>
-              <th>复用类型</th>
-              <th>导入人员</th>
-              <th>导入时间</th>
-              <th>最近更新人员</th>
-              <th>更新时间</th>
-              <th>关联用例</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="caseLibraryEditListBody">
-            <tr><td colspan="12"><p class="hint">请选择项目后自动刷新。</p></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <label class="tap-table-select-all" for="caseLibraryEditSelectAll">
+        <input type="checkbox" id="caseLibraryEditSelectAll" aria-label="全选/全不选当前页"/>
+        <span>全选当前页</span>
+      </label>
+      <div class="case-library-edit-table-host" id="caseLibraryEditListBody" data-vtable-id="case-library-edit-list"></div>
       <div id="caseLibraryEditDrawerPaginationBottom"></div>
       <div class="actions user-form-actions">
         <button class="ghost-btn" data-drawer-close="caseLibraryEditDrawer" type="button">关闭</button>
@@ -1345,27 +1283,15 @@ xmind用例生成进度
       </div>
       <p class="status" id="caseLibrarySelectDrawerStatus"></p>
       <div id="caseLibrarySelectDrawerPaginationTop"></div>
-      <div class="admin-table-wrapper">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th><input type="checkbox" id="caseLibrarySelectSelectAll" aria-label="全选/全不选"/></th>
-              <th>所属项目</th>
-              <th>版本</th>
-              <th>用例名</th>
-              <th>执行页状态</th>
-              <th>导入人员</th>
-              <th>导入时间</th>
-              <th>更新时间</th>
-              <th>关联用例</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="caseLibrarySelectListBody">
-            <tr><td colspan="10"><p class="hint">请选择项目后自动刷新。</p></td></tr>
-          </tbody>
-        </table>
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-secondary">
+        <div class="case-library-drawer-actions">
+          <label class="inline tap-table-select-all">
+            <input type="checkbox" id="caseLibrarySelectSelectAll" aria-label="全选/全不选当前页"/>
+            全选当前页
+          </label>
+        </div>
       </div>
+      <div id="caseLibrarySelectExecTableHost" data-vtable-id="case-library-select-exec"></div>
       <div id="caseLibrarySelectDrawerPaginationBottom"></div>
       <div class="actions user-form-actions">
         <button class="ghost-btn" data-drawer-close="caseLibrarySelectExecDrawer" type="button">关闭</button>
@@ -1393,20 +1319,7 @@ xmind用例生成进度
           <button class="primary" id="caseLibraryAssociationAddBtn" type="button">新增关联</button>
         </div>
       </div>
-      <div class="admin-table-wrapper">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>关联用例名</th>
-              <th>关联用例数</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="caseLibraryAssociationListBody">
-            <tr><td colspan="3"><p class="hint">暂无关联副用例</p></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div id="caseLibraryAssociationListTableHost" data-vtable-id="case-library-association-list"></div>
       <div class="actions user-form-actions">
         <button class="ghost-btn" data-drawer-close="caseLibraryAssociationDrawer" type="button">关闭</button>
       </div>
@@ -1437,21 +1350,7 @@ xmind用例生成进度
           <button class="secondary" id="caseLibraryAssociationPickRefreshBtn" type="button">刷新副用例</button>
         </div>
       </div>
-      <div class="admin-table-wrapper">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th style="width:80px;">选择</th>
-              <th>用例名</th>
-              <th style="width:160px;">版本</th>
-              <th style="width:120px;">条目数</th>
-            </tr>
-          </thead>
-          <tbody id="caseLibraryAssociationPickCaseBody">
-            <tr><td colspan="4"><p class="hint">请先选择版本并查询</p></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div id="caseLibraryAssociationCandidateTableHost" data-vtable-id="case-library-association-candidates"></div>
       <div class="actions user-form-actions">
         <button class="primary" id="caseLibraryAssociationPickNextBtn" type="button">下一步选择条目</button>
         <button class="ghost-btn" data-drawer-close="caseLibraryAssociationPickDrawer" type="button">取消</button>
@@ -1470,25 +1369,15 @@ xmind用例生成进度
     <div class="drawer-body">
       <p class="hint" style="margin:0 0 8px;">已选副用例：<strong id="caseLibraryAssociationPickSubCaseName">--</strong></p>
       <div id="caseLibraryAssociationPickPaginationTop"></div>
-      <div class="admin-table-wrapper">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th style="width:80px;"><input type="checkbox" id="caseLibraryAssociationPickSelectAll" aria-label="全选/全不选" /></th>
-              <th style="width:90px;">编号</th>
-              <th>模块</th>
-              <th>用例标题</th>
-              <th style="width:100px;">优先级</th>
-              <th>前提条件</th>
-              <th>操作步骤</th>
-              <th>预期结果</th>
-            </tr>
-          </thead>
-          <tbody id="caseLibraryAssociationPickItemBody">
-            <tr><td colspan="8"><p class="hint">请先在上一步选择副用例</p></td></tr>
-          </tbody>
-        </table>
+      <div class="case-library-drawer-toolbar case-library-drawer-toolbar-secondary">
+        <div class="case-library-drawer-actions">
+          <label class="inline tap-table-select-all">
+            <input type="checkbox" id="caseLibraryAssociationPickSelectAll" aria-label="全选/全不选当前页" />
+            全选当前页
+          </label>
+        </div>
       </div>
+      <div id="caseLibraryAssociationItemTableHost" data-vtable-id="case-library-association-items"></div>
       <div id="caseLibraryAssociationPickPaginationBottom"></div>
       <div class="actions user-form-actions">
         <button class="primary" id="caseLibraryAssociationPickConfirmBtn" type="button">确认关联</button>
@@ -1515,7 +1404,7 @@ xmind用例生成进度
   </div>
 </div>
 
-<div class="drawer" id="caseLibraryHistoryDrawer" data-tab-section="case-library">
+<div class="drawer" id="caseLibraryHistoryDrawer" data-tab-section="case-library" data-drawer-kind="table">
   <div class="drawer-mask" data-drawer-close="caseLibraryHistoryDrawer"></div>
   <div class="drawer-panel">
     <div class="drawer-header">
@@ -1540,25 +1429,7 @@ xmind用例生成进度
       </div>
       <p class="status" id="caseLibraryHistoryDrawerStatus"></p>
       <div id="caseLibraryHistoryDrawerPaginationTop"></div>
-      <div class="admin-table-wrapper">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th style="width:160px;">修改时间</th>
-              <th>用例名</th>
-              <th style="width:120px;">版本</th>
-              <th style="width:120px;">导入人员</th>
-              <th style="width:160px;">导入时间</th>
-              <th style="width:120px;">更新人员</th>
-              <th style="width:160px;">更新时间</th>
-              <th style="width:120px;">操作</th>
-            </tr>
-          </thead>
-          <tbody id="caseLibraryHistoryDrawerListBody">
-            <tr><td colspan="8"><p class="hint">请选择项目与版本后点击“查询”。</p></td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div id="caseLibraryHistoryDrawerTableHost"></div>
       <div id="caseLibraryHistoryDrawerPaginationBottom"></div>
       <div class="actions user-form-actions">
         <button class="ghost-btn" data-drawer-close="caseLibraryHistoryDrawer" type="button">关闭</button>
@@ -1758,6 +1629,25 @@ xmind用例生成进度
 <script src="./scripts/vendor/mind-elixir.iife.js" defer></script>
 <script src="./config/constants.js" defer></script>
 <script src="./config/domConfig.js" defer></script>
+<script src="./scripts/ui/tableContract.js" defer></script>
+<script src="./scripts/ui/vtableTheme.js" defer></script>
+<script src="./scripts/ui/vtableLoader.js" defer></script>
+<script src="./scripts/ui/vtableEditorRegistry.js" defer></script>
+<script src="./scripts/ui/tableSemanticMirror.js" defer></script>
+<script src="./scripts/ui/vtableHost.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryDiffModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryXmindModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryXmindWorkspaceController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryDiffTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryDiffController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryHistoryModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryHistoryQueryTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryHistoryDetailTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryHistoryQueryController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryHistoryDetailController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryHistoryDrawerController.js"></script>
+<script src="./scripts/ui/navigationShell.js" defer></script>
+<script src="./scripts/ui/drawerShell.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>
 <script src="./scripts/core/appRuntime.js" defer></script>
 <script src="./scripts/core/splitCore.js" defer></script>
@@ -1805,7 +1695,71 @@ xmind用例生成进度
 <script src="./scripts/modules/auto.js" defer></script>
 <script src="./scripts/modules/casesgen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryEditListModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryEditListTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryEditListController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryEditorModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryEditorTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryEditorController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryViewStateStore.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingViewModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingViewController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryEditorPendingModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryPendingOperationLifecycle.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryEditorPendingController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingViewPendingController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibrarySelectExecModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibrarySelectExecWorkflow.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibrarySelectExecTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibrarySelectExecController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibrarySelectExecViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibrarySelectExecDrawerController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryExecTransferService.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAssociationModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAssociationListTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAssociationCandidateTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAssociationItemTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAssociationListController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAssociationCandidateController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAssociationItemController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAssociationWorkflowViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAssociationWorkflowController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAiGenModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingImportModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryImportFileParser.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingImportFileParser.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingImportViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingImportController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingDrawerModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingDrawerViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingDrawerController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingCatalogMaintenanceViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingCatalogMaintenanceController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryImportReviewViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryImportReviewController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryImportWorkflowController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryImportSelectModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryImportSelectViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryImportSelectController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryExportService.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryExportController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryWriterPublishViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryWriterPublishController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryShareViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryShareController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingReminderModel.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingReminderViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryMissingReminderController.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAiGenStore.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAiGenFileParser.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAiGenTaskRunner.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAiGenViewAdapter.js" defer></script>
+<script src="./scripts/modules/caseLibrary/caseLibraryAiGenController.js" defer></script>
 <script src="./scripts/modules/caseLibrary.js" defer></script>
+<script src="./scripts/modules/caseArchive/caseArchiveListModel.js" defer></script>
+<script src="./scripts/modules/caseArchive/caseArchiveListTableAdapter.js" defer></script>
+<script src="./scripts/modules/caseArchive/caseArchiveListController.js" defer></script>
 <script src="./scripts/modules/caseArchive.js" defer></script>
 <script src="./scripts/modules/execOverview.js" defer></script>
 <script src="./scripts/modules/opsLog.js" defer></script>
@@ -1813,6 +1767,20 @@ xmind用例生成进度
 <script src="./scripts/modules/authGuard.js" defer></script>
 <script src="./scripts/modules/flowGuide.js" defer></script>
 <script src="./scripts/modules/pageGuide.js" defer></script>
+<script src="./scripts/modules/app/appConfigContext.js" defer></script>
+<script src="./scripts/modules/app/appDomContext.js" defer></script>
+<script src="./scripts/modules/app/appTaskLifecycleController.js" defer></script>
+<script src="./scripts/modules/app/modelRuntime.js" defer></script>
+<script src="./scripts/modules/app/requirementMediaContextController.js" defer></script>
+<script src="./scripts/modules/app/xmindAssetLoader.js" defer></script>
+<script src="./scripts/modules/app/workflowStepStateController.js" defer></script>
+<script src="./scripts/modules/app/workflowValidationController.js" defer></script>
+<script src="./scripts/modules/app/workflowResetController.js" defer></script>
+<script src="./scripts/modules/app/missingReminderAiManager.js" defer></script>
+<script src="./scripts/modules/app/caseLibraryAiGenManager.js" defer></script>
+<script src="./scripts/modules/app/xmindCaseGenTaskStore.js" defer></script>
+<script src="./scripts/modules/app/xmindCaseGenTaskManager.js" defer></script>
+<script src="./scripts/modules/app/autoWorkflowManager.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
 <script>

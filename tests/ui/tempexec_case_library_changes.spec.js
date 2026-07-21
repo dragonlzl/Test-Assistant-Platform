@@ -45,19 +45,37 @@ async function switchToTab(page, tabName) {
 }
 
 async function ensureAuthed(page, token, user) {
-  await page.waitForFunction(() => window.app && window.app.apiClient && window.app.state);
-  await page.evaluate((payload) => {
-    try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
-    if (window.app && window.app.apiClient && typeof window.app.apiClient.setToken === 'function') {
-      window.app.apiClient.setToken(payload.token);
+  const deadline = Date.now() + 30000;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      await page.waitForFunction(() => window.app && window.app.apiClient && window.app.state);
+      await page.evaluate((payload) => {
+        try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+        if (window.app && window.app.apiClient && typeof window.app.apiClient.setToken === 'function') {
+          window.app.apiClient.setToken(payload.token);
+        }
+        if (window.app && window.app.state) {
+          window.app.state.currentUser = payload.user;
+          window.app.state.authReady = true;
+        }
+        window.app = window.app || {};
+        window.app.authReady = true;
+      }, { token: token, user: user });
+      return;
+    } catch (error) {
+      lastError = error;
+      const message = error && error.message ? String(error.message) : '';
+      if (message.indexOf('Execution context was destroyed') === -1) throw error;
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
+      await page.waitForTimeout(100);
     }
-    if (window.app && window.app.state) {
-      window.app.state.currentUser = payload.user;
-      window.app.state.authReady = true;
-    }
-    window.app = window.app || {};
-    window.app.authReady = true;
-  }, { token: token, user: user });
+  }
+  throw lastError || new Error('ensureAuthed timeout');
+}
+
+async function clickSemantic(page, selector) {
+  await page.locator(selector).evaluate((element) => element.click());
 }
 
 test.describe('执行页-用例库变更同步与diff抽屉', () => {
@@ -171,19 +189,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     }, token);
 
     await gotoIndex(page);
-    await page.waitForFunction(() => window.app && window.app.apiClient && window.app.state);
-    await page.evaluate((payload) => {
-      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
-      if (window.app && window.app.apiClient && typeof window.app.apiClient.setToken === 'function') {
-        window.app.apiClient.setToken(payload.token);
-      }
-      if (window.app && window.app.state) {
-        window.app.state.currentUser = payload.user;
-        window.app.state.authReady = true;
-      }
-      window.app = window.app || {};
-      window.app.authReady = true;
-    }, { token: token, user: user });
+    await ensureAuthed(page, token, user);
 
     await waitAppReady(page, 30000);
     await switchToTab(page, 'tempexec');
@@ -757,20 +763,16 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
     const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
     await expect(diffDrawer).toHaveClass(/open/);
-    await page.waitForSelector('#tempExecCaseLibraryDiffBody .case-lib-diff-old', { timeout: 8000 });
-    await page.waitForSelector('#tempExecCaseLibraryDiffBody .case-lib-diff-new', { timeout: 8000 });
+    await page.waitForSelector('#tempExecCaseLibraryDiffBody .tap-vtable-semantic-table td[data-tone="changed"]', { timeout: 8000 });
+    await expect(page.locator('#tempExecCaseLibraryDiffTableHost .tap-vtable-canvas canvas')).toHaveCount(1);
 
     const weights = await page.evaluate(() => {
-      var oldEl = document.querySelector('#tempExecCaseLibraryDiffBody .case-lib-diff-old');
-      var newEl = document.querySelector('#tempExecCaseLibraryDiffBody .case-lib-diff-new');
-      if (!oldEl || !newEl) return null;
-      var oldWeight = parseInt(getComputedStyle(oldEl).fontWeight, 10);
-      var newWeight = parseInt(getComputedStyle(newEl).fontWeight, 10);
-      return { oldWeight: oldWeight, newWeight: newWeight };
+      var changedEl = document.querySelector('#tempExecCaseLibraryDiffBody .tap-vtable-semantic-table td[data-tone="changed"]');
+      if (!changedEl) return null;
+      return { changedWeight: parseInt(getComputedStyle(changedEl).fontWeight, 10) };
     });
     expect(weights).not.toBeNull();
-    expect(weights.oldWeight).toBeGreaterThanOrEqual(600);
-    expect(weights.newWeight).toBeGreaterThanOrEqual(600);
+    expect(weights.changedWeight).toBeGreaterThanOrEqual(600);
 
     const tagWeights = await page.evaluate(() => {
       var appendedEl = document.querySelector('#tempExecCaseLibraryDiffBody .case-lib-diff-kind.appended');
@@ -1996,21 +1998,21 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     const targetRowBottom = page.locator('tr.case-row[data-temp-case-row=\"' + execSet.id + '\"][data-index=\"8\"]');
     const targetRowTop = page.locator('tr.case-row[data-temp-case-row=\"' + execSet.id + '\"][data-index=\"2\"]');
 
-    const diffRowTop = page.locator('#tempExecCaseLibraryDiffBody tr.case-lib-diff-clickable[data-case-lib-diff-case-id=\"5003\"]');
-    await expect(diffRowTop).toBeVisible();
+    const diffRowTopSelector = '#tempExecCaseLibraryDiffBody .tap-vtable-semantic-table td[data-case-lib-diff-case-id=\"5003\"]';
+    await expect(page.locator(diffRowTopSelector)).toHaveCount(1);
     await page.evaluate(() => {
       window.scrollTo(0, document.body.scrollHeight);
     });
-    await diffRowTop.click();
+    await clickSemantic(page, diffRowTopSelector);
 
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(targetRowTop).toHaveCount(1);
     await expect(targetRowTop).toContainText('用例3');
     await expect(targetRowTop).toHaveClass(/locate-highlight/);
 
-    const diffRowBottom = page.locator('#tempExecCaseLibraryDiffBody tr.case-lib-diff-clickable[data-case-lib-diff-case-id=\"5009\"]');
-    await expect(diffRowBottom).toBeVisible();
-    await diffRowBottom.click();
+    const diffRowBottomSelector = '#tempExecCaseLibraryDiffBody .tap-vtable-semantic-table td[data-case-lib-diff-case-id=\"5009\"]';
+    await expect(page.locator(diffRowBottomSelector)).toHaveCount(1);
+    await clickSemantic(page, diffRowBottomSelector);
 
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(targetRowBottom).toHaveCount(1);
@@ -2164,7 +2166,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
 
     await page.click('#tempExecCaseLibraryChangesBtn');
     const body = page.locator('#tempExecCaseLibraryDiffBody');
-    await expect(body.locator('tr')).toHaveCount(2);
+    await expect(body.locator('.tap-vtable-semantic-table tbody tr')).toHaveCount(2);
     await expect(body).toContainText('用例A');
     await expect(body).toContainText('用例B');
 
@@ -2184,7 +2186,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
       }
     });
 
-    await expect(body.locator('tr')).toHaveCount(1);
+    await expect(body.locator('.tap-vtable-semantic-table tbody tr')).toHaveCount(1);
     await expect(body).not.toContainText('用例A');
     await expect(body).toContainText('用例B');
   });
@@ -2503,7 +2505,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     const changeBtn = page.locator('#tempExecCaseLibraryChangesBtn');
 
     await expect(diffDrawer).toHaveClass(/open/);
-    await expect(diffBody.locator('tr')).toHaveCount(2);
+    await expect(diffBody.locator('.tap-vtable-semantic-table tbody tr')).toHaveCount(2);
     await expect(diffBody).toContainText('新增');
     await expect(diffBody).toContainText('删除');
 
@@ -2535,7 +2537,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
       });
     }
     await expect(diffDrawer).toHaveClass(/open/);
-    await expect(diffBody.locator('tr')).toHaveCount(2);
+    await expect(diffBody.locator('.tap-vtable-semantic-table tbody tr')).toHaveCount(2);
     await expect(diffBody).toContainText('新增');
     await expect(diffBody).toContainText('删除');
   });

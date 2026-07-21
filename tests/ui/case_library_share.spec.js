@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
+const { setSemanticChecked } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/case-library.html');
 }
 
 async function waitAppReady(page, timeoutMs) {
@@ -194,8 +195,8 @@ test.describe('用例库共享用例', () => {
     await page.selectOption('#caseLibraryEditProjectSelect', String(projectA.id));
     await page.waitForTimeout(200);
 
-    await page.check(`#caseLibraryEditListBody [data-case-lib-edit-select="${caseFileId}"]`);
-    await page.check(`#caseLibraryEditListBody [data-case-lib-edit-select="${caseFileId2}"]`);
+    await setSemanticChecked(page, `#caseLibraryEditListBody [data-case-lib-edit-select="${caseFileId}"]`, true);
+    await setSemanticChecked(page, `#caseLibraryEditListBody [data-case-lib-edit-select="${caseFileId2}"]`, true);
     await page.click('#caseLibraryEditShareBtn');
     await expect(page.locator('#caseLibraryShareDrawer')).toHaveClass(/open/);
 

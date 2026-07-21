@@ -21,14 +21,17 @@ async function waitAppReady(page, timeoutMs) {
         token: token,
       };
     });
-    if (last && last.hasApp && last.authReady && last.hasSwitchTab) return;
+    if (last && last.hasApp && last.authReady && last.hasSwitchTab) {
+      await page.waitForFunction(() => window.app && window.app.uiReady === true, null, { timeout: 5000 });
+      return;
+    }
     await page.waitForTimeout(200);
   }
   throw new Error('waitAppReady timeout: ' + JSON.stringify(last || {}));
 }
 
 test.describe('左侧导航窄屏适配', () => {
-  test('窄屏下侧边栏改为全宽并展开分组菜单', async ({ page }) => {
+  test('窄屏固定 68px 主栏并使用可关闭的 240px 二级覆盖层', async ({ page }) => {
     await page.setViewportSize({ width: 640, height: 900 });
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -39,7 +42,10 @@ test.describe('左侧导航窄屏适配', () => {
     });
 
     await page.addInitScript(() => {
-      try { localStorage.setItem('tap-auth-token', 'token-sidebar-narrow'); } catch (_) {}
+      try {
+        localStorage.setItem('tap-auth-token', 'token-sidebar-narrow');
+        localStorage.removeItem('tap-navigation-context-collapsed-v1');
+      } catch (_) {}
     });
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -67,9 +73,15 @@ test.describe('左侧导航窄屏适配', () => {
         columns: layout && window.getComputedStyle ? window.getComputedStyle(layout).gridTemplateColumns : '',
       };
     });
-    expect(layout.sidebarWidth).toBeGreaterThan(Math.floor(layout.viewportWidth * 0.9));
+    expect(layout.sidebarWidth).toBe(68);
+    expect(layout.columns.split(' ')[0]).toBe('68px');
+    await expect(page.locator('.tap-nav-context')).toHaveCSS('visibility', 'hidden');
+    await expect(page.locator('.tap-nav-backdrop')).toBeHidden();
 
-    await page.click('.tab-group-btn[data-group="cases"]');
+    await page.click('.tap-nav-rail-item[data-nav-group="cases"]');
+    await expect(page.locator('.tap-nav-context')).toBeVisible();
+    await expect(page.locator('.tap-nav-backdrop')).toBeVisible();
+    await expect.poll(async () => page.locator('.tap-nav-context').evaluate((el) => Math.round(el.getBoundingClientRect().width))).toBe(240);
     const submenu = page.locator('.tab-group-btn[data-group="cases"] + .tab-submenu');
     await expect(submenu).toBeVisible();
 
@@ -91,5 +103,18 @@ test.describe('左侧导航窄屏适配', () => {
       return window.getComputedStyle(menu).position;
     });
     expect(menuPosition).toBe('static');
+
+    await page.click('.tap-nav-backdrop');
+    await expect(page.locator('.tap-nav-context')).toHaveCSS('visibility', 'hidden');
+
+    await page.click('.tap-nav-rail-item[data-nav-group="cases"]');
+    await expect(page.locator('.tap-nav-context')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.tap-nav-context')).toHaveCSS('visibility', 'hidden');
+
+    const desktopPreference = await page.evaluate(() => {
+      try { return localStorage.getItem('tap-navigation-context-collapsed-v1'); } catch (_) { return null; }
+    });
+    expect(desktopPreference).toBeNull();
   });
 });

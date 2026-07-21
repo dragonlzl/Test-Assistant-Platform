@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic, focusSemantic, setSemanticValue } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/case-library.html');
 }
 
 async function waitAppReady(page, timeoutMs) {
@@ -10,7 +11,10 @@ async function waitAppReady(page, timeoutMs) {
   await page.waitForFunction(() => window.app && window.app._inited === true && window.app.authReady === true, null, {
     timeout,
   });
-  await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout });
+  await page.waitForFunction(() => {
+    return window.app && window.app.caseLibraryBound === true &&
+      window.app.tabGroupBound === true && typeof window.app.switchTab === 'function';
+  }, null, { timeout });
 }
 
 test.describe('用例库编辑输入焦点稳定性', () => {
@@ -147,18 +151,21 @@ test.describe('用例库编辑输入焦点稳定性', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
     const moduleCell = page.locator('#caseLibraryEditView [data-case-lib-edit-field="module"][data-index="0"]');
     const titleCell = page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]');
 
-    await moduleCell.click();
-    await moduleCell.fill('模块A-更新');
     const patchWait = page.waitForResponse((res) => {
       return res.url().includes('/api/case-files/items/') && res.request().method() === 'PATCH';
     });
-    await titleCell.click();
+    await setSemanticValue(
+      page,
+      '#caseLibraryEditView [data-case-lib-edit-field="module"][data-index="0"]',
+      '模块A-更新'
+    );
+    await focusSemantic(page, '#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]');
     await patchWait;
 
     const activeKey = await page.evaluate(() => {

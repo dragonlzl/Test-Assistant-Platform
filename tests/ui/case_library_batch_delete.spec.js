@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic, setSemanticChecked } = require('./helpers/vtable_semantic');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/case-library.html');
 }
 
 async function waitAppReady(page, timeoutMs) {
@@ -16,12 +17,17 @@ async function waitAppReady(page, timeoutMs) {
       return {
         hasApp: Boolean(window.app),
         authReady: Boolean(window.app && window.app.authReady === true),
+        caseLibraryBound: Boolean(window.app && window.app.caseLibraryBound === true),
         hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
+        tabGroupBound: Boolean(window.app && window.app.tabGroupBound === true),
         tab: window.app && window.app.state ? window.app.state.activeTab : '',
         token: token,
       };
     });
-    if (last && last.hasApp && last.authReady && last.hasSwitchTab) return;
+    if (
+      last && last.hasApp && last.authReady && last.caseLibraryBound &&
+      last.hasSwitchTab && last.tabGroupBound
+    ) return;
     await page.waitForTimeout(200);
   }
   throw new Error('waitAppReady timeout: ' + JSON.stringify(last || {}));
@@ -165,13 +171,13 @@ test.describe('用例库编辑视图批量删除', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
     await expect(page.locator('#caseLibraryEditBatchDeleteBtn')).toBeDisabled();
 
-    await page.click('#caseLibraryEditView input[data-case-lib-select][data-index="0"]');
-    await page.click('#caseLibraryEditView input[data-case-lib-select][data-index="1"]');
+    await setSemanticChecked(page, '#caseLibraryEditView input[data-case-lib-select][data-index="0"]', true);
+    await setSemanticChecked(page, '#caseLibraryEditView input[data-case-lib-select][data-index="1"]', true);
     await expect(page.locator('#caseLibraryEditBatchDeleteBtn')).toBeEnabled();
     await expect(page.locator('#caseLibraryEditBatchDeleteBtn')).toContainText('（2）');
 
@@ -191,8 +197,8 @@ test.describe('用例库编辑视图批量删除', () => {
     await expect(page.locator('#caseLibraryEditView')).toContainText('异常登录');
     expect(deleteCalls).toBe(0);
 
-    await page.click('#caseLibraryEditView input[data-case-lib-select][data-index="0"]');
-    await page.click('#caseLibraryEditView input[data-case-lib-select][data-index="1"]');
+    await setSemanticChecked(page, '#caseLibraryEditView input[data-case-lib-select][data-index="0"]', true);
+    await setSemanticChecked(page, '#caseLibraryEditView input[data-case-lib-select][data-index="1"]', true);
     await page.click('#caseLibraryEditBatchDeleteBtn');
     await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
     await page.click('#appConfirmDrawerConfirmBtn');

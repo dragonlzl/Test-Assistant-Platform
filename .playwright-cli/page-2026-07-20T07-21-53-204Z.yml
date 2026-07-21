@@ -1,0 +1,187 @@
+- generic [ref=f1e2]:
+  - complementary:
+    - generic:
+      - generic "用例助手": TA
+      - navigation "主功能导航":
+        - button "AI 功能":
+          - generic: AI
+        - button "用例相关":
+          - generic: TC
+        - button "管理":
+          - generic: AD
+        - button "设置":
+          - generic: ST
+      - button "收起二级导航" [expanded]: <
+    - generic:
+      - generic:
+        - strong: AI 功能
+      - generic:
+        - generic: 当前用户
+        - strong: e2e
+        - generic: 管理员
+        - button "用户菜单": 个人
+        - generic:
+          - button "登出"
+      - generic:
+        - generic:
+          - button "AI 功能"
+          - button "一键执行"
+      - navigation:
+        - generic:
+          - button "AI 功能 需先配置模型/指派":
+            - generic: AI 功能
+            - generic: 需先配置模型/指派
+          - generic:
+            - button "一键执行"
+            - button "功能流程"
+            - button "用例生成"
+            - button "功能指派 未配置模型":
+              - text: 功能指派
+              - generic: 未配置模型
+            - button "模型管理 未配置模型":
+              - text: 模型管理
+              - generic: 未配置模型
+        - generic:
+          - button "用例相关"
+        - generic:
+          - button "管理"
+        - generic:
+          - button "设置"
+      - button "回到顶部"
+      - button "跳到底部"
+      - generic:
+        - generic:
+          - button "xmind用例生成进度"
+          - button "个人备忘"
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic: xmind用例生成进度
+                  - button "收起" [expanded]
+                - generic: 点击打开对应 XMind 生成页签
+              - generic:
+                - paragraph: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f1e3]:
+    - generic:
+      - generic: 一键执行步骤
+      - generic:
+        - generic:
+          - generic: "1"
+          - generic: 导入
+          - generic: ▶
+        - generic:
+          - generic: "2"
+          - generic: 评审
+          - generic: ▶
+        - generic:
+          - generic: "3"
+          - generic: 清洗
+          - generic: ▶
+        - generic:
+          - generic: "4"
+          - generic: 对比完整性
+          - generic: ▶
+        - generic:
+          - generic: "5"
+          - generic: 拆分
+          - generic: ▶
+        - generic:
+          - generic: "6"
+          - generic: 用例导入
+          - generic: ▶
+        - generic:
+          - generic: "7"
+          - generic: 覆盖对比
+          - generic: ▶
+    - main [ref=f1e4]:
+      - generic [ref=f1e5]:
+        - heading "导入数据" [level=2] [ref=f1e6]
+        - generic [ref=f1e8]:
+          - generic [ref=f1e9]:
+            - paragraph [ref=f1e10]: 将原始需求文档拖入或点击选择，等同于“导入需求文档”的操作。
+            - generic [ref=f1e11]:
+              - generic [ref=f1e12]:
+                - strong [ref=f1e13]: 原始需求
+                - generic [ref=f1e14]: 拖拽或点击选择
+              - generic [ref=f1e15]: 导入后内容会同步到左侧“导入需求”模块
+            - generic [ref=f1e16]: 未导入需求
+            - paragraph [ref=f1e18]: 图片上下文：0 张（当前仅文本）。一键执行后续步骤模型能力：评审模型：未配置；清洗模型：未配置。 当前不含图片，后续步骤将仅基于文本。
+            - button "清除原始需求" [disabled] [ref=f1e20]
+          - generic [ref=f1e21]:
+            - paragraph [ref=f1e22]: 导入 XMind/文本用例后可直接用于覆盖对比。
+            - generic [ref=f1e23]:
+              - generic [ref=f1e24]:
+                - strong [ref=f1e25]: 测试用例
+                - generic [ref=f1e26]: 拖拽或点击选择
+              - generic [ref=f1e27]: 导入结果同步到“测试用例导入”模块
+            - generic [ref=f1e28]: 未导入文件
+            - button "从用例库中选择" [ref=f1e31] [cursor=pointer]
+      - generic [ref=f1e32]:
+        - heading "自动执行工作流" [level=2] [ref=f1e33]
+        - generic [ref=f1e34]:
+          - paragraph [ref=f1e35]: 自动按顺序执行：导入需求 → 需求评审 → 需求清洗 → 对比完整性 → 测试模块拆分 → 测试用例覆盖对比。执行前请确保已导入需求与测试用例，并在“功能指派”中配置所有模型。
+          - generic [ref=f1e36]:
+            - checkbox "需要人工确认需求澄清后再继续自动流程" [ref=f1e37]
+            - generic [ref=f1e38]: 需要人工确认需求澄清后再继续自动流程
+          - generic [ref=f1e39]:
+            - button "一键执行" [ref=f1e40] [cursor=pointer]
+            - button "中断全部执行" [ref=f1e41] [cursor=pointer]
+          - paragraph [ref=f1e42]
+      - generic [ref=f1e43]:
+        - heading "清洗后需求覆盖率" [level=2] [ref=f1e44]
+        - generic [ref=f1e45]:
+          - paragraph [ref=f1e46]: 展示“对比完整性”步骤返回的覆盖率；低于 100% 表示清洗结果缺失，需要重新清洗并修正。
+          - button "覆盖缺失视图" [disabled] [ref=f1e48]
+          - paragraph [ref=f1e49]: 覆盖率：--
+      - generic [ref=f1e50]:
+        - heading "用例缺失测试点" [level=2] [ref=f1e51]
+        - generic [ref=f1e52]:
+          - paragraph [ref=f1e53]: 同步显示“测试用例覆盖对比”后的缺失模块详情，与功能流程中的“缺失模块视图”一致，点击右侧抽屉查看并处理。
+          - button "前往勾选缺失模块生成缺失用例" [disabled] [ref=f1e55]
+      - generic [ref=f1e58]:
+        - generic [ref=f1e59]:
+          - heading "一键执行说明" [level=3] [ref=f1e60]
+          - button "关闭" [ref=f1e61] [cursor=pointer]: x
+        - generic [ref=f1e63]:
+          - generic [ref=f1e64]:
+            - heading "页面功能简介" [level=4] [ref=f1e65]
+            - paragraph [ref=f1e66]: 用于一键执行，对导入的需求和用例进行评审、清洗、对比与覆盖检查，并在侧边栏展示当前进度。
+          - generic [ref=f1e67]:
+            - heading "操作流程" [level=4] [ref=f1e68]
+            - list [ref=f1e69]:
+              - listitem [ref=f1e70]: Step1 导入需求、导入用例。
+              - listitem [ref=f1e71]:
+                - text: Step2 点击“自动执行工作流”模块的 【一键执行】 按钮。
+                - list [ref=f1e72]:
+                  - listitem [ref=f1e73]: 可选操作：勾选 【需要人工确认需求澄清后再继续自动流程】。
+                  - listitem [ref=f1e74]: 勾选后，在需求评审完成后会暂停，需人工确认澄清后才继续执行进入 Step3。
+                  - listitem [ref=f1e75]: 执行过程中，侧边栏 【AI 功能】 与二级菜单会显示当前步骤的紧凑进度。
+              - listitem [ref=f1e76]:
+                - text: Step3 等待覆盖率结果。
+                - list [ref=f1e77]:
+                  - listitem [ref=f1e78]: 覆盖率少于 100%，需要人工确认是直接继续执行，还是重新清洗需求。
+                  - listitem [ref=f1e79]: 注意：重新清洗后覆盖率仍少于 100% 时，依然需要人工确认是否继续或再次清洗。
+                  - listitem [ref=f1e80]: 覆盖率等于 100%，则继续执行直到最后一步覆盖对比完成。
+              - listitem [ref=f1e81]: Step3-1 若步骤处于等待/失败，会在对应步骤按钮上方持续展示原因气泡，直到状态恢复正常。
+              - listitem [ref=f1e82]:
+                - text: Step4 覆盖对比完成。
+                - list [ref=f1e83]:
+                  - listitem [ref=f1e84]: 点击 【用例缺失测试点】 下的 【前往勾选缺失模块生成缺失用例】 展开视图。
+                  - listitem [ref=f1e85]: 视图中勾选用例，选择下方 【智能生成填充】 或 【生成用例】，将自动跳转到“用例生成”。
+          - generic [ref=f1e86]:
+            - heading "必要说明" [level=4] [ref=f1e87]
+            - list [ref=f1e88]:
+              - listitem [ref=f1e89]: 【需要人工确认需求澄清后再继续自动流程】：可选操作，勾选后流程在评审后暂停，需在澄清抽屉确认完成才会继续。
+              - listitem [ref=f1e90]: 【一键执行】：按顺序执行评审、清洗、对比、拆分与覆盖对比流程。
+              - listitem [ref=f1e91]: 【覆盖缺失视图】：展示清洗后需求缺失点，便于判断是否重新清洗。
+              - listitem [ref=f1e92]: 等待/失败时的原因气泡会持续显示在步骤按钮上方，直到状态恢复为未开始/执行中/完成。
+              - listitem [ref=f1e93]: 侧边栏仅展示最新步骤的紧凑进度，便于窄屏下快速查看。
+              - listitem [ref=f1e94]: 【前往勾选缺失模块生成缺失用例】：打开缺失模块视图并支持勾选生成用例。
+          - generic [ref=f1e95]:
+            - heading "提示" [level=3] [ref=f1e96]
+            - list [ref=f1e97]:
+              - listitem [ref=f1e98]:
+                - strong [ref=f1e99]: 进入设置的“其他设置”页可以关闭每次进入的提示。
+                - text: 如不需要自动弹出，可取消勾选对应页面。

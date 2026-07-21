@@ -1,0 +1,181 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e100]:
+    - generic [ref=f3e101]:
+      - generic "用例助手" [ref=f3e102]: TA
+      - navigation "主功能导航" [ref=f3e103]:
+        - button "AI 功能" [ref=f3e104] [cursor=pointer]:
+          - generic [ref=f3e105]: AI
+        - button "用例相关" [ref=f3e107] [cursor=pointer]:
+          - generic [ref=f3e108]: TC
+        - button "管理" [ref=f3e110] [cursor=pointer]:
+          - generic [ref=f3e111]: AD
+        - button "设置" [ref=f3e113] [cursor=pointer]:
+          - generic [ref=f3e114]: ST
+      - button "收起二级导航" [expanded] [ref=f3e116] [cursor=pointer]: <
+    - generic [ref=f3e117]:
+      - strong [ref=f3e119]: AI 功能
+      - generic [ref=f3e120]:
+        - generic [ref=f3e121]: 当前用户
+        - strong [ref=f3e122]: e2e
+        - generic [ref=f3e123]: 管理员
+        - button "用户菜单" [ref=f3e124] [cursor=pointer]: 个人
+        - generic:
+          - button "登出"
+      - generic [ref=f3e126]:
+        - button "AI 功能" [ref=f3e127] [cursor=pointer]
+        - button "一键执行" [ref=f3e128] [cursor=pointer]
+      - navigation [ref=f3e129]:
+        - generic [ref=f3e130]:
+          - button "AI 功能 需先配置模型/指派" [ref=f3e131] [cursor=pointer]:
+            - generic [ref=f3e132]: AI 功能
+            - generic [ref=f3e133]: 需先配置模型/指派
+          - generic [ref=f3e134]:
+            - button "一键执行" [ref=f3e135] [cursor=pointer]
+            - button "功能流程" [ref=f3e137] [cursor=pointer]
+            - button "用例生成" [ref=f3e139] [cursor=pointer]
+            - button "功能指派 未配置模型" [ref=f3e140] [cursor=pointer]:
+              - text: 功能指派
+              - generic [ref=f3e141]: 未配置模型
+            - button "模型管理 未配置模型" [ref=f3e142] [cursor=pointer]:
+              - text: 模型管理
+              - generic [ref=f3e143]: 未配置模型
+        - button "用例相关" [ref=f3e144] [cursor=pointer]
+        - button "管理" [ref=f3e145] [cursor=pointer]
+        - button "设置" [ref=f3e146] [cursor=pointer]
+      - button "回到顶部" [ref=f3e147] [cursor=pointer]
+      - button "跳到底部" [ref=f3e148] [cursor=pointer]
+      - generic [ref=f3e149]:
+        - generic [ref=f3e150]:
+          - button "xmind用例生成进度" [ref=f3e151] [cursor=pointer]
+          - button "个人备忘" [ref=f3e153] [cursor=pointer]
+        - generic [ref=f3e156]:
+          - generic [ref=f3e157]:
+            - generic [ref=f3e158]:
+              - generic [ref=f3e159]: xmind用例生成进度
+              - button "收起" [expanded] [ref=f3e160] [cursor=pointer]
+            - generic [ref=f3e161]: 点击打开对应 XMind 生成页签
+          - paragraph [ref=f3e163]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f3e3]:
+    - generic [ref=f3e164]:
+      - generic [ref=f3e165]: 一键执行步骤
+      - generic [ref=f3e166]:
+        - generic [ref=f3e167] [cursor=pointer]:
+          - generic [ref=f3e168]: "1"
+          - generic [ref=f3e169]: 导入
+          - generic [ref=f3e170]: ▶
+        - generic [ref=f3e172] [cursor=pointer]:
+          - generic [ref=f3e173]: "2"
+          - generic [ref=f3e174]: 评审
+          - generic [ref=f3e175]: ▶
+        - generic [ref=f3e177] [cursor=pointer]:
+          - generic [ref=f3e178]: "3"
+          - generic [ref=f3e179]: 清洗
+          - generic [ref=f3e180]: ▶
+        - generic [ref=f3e182] [cursor=pointer]:
+          - generic [ref=f3e183]: "4"
+          - generic [ref=f3e184]: 对比完整性
+          - generic [ref=f3e185]: ▶
+        - generic [ref=f3e187] [cursor=pointer]:
+          - generic [ref=f3e188]: "5"
+          - generic [ref=f3e189]: 拆分
+          - generic [ref=f3e190]: ▶
+        - generic [ref=f3e192] [cursor=pointer]:
+          - generic [ref=f3e193]: "6"
+          - generic [ref=f3e194]: 用例导入
+          - generic [ref=f3e195]: ▶
+        - generic [ref=f3e197] [cursor=pointer]:
+          - generic [ref=f3e198]: "7"
+          - generic [ref=f3e199]: 覆盖对比
+          - generic [ref=f3e200]: ▶
+    - main [ref=f3e4]:
+      - generic [ref=f3e5]:
+        - heading "导入数据" [level=2] [ref=f3e6]
+        - generic [ref=f3e8]:
+          - generic [ref=f3e9]:
+            - paragraph [ref=f3e10]: 将原始需求文档拖入或点击选择，等同于“导入需求文档”的操作。
+            - generic [ref=f3e11]:
+              - generic [ref=f3e12]:
+                - strong [ref=f3e13]: 原始需求
+                - generic [ref=f3e14]: 拖拽或点击选择
+              - generic [ref=f3e15]: 导入后内容会同步到左侧“导入需求”模块
+            - generic [ref=f3e16]: 未导入需求
+            - paragraph [ref=f3e18]: 图片上下文：0 张（当前仅文本）。一键执行后续步骤模型能力：评审模型：未配置；清洗模型：未配置。 当前不含图片，后续步骤将仅基于文本。
+            - button "清除原始需求" [disabled] [ref=f3e20]
+          - generic [ref=f3e21]:
+            - paragraph [ref=f3e22]: 导入 XMind/文本用例后可直接用于覆盖对比。
+            - generic [ref=f3e23]:
+              - generic [ref=f3e24]:
+                - strong [ref=f3e25]: 测试用例
+                - generic [ref=f3e26]: 拖拽或点击选择
+              - generic [ref=f3e27]: 导入结果同步到“测试用例导入”模块
+            - generic [ref=f3e28]: 未导入文件
+            - button "从用例库中选择" [ref=f3e31] [cursor=pointer]
+      - generic [ref=f3e32]:
+        - heading "自动执行工作流" [level=2] [ref=f3e33]
+        - generic [ref=f3e34]:
+          - paragraph [ref=f3e35]: 自动按顺序执行：导入需求 → 需求评审 → 需求清洗 → 对比完整性 → 测试模块拆分 → 测试用例覆盖对比。执行前请确保已导入需求与测试用例，并在“功能指派”中配置所有模型。
+          - generic [ref=f3e36]:
+            - checkbox "需要人工确认需求澄清后再继续自动流程" [ref=f3e37]
+            - generic [ref=f3e38]: 需要人工确认需求澄清后再继续自动流程
+          - generic [ref=f3e39]:
+            - button "一键执行" [ref=f3e40] [cursor=pointer]
+            - button "中断全部执行" [disabled] [ref=f3e41]
+          - paragraph [ref=f3e42]
+      - generic [ref=f3e43]:
+        - heading "清洗后需求覆盖率" [level=2] [ref=f3e44]
+        - generic [ref=f3e45]:
+          - paragraph [ref=f3e46]: 展示“对比完整性”步骤返回的覆盖率；低于 100% 表示清洗结果缺失，需要重新清洗并修正。
+          - button "覆盖缺失视图" [disabled] [ref=f3e48]
+          - paragraph [ref=f3e49]: 覆盖率：--
+      - generic [ref=f3e50]:
+        - heading "用例缺失测试点" [level=2] [ref=f3e51]
+        - generic [ref=f3e52]:
+          - paragraph [ref=f3e53]: 同步显示“测试用例覆盖对比”后的缺失模块详情，与功能流程中的“缺失模块视图”一致，点击右侧抽屉查看并处理。
+          - button "前往勾选缺失模块生成缺失用例" [disabled] [ref=f3e55]
+      - generic:
+        - generic:
+          - generic:
+            - heading "一键执行说明" [level=3]
+            - button "关闭" [active]: ×
+          - generic:
+            - generic:
+              - generic:
+                - heading "页面功能简介" [level=4]
+                - paragraph: 用于一键执行，对导入的需求和用例进行评审、清洗、对比与覆盖检查，并在侧边栏展示当前进度。
+              - generic:
+                - heading "操作流程" [level=4]
+                - list:
+                  - listitem: Step1 导入需求、导入用例。
+                  - listitem:
+                    - text: Step2 点击“自动执行工作流”模块的 【一键执行】 按钮。
+                    - list:
+                      - listitem: 可选操作：勾选 【需要人工确认需求澄清后再继续自动流程】。
+                      - listitem: 勾选后，在需求评审完成后会暂停，需人工确认澄清后才继续执行进入 Step3。
+                      - listitem: 执行过程中，侧边栏 【AI 功能】 与二级菜单会显示当前步骤的紧凑进度。
+                  - listitem:
+                    - text: Step3 等待覆盖率结果。
+                    - list:
+                      - listitem: 覆盖率少于 100%，需要人工确认是直接继续执行，还是重新清洗需求。
+                      - listitem: 注意：重新清洗后覆盖率仍少于 100% 时，依然需要人工确认是否继续或再次清洗。
+                      - listitem: 覆盖率等于 100%，则继续执行直到最后一步覆盖对比完成。
+                  - listitem: Step3-1 若步骤处于等待/失败，会在对应步骤按钮上方持续展示原因气泡，直到状态恢复正常。
+                  - listitem:
+                    - text: Step4 覆盖对比完成。
+                    - list:
+                      - listitem: 点击 【用例缺失测试点】 下的 【前往勾选缺失模块生成缺失用例】 展开视图。
+                      - listitem: 视图中勾选用例，选择下方 【智能生成填充】 或 【生成用例】，将自动跳转到“用例生成”。
+              - generic:
+                - heading "必要说明" [level=4]
+                - list:
+                  - listitem: 【需要人工确认需求澄清后再继续自动流程】：可选操作，勾选后流程在评审后暂停，需在澄清抽屉确认完成才会继续。
+                  - listitem: 【一键执行】：按顺序执行评审、清洗、对比、拆分与覆盖对比流程。
+                  - listitem: 【覆盖缺失视图】：展示清洗后需求缺失点，便于判断是否重新清洗。
+                  - listitem: 等待/失败时的原因气泡会持续显示在步骤按钮上方，直到状态恢复为未开始/执行中/完成。
+                  - listitem: 侧边栏仅展示最新步骤的紧凑进度，便于窄屏下快速查看。
+                  - listitem: 【前往勾选缺失模块生成缺失用例】：打开缺失模块视图并支持勾选生成用例。
+              - generic:
+                - heading "提示" [level=3]
+                - list:
+                  - listitem:
+                    - strong: 进入设置的“其他设置”页可以关闭每次进入的提示。
+                    - text: 如不需要自动弹出，可取消勾选对应页面。

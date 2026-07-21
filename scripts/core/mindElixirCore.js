@@ -6,6 +6,9 @@
     var renderPolicyCore = deps && deps.renderPolicyCore
       ? deps.renderPolicyCore
       : (window.app && window.app.xmindRenderPolicyCore ? window.app.xmindRenderPolicyCore : null);
+    var drawerFullscreenPort = window.app && window.app.ui && window.app.ui.DrawerShell
+      ? window.app.ui.DrawerShell.fullscreen
+      : null;
     var defaultScaleStep = 0.15;
     var minScale = 0.1;
     var maxScale = 2.5;
@@ -1007,7 +1010,6 @@
       var nodeDecorationApplying = false;
       var drawerEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer') : null;
       var drawerPanelEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer-panel') : null;
-      var drawerFullscreenClassName = 'xmind-drawer-fullscreen';
 
       function getInstance() {
         return instance;
@@ -1672,13 +1674,16 @@
           drawerEl &&
           drawerPanelEl &&
           drawerEl.classList &&
-          drawerPanelEl.classList
+          drawerPanelEl.classList &&
+          drawerFullscreenPort &&
+          typeof drawerFullscreenPort.is === 'function' &&
+          typeof drawerFullscreenPort.set === 'function'
         );
       }
 
       function isDrawerFullscreen() {
         if (!canToggleDrawerFullscreen()) return false;
-        return drawerEl.classList.contains(drawerFullscreenClassName);
+        return drawerFullscreenPort.is(drawerEl);
       }
 
       function syncFullscreenButtonState() {
@@ -1765,12 +1770,14 @@
           syncFullscreenButtonState();
           return false;
         }
-        if (enabled) drawerEl.classList.add(drawerFullscreenClassName);
-        else drawerEl.classList.remove(drawerFullscreenClassName);
+        drawerFullscreenPort.set(drawerEl, enabled === true);
+        return enabled === true;
+      }
+
+      function onDrawerFullscreenChange() {
         syncFullscreenButtonState();
         updateViewerDragState(viewerEl, getInstance(), false);
         notifyViewportStateChange('drawer-fullscreen');
-        return enabled === true;
       }
 
       function zoomBy(step) {
@@ -4440,14 +4447,6 @@
         flushPendingEditSnapshot();
       }
 
-      function onWindowKeydownForDrawerFullscreen(e) {
-        if (!e || e.key !== 'Escape') return;
-        if (!isDrawerFullscreen()) return;
-        if (e.preventDefault) e.preventDefault();
-        if (e.stopPropagation) e.stopPropagation();
-        setDrawerFullscreen(false);
-      }
-
       function insertInputBoxLineBreak(inputEl) {
         if (!inputEl) return false;
         if (typeof document !== 'undefined' && document && typeof document.execCommand === 'function') {
@@ -5214,6 +5213,9 @@
       if (controlsEl && typeof controlsEl.addEventListener === 'function') {
         controlsEl.addEventListener('click', onControlsClick);
       }
+      if (drawerEl && typeof drawerEl.addEventListener === 'function') {
+        drawerEl.addEventListener('tap:drawer-fullscreen-change', onDrawerFullscreenChange);
+      }
       if (searchInputEl && typeof searchInputEl.addEventListener === 'function') {
         searchInputEl.addEventListener('input', onSearchInput);
         searchInputEl.addEventListener('keydown', onSearchKeydown);
@@ -5270,7 +5272,6 @@
       if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
         window.addEventListener('pagehide', onWindowPageHide);
         window.addEventListener('beforeunload', onWindowPageHide);
-        window.addEventListener('keydown', onWindowKeydownForDrawerFullscreen, true);
         window.addEventListener('pointerdown', onWindowPointerDownForCtrlLeftCanvasDrag, true);
         window.addEventListener('mousedown', onWindowMouseDownForCtrlLeftCanvasDrag, true);
         window.addEventListener('contextmenu', onWindowContextMenu, true);
@@ -5451,6 +5452,9 @@
         if (controlsEl && typeof controlsEl.removeEventListener === 'function') {
           controlsEl.removeEventListener('click', onControlsClick);
         }
+        if (drawerEl && typeof drawerEl.removeEventListener === 'function') {
+          drawerEl.removeEventListener('tap:drawer-fullscreen-change', onDrawerFullscreenChange);
+        }
         if (searchInputEl && typeof searchInputEl.removeEventListener === 'function') {
           searchInputEl.removeEventListener('input', onSearchInput);
           searchInputEl.removeEventListener('keydown', onSearchKeydown);
@@ -5507,7 +5511,6 @@
         if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
           window.removeEventListener('pagehide', onWindowPageHide);
           window.removeEventListener('beforeunload', onWindowPageHide);
-          window.removeEventListener('keydown', onWindowKeydownForDrawerFullscreen, true);
           window.removeEventListener('pointerdown', onWindowPointerDownForCtrlLeftCanvasDrag, true);
           window.removeEventListener('mousedown', onWindowMouseDownForCtrlLeftCanvasDrag, true);
           window.removeEventListener('contextmenu', onWindowContextMenu, true);
@@ -5748,7 +5751,11 @@
       var drawerEl = instance.container.closest('.drawer');
       if (!drawerEl || !drawerEl.classList) return null;
       return {
-        fullscreen: drawerEl.classList.contains('xmind-drawer-fullscreen'),
+        fullscreen: Boolean(
+          drawerFullscreenPort &&
+          typeof drawerFullscreenPort.is === 'function' &&
+          drawerFullscreenPort.is(drawerEl)
+        ),
       };
     }
 

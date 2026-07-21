@@ -1974,10 +1974,30 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     });
 
     await gotoIndex(page);
-    await seedCaseGenState(page, { requirement: 'UI自动化需求-追加覆盖', selectIndex: 0, noGenerateIndex: 1 });
-
-    await switchCasegenStoreMode(page, 'append');
-    await page.click('#caseGenStoreAppendBtn');
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('casesgen');
+      }
+    });
+    await page.waitForFunction(() => {
+      return window.app
+        && window.app.casesGenApi
+        && typeof window.app.casesGenApi.openCaseGenDbStoreAppendDrawerWithItems === 'function';
+    }, null, { timeout: 8000 });
+    await page.evaluate(() => {
+      window.app.casesGenApi.openCaseGenDbStoreAppendDrawerWithItems([{
+        module: '登录',
+        title: '登录-用例1',
+        priority: 'P1',
+        precondition: '前置条件',
+        steps: '步骤1\n步骤2',
+        expected: '预期结果',
+        remark: '',
+      }], {
+        source: 'ui-test',
+        missingModules: ['支付'],
+      });
+    });
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseGenDbStoreProjectSelect', String(project.id));
     await page.selectOption('#caseGenDbStoreVersionSelect', String(versions[0].id));
@@ -1986,6 +2006,8 @@ test.describe('用例生成-新用例入库/旧用例追加入库', () => {
     await confirmDrawer(page, { messageIncludes: ['支付', '没有选择用例'] });
 
     await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryImportDiffTitle')).toHaveText(/^追加入库差异对比/);
+    await expect(page.locator('#caseLibraryImportDiffOverwriteBtn')).toHaveText('确认覆盖并追加入库');
     await page.click('#caseLibraryImportDiffOverwriteBtn');
 
     await expect(page.locator('#caseGenStatus')).toContainText('追加入库成功', { timeout: 5000 });

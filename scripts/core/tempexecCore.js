@@ -92,7 +92,6 @@
     var tempExecCaseLibraryChangesBtn = null;
     var tempExecAiGenBtn = null;
     var tempExecCaseLibraryDiffStatus = null;
-    var tempExecCaseLibraryDiffBody = null;
     var tempExecCaseLibraryDiffAppendedPill = null;
     var tempExecCaseLibraryDiffAddedPill = null;
     var tempExecCaseLibraryDiffUpdatedPill = null;
@@ -106,7 +105,6 @@
         tempExecCaseLibraryChangesBtn = document.getElementById('tempExecCaseLibraryChangesBtn');
         tempExecAiGenBtn = document.getElementById('tempExecAiGenBtn');
         tempExecCaseLibraryDiffStatus = document.getElementById('tempExecCaseLibraryDiffStatus');
-        tempExecCaseLibraryDiffBody = document.getElementById('tempExecCaseLibraryDiffBody');
         tempExecCaseLibraryDiffAppendedPill = document.getElementById('tempExecCaseLibraryDiffAppendedPill');
         tempExecCaseLibraryDiffAddedPill = document.getElementById('tempExecCaseLibraryDiffAddedPill');
         tempExecCaseLibraryDiffUpdatedPill = document.getElementById('tempExecCaseLibraryDiffUpdatedPill');
@@ -169,6 +167,12 @@
       };
     var tempExecResultOptions = deps && deps.tempExecResultOptions ? deps.tempExecResultOptions : ['未执行', '通过', '失败', '阻塞', '不适用'];
     var reuseApplicabilityCore = deps && deps.reuseApplicabilityCore ? deps.reuseApplicabilityCore : null;
+    var tempExecImportDuplicateControllerFactory = deps && deps.tempExecImportDuplicateControllerFactory
+      ? deps.tempExecImportDuplicateControllerFactory
+      : null;
+    var tempExecCaseLibraryDiffControllerFactory = deps && deps.tempExecCaseLibraryDiffControllerFactory
+      ? deps.tempExecCaseLibraryDiffControllerFactory
+      : null;
     var deriveCaseListFromText = deps && deps.deriveCaseListFromText ? deps.deriveCaseListFromText : function() { return []; };
     var parseXmindFile = deps && deps.parseXmindFile ? deps.parseXmindFile : function() { return Promise.resolve({ text: '', list: [] }); };
     var parseXlsxFileToRows = deps && deps.parseXlsxFileToRows ? deps.parseXlsxFileToRows : null;
@@ -757,6 +761,16 @@
     var tempExecImportDuplicateResolve = null;
     var tempExecImportDuplicateResolved = false;
     var tempExecImportDuplicateConfirmBound = false;
+    var tempExecImportDuplicateTableController = null;
+
+    function ensureTempExecImportDuplicateTableController() {
+      if (tempExecImportDuplicateTableController) return tempExecImportDuplicateTableController;
+      if (!tempExecImportDuplicateControllerFactory || typeof tempExecImportDuplicateControllerFactory.create !== 'function') return null;
+      var hostEl = document.getElementById('tempExecImportDuplicateTableHost');
+      if (!hostEl) return null;
+      tempExecImportDuplicateTableController = tempExecImportDuplicateControllerFactory.create({ hostEl: hostEl });
+      return tempExecImportDuplicateTableController;
+    }
 
     function ensureTempExecImportDuplicateDrawer() {
       if (tempExecImportDuplicateDrawer) return tempExecImportDuplicateDrawer;
@@ -795,7 +809,6 @@
     function renderTempExecImportDuplicateDrawer(payload) {
       var titleEl = document.getElementById('tempExecImportDuplicateTitle');
       var statusEl = document.getElementById('tempExecImportDuplicateStatus');
-      var bodyEl = document.getElementById('tempExecImportDuplicateBody');
       var confirmBtn = document.getElementById('tempExecImportDuplicateConfirmBtn');
 
       var fileName = payload && payload.fileName ? String(payload.fileName) : '用例';
@@ -810,61 +823,8 @@
         setStatus(statusEl, msg, 'warn');
       }
       if (confirmBtn) confirmBtn.disabled = !duplicateCount;
-
-      if (!bodyEl) return;
-      if (!rows.length) {
-        bodyEl.innerHTML = '<tr><td colspan="11"><p class="hint">暂无重复条目</p></td></tr>';
-        return;
-      }
-
-      function toHtml(val) {
-        var text = val === null || val === undefined ? '' : String(val);
-        return escapeHtml(text).replace(/\n/g, '<br>');
-      }
-      function formatDefects(list) {
-        if (!Array.isArray(list) || !list.length) return '';
-        var urls = list.map(function(d) {
-          if (!d) return '';
-          if (typeof d === 'string') return d;
-          if (d.url) return String(d.url);
-          if (d.value) return String(d.value);
-          return '';
-        }).filter(Boolean);
-        return urls.join('\n');
-      }
-
-      bodyEl.innerHTML = rows.map(function(entry) {
-        var item = entry && entry.payload ? entry.payload : null;
-        var src = entry && entry.source ? entry.source : null;
-        var line = entry && Number.isFinite(Number(entry.line)) ? Number(entry.line) : 0;
-        var keep = entry && entry.keep ? true : false;
-
-        var module = item && item.module ? String(item.module) : '';
-        var title = item && item.title ? String(item.title) : '';
-        var priority = item && item.priority ? String(item.priority) : '';
-        var pre = item && item.precondition ? String(item.precondition) : '';
-        var steps = item && item.steps ? String(item.steps) : '';
-        var expected = item && item.expected ? String(item.expected) : '';
-        var actual = src && src.actual ? String(src.actual) : '';
-        var remark = src && src.remark ? String(src.remark) : (item && item.remark ? String(item.remark) : '');
-        var defect = formatDefects(src && src.defectLinks ? src.defectLinks : []);
-        var action = keep ? '保留' : '移除';
-        return (
-          '<tr>' +
-            '<td>' + (line ? String(line) : '-') + '</td>' +
-            '<td>' + toHtml(module) + '</td>' +
-            '<td>' + toHtml(title) + '</td>' +
-            '<td>' + toHtml(priority) + '</td>' +
-            '<td>' + toHtml(pre) + '</td>' +
-            '<td>' + toHtml(steps) + '</td>' +
-            '<td>' + toHtml(expected) + '</td>' +
-            '<td>' + toHtml(actual) + '</td>' +
-            '<td>' + toHtml(remark) + '</td>' +
-            '<td>' + toHtml(defect) + '</td>' +
-            '<td>' + escapeHtml(action) + '</td>' +
-          '</tr>'
-        );
-      }).join('');
+      var controller = ensureTempExecImportDuplicateTableController();
+      if (controller) controller.setData(rows);
     }
 
     function confirmTempExecImportDuplicateByDrawer(payload) {
@@ -6227,77 +6187,12 @@
       }
     }
 
-    function getCaseLibDiffKindLabel(kind) {
-      if (kind === 'appended') return '追加';
-      if (kind === 'added') return '新增';
-      if (kind === 'updated') return '改动';
-      if (kind === 'deleted') return '删除';
-      return '';
-    }
-
     function normalizeCaseLibDiffItemId(entry) {
       if (!entry) return '';
       var id = entry.case_item_id;
       if (id === null || id === undefined) id = entry.caseItemId;
       if (id === null || id === undefined) return '';
       return String(id);
-    }
-
-    function buildTempExecCaseItemIdSet(file) {
-      if (!file || !Array.isArray(file.cases)) return null;
-      if (file._casesLoading) return null;
-      var ids = new Set();
-      file.cases.forEach(function(item) {
-        if (!item) return;
-        var id = item.caseItemId;
-        if (id === null || id === undefined) id = item.case_item_id;
-        if (id !== null && id !== undefined) ids.add(String(id));
-        var sourceId = item.caseItemSourceId;
-        if (sourceId === null || sourceId === undefined) sourceId = item.case_item_source_id;
-        if (sourceId !== null && sourceId !== undefined) ids.add(String(sourceId));
-      });
-      return ids;
-    }
-
-    function filterTempExecCaseLibraryDiffRows(execSetId, rows) {
-      if (!execSetId || !Array.isArray(rows) || !rows.length) return rows;
-      var file = getTempExecFile(String(execSetId));
-      var idSet = buildTempExecCaseItemIdSet(file);
-      if (!idSet) return rows;
-      var deletedIds = new Set();
-      rows.forEach(function(row) {
-        var entry = row && row.entry ? row.entry : null;
-        var kind = normalizeDiffKind(entry && entry.kind ? entry.kind : '');
-        if (kind !== 'deleted') return;
-        var deletedId = normalizeCaseLibDiffItemId(entry);
-        if (!deletedId) return;
-        deletedIds.add(String(deletedId));
-      });
-      return rows.filter(function(row) {
-        var entry = row && row.entry ? row.entry : null;
-        var kind = normalizeDiffKind(entry && entry.kind ? entry.kind : '');
-        if (kind === 'deleted') return true;
-        var caseItemId = normalizeCaseLibDiffItemId(entry);
-        if (!caseItemId) return true;
-        if (idSet.has(caseItemId)) return true;
-        if ((kind === 'added' || kind === 'appended') && deletedIds.has(String(caseItemId))) {
-          return true;
-        }
-        return false;
-      });
-    }
-
-    function summarizeTempExecCaseLibraryDiffRows(rows) {
-      var summary = { appended: 0, added: 0, updated: 0, deleted: 0 };
-      if (!Array.isArray(rows) || !rows.length) return summary;
-      rows.forEach(function(row) {
-        var kind = normalizeDiffKind(row && row.entry ? row.entry.kind : '');
-        if (kind === 'appended') summary.appended += 1;
-        if (kind === 'added') summary.added += 1;
-        if (kind === 'updated') summary.updated += 1;
-        if (kind === 'deleted') summary.deleted += 1;
-      });
-      return summary;
     }
 
     function findTempExecCaseIndexByItemId(file, caseItemId) {
@@ -6465,8 +6360,35 @@
         .join('');
     }
 
+    var tempExecCaseLibraryDiffTableController = null;
+
+    function ensureTempExecCaseLibraryDiffTableController() {
+      if (tempExecCaseLibraryDiffTableController) return tempExecCaseLibraryDiffTableController;
+      if (!tempExecCaseLibraryDiffControllerFactory ||
+        typeof tempExecCaseLibraryDiffControllerFactory.create !== 'function') return null;
+      var hostEl = document.getElementById('tempExecCaseLibraryDiffTableHost');
+      if (!hostEl) return null;
+      tempExecCaseLibraryDiffTableController = tempExecCaseLibraryDiffControllerFactory.create({
+        hostEl: hostEl,
+        onRowActivate: function(record) {
+          var selectedExecSetId = getTempExecCaseLibraryDiffSelectedExecSetId();
+          if (!selectedExecSetId && state.tempExecActiveId) {
+            var active = getTempExecFile(state.tempExecActiveId);
+            selectedExecSetId = active && active.execSetId ? String(active.execSetId) : '';
+          }
+          if (!selectedExecSetId || !record) return;
+          locateTempExecCaseFromDiff({
+            case_item_id: record.caseItemId,
+            kind: record.kind,
+          }, selectedExecSetId);
+        },
+      });
+      return tempExecCaseLibraryDiffTableController;
+    }
+
     function renderTempExecCaseLibraryDiff(execSetId) {
-      if (!tempExecCaseLibraryDiffBody) return;
+      var tableController = ensureTempExecCaseLibraryDiffTableController();
+      if (!tableController) return null;
       var store = ensureTempExecCaseLibraryDiffState();
       var lastRendered = state.tempExecCaseLibraryDiffLastRenderedExecSetId ? String(state.tempExecCaseLibraryDiffLastRenderedExecSetId) : '';
       var nextRendered = execSetId ? String(execSetId) : '';
@@ -6478,106 +6400,22 @@
       var filter = execSetId && store.filterByExecSetId[String(execSetId)]
         ? String(store.filterByExecSetId[String(execSetId)])
         : '';
-      if (filter !== 'added' && filter !== 'updated' && filter !== 'deleted') filter = '';
+      filter = normalizeDiffKind(filter);
 
       setTempExecCaseLibraryDiffSelectedExecSetId(execSetId);
       if (tempExecCaseLibraryDiffCaseName) {
         tempExecCaseLibraryDiffCaseName.textContent = getTempExecFileNameByExecSetId(execSetId || '');
       }
       renderTempExecCaseLibraryDiffCaseTabs(execSetId);
-
-      function formatCaseLibDiffTime(iso) {
-        if (!iso) return '';
-        var ts = parseDbTimeMs(iso);
-        if (!ts) return String(iso || '');
-        var d = new Date(ts);
-        var pad = function(n) { return n < 10 ? '0' + n : String(n); };
-        return (
-          d.getFullYear() + '-' +
-          pad(d.getMonth() + 1) + '-' +
-          pad(d.getDate()) + ' ' +
-          pad(d.getHours()) + ':' +
-          pad(d.getMinutes()) + ':' +
-          pad(d.getSeconds())
-        );
-      }
-
-      var batches = meta && Array.isArray(meta.history) && meta.history.length ? meta.history : [];
-      if (!batches.length) {
-        var fallbackDiff = meta && Array.isArray(meta.diff) ? meta.diff : [];
-        var fallbackSummary = meta && meta.summary ? meta.summary : { appended: 0, added: 0, updated: 0, deleted: 0 };
-        if (fallbackDiff.length) {
-          batches = [{
-            diffAt: meta && meta.lastDiffAt ? String(meta.lastDiffAt) : '',
-            summary: fallbackSummary,
-            diff: fallbackDiff,
-          }];
-        }
-      }
-
-      var totalSummary = { appended: 0, added: 0, updated: 0, deleted: 0 };
-      var rows = [];
-      batches.forEach(function(batch) {
-        if (!batch) return;
-        var diffAt = batch.diffAt ? String(batch.diffAt) : '';
-        var operator = batch.operator ? String(batch.operator) : '';
-        var batchTs = parseDbTimeMs(diffAt);
-        if (!isFinite(batchTs)) batchTs = 0;
-        var sum = batch.summary && typeof batch.summary === 'object' ? batch.summary : {};
-        var diff = Array.isArray(batch.diff) ? batch.diff : [];
-        var hasSum = Number.isFinite(Number(sum.appended)) || Number.isFinite(Number(sum.added)) || Number.isFinite(Number(sum.updated)) || Number.isFinite(Number(sum.deleted));
-        if (hasSum) {
-          totalSummary.appended += Number(sum.appended) || 0;
-          totalSummary.added += Number(sum.added) || 0;
-          totalSummary.updated += Number(sum.updated) || 0;
-          totalSummary.deleted += Number(sum.deleted) || 0;
-        } else {
-          diff.forEach(function(entry) {
-            var k = normalizeDiffKind(entry && entry.kind);
-            if (k === 'appended') totalSummary.appended += 1;
-            if (k === 'added') totalSummary.added += 1;
-            if (k === 'updated') totalSummary.updated += 1;
-            if (k === 'deleted') totalSummary.deleted += 1;
-          });
-        }
-        diff.forEach(function(entry) {
-          rows.push({ entry: entry, diffAt: diffAt, operator: operator, ts: batchTs });
-        });
+      var tableState = tableController.setData(meta, {
+        execSetId: execSetId,
+        file: execSetId ? getTempExecFile(String(execSetId)) : null,
+        filter: filter,
+        emptyText: '暂无变更',
       });
-      if (!rows.length && meta && meta.summary) {
-        var fallbackSummary = meta.summary || {};
-        var hasFallback = Number(fallbackSummary.appended) || Number(fallbackSummary.added) || Number(fallbackSummary.updated) || Number(fallbackSummary.deleted);
-        var emptyTotals = !(totalSummary.appended || totalSummary.added || totalSummary.updated || totalSummary.deleted);
-        if (hasFallback && emptyTotals) {
-          totalSummary.appended = Number(fallbackSummary.appended) || 0;
-          totalSummary.added = Number(fallbackSummary.added) || 0;
-          totalSummary.updated = Number(fallbackSummary.updated) || 0;
-          totalSummary.deleted = Number(fallbackSummary.deleted) || 0;
-        }
-      }
-
-      rows.sort(function(a, b) {
-        var ta = a && a.ts ? Number(a.ts) : 0;
-        var tb = b && b.ts ? Number(b.ts) : 0;
-        if (ta !== tb) return tb - ta;
-        var ka = normalizeDiffKind(a && a.entry ? a.entry.kind : '');
-        var kb = normalizeDiffKind(b && b.entry ? b.entry.kind : '');
-        if (ka !== kb) return String(kb).localeCompare(String(ka));
-        return 0;
-      });
-
-      var availableRows = filterTempExecCaseLibraryDiffRows(execSetId, rows);
-      if (availableRows.length !== rows.length) {
-        totalSummary = summarizeTempExecCaseLibraryDiffRows(availableRows);
-      }
-
-      var visible = availableRows.filter(function(row) {
-        var entry = row && row.entry ? row.entry : null;
-        var kind = normalizeDiffKind(entry && entry.kind);
-        if (!kind) return false;
-        if (!filter) return true;
-        return kind === filter;
-      });
+      var totalSummary = tableState && tableState.summary
+        ? tableState.summary
+        : { appended: 0, added: 0, updated: 0, deleted: 0 };
 
       if (tempExecCaseLibraryDiffAppendedPill) {
         tempExecCaseLibraryDiffAppendedPill.textContent = '追加 ' + (totalSummary.appended || 0);
@@ -6610,57 +6448,7 @@
         }
         setStatus(tempExecCaseLibraryDiffStatus, statusText, meta && (meta.everChanged || hasSignal) ? 'ok' : '');
       }
-
-      if (!visible.length) {
-        tempExecCaseLibraryDiffBody.innerHTML = '<tr><td colspan="8"><p class="hint">暂无变更</p></td></tr>';
-        return;
-      }
-
-      function buildCell(oldSnap, newSnap, key, changed) {
-        var oldVal = oldSnap && oldSnap[key] !== undefined && oldSnap[key] !== null ? String(oldSnap[key]) : '';
-        var newVal = newSnap && newSnap[key] !== undefined && newSnap[key] !== null ? String(newSnap[key]) : '';
-        if (!changed) {
-          var text = newVal || oldVal || '';
-          return '<div class="case-lib-diff-cell"><div class="case-lib-diff-only">' + escapeHtmlPreserve(text) + '</div></div>';
-        }
-        return (
-          '<div class="case-lib-diff-cell">' +
-            '<div class="case-lib-diff-old">旧：' + escapeHtmlPreserve(oldVal) + '</div>' +
-            '<div class="case-lib-diff-new">新：' + escapeHtmlPreserve(newVal) + '</div>' +
-          '</div>'
-        );
-      }
-
-      tempExecCaseLibraryDiffBody.innerHTML = visible.map(function(row) {
-        var entry = row && row.entry ? row.entry : null;
-        var kind = normalizeDiffKind(entry && entry.kind);
-        var caseItemId = normalizeCaseLibDiffItemId(entry);
-        var oldSnap = entry && entry.old && typeof entry.old === 'object' ? entry.old : null;
-        var newSnap = entry && entry.new && typeof entry.new === 'object' ? entry.new : null;
-        var changedFields = Array.isArray(entry && entry.changed_fields) ? entry.changed_fields : [];
-        var changedMap = {};
-        changedFields.forEach(function(f) { changedMap[String(f)] = true; });
-        var typeTag = '<span class="tag case-lib-diff-kind ' + kind + '">' + escapeHtml(getCaseLibDiffKindLabel(kind)) + '</span>';
-        var timeText = formatCaseLibDiffTime(row && row.diffAt ? row.diffAt : '');
-        var operatorText = row && row.operator ? String(row.operator) : '';
-        var canLocate = Boolean(caseItemId && (kind === 'appended' || kind === 'added' || kind === 'updated'));
-        var rowClass = 'case-lib-diff-row' + (canLocate ? ' case-lib-diff-clickable' : '');
-        var rowAttrs = canLocate
-          ? (' data-case-lib-diff-case-id="' + escapeHtml(caseItemId) + '" data-case-lib-diff-kind="' + escapeHtml(kind) + '"')
-          : '';
-        return (
-          '<tr class="' + rowClass + '"' + rowAttrs + '>' +
-            '<td>' + typeTag + '</td>' +
-            '<td class="case-lib-diff-time">' + escapeHtml(timeText) + '</td>' +
-            '<td class="case-lib-diff-operator">' + escapeHtml(operatorText) + '</td>' +
-            '<td>' + buildCell(oldSnap, newSnap, 'module', Boolean(changedMap.module)) + '</td>' +
-            '<td>' + buildCell(oldSnap, newSnap, 'title', Boolean(changedMap.title)) + '</td>' +
-            '<td>' + buildCell(oldSnap, newSnap, 'precondition', Boolean(changedMap.precondition)) + '</td>' +
-            '<td>' + buildCell(oldSnap, newSnap, 'steps', Boolean(changedMap.steps)) + '</td>' +
-            '<td>' + buildCell(oldSnap, newSnap, 'expected', Boolean(changedMap.expected)) + '</td>' +
-          '</tr>'
-        );
-      }).join('');
+      return tableState;
     }
 
     function ensureTempExecCaseLibraryDiffDrawer() {
@@ -6685,16 +6473,6 @@
             if (nextExecSetId) {
               renderTempExecCaseLibraryDiff(nextExecSetId);
             }
-            return;
-          }
-          var diffRow = target.closest('tr.case-lib-diff-clickable');
-          if (diffRow && diffRow.dataset && diffRow.dataset.caseLibDiffCaseId) {
-            var execSetId = getTempExecCaseLibraryDiffSelectedExecSetId();
-            if (!execSetId) execSetId = state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
-            locateTempExecCaseFromDiff(
-              { case_item_id: diffRow.dataset.caseLibDiffCaseId, kind: diffRow.dataset.caseLibDiffKind },
-              execSetId
-            );
             return;
           }
           var pill = target.closest('[data-case-lib-diff-filter]');
@@ -6751,8 +6529,8 @@
           if (tempExecCaseLibraryDiffStatus) {
             setStatus(tempExecCaseLibraryDiffStatus, '正在同步用例变更...', '');
           }
-          if (tempExecCaseLibraryDiffBody && (!meta || !hasSignal)) {
-            tempExecCaseLibraryDiffBody.innerHTML = '<tr><td colspan="8"><p class="hint">正在同步用例变更...</p></td></tr>';
+          if (tempExecCaseLibraryDiffTableController && (!meta || !hasSignal)) {
+            tempExecCaseLibraryDiffTableController.setLoading();
           }
           if (tempExecCaseLibraryDiffDrawer && typeof tempExecCaseLibraryDiffDrawer.open === 'function') {
             tempExecCaseLibraryDiffDrawer.open();

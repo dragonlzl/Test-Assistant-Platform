@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic, readSemanticValues } = require('./helpers/vtable_semantic');
 
 const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
 
@@ -139,10 +140,10 @@ test.describe('用例库按执行顺序排序', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('用例1');
 
-    const titles = await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"]').allInnerTexts();
+    const titles = await readSemanticValues(page, '#caseLibraryEditView [data-case-lib-edit-field="title"]');
     expect(titles).toEqual(['用例1', '用例3', '用例2']);
   });
 });

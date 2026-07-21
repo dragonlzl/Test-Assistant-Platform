@@ -1,0 +1,68 @@
+:root {
+  color-scheme: light;
+  --tap-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --tap-bg: #f6f8fb;
+  --tap-surface: #ffffff;
+  --tap-surface-muted: #f6f8fb;
+  --tap-surface-hover: #f3f6fb;
+  --tap-text: #1f2937;
+  --tap-text-soft: #4b5563;
+  --tap-muted: #8b95a5;
+  --tap-border: rgba(226, 232, 240, 0.96);
+  --tap-border-strong: rgba(203, 213, 225, 0.78);
+  --tap-table-border: #edf1f7;
+  --tap-accent: #155eef;
+  --tap-accent-strong: #0f56d9;
+  --tap-accent-soft: rgba(21, 94, 239, 0.10);
+  --tap-selection: rgba(21, 94, 239, 0.16);
+  --tap-ring: rgba(21, 94, 239, 0.28);
+  --tap-success: #15803d;
+  --tap-warning: #b45309;
+  --tap-danger: #b42318;
+  --tap-radius-control: 6px;
+  --tap-radius-panel: 8px;
+  --tap-nav-rail-width: 68px;
+  --tap-nav-context-width: 240px;
+  --tap-layout-sidebar-width: 308px;
+  --bg: var(--tap-bg);
+  --card: var(--tap-surface);
+  --border: var(--tap-border);
+  --primary: var(--tap-accent);
+  --primary-weak: var(--tap-accent-soft);
+  --text: var(--tap-text);
+  --muted: var(--tap-muted);
+  --success: var(--tap-success);
+  --warn: var(--tap-warning);
+  --error: var(--tap-danger);
+  --shadow: none;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --tap-bg: #111925;
+  --tap-surface: #182231;
+  --tap-surface-muted: #1d2939;
+  --tap-surface-hover: #223044;
+  --tap-text: #e5e7eb;
+  --tap-text-soft: #c0cad8;
+  --tap-muted: #9aa7b8;
+  --tap-border: #2c3a4d;
+  --tap-border-strong: #3a4a60;
+  --tap-table-border: #2c3a4d;
+  --tap-accent: #7db3ff;
+  --tap-accent-strong: #9bc4ff;
+  --tap-accent-soft: rgba(125, 179, 255, 0.16);
+  --tap-selection: rgba(125, 179, 255, 0.22);
+  --tap-ring: rgba(125, 179, 255, 0.34);
+  --tap-success: #6ee7a5;
+  --tap-warning: #fbbf72;
+  --tap-danger: #fda29b;
+}
+
+html,
+body {
+  background: var(--tap-bg);
+  color: var(--tap-text);
+  font-family: var(--tap-font);
+  letter-spacing: 0;
+}

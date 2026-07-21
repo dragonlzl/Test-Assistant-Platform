@@ -207,8 +207,12 @@ test.describe('用例库导入-多文件同名 diff 队列', () => {
     await expect(page.locator('#caseLibraryImportDiffDrawer')).toHaveClass(/open/);
     await expect(page.locator('#caseLibraryImportDiffTitle')).toContainText('用例C');
 
-    await page.click('#caseLibraryImportDiffDrawer .drawer-header [data-drawer-close="caseLibraryImportDiffDrawer"]', { force: true });
-    await expect(page.locator('#caseLibraryImportDiffDrawer')).not.toHaveClass(/open/);
+    const confirmDrawer = page.locator('#appConfirmDrawer');
+    const diffDrawer = page.locator('#caseLibraryImportDiffDrawer');
+    await expect(confirmDrawer).not.toHaveClass(/\b(?:open|closing)\b/);
+    await expect(diffDrawer).not.toHaveClass(/\bdrawer-suspended\b/);
+    await page.click('#caseLibraryImportDiffDrawer .drawer-header [data-drawer-close="caseLibraryImportDiffDrawer"]');
+    await expect(diffDrawer).not.toHaveClass(/open/);
 
     const status = page.locator('#caseLibraryImportStatus');
     await expect(status).toContainText('导入完成', { timeout: 8000 });

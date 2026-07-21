@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
+const { clickSemantic } = require('./helpers/vtable_semantic');
 
-async function gotoIndex(page) {
+async function gotoPage(page, fileName) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/' + fileName);
 }
 
 async function waitAppReady(page, timeoutMs) {
@@ -45,6 +46,8 @@ test.describe('用例相关视图窄屏适配', () => {
       return route.abort();
     });
     await page.addInitScript(() => {
+      var keys = ['usecase-temp-exec-v1', 'tempexec-focus-v1', 'tempexec-page-size'];
+      keys.forEach(function(key) { localStorage.removeItem(key); });
       try { localStorage.setItem('tap-auth-token', 'token-narrow-tempexec'); } catch (_) {}
     });
     await page.route('**/api/**', async (route) => {
@@ -64,19 +67,15 @@ test.describe('用例相关视图窄屏适配', () => {
       await dialog.accept(answer);
     });
 
-    await gotoIndex(page);
-    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
-    await page.evaluate(() => {
-      var keys = ['usecase-temp-exec-v1', 'tempexec-focus-v1', 'tempexec-page-size'];
-      keys.forEach(function(key) {
-        window.localStorage.removeItem(key);
-      });
-    });
-    await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
+    await gotoPage(page, 'case-exec.html');
+    await page.waitForFunction(() => {
+      return window.app && window.app._inited === true && document.body &&
+        document.body.getAttribute('data-page') === 'case-exec';
+    }, { timeout: 20000 });
 
-    await page.click('[data-group="cases"]');
-    await page.click('[data-tab-btn="tempexec"]');
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('tempexec');
+    });
     await page.click('#openTempExecImportDrawerBtn');
     await page.evaluate(() => {
       window.app.state.requirementLabel = '窄屏用例';
@@ -96,7 +95,7 @@ test.describe('用例相关视图窄屏适配', () => {
     await page.setInputFiles('#tempExecInput', execFile);
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
 
-    await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await page.click('#closeTempExecImportDrawerBtn');
     await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
     await page.click('#openTempExecAssignDrawerBtn', { force: true });
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
@@ -244,7 +243,7 @@ test.describe('用例相关视图窄屏适配', () => {
       return respond(404, { detail: 'not found' });
     });
 
-    await gotoIndex(page);
+    await gotoPage(page, 'case-library.html');
     await waitAppReady(page, 30000);
     await switchToTab(page, 'case-library');
     await expect(page.locator('#caseLibraryHead')).toBeVisible();
@@ -252,7 +251,7 @@ test.describe('用例相关视图窄屏适配', () => {
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
-    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await clickSemantic(page, `#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryEditCard .case-library-drawer-toolbar')).toBeVisible();
@@ -261,11 +260,18 @@ test.describe('用例相关视图窄屏适配', () => {
       function rect(el) {
         if (!el) return null;
         var box = el.getBoundingClientRect();
-        return { x: Math.round(box.x), y: Math.round(box.y) };
+        return {
+          x: Math.round(box.x),
+          y: Math.round(box.y),
+          width: Math.round(box.width),
+          height: Math.round(box.height),
+        };
       }
       var toolbar = document.querySelector('#caseLibraryEditCard .case-library-drawer-toolbar');
       return {
         toolbarExists: Boolean(toolbar),
+        toolbar: rect(toolbar),
+        searchGroup: rect(document.querySelector('#caseLibraryEditCard .case-library-search-group')),
         search: rect(document.querySelector('#caseLibraryEditCard .case-library-search')),
         actions: rect(document.querySelector('#caseLibraryEditCard .case-library-drawer-actions')),
       };
@@ -274,10 +280,30 @@ test.describe('用例相关视图窄屏适配', () => {
     expect(layout.search).toBeTruthy();
     expect(layout.actions).toBeTruthy();
     expect(layout.search.y).toBeLessThan(layout.actions.y);
+    expect(layout.searchGroup.height).toBeLessThan(180);
+    expect(layout.toolbar.height).toBeLessThan(260);
     const viewSize = await page.evaluate(() => {
-      var el = document.getElementById('caseLibraryEditView');
-      return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
+      var host = document.getElementById('caseLibraryEditorTableHost');
+      var tableHost = window.app && window.app.ui ? window.app.ui.VTableHost : null;
+      var controller = tableHost && typeof tableHost.get === 'function'
+        ? tableHost.get('case-library-editor')
+        : null;
+      var model = controller && typeof controller.getModel === 'function'
+        ? controller.getModel()
+        : null;
+      var canvas = host ? host.querySelector('canvas') : null;
+      var modelWidth = model && Array.isArray(model.columns)
+        ? model.columns.reduce(function(total, column) { return total + (Number(column.width) || 0); }, 0)
+        : 0;
+      return {
+        hostWidth: host ? host.clientWidth : 0,
+        modelWidth: modelWidth,
+        canvasWidth: canvas ? canvas.width : 0,
+        rowCount: model && Array.isArray(model.records) ? model.records.length : 0,
+      };
     });
-    expect(viewSize.scrollWidth).toBeGreaterThan(viewSize.clientWidth);
+    expect(viewSize.modelWidth).toBeGreaterThan(viewSize.hostWidth);
+    expect(viewSize.canvasWidth).toBeGreaterThan(0);
+    expect(viewSize.rowCount).toBe(1);
   });
 });

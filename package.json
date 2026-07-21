@@ -4,6 +4,7 @@
   "description": "",
   "main": "jszip.min.js",
   "scripts": {
+    "build:vtable": "node tools/build-vtable.js",
     "test": "npm run test:ui",
     "test:ui": "playwright test --config tests/playwright.config.js",
     "test:api": "playwright test --config tests/api/playwright.api.config.js",
@@ -14,6 +15,9 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@playwright/test": "^1.41.2"
+    "@playwright/test": "^1.41.2",
+    "@visactor/vtable": "1.26.1",
+    "@visactor/vtable-editors": "1.26.1",
+    "esbuild": "^0.25.6"
   }
 }

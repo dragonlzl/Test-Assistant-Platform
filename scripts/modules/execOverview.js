@@ -2,6 +2,13 @@
   var api = window.app && window.app.apiClient;
   if (!api) return;
 
+  var execSetControllerFactory = window.app && window.app.execOverview
+    ? window.app.execOverview.execSetController
+    : null;
+  var layoutWindowModel = window.app && window.app.execOverview
+    ? window.app.execOverview.layoutWindowModel
+    : null;
+
     var execOverviewProjectStorageKey = 'exec_overview_last_project_id_v1';
     var execOverviewVersionStorageKey = 'exec_overview_last_version_id_v1';
 
@@ -28,8 +35,7 @@
       execSetSearchClearBtn: document.getElementById('execOverviewExecSetSearchClearBtn'),
       execSetPaginationTop: document.getElementById('execOverviewExecSetPaginationTop'),
       execSetPaginationBottom: document.getElementById('execOverviewExecSetPaginationBottom'),
-      execSetTableBody: document.getElementById('execOverviewExecSetTableBody'),
-      execSetEmpty: document.getElementById('execOverviewExecSetEmpty'),
+      execSetTableHost: document.getElementById('execOverviewExecSetTableHost'),
 	  };
 
   var state = {
@@ -40,13 +46,6 @@
     overviewRows: [],
     overviewLayoutUsers: [],
     versionSummaryRows: [],
-    execSetDrawer: {
-      execSetId: null,
-      execSetName: '',
-      rows: [],
-      searchText: '',
-      pageIndex: 0,
-    },
   };
 
   var versionSummaryWindowSize = 4;
@@ -551,6 +550,7 @@
   }
 
   var execSetDrawerInstance = null;
+  var execSetTableController = null;
 
   function clampPageSize(value) {
     var n = Number(value);
@@ -567,117 +567,13 @@
     return clampPageSize(globalState && globalState.tempExecPageSize ? globalState.tempExecPageSize : 20);
   }
 
-  function setExecSetPagination(html) {
-    if (dom.execSetPaginationTop) dom.execSetPaginationTop.innerHTML = html || '';
-    if (dom.execSetPaginationBottom) dom.execSetPaginationBottom.innerHTML = html || '';
-  }
-
-  function buildExecSetPagination(total, pageIndex, totalPages, start, end, rawTotal) {
-    total = Number(total) || 0;
-    rawTotal = Number(rawTotal) || 0;
-    pageIndex = Number(pageIndex) || 0;
-    totalPages = Number(totalPages) || 1;
-    start = Number(start) || 0;
-    end = Number(end) || 0;
-    var currentPage = totalPages ? pageIndex + 1 : 1;
-    var maxPage = totalPages || 1;
-    var rangeInfo = total ? ('显示 ' + (start + 1) + '-' + end + ' / 共 ' + total + ' 条') : '暂无记录';
-    if (rawTotal && total && total !== rawTotal) {
-      rangeInfo += '（筛选后）';
-    } else if (rawTotal && !total && rawTotal) {
-      rangeInfo += '（筛选后）';
-    }
-    return (
-      '<div class=\"temp-pagination\" data-exec-overview-pagination>' +
-        '<div class=\"temp-pagination-info\">' + escapeHtml(rangeInfo) + '，每页 ' + getPageSize() + ' 条</div>' +
-        '<div class=\"temp-pagination-controls\">' +
-          '<button type=\"button\" class=\"secondary\" data-exec-overview-page=\"first\" ' + (pageIndex <= 0 ? 'disabled' : '') + '>首页</button>' +
-          '<button type=\"button\" class=\"secondary\" data-exec-overview-page=\"prev\" ' + (pageIndex <= 0 ? 'disabled' : '') + '>上一页</button>' +
-          '<button type=\"button\" class=\"secondary\" data-exec-overview-page=\"next\" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>下一页</button>' +
-          '<button type=\"button\" class=\"secondary\" data-exec-overview-page=\"last\" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>末页</button>' +
-          '<label>跳转</label>' +
-          '<input type=\"number\" min=\"1\" max=\"' + maxPage + '\" value=\"' + Math.min(currentPage, maxPage) + '\" data-exec-overview-page-input>' +
-        '</div>' +
-      '</div>'
-    );
-  }
-
-  function normalizeExecSetSearchText(value) {
-    var text = value === null || value === undefined ? '' : String(value);
-    return text.trim().toLowerCase();
-  }
-
-  function matchesExecSetCase(item, term) {
-    if (!term) return true;
-    if (!item) return false;
-    function has(field) {
-      var raw = item[field];
-      if (raw === null || raw === undefined) return false;
-      return String(raw).toLowerCase().indexOf(term) !== -1;
-    }
-    return Boolean(
-      has('module') ||
-      has('title') ||
-      has('actual_result') ||
-      has('expected') ||
-      has('remark')
-    );
-  }
-
   function hideExecSetDrawer() {
     if (execSetDrawerInstance && typeof execSetDrawerInstance.close === 'function') {
       execSetDrawerInstance.close();
     }
-    if (dom.execSetTableBody) dom.execSetTableBody.innerHTML = '';
-    if (dom.execSetEmpty) dom.execSetEmpty.classList.add('hidden');
     if (dom.execSetTitle) dom.execSetTitle.textContent = '执行列表';
     setDrawerStatus(dom.execSetStatus, '', '');
-    setExecSetPagination('');
-    state.execSetDrawer.execSetId = null;
-    state.execSetDrawer.execSetName = '';
-    state.execSetDrawer.rows = [];
-    state.execSetDrawer.searchText = '';
-    state.execSetDrawer.pageIndex = 0;
-    if (dom.execSetSearchInput) dom.execSetSearchInput.value = '';
-    if (dom.execSetSearchClearBtn) dom.execSetSearchClearBtn.disabled = true;
-  }
-
-  function syncExecSetSearchControls() {
-    if (!dom.execSetSearchClearBtn) return;
-    var term = state.execSetDrawer && state.execSetDrawer.searchText ? String(state.execSetDrawer.searchText) : '';
-    dom.execSetSearchClearBtn.disabled = !term.trim();
-  }
-
-  function renderExecSetDrawer() {
-    var rawList = Array.isArray(state.execSetDrawer.rows) ? state.execSetDrawer.rows : [];
-    var term = normalizeExecSetSearchText(state.execSetDrawer.searchText);
-    var filtered = term
-      ? rawList.filter(function(item) { return matchesExecSetCase(item, term); })
-      : rawList;
-    var pageSize = getPageSize();
-    var total = filtered.length;
-    var totalPages = total ? Math.ceil(total / pageSize) : 1;
-    if (state.execSetDrawer.pageIndex >= totalPages) state.execSetDrawer.pageIndex = Math.max(totalPages - 1, 0);
-    if (state.execSetDrawer.pageIndex < 0) state.execSetDrawer.pageIndex = 0;
-    var start = state.execSetDrawer.pageIndex * pageSize;
-    var end = Math.min(total, start + pageSize);
-    var pageRows = total ? filtered.slice(start, end) : [];
-
-    renderExecSetCases(pageRows);
-
-    if (dom.execSetEmpty) {
-      if (term && !total && rawList.length) {
-        dom.execSetEmpty.textContent = '未找到匹配用例';
-      } else {
-        dom.execSetEmpty.textContent = '暂无用例';
-      }
-    }
-
-    if (!rawList.length && !term) {
-      setExecSetPagination('');
-      return;
-    }
-    setExecSetPagination(buildExecSetPagination(total, state.execSetDrawer.pageIndex, totalPages, start, end, rawList.length));
+    if (execSetTableController) execSetTableController.reset();
   }
 
 	  function renderProjects() {
@@ -974,12 +870,17 @@
     var boxWidth = boxes[0].offsetWidth || 0;
     var gap = getContainerGap(layoutEl, 'x');
     var unit = boxWidth + gap;
-    var startIndex = unit > 0 ? Math.floor(layoutEl.scrollLeft / unit) : 0;
-    startIndex = Math.max(0, startIndex - 1);
-    var endIndex = Math.min(total - 1, startIndex + overviewLayoutWindowSize - 1);
-    if (endIndex - startIndex + 1 < overviewLayoutWindowSize) {
-      startIndex = Math.max(0, endIndex - overviewLayoutWindowSize + 1);
-    }
+    if (!layoutWindowModel || typeof layoutWindowModel.resolveWindowRange !== 'function') return;
+    var windowRange = layoutWindowModel.resolveWindowRange({
+      total: total,
+      windowSize: overviewLayoutWindowSize,
+      scrollLeft: layoutEl.scrollLeft,
+      scrollWidth: layoutEl.scrollWidth,
+      clientWidth: layoutEl.clientWidth,
+      unit: unit,
+    });
+    var startIndex = windowRange.startIndex;
+    var endIndex = windowRange.endIndex;
     for (var i = 0; i < boxes.length; i += 1) {
       var box = boxes[i];
       var body = box ? box.querySelector('.body') : null;
@@ -1400,31 +1301,6 @@
       });
   }
 
-  function renderExecSetCases(rows) {
-    if (!dom.execSetTableBody) return;
-    var list = Array.isArray(rows) ? rows : [];
-    if (!list.length) {
-      dom.execSetTableBody.innerHTML = '';
-      if (dom.execSetEmpty) dom.execSetEmpty.classList.remove('hidden');
-      return;
-    }
-    if (dom.execSetEmpty) dom.execSetEmpty.classList.add('hidden');
-    dom.execSetTableBody.innerHTML = list.map(function(item) {
-      var updatedText = formatTime(item && item.updated_at ? item.updated_at : '');
-      var statusText = item && item.status !== null && item.status !== undefined ? String(item.status) : '';
-      var actualText = item && item.actual_result !== null && item.actual_result !== undefined ? String(item.actual_result) : '';
-      if (!actualText && statusText) actualText = statusText;
-      return (
-        '<tr>' +
-          '<td>' + escapeHtml(item.module || '') + '</td>' +
-          '<td>' + escapeHtml(item.title || '') + '</td>' +
-          '<td>' + escapeHtml(actualText) + '</td>' +
-          '<td>' + escapeHtml(updatedText) + '</td>' +
-        '</tr>'
-      );
-    }).join('');
-  }
-
   function loadProjects() {
     setStatus('加载项目中...', '');
     return api
@@ -1508,29 +1384,18 @@
     if (dom.execSetTitle) dom.execSetTitle.textContent = name ? ('执行列表：' + name) : ('执行列表（执行集#' + sid + '）');
     setDrawerStatus(dom.execSetStatus, '加载中...', '');
     if (execSetDrawerInstance && typeof execSetDrawerInstance.open === 'function') execSetDrawerInstance.open();
-    if (dom.execSetEmpty) dom.execSetEmpty.classList.add('hidden');
-    state.execSetDrawer.execSetId = sid;
-    state.execSetDrawer.execSetName = name;
-    state.execSetDrawer.rows = [];
-    state.execSetDrawer.searchText = '';
-    state.execSetDrawer.pageIndex = 0;
-    if (dom.execSetSearchInput) dom.execSetSearchInput.value = '';
-    syncExecSetSearchControls();
-    setExecSetPagination('');
-    if (dom.execSetTableBody) {
-      dom.execSetTableBody.innerHTML = '<tr><td colspan="5"><p class="hint">加载中...</p></td></tr>';
-    }
+    if (execSetTableController) execSetTableController.setPageSize(getPageSize());
+    if (execSetTableController) execSetTableController.setLoading();
     api
       .listExecCases(sid)
       .then(function(rows) {
-        state.execSetDrawer.rows = Array.isArray(rows) ? rows : [];
-        renderExecSetDrawer();
+        if (execSetTableController) execSetTableController.setData(rows);
         setDrawerStatus(dom.execSetStatus, '', '');
       })
       .catch(function(err) {
-        state.execSetDrawer.rows = [];
-        renderExecSetDrawer();
-        setDrawerStatus(dom.execSetStatus, err && err.message ? err.message : '执行列表加载失败', 'err');
+        var message = err && err.message ? err.message : '执行列表加载失败';
+        if (execSetTableController) execSetTableController.setError(message);
+        setDrawerStatus(dom.execSetStatus, message, 'err');
       });
   }
 
@@ -1564,52 +1429,16 @@
         }
       }
 
-      if (dom.execSetSearchInput) {
-        dom.execSetSearchInput.addEventListener('input', function() {
-          state.execSetDrawer.searchText = String(dom.execSetSearchInput.value || '');
-          state.execSetDrawer.pageIndex = 0;
-          syncExecSetSearchControls();
-          renderExecSetDrawer();
-        });
-      }
-      if (dom.execSetSearchClearBtn) {
-        dom.execSetSearchClearBtn.addEventListener('click', function() {
-          state.execSetDrawer.searchText = '';
-          state.execSetDrawer.pageIndex = 0;
-          if (dom.execSetSearchInput) dom.execSetSearchInput.value = '';
-          syncExecSetSearchControls();
-          renderExecSetDrawer();
-        });
-      }
-      if (dom.execSetDrawer) {
-        dom.execSetDrawer.addEventListener('click', function(e) {
-          var btn = e && e.target && e.target.closest ? e.target.closest('[data-exec-overview-page]') : null;
-          if (!btn) return;
-          var action = btn.getAttribute('data-exec-overview-page') || '';
-          if (!action) return;
-          var pageSize = getPageSize();
-          var term = normalizeExecSetSearchText(state.execSetDrawer.searchText);
-          var rawList = Array.isArray(state.execSetDrawer.rows) ? state.execSetDrawer.rows : [];
-          var filtered = term ? rawList.filter(function(item) { return matchesExecSetCase(item, term); }) : rawList;
-          var total = filtered.length;
-          var totalPages = total ? Math.ceil(total / pageSize) : 1;
-          if (action === 'prev') state.execSetDrawer.pageIndex -= 1;
-          else if (action === 'next') state.execSetDrawer.pageIndex += 1;
-          else if (action === 'first') state.execSetDrawer.pageIndex = 0;
-          else if (action === 'last') state.execSetDrawer.pageIndex = totalPages - 1;
-          if (state.execSetDrawer.pageIndex < 0) state.execSetDrawer.pageIndex = 0;
-          if (state.execSetDrawer.pageIndex >= totalPages) state.execSetDrawer.pageIndex = Math.max(totalPages - 1, 0);
-          renderExecSetDrawer();
-        });
-        dom.execSetDrawer.addEventListener('change', function(e) {
-          var t = e && e.target ? e.target : null;
-          if (!t || !t.hasAttribute) return;
-          if (!t.hasAttribute('data-exec-overview-page-input')) return;
-          var raw = t.value;
-          var idx = Math.floor(Number(raw)) - 1;
-          if (!isFinite(idx) || idx < 0) idx = 0;
-          state.execSetDrawer.pageIndex = idx;
-          renderExecSetDrawer();
+      if (dom.execSetTableHost && execSetControllerFactory && typeof execSetControllerFactory.create === 'function') {
+        execSetTableController = execSetControllerFactory.create({
+          hostEl: dom.execSetTableHost,
+          searchInputEl: dom.execSetSearchInput,
+          searchClearBtnEl: dom.execSetSearchClearBtn,
+          paginationTopEl: dom.execSetPaginationTop,
+          paginationBottomEl: dom.execSetPaginationBottom,
+          eventRoot: dom.execSetDrawer,
+          pageSize: getPageSize(),
+          formatTime: formatTime,
         });
       }
 
@@ -1706,9 +1535,7 @@
   }
 
   function handlePageSizeChanged() {
-    if (dom.execSetDrawer && dom.execSetDrawer.classList && dom.execSetDrawer.classList.contains('open')) {
-      renderExecSetDrawer();
-    }
+    if (execSetTableController) execSetTableController.setPageSize(getPageSize());
   }
 
   function bindTabActivation() {

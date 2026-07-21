@@ -328,7 +328,6 @@
     if (tabButtons && typeof tabButtons.forEach === 'function') {
       tabButtons.forEach(function(btn) {
         btn.addEventListener('click', function() {
-          if (btn.dataset && btn.dataset.tabBtn) switchTab(btn.dataset.tabBtn);
           if (btn.dataset && btn.dataset.tabBtn === 'tempexec') scheduleSyncTempexecNavHeight();
           resetSmartScroll();
         });

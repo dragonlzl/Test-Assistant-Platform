@@ -15,6 +15,9 @@
       || (window.app && window.app.xmindCoverageCaseTooltipCore ? window.app.xmindCoverageCaseTooltipCore : null);
     var workspaceRecoveryCore = ctx.workspaceRecoveryCore
       || (window.app && window.app.xmindWorkspaceRecoveryCore ? window.app.xmindWorkspaceRecoveryCore : null);
+    var drawerShellPort = window.app && window.app.ui ? window.app.ui.DrawerShell : null;
+    var drawerFullscreenPort = drawerShellPort ? drawerShellPort.fullscreen : null;
+    var drawerScrollLockPort = drawerShellPort ? drawerShellPort.scrollLock : null;
 
     function getRenderPolicyCore() {
       if (renderPolicyCore) return renderPolicyCore;
@@ -84,7 +87,6 @@
     var openBtn = document.getElementById('xmindCaseGenOpenBtn');
     var drawerEl = document.getElementById('xmindCaseGenDrawer');
     var drawerTitleEl = document.getElementById('xmindCaseGenDrawerTitle');
-    var workspaceLayerEl = document.getElementById('xmindCaseGenWorkspaceLayer');
     var workspaceListEl = document.getElementById('xmindCaseGenWorkspaceList');
     var workspaceAddBtn = document.getElementById('xmindCaseGenWorkspaceAddBtn');
     var toolbarEl = document.getElementById('xmindCaseGenToolbar');
@@ -108,6 +110,11 @@
     var exportMarkdownBtn = document.getElementById('xmindCaseGenExportMarkdownBtn');
     var statusEl = document.getElementById('xmindCaseGenStatus');
     var mindContainer = document.getElementById('xmindCaseGenMindContainer');
+
+    function setDrawerFullscreenState(enabled) {
+      if (!drawerEl || !drawerFullscreenPort || typeof drawerFullscreenPort.set !== 'function') return false;
+      return drawerFullscreenPort.set(drawerEl, enabled === true);
+    }
 
     var renderTimer = 0;
     var queuedMindRender = null;
@@ -218,14 +225,6 @@
     var multimodalMaxImages = 20;
     var multimodalMaxEdge = 1600;
     var multimodalMaxBytes = 4 * 1024 * 1024;
-    var WORKSPACE_HOST_KEYS = {
-      activeWorkspaceId: 1,
-      mirrorWorkspaceId: 1,
-      workspaceOrder: 1,
-      workspaces: 1,
-      nextWorkspaceSeq: 1,
-      openButtonDotVisible: 1,
-    };
     var SHARED_WORKSPACE_CASEGEN_SETTING_KEYS = [
       'activeTab',
       'customRequirement',
@@ -261,6 +260,92 @@
       APPEND: 'module-append',
       ROLLBACK: 'module-rollback',
     };
+    var caseModelFactory = ctx.caseModelFactory
+      || (window.app && window.app.xmindCasegenCaseModel ? window.app.xmindCasegenCaseModel : null);
+    if (!caseModelFactory || typeof caseModelFactory.create !== 'function') {
+      throw new Error('xmindCasegenCaseModel 未加载');
+    }
+    var caseModel = caseModelFactory.create({
+      normalizeText: normalizeText,
+      stringifyField: stringifyField,
+      normalizeModuleTitle: normalizeModuleTitle,
+      normalizeCaseTitle: normalizeCaseTitle,
+    });
+    var normalizeCaseItem = caseModel.normalizeCaseItem;
+    var normalizeFallbackCaseList = caseModel.normalizeFallbackCaseList;
+    var buildCaseSignature = caseModel.buildCaseSignature;
+    var modelOutputParserFactory = ctx.modelOutputParserFactory
+      || (window.app && window.app.xmindCasegenModelOutputParser ? window.app.xmindCasegenModelOutputParser : null);
+    if (!modelOutputParserFactory || typeof modelOutputParserFactory.create !== 'function') {
+      throw new Error('xmindCasegenModelOutputParser 未加载');
+    }
+    var modelOutputParser = modelOutputParserFactory.create({
+      stripCodeFence: stripCodeFence,
+      normalizeModuleTitle: normalizeModuleTitle,
+      normalizeArrayField: normalizeArrayField,
+      normalizeCaseItem: normalizeCaseItem,
+    });
+    var summarizeModelOutputText = modelOutputParser.summarizeModelOutputText;
+    var normalizeHistoryLongText = modelOutputParser.normalizeHistoryLongText;
+    var extractJsonPayloadDetailed = modelOutputParser.extractJsonPayloadDetailed;
+    var normalizeModelModulesOutputDetailed = modelOutputParser.normalizeModelModulesOutputDetailed;
+    var generationPolicyModelFactory = ctx.generationPolicyModelFactory
+      || (window.app && window.app.xmindCasegenGenerationPolicyModel
+        ? window.app.xmindCasegenGenerationPolicyModel
+        : null);
+    if (!generationPolicyModelFactory || typeof generationPolicyModelFactory.create !== 'function') {
+      throw new Error('xmindCasegenGenerationPolicyModel 未加载');
+    }
+    var generationPolicyModel = generationPolicyModelFactory.create({
+      rootActions: ROOT_ACTIONS,
+      moduleActions: MODULE_ACTIONS,
+      cloneJson: cloneJson,
+      normalizeModuleTitle: normalizeModuleTitle,
+      normalizeModuleKey: normalizeModuleKey,
+      normalizeArrayField: normalizeArrayField,
+      normalizeCaseTitle: normalizeCaseTitle,
+      normalizeCaseItem: normalizeCaseItem,
+      getVisibleCasesForModuleEntry: getVisibleCasesForModuleEntry,
+      normalizeHistoryLongText: normalizeHistoryLongText,
+    });
+    var createOperationContract = generationPolicyModel.createOperationContract;
+    var applyExistingCasesCompletionPolicy = generationPolicyModel.applyExistingCasesCompletionPolicy;
+    var applyImportedBaselineCompletionPolicy = generationPolicyModel.applyImportedBaselineCompletionPolicy;
+    var getExistingCasesCompletionPolicy = generationPolicyModel.getExistingCasesCompletionPolicy;
+    var getImportedBaselineCompletionPolicy = generationPolicyModel.getImportedBaselineCompletionPolicy;
+    var filterModulesByContract = generationPolicyModel.filterModulesByContract;
+    var mergeCasesWithoutDuplicates = generationPolicyModel.mergeCasesWithoutDuplicates;
+    var getDiagnosticsMetric = generationPolicyModel.getDiagnosticsMetric;
+    var buildGenerationErrorInfo = generationPolicyModel.buildGenerationErrorInfo;
+    var buildRootNoChangeInfo = generationPolicyModel.buildRootNoChangeInfo;
+    var buildModuleNoChangeInfo = generationPolicyModel.buildModuleNoChangeInfo;
+    var historyModelFactory = ctx.historyModelFactory
+      || (window.app && window.app.xmindCasegenHistoryModel ? window.app.xmindCasegenHistoryModel : null);
+    if (!historyModelFactory || typeof historyModelFactory.create !== 'function') {
+      throw new Error('xmindCasegenHistoryModel 未加载');
+    }
+    var historyModel = historyModelFactory.create({
+      escapeHtml: escapeHtml,
+      normalizeModuleTitle: normalizeModuleTitle,
+      normalizeModuleKey: normalizeModuleKey,
+      rootActions: ROOT_ACTIONS,
+      moduleActions: MODULE_ACTIONS,
+      getRootFullCasesLabel: getRootFullCasesLabel,
+      getModuleFullCasesLabel: getModuleFullCasesLabel,
+      getRequirementLabelText: getRequirementLabelText,
+    });
+    var getRootHistoryActionLabel = historyModel.getRootHistoryActionLabel;
+    var getModuleHistoryActionLabel = historyModel.getModuleHistoryActionLabel;
+    var getGenerationFailureLabel = historyModel.getGenerationFailureLabel;
+    var buildHistoryLocationLabel = historyModel.buildHistoryLocationLabel;
+    var normalizeHistoryDurationMs = historyModel.normalizeHistoryDurationMs;
+    var getTaskModelRequestDurationMs = historyModel.getTaskModelRequestDurationMs;
+    var formatHistoryDuration = historyModel.formatHistoryDuration;
+    var normalizeHistoryDetails = historyModel.normalizeHistoryDetails;
+    var normalizeHistoryDiagnostics = historyModel.normalizeHistoryDiagnostics;
+    var normalizeHistoryDedupeRecords = historyModel.normalizeHistoryDedupeRecords;
+    var normalizeHistoryPreviewText = historyModel.normalizeHistoryPreviewText;
+    var buildHistoryListHtml = historyModel.buildHistoryListHtml;
     var COMMON_ACTIONS = {
       DELETE: 'xmind-delete-selection',
     };
@@ -272,182 +357,134 @@
     var DEDUPE_MIN_VISIBLE_MS = 260;
     var DEDUPE_TERMINAL_GRACE_MS = 1200;
     var DEDUPE_TERMINAL_VISUAL_MS = 3200;
-
-    function createDefaultPrepState() {
-      return {
-        step: STEP_REQUIREMENT,
-        requirementMode: '',
-        requirementSupplement: '',
-        manualRequirementLabel: '',
-        manualRequirementBlocks: [],
-        caseImportMode: '',
-        baseLocked: false,
-        completed: false,
-      };
+    var stateModelFactory = ctx.stateModelFactory
+      || (window.app && window.app.xmindCasegenStateModel ? window.app.xmindCasegenStateModel : null);
+    if (!stateModelFactory || typeof stateModelFactory.create !== 'function') {
+      throw new Error('xmindCasegenStateModel 未加载');
     }
-
-    function createDefaultRootState() {
-      return {
-        lastAction: '',
-        running: false,
-        taskId: '',
-        hideAiLayer: false,
-        snapshotId: '',
-        status: '',
-        error: '',
-        updatedAt: 0,
-        pipeline: null,
-      };
+    var stateModel = stateModelFactory.create({
+      stepRequirement: STEP_REQUIREMENT,
+      dedupeModeOnly: DEDUPE_MODE_ONLY,
+      sharedCaseGenSettingKeys: SHARED_WORKSPACE_CASEGEN_SETTING_KEYS,
+      cloneJson: cloneJson,
+      normalizeUniqueStringList: normalizeUniqueStringList,
+      normalizeDedupeMode: normalizeDedupeMode,
+      normalizeHistoryDedupeRecords: normalizeHistoryDedupeRecords,
+      normalizeRootPipelineDedupeModules: normalizeRootPipelineDedupeModules,
+      normalizeModuleTitle: normalizeModuleTitle,
+      normalizeHistoryDurationMs: normalizeHistoryDurationMs,
+      normalizeHistoryDiagnostics: normalizeHistoryDiagnostics,
+      normalizePersistedRequirementLabel: normalizePersistedRequirementLabel,
+      createDefaultKnowledgeBaseState: createDefaultKnowledgeBaseState,
+      normalizeKnowledgeBaseState: normalizeKnowledgeBaseState,
+      areRestoreContextsCompatible: function(baseContext, incomingContext) {
+        var recoveryCore = getWorkspaceRecoveryCore();
+        if (!recoveryCore || typeof recoveryCore.areRestoreContextsCompatible !== 'function') return true;
+        return recoveryCore.areRestoreContextsCompatible(baseContext, incomingContext) === true;
+      },
+      createRootPipelineId: buildRootPipelineId,
+      now: function() { return Date.now(); },
+    });
+    var createDefaultPrepState = stateModel.createDefaultPrepState;
+    var createDefaultRootState = stateModel.createDefaultRootState;
+    var createDefaultDedupeState = stateModel.createDefaultDedupeState;
+    var createDefaultCoverageState = stateModel.createDefaultCoverageState;
+    var normalizeCoverageState = stateModel.normalizeCoverageState;
+    var createDefaultViewState = stateModel.createDefaultViewState;
+    var normalizeStoredViewState = stateModel.normalizeStoredViewState;
+    var mergeStoredViewState = stateModel.mergeStoredViewState;
+    var shouldRestoreViewportForViewState = stateModel.shouldRestoreViewportForViewState;
+    var cloneSelectionMap = stateModel.cloneSelectionMap;
+    var createEmptyRequirementMedia = stateModel.createEmptyRequirementMedia;
+    var createDefaultCaseGenSettings = stateModel.createDefaultCaseGenSettings;
+    var createEmptyWorkspaceSharedState = stateModel.createEmptyWorkspaceSharedState;
+    var cloneCaseGenSettingsValue = stateModel.cloneCaseGenSettingsValue;
+    var cloneRequirementMediaValue = stateModel.cloneRequirementMediaValue;
+    var createRootPipelineState = stateModel.createRootPipelineState;
+    var cloneRootPipelineSnapshot = stateModel.cloneRootPipelineSnapshot;
+    var buildCompactRootPipelineRestoreSnapshot = stateModel.buildCompactRootPipelineRestoreSnapshot;
+    var mergeRootPipelineSnapshot = stateModel.mergeRootPipelineSnapshot;
+    var createInitialXmindState = stateModel.createInitialXmindState;
+    var normalizeWorkspaceSharedState = stateModel.normalizeWorkspaceSharedState;
+    var createWorkspaceSnapshot = stateModel.createWorkspaceSnapshot;
+    var normalizeWorkspaceSnapshot = stateModel.normalizeWorkspaceSnapshot;
+    var workspaceSnapshotHasContent = stateModel.workspaceSnapshotHasContent;
+    var workspaceSnapshotHasGeneratedContent = stateModel.workspaceSnapshotHasGeneratedContent;
+    var workspaceSnapshotHasPrepDraft = stateModel.workspaceSnapshotHasPrepDraft;
+    var mergeRestoreResultMap = stateModel.mergeRestoreResultMap;
+    var deriveNextOperationSnapshotId = stateModel.deriveNextOperationSnapshotId;
+    var buildOperationSnapshotRestoreVersion = stateModel.buildOperationSnapshotRestoreVersion;
+    var shouldPreferRestoreOperationSnapshots = stateModel.shouldPreferRestoreOperationSnapshots;
+    var mergeTaskRestoreContext = stateModel.mergeTaskRestoreContext;
+    var workspaceStateControllerFactory = ctx.workspaceStateControllerFactory
+      || (window.app && window.app.xmindCasegenWorkspaceStateController
+        ? window.app.xmindCasegenWorkspaceStateController
+        : null);
+    if (!workspaceStateControllerFactory || typeof workspaceStateControllerFactory.create !== 'function') {
+      throw new Error('xmindCasegenWorkspaceStateController 未加载');
     }
-
-    function createDefaultDedupeState() {
-      return {
-        running: false,
-        taskId: '',
-        status: '',
-        error: '',
-        dedupeMode: DEDUPE_MODE_ONLY,
-        batchCompleted: 0,
-        batchTotal: 0,
-        lastResult: null,
-        updatedAt: 0,
-      };
-    }
-
-    function createDefaultCoverageState() {
-      return {
-        running: false,
-        taskId: '',
-        status: '',
-        error: '',
-        result: null,
-        signature: '',
-        selectedSegmentId: '',
-        updatedAt: 0,
-      };
-    }
-
-    function normalizeCoverageState(value) {
-      var source = value && typeof value === 'object' ? value : {};
-      var next = createDefaultCoverageState();
-      next.running = source.running === true;
-      next.taskId = source.taskId ? String(source.taskId || '') : '';
-      next.status = source.status ? String(source.status || '') : '';
-      next.error = source.error ? String(source.error || '') : '';
-      next.result = source.result && typeof source.result === 'object'
-        ? cloneJson(source.result, null)
-        : null;
-      next.signature = source.signature ? String(source.signature || '') : '';
-      if (!next.signature && next.result && next.result.signature) {
-        next.signature = String(next.result.signature || '');
-      }
-      next.selectedSegmentId = source.selectedSegmentId ? String(source.selectedSegmentId || '') : '';
-      if (!next.selectedSegmentId && next.result && next.result.selectedSegmentId) {
-        next.selectedSegmentId = String(next.result.selectedSegmentId || '');
-      }
-      next.updatedAt = Number(source.updatedAt || 0) || 0;
-      return next;
-    }
-
-    function createDefaultViewState() {
-      return {
-        drawerOpen: false,
-        fullscreen: false,
-        transform: '',
-        scaleVal: 1,
-        scrollLeft: 0,
-        scrollTop: 0,
-        hasManualViewport: false,
-        anchorState: null,
-        toolbarCollapsed: false,
-        collapsedNodeKeys: [],
-        treeSourceSignature: '',
-        updatedAt: 0,
-      };
-    }
-
-    function normalizeStoredViewState(source, options) {
-      var input = source && typeof source === 'object' ? source : {};
-      var opts = options || {};
-      var next = createDefaultViewState();
-      next.drawerOpen = opts.drawerOpen === true || input.drawerOpen === true;
-      next.fullscreen = opts.fullscreen === true || input.fullscreen === true;
-      next.transform = String(input.transform || '');
-      next.scaleVal = Number(input.scaleVal || 1);
-      if (!isFinite(next.scaleVal) || next.scaleVal <= 0) next.scaleVal = 1;
-      next.scrollLeft = Number(input.scrollLeft || 0);
-      if (!isFinite(next.scrollLeft) || next.scrollLeft < 0) next.scrollLeft = 0;
-      next.scrollTop = Number(input.scrollTop || 0);
-      if (!isFinite(next.scrollTop) || next.scrollTop < 0) next.scrollTop = 0;
-      next.hasManualViewport = input.hasManualViewport === true && Boolean(next.transform);
-      next.anchorState = input.anchorState && input.anchorState.nodeId
-        ? {
-          nodeId: String(input.anchorState.nodeId || ''),
-          centerX: Number(input.anchorState.centerX || 0),
-          centerY: Number(input.anchorState.centerY || 0),
-        }
-        : null;
-      next.toolbarCollapsed = input.toolbarCollapsed === true;
-      next.collapsedNodeKeys = normalizeUniqueStringList(input.collapsedNodeKeys);
-      next.treeSourceSignature = String(input.treeSourceSignature || '');
-      next.updatedAt = Number(input.updatedAt || 0);
-      if (!isFinite(next.updatedAt) || next.updatedAt < 0) next.updatedAt = 0;
-      return next;
-    }
-
-    function shouldPreferIncomingViewState(baseViewState, incomingViewState) {
-      var base = normalizeStoredViewState(baseViewState);
-      var incoming = normalizeStoredViewState(incomingViewState);
-      if (!incoming.transform && incoming.updatedAt <= 0) return false;
-      if (!base.transform && incoming.transform) return true;
-      if (base.hasManualViewport !== true && incoming.hasManualViewport === true) return true;
-      if (incoming.updatedAt > base.updatedAt) return true;
-      if (incoming.updatedAt === base.updatedAt && incoming.transform && incoming.transform !== base.transform) {
-        return true;
-      }
-      return false;
-    }
-
-    function mergeStoredViewState(baseViewState, incomingViewState) {
-      var base = normalizeStoredViewState(baseViewState);
-      var incoming = normalizeStoredViewState(incomingViewState);
-      var preferIncoming = shouldPreferIncomingViewState(base, incoming);
-      var merged = preferIncoming
-        ? cloneJson(incoming, createDefaultViewState())
-        : cloneJson(base, createDefaultViewState());
-      var baseUpdatedAt = Number(base.updatedAt || 0);
-      var incomingUpdatedAt = Number(incoming.updatedAt || 0);
-      if (incomingUpdatedAt > baseUpdatedAt) {
-        merged.drawerOpen = incoming.drawerOpen === true;
-        merged.fullscreen = incoming.fullscreen === true;
-      } else if (baseUpdatedAt > incomingUpdatedAt) {
-        merged.drawerOpen = base.drawerOpen === true;
-        merged.fullscreen = base.fullscreen === true;
-      } else {
-        merged.drawerOpen = preferIncoming ? incoming.drawerOpen === true : base.drawerOpen === true;
-        merged.fullscreen = preferIncoming ? incoming.fullscreen === true : base.fullscreen === true;
-      }
-      if (!merged.transform && incoming.transform) {
-        merged = cloneJson(incoming, createDefaultViewState());
-        if (incomingUpdatedAt > baseUpdatedAt) {
-          merged.drawerOpen = incoming.drawerOpen === true;
-          merged.fullscreen = incoming.fullscreen === true;
-        } else if (baseUpdatedAt > incomingUpdatedAt) {
-          merged.drawerOpen = base.drawerOpen === true;
-          merged.fullscreen = base.fullscreen === true;
-        } else {
-          merged.drawerOpen = incoming.drawerOpen === true;
-          merged.fullscreen = incoming.fullscreen === true;
-        }
-      }
-      merged.updatedAt = Math.max(baseUpdatedAt, incomingUpdatedAt, Number(merged.updatedAt || 0) || 0);
-      return normalizeStoredViewState(merged);
-    }
-
-    function shouldRestoreViewportForViewState(viewState) {
-      var normalized = normalizeStoredViewState(viewState);
-      return normalized.hasManualViewport === true && Boolean(normalized.transform);
-    }
+    var workspaceStateController = workspaceStateControllerFactory.create({
+      state: state,
+      stateModel: stateModel,
+      cloneJson: cloneJson,
+      snapshotPort: {
+        ensureActiveState: ensureState,
+        captureCurrent: createWorkspaceSnapshotFromCurrent,
+        applyShared: applySharedWorkspaceSnapshot,
+        syncSummaryDraft: syncSummaryDraftIntoState,
+        setDrawerState: function(drawerOpen, fullscreen) {
+          getViewState().drawerOpen = drawerOpen === true;
+          getViewState().fullscreen = fullscreen === true;
+        },
+        postHydrate: function() {
+          syncInlineStatusFromState();
+          syncKnowledgeBaseToolbarState();
+        },
+      },
+      persistencePort: {
+        persistDeferred: persistWorkflowState,
+        persistImmediate: persistWorkflowStateNow,
+        syncRestoreContexts: syncRunningTaskRestoreContexts,
+      },
+      environmentPort: {
+        hasImportedBaseline: hasImportedBaselineCases,
+        isDrawerOpen: isDrawerOpen,
+        isDrawerFullscreen: function() {
+          return Boolean(drawerEl && drawerEl.classList
+            && drawerEl.classList.contains('xmind-drawer-fullscreen'));
+        },
+        isPageSuspending: isPageSuspending,
+        getShadowDepth: function() { return workspaceShadowDepth; },
+      },
+      getTaskManager: getXmindTaskManager,
+      getRecoveryCore: getWorkspaceRecoveryCore,
+      deriveLiveWorkspaceName: deriveLiveWorkspaceRecordName,
+      normalizeRequirementLabelFromFileName: normalizeRequirementLabelFromFileName,
+    });
+    var persistXmindState = workspaceStateController.persistXmindState;
+    var persistManagedTaskWorkspaceState = workspaceStateController.persistManagedTaskWorkspaceState;
+    var extractActiveXmindStateSnapshot = workspaceStateController.extractActiveXmindStateSnapshot;
+    var applyActiveXmindStateSnapshot = workspaceStateController.applyActiveXmindStateSnapshot;
+    var createWorkspaceRecord = workspaceStateController.createWorkspaceRecord;
+    var getWorkspaceHostState = workspaceStateController.getWorkspaceHostState;
+    var isDefaultWorkspaceRecordName = workspaceStateController.isDefaultWorkspaceRecordName;
+    var buildDefaultWorkspaceRecordName = workspaceStateController.buildDefaultWorkspaceRecordName;
+    var resetActiveWorkspaceRecordNameToDefault = workspaceStateController.resetActiveWorkspaceRecordNameToDefault;
+    var resetActiveWorkspaceRecordSnapshotToInitial = workspaceStateController.resetActiveWorkspaceRecordSnapshotToInitial;
+    var captureWorkspaceSnapshot = workspaceStateController.captureWorkspaceSnapshot;
+    var ensureWorkspaceHostState = workspaceStateController.ensureWorkspaceHostState;
+    var getActiveWorkspaceId = workspaceStateController.getActiveWorkspaceId;
+    var getMirrorWorkspaceId = workspaceStateController.getMirrorWorkspaceId;
+    var getWorkspaceUiSelectedId = workspaceStateController.getWorkspaceUiSelectedId;
+    var setMirrorWorkspaceSelection = workspaceStateController.setMirrorWorkspaceSelection;
+    var getWorkspaceRecord = workspaceStateController.getWorkspaceRecord;
+    var clearManagedTasksForWorkspace = workspaceStateController.clearManagedTasksForWorkspace;
+    var rotateWorkspaceGeneration = workspaceStateController.rotateWorkspaceGeneration;
+    var ensureWorkspaceRecordFromCurrentContent = workspaceStateController.ensureWorkspaceRecordFromCurrentContent;
+    var saveActiveWorkspaceSnapshot = workspaceStateController.saveActiveWorkspaceSnapshot;
+    var hydrateWorkspaceSnapshot = workspaceStateController.hydrateWorkspaceSnapshot;
+    var buildWorkspaceDisplayName = workspaceStateController.buildWorkspaceDisplayName;
+    var buildWorkspaceId = workspaceStateController.buildWorkspaceId;
 
     function isMindCanvasInteractionTarget(target) {
       if (!target || !target.closest) return false;
@@ -566,125 +603,6 @@
       } catch (err) {
         return false;
       }
-    }
-
-    function cloneSelectionMap(source) {
-      var result = {};
-      var map = source && typeof source === 'object' ? source : {};
-      Object.keys(map).forEach(function(key) {
-        var list = [];
-        var current = map[key];
-        if (current && typeof current.forEach === 'function') {
-          current.forEach(function(value) {
-            var num = Number(value);
-            if (Number.isFinite(num)) list.push(num);
-          });
-        } else if (Array.isArray(current)) {
-          current.forEach(function(value) {
-            var num = Number(value);
-            if (Number.isFinite(num)) list.push(num);
-          });
-        }
-        result[key] = list;
-      });
-      return result;
-    }
-
-    function createEmptyRequirementMedia() {
-      return {
-        docxImages: [],
-        pastedImages: [],
-        lastDocxImageCount: 0,
-        updatedAt: Date.now(),
-      };
-    }
-
-    function createDefaultCaseGenSettings() {
-      return {
-        activeTab: 'settings',
-        customRequirement: '',
-        dedupeSimplify: false,
-        needFunctionCondition: true,
-        needNumericValidation: true,
-        needBoundary: false,
-        needMobile: false,
-        needSpecial: false,
-        specialRepeatOperation: false,
-        specialMultiTouch: false,
-        specialRepeatExecution: false,
-        specialWeakNetwork: false,
-        specialInterruptResume: false,
-      };
-    }
-
-    function createEmptyWorkspaceSharedState() {
-      return {
-        requirementLabel: '',
-        requirementLabelSource: '',
-        lastRawImportName: '',
-        rawText: '',
-        caseText: '',
-        importedCases: [],
-        caseGenModules: [],
-        caseGenSource: '',
-        caseGenResults: {},
-        caseSelections: {},
-        caseGenSuggestions: {},
-        caseGenModuleStatus: {},
-        caseGenProgress: {},
-        caseGenTiming: {},
-        caseGenProgressNotice: {},
-        caseGenSettings: createDefaultCaseGenSettings(),
-        requirementMedia: createEmptyRequirementMedia(),
-      };
-    }
-
-    function cloneCaseGenSettingsValue(value) {
-      var next = createDefaultCaseGenSettings();
-      var source = value && typeof value === 'object' ? value : {};
-      SHARED_WORKSPACE_CASEGEN_SETTING_KEYS.forEach(function(key) {
-        if (!Object.prototype.hasOwnProperty.call(source, key)) return;
-        next[key] = cloneJson(source[key], source[key]);
-      });
-      next.activeTab = next.activeTab === 'settings' ? 'settings' : 'settings';
-      next.customRequirement = String(next.customRequirement || '');
-      next.dedupeSimplify = next.dedupeSimplify === true;
-      next.needFunctionCondition = next.needFunctionCondition !== false;
-      next.needNumericValidation = next.needNumericValidation !== false;
-      next.needBoundary = next.needBoundary === true;
-      next.needMobile = next.needMobile === true;
-      next.needSpecial = next.needSpecial === true;
-      next.specialRepeatOperation = next.specialRepeatOperation === true;
-      next.specialMultiTouch = next.specialMultiTouch === true;
-      next.specialRepeatExecution = next.specialRepeatExecution === true;
-      next.specialWeakNetwork = next.specialWeakNetwork === true;
-      next.specialInterruptResume = next.specialInterruptResume === true;
-      return next;
-    }
-
-    function cloneRequirementMediaValue(value) {
-      var source = value && typeof value === 'object' ? value : {};
-      var next = createEmptyRequirementMedia();
-      function cloneMediaList(list) {
-        var result = [];
-        (Array.isArray(list) ? list : []).forEach(function(item) {
-          if (!item || typeof item !== 'object') return;
-          var cloned = {};
-          Object.keys(item).forEach(function(key) {
-            cloned[key] = item[key];
-          });
-          result.push(cloned);
-        });
-        return result;
-      }
-      next.docxImages = cloneMediaList(source.docxImages);
-      next.pastedImages = cloneMediaList(source.pastedImages);
-      next.lastDocxImageCount = Number(source.lastDocxImageCount || 0);
-      if (!Number.isFinite(next.lastDocxImageCount) || next.lastDocxImageCount < 0) {
-        next.lastDocxImageCount = 0;
-      }
-      next.updatedAt = Number(source.updatedAt || 0) || Date.now();
-      return next;
     }
 
     function restoreSelectionMap(snapshotMap) {
@@ -2094,50 +2012,6 @@
       return drawerLegacyRestoreSnapshot;
     }
 
-    function buildLegacyRestoreSignature(snapshot) {
-      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
-      var importedCases = Array.isArray(source.importedCases) ? source.importedCases : [];
-      var modules = Array.isArray(source.modules)
-        ? source.modules
-        : (Array.isArray(source.caseGenModules) ? source.caseGenModules : []);
-      var results = source.results && typeof source.results === 'object'
-        ? source.results
-        : (source.caseGenResults && typeof source.caseGenResults === 'object' ? source.caseGenResults : {});
-      return JSON.stringify({
-        requirementLabel: String(source.requirementLabel || ''),
-        lastRawImportName: String(source.lastRawImportName || ''),
-        rawText: String(source.rawText || ''),
-        importedNames: importedCases.map(function(item) {
-          return String(item && item.name ? item.name : '');
-        }).filter(Boolean).sort(),
-        moduleNames: modules.map(function(item) {
-          return normalizeModuleTitle(item && (item.title || item.module || ''));
-        }).filter(Boolean).sort(),
-        resultKeys: Object.keys(results || {}).sort(),
-      });
-    }
-
-    function shouldApplyDrawerLegacyRestoreSnapshot() {
-      if (!drawerLegacyRestoreSnapshot || typeof drawerLegacyRestoreSnapshot !== 'object') return false;
-      var currentLegacy = state.caseGenLegacy && typeof state.caseGenLegacy === 'object'
-        ? state.caseGenLegacy
-        : null;
-      if (!currentLegacy) return true;
-      var currentLegacySignature = buildLegacyRestoreSignature(currentLegacy);
-      var currentSharedSignature = buildLegacyRestoreSignature(buildCurrentSharedWorkspaceSnapshot());
-      var cachedSignature = buildLegacyRestoreSignature(drawerLegacyRestoreSnapshot);
-      if (!currentLegacySignature) return true;
-      return currentLegacySignature === currentSharedSignature
-        && cachedSignature
-        && cachedSignature !== currentSharedSignature;
-    }
-
-    function primeLegacyWorkflowContextForClose() {
-      if (!shouldApplyDrawerLegacyRestoreSnapshot()) return false;
-      state.caseGenLegacy = cloneJson(drawerLegacyRestoreSnapshot, {});
-      return true;
-    }
-
     function finalizeLegacyWorkflowRestore() {
       restoreLegacyWorkflowContext({
         allowWhileXmindMirror: true,
@@ -2212,12 +2086,7 @@
           }
           getViewState().updatedAt = Date.now();
           clearOpenButtonCompletionNotice({ persist: restoreOpening !== true });
-          if (drawerEl && drawerEl.classList) {
-            drawerEl.classList.toggle(
-              'xmind-drawer-fullscreen',
-              getViewState().fullscreen === true && restoreOpening !== true
-            );
-          }
+          setDrawerFullscreenState(getViewState().fullscreen === true && restoreOpening !== true);
           setDebugState({ phase: 'drawer-open' });
           if (!restoreOpening) {
             try {
@@ -2670,226 +2539,6 @@
       return setRootPipelineState(null);
     }
 
-    function createRootPipelineState(payload) {
-      var input = payload && typeof payload === 'object' ? payload : {};
-      return {
-        id: input.id ? String(input.id || '') : buildRootPipelineId(),
-        actionId: input.actionId ? String(input.actionId || '') : '',
-        snapshotId: input.snapshotId ? String(input.snapshotId || '') : '',
-        historyActionLabel: input.historyActionLabel ? String(input.historyActionLabel || '') : '',
-        stage: input.stage ? String(input.stage || '') : '',
-        discoveryStatus: input.discoveryStatus ? String(input.discoveryStatus || '') : '',
-        hadAiContentBeforeAction: input.hadAiContentBeforeAction === true,
-        hadAiLayerBeforeAction: input.hadAiLayerBeforeAction === true,
-        hadAiCasesBeforeAction: input.hadAiCasesBeforeAction === true,
-        restoredAfterRefresh: input.restoredAfterRefresh === true,
-        cancelled: input.cancelled === true,
-        cancelReason: input.cancelReason ? String(input.cancelReason || '') : '',
-        errorCount: Number(input.errorCount || 0),
-        createdModules: Number(input.createdModules || 0),
-        addedCases: Number(input.addedCases || 0),
-        moduleTaskTotal: Number(input.moduleTaskTotal || 0),
-        moduleTaskCompleted: Number(input.moduleTaskCompleted || 0),
-        moduleTaskCompletedKeys: normalizeUniqueStringList(input.moduleTaskCompletedKeys || []),
-        dedupeStatus: input.dedupeStatus ? String(input.dedupeStatus || '') : '',
-        dedupeTaskId: input.dedupeTaskId ? String(input.dedupeTaskId || '') : '',
-        dedupeMode: input.dedupeMode ? normalizeDedupeMode(input.dedupeMode) : '',
-        dedupeBeforeCount: Number(input.dedupeBeforeCount || 0),
-        dedupeAfterCount: Number(input.dedupeAfterCount || 0),
-        dedupeRemovedCount: Number(input.dedupeRemovedCount || 0),
-        dedupeError: input.dedupeError ? String(input.dedupeError || '') : '',
-        dedupeRecords: normalizeHistoryDedupeRecords(input.dedupeRecords || input.removedCases || []),
-        generatedDedupeModules: normalizeRootPipelineDedupeModules(input.generatedDedupeModules || []),
-        detailMap: cloneJson(input.detailMap, {}) || {},
-        diagnostics: Array.isArray(input.diagnostics) ? input.diagnostics.slice() : [],
-        pendingQueue: Array.isArray(input.pendingQueue) ? cloneJson(input.pendingQueue, []) || [] : [],
-        updatedAt: Date.now(),
-      };
-    }
-
-    function cloneRootPipelineSnapshot(snapshot) {
-      if (!snapshot || typeof snapshot !== 'object') return null;
-      var cloned = createRootPipelineState({
-        id: snapshot.id,
-        actionId: snapshot.actionId,
-        snapshotId: snapshot.snapshotId,
-        historyActionLabel: snapshot.historyActionLabel,
-        stage: snapshot.stage,
-        discoveryStatus: snapshot.discoveryStatus,
-        hadAiContentBeforeAction: snapshot.hadAiContentBeforeAction === true,
-        hadAiLayerBeforeAction: snapshot.hadAiLayerBeforeAction === true,
-        hadAiCasesBeforeAction: snapshot.hadAiCasesBeforeAction === true,
-        restoredAfterRefresh: snapshot.restoredAfterRefresh === true,
-        cancelled: snapshot.cancelled === true,
-        cancelReason: snapshot.cancelReason,
-        errorCount: snapshot.errorCount,
-        createdModules: snapshot.createdModules,
-        addedCases: snapshot.addedCases,
-        moduleTaskTotal: snapshot.moduleTaskTotal,
-        moduleTaskCompleted: snapshot.moduleTaskCompleted,
-        moduleTaskCompletedKeys: snapshot.moduleTaskCompletedKeys,
-        dedupeStatus: snapshot.dedupeStatus,
-        dedupeTaskId: snapshot.dedupeTaskId,
-        dedupeMode: snapshot.dedupeMode,
-        dedupeBeforeCount: snapshot.dedupeBeforeCount,
-        dedupeAfterCount: snapshot.dedupeAfterCount,
-        dedupeRemovedCount: snapshot.dedupeRemovedCount,
-        dedupeError: snapshot.dedupeError,
-        dedupeRecords: snapshot.dedupeRecords,
-        generatedDedupeModules: snapshot.generatedDedupeModules,
-        detailMap: snapshot.detailMap,
-        diagnostics: snapshot.diagnostics,
-        pendingQueue: snapshot.pendingQueue,
-      });
-      cloned.updatedAt = Number(snapshot.updatedAt || 0);
-      if (!Number.isFinite(cloned.updatedAt) || cloned.updatedAt < 0) {
-        cloned.updatedAt = 0;
-      }
-      return cloned;
-    }
-
-    function buildCompactRootPipelineRestoreSnapshot(snapshot) {
-      var cloned = cloneRootPipelineSnapshot(snapshot);
-      if (!cloned) return null;
-      return {
-        id: String(cloned.id || ''),
-        actionId: String(cloned.actionId || ''),
-        snapshotId: String(cloned.snapshotId || ''),
-        historyActionLabel: String(cloned.historyActionLabel || ''),
-        stage: String(cloned.stage || ''),
-        discoveryStatus: String(cloned.discoveryStatus || ''),
-        hadAiContentBeforeAction: cloned.hadAiContentBeforeAction === true,
-        hadAiLayerBeforeAction: cloned.hadAiLayerBeforeAction === true,
-        hadAiCasesBeforeAction: cloned.hadAiCasesBeforeAction === true,
-        restoredAfterRefresh: cloned.restoredAfterRefresh === true,
-        cancelled: cloned.cancelled === true,
-        cancelReason: String(cloned.cancelReason || ''),
-        errorCount: Number(cloned.errorCount || 0) || 0,
-        createdModules: Number(cloned.createdModules || 0) || 0,
-        addedCases: Number(cloned.addedCases || 0) || 0,
-        moduleTaskTotal: Number(cloned.moduleTaskTotal || 0) || 0,
-        moduleTaskCompleted: Number(cloned.moduleTaskCompleted || 0) || 0,
-        moduleTaskCompletedKeys: normalizeUniqueStringList(cloned.moduleTaskCompletedKeys || []),
-        dedupeStatus: String(cloned.dedupeStatus || ''),
-        dedupeTaskId: String(cloned.dedupeTaskId || ''),
-        dedupeMode: cloned.dedupeMode ? normalizeDedupeMode(cloned.dedupeMode) : '',
-        dedupeBeforeCount: Number(cloned.dedupeBeforeCount || 0) || 0,
-        dedupeAfterCount: Number(cloned.dedupeAfterCount || 0) || 0,
-        dedupeRemovedCount: Number(cloned.dedupeRemovedCount || 0) || 0,
-        dedupeError: String(cloned.dedupeError || ''),
-        dedupeRecords: normalizeHistoryDedupeRecords(cloned.dedupeRecords || []),
-        generatedDedupeModules: normalizeRootPipelineDedupeModules(cloned.generatedDedupeModules || []),
-        detailMap: cloneJson(cloned.detailMap, {}) || {},
-        diagnostics: Array.isArray(cloned.diagnostics) ? cloned.diagnostics.slice() : [],
-        pendingQueue: Array.isArray(cloned.pendingQueue) ? cloneJson(cloned.pendingQueue, []) || [] : [],
-        updatedAt: Number(cloned.updatedAt || 0) || 0,
-      };
-    }
-
-    function getRootPipelineSnapshotWeight(pipeline) {
-      var detailMap = pipeline && pipeline.detailMap && typeof pipeline.detailMap === 'object'
-        ? pipeline.detailMap
-        : {};
-      var detailCount = Object.keys(detailMap).length;
-      var diagnosticsCount = Array.isArray(pipeline && pipeline.diagnostics) ? pipeline.diagnostics.length : 0;
-      var dedupeRecordCount = Array.isArray(pipeline && pipeline.dedupeRecords) ? pipeline.dedupeRecords.length : 0;
-      var generatedDedupeCount = Array.isArray(pipeline && pipeline.generatedDedupeModules) ? pipeline.generatedDedupeModules.length : 0;
-      var pendingCount = Array.isArray(pipeline && pipeline.pendingQueue) ? pipeline.pendingQueue.length : 0;
-      return (
-        Number(pipeline && pipeline.createdModules || 0) * 1000
-        + Number(pipeline && pipeline.addedCases || 0) * 10
-        + Number(pipeline && pipeline.moduleTaskTotal || 0) * 5
-        + Number(pipeline && pipeline.moduleTaskCompleted || 0) * 20
-        + detailCount * 100
-        + diagnosticsCount * 10
-        + dedupeRecordCount * 10
-        + generatedDedupeCount * 100
-        + pendingCount
-      );
-    }
-
-    function mergeRootPipelineSnapshot(baseSnapshot, incomingSnapshot) {
-      var base = cloneRootPipelineSnapshot(baseSnapshot);
-      var incoming = cloneRootPipelineSnapshot(incomingSnapshot);
-      if (!base) return incoming;
-      if (!incoming) return base;
-      var baseId = String(base.id || '');
-      var incomingId = String(incoming.id || '');
-      if (baseId && incomingId && baseId !== incomingId) {
-        return getRootPipelineSnapshotWeight(incoming) >= getRootPipelineSnapshotWeight(base)
-          ? incoming
-          : base;
-      }
-
-      function pickString(existingValue, nextValue) {
-        var nextText = nextValue === null || nextValue === undefined ? '' : String(nextValue || '').trim();
-        if (nextText) return nextValue;
-        return existingValue;
-      }
-
-      base.id = pickString(base.id, incoming.id);
-      base.actionId = pickString(base.actionId, incoming.actionId);
-      base.snapshotId = pickString(base.snapshotId, incoming.snapshotId);
-      base.historyActionLabel = pickString(base.historyActionLabel, incoming.historyActionLabel);
-      base.stage = pickString(base.stage, incoming.stage);
-      base.discoveryStatus = pickString(base.discoveryStatus, incoming.discoveryStatus);
-      base.cancelReason = pickString(base.cancelReason, incoming.cancelReason);
-      base.dedupeStatus = pickString(base.dedupeStatus, incoming.dedupeStatus);
-      base.dedupeTaskId = pickString(base.dedupeTaskId, incoming.dedupeTaskId);
-      if (incoming.dedupeMode && (incoming.dedupeStatus || incoming.dedupeTaskId || !base.dedupeMode)) {
-        base.dedupeMode = normalizeDedupeMode(incoming.dedupeMode);
-      } else if (base.dedupeMode) {
-        base.dedupeMode = normalizeDedupeMode(base.dedupeMode);
-      } else {
-        base.dedupeMode = '';
-      }
-      base.dedupeError = pickString(base.dedupeError, incoming.dedupeError);
-      base.hadAiContentBeforeAction = base.hadAiContentBeforeAction === true || incoming.hadAiContentBeforeAction === true;
-      base.hadAiLayerBeforeAction = base.hadAiLayerBeforeAction === true || incoming.hadAiLayerBeforeAction === true;
-      base.hadAiCasesBeforeAction = base.hadAiCasesBeforeAction === true || incoming.hadAiCasesBeforeAction === true;
-      base.restoredAfterRefresh = base.restoredAfterRefresh === true || incoming.restoredAfterRefresh === true;
-      base.cancelled = base.cancelled === true || incoming.cancelled === true;
-      base.errorCount = Math.max(Number(base.errorCount || 0), Number(incoming.errorCount || 0));
-      base.createdModules = Math.max(Number(base.createdModules || 0), Number(incoming.createdModules || 0));
-      base.addedCases = Math.max(Number(base.addedCases || 0), Number(incoming.addedCases || 0));
-      base.moduleTaskTotal = Math.max(Number(base.moduleTaskTotal || 0), Number(incoming.moduleTaskTotal || 0));
-      base.moduleTaskCompleted = Math.max(Number(base.moduleTaskCompleted || 0), Number(incoming.moduleTaskCompleted || 0));
-      base.moduleTaskCompletedKeys = normalizeUniqueStringList((base.moduleTaskCompletedKeys || []).concat(incoming.moduleTaskCompletedKeys || []));
-      if (base.moduleTaskCompletedKeys.length > base.moduleTaskCompleted) {
-        base.moduleTaskCompleted = base.moduleTaskCompletedKeys.length;
-      }
-      base.dedupeBeforeCount = Math.max(Number(base.dedupeBeforeCount || 0), Number(incoming.dedupeBeforeCount || 0));
-      base.dedupeAfterCount = Math.max(Number(base.dedupeAfterCount || 0), Number(incoming.dedupeAfterCount || 0));
-      base.dedupeRemovedCount = Math.max(Number(base.dedupeRemovedCount || 0), Number(incoming.dedupeRemovedCount || 0));
-      base.updatedAt = Math.max(Number(base.updatedAt || 0), Number(incoming.updatedAt || 0));
-
-      var mergedDetailMap = {};
-      [base.detailMap, incoming.detailMap].forEach(function(map) {
-        var source = map && typeof map === 'object' ? map : {};
-        Object.keys(source).forEach(function(key) {
-          var item = source[key];
-          if (!item) return;
-          var caseCount = Number(item.caseCount || 0);
-          if (!Number.isFinite(caseCount) || caseCount < 0) caseCount = 0;
-          if (!mergedDetailMap[key] || caseCount >= Number(mergedDetailMap[key].caseCount || 0)) {
-            mergedDetailMap[key] = {
-              module: normalizeModuleTitle(item.module || ''),
-              caseCount: caseCount,
-              durationMs: normalizeHistoryDurationMs(item.durationMs),
-            };
-          }
-        });
-      });
-      base.detailMap = mergedDetailMap;
-      base.diagnostics = normalizeHistoryDiagnostics((base.diagnostics || []).concat(incoming.diagnostics || []));
-      base.dedupeRecords = normalizeHistoryDedupeRecords((base.dedupeRecords || []).concat(incoming.dedupeRecords || []));
-      base.generatedDedupeModules = normalizeRootPipelineDedupeModules((base.generatedDedupeModules || []).concat(incoming.generatedDedupeModules || []));
-      if (Array.isArray(incoming.pendingQueue) && incoming.pendingQueue.length >= (Array.isArray(base.pendingQueue) ? base.pendingQueue.length : 0)) {
-        base.pendingQueue = cloneJson(incoming.pendingQueue, []) || [];
-      }
-      return base;
-    }
-
     function updateRootPipelineState(mutator) {
       var current = getRootPipelineState();
       if (!current || typeof mutator !== 'function') return null;
@@ -3013,15 +2662,6 @@
         ? currentRootState.pipeline
         : getRootPipelineState();
       return isRootPipelineUiActive(pipeline);
-    }
-
-    function collectRootPipelineTerminalTasks(pipelineId, tasks) {
-      var targetId = String(pipelineId || '');
-      if (!targetId) return [];
-      var list = Array.isArray(tasks) ? tasks : listManagedXmindTasks();
-      return list.filter(function(task) {
-        return task && isManagedTaskTerminal(task) && isTaskInRootPipeline(task, targetId);
-      });
     }
 
     function serializeRootPipelineDescriptor(descriptor) {
@@ -3304,117 +2944,6 @@
       clearAllTopupHighlights();
     }
 
-    function persistXmindState(useImmediate, options) {
-      var opts = options || {};
-      ensureState().hasImportedBaseline = hasImportedBaselineCases();
-      saveActiveWorkspaceSnapshot({
-        forceShared: opts.forceShared === true,
-      });
-      if (useImmediate === true) persistWorkflowStateNow();
-      else persistWorkflowState();
-      if (useImmediate === true) {
-        syncRunningTaskRestoreContexts();
-      }
-    }
-
-    function persistManagedTaskWorkspaceState(useImmediate) {
-      persistXmindState(useImmediate, {
-        forceShared: true,
-      });
-    }
-
-    function createInitialXmindState(options) {
-      var opts = options || {};
-      var nextViewState = createDefaultViewState();
-      nextViewState.drawerOpen = opts.drawerOpen === true;
-      nextViewState.fullscreen = opts.fullscreen === true;
-      nextViewState.updatedAt = Date.now();
-      return {
-        mode: 'modules',
-        treeSourceSignature: '',
-        hasModuleSkeleton: false,
-        hasImportedBaseline: false,
-        summaryResultKind: '',
-        inlineStatusText: '',
-        inlineStatusType: '',
-        openButtonDotVisible: false,
-        historyUnread: false,
-        knowledgeBase: createDefaultKnowledgeBaseState(),
-        dedupe: createDefaultDedupeState(),
-        coverage: createDefaultCoverageState(),
-        viewState: nextViewState,
-        history: [],
-        operationSnapshots: [],
-        lastOperationSnapshotId: '',
-        rootSnapshotId: '',
-        rootSnapshots: [],
-        deletedBaselineModuleKeys: [],
-        deletedBaselineCaseKeys: [],
-        deleteUndoStack: [],
-        deleteRedoStack: [],
-        root: createDefaultRootState(),
-        summaryCollapsed: false,
-        prep: createDefaultPrepState(),
-        nextSnapshotId: 1,
-        snapshots: [],
-        modules: {},
-      };
-    }
-
-    function normalizeWorkspaceSharedState(snapshot) {
-      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
-      return {
-        requirementLabel: normalizePersistedRequirementLabel(source.requirementLabel),
-        requirementLabelSource: String(source.requirementLabelSource || ''),
-        lastRawImportName: String(source.lastRawImportName || ''),
-        rawText: String(source.rawText || ''),
-        caseText: String(source.caseText || ''),
-        importedCases: cloneJson(source.importedCases, []),
-        caseGenModules: cloneJson(source.caseGenModules, []),
-        caseGenSource: String(source.caseGenSource || ''),
-        caseGenResults: cloneJson(source.caseGenResults, {}),
-        caseSelections: cloneSelectionMap(source.caseSelections),
-        caseGenSuggestions: cloneJson(source.caseGenSuggestions, {}),
-        caseGenModuleStatus: cloneJson(source.caseGenModuleStatus, {}),
-        caseGenProgress: cloneJson(source.caseGenProgress, {}),
-        caseGenTiming: cloneJson(source.caseGenTiming, {}),
-        caseGenProgressNotice: cloneJson(source.caseGenProgressNotice, {}),
-        caseGenSettings: cloneCaseGenSettingsValue(source.caseGenSettings),
-        requirementMedia: cloneRequirementMediaValue(source.requirementMedia),
-      };
-    }
-
-    function extractActiveXmindStateSnapshot() {
-      var source = state.xmindCaseGen && typeof state.xmindCaseGen === 'object' ? state.xmindCaseGen : {};
-      var next = createInitialXmindState({
-        drawerOpen: source.viewState && source.viewState.drawerOpen === true,
-        fullscreen: source.viewState && source.viewState.fullscreen === true,
-      });
-      Object.keys(source).forEach(function(key) {
-        if (WORKSPACE_HOST_KEYS[key]) return;
-        next[key] = cloneJson(source[key], source[key]);
-      });
-      return next;
-    }
-
-    function applyActiveXmindStateSnapshot(snapshot) {
-      var next = createInitialXmindState({
-        drawerOpen: snapshot && snapshot.viewState && snapshot.viewState.drawerOpen === true,
-        fullscreen: snapshot && snapshot.viewState && snapshot.viewState.fullscreen === true,
-      });
-      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
-      Object.keys(source).forEach(function(key) {
-        if (WORKSPACE_HOST_KEYS[key]) return;
-        next[key] = cloneJson(source[key], source[key]);
-      });
-      var host = state.xmindCaseGen && typeof state.xmindCaseGen === 'object' ? state.xmindCaseGen : {};
-      Object.keys(host).forEach(function(key) {
-        if (!WORKSPACE_HOST_KEYS[key]) return;
-        next[key] = cloneJson(host[key], host[key]);
-      });
-      state.xmindCaseGen = next;
-    }
-
     function buildCurrentSharedWorkspaceSnapshot() {
       var rawTextEl = document.getElementById('rawText');
       var caseTextEl = document.getElementById('caseText');
@@ -3540,143 +3069,6 @@
       syncCasesGenPageRender();
     }
 
-    function createWorkspaceSnapshot(options) {
-      var opts = options || {};
-      return {
-        xmind: createInitialXmindState({
-          drawerOpen: opts.drawerOpen === true,
-          fullscreen: opts.fullscreen === true,
-        }),
-        shared: createEmptyWorkspaceSharedState(),
-      };
-    }
-
-    function normalizeWorkspaceSnapshot(snapshot) {
-      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
-      var xmindSnapshot = source.xmind && typeof source.xmind === 'object'
-        ? cloneJson(source.xmind, createInitialXmindState())
-        : createInitialXmindState();
-      xmindSnapshot.knowledgeBase = normalizeKnowledgeBaseState(xmindSnapshot.knowledgeBase);
-      if (!xmindSnapshot.dedupe || typeof xmindSnapshot.dedupe !== 'object') {
-        xmindSnapshot.dedupe = createDefaultDedupeState();
-      }
-      xmindSnapshot.coverage = normalizeCoverageState(xmindSnapshot.coverage);
-      if (!xmindSnapshot.viewState || typeof xmindSnapshot.viewState !== 'object') {
-        xmindSnapshot.viewState = createDefaultViewState();
-      }
-      xmindSnapshot.viewState = normalizeStoredViewState(xmindSnapshot.viewState, {
-        drawerOpen: xmindSnapshot.viewState.drawerOpen === true,
-        fullscreen: xmindSnapshot.viewState.fullscreen === true,
-      });
-      return {
-        xmind: xmindSnapshot,
-        shared: normalizeWorkspaceSharedState(source.shared),
-      };
-    }
-
-    function buildWorkspaceGenerationId() {
-      var recoveryCore = getWorkspaceRecoveryCore();
-      if (recoveryCore && typeof recoveryCore.createWorkspaceGenerationId === 'function') {
-        return recoveryCore.createWorkspaceGenerationId(Date.now(), Math.random());
-      }
-      return 'xmind-generation-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-    }
-
-    function createWorkspaceRecord(id, options) {
-      var opts = options || {};
-      var now = Date.now();
-      var createdAt = Number(opts.createdAt || now);
-      if (!Number.isFinite(createdAt) || createdAt <= 0) createdAt = now;
-      return {
-        id: String(id || ''),
-        seq: Number(opts.seq || 0) || 0,
-        name: String(opts.name || ''),
-        generationId: String(opts.generationId || '') || buildWorkspaceGenerationId(),
-        pendingOpenPrep: opts.pendingOpenPrep === true,
-        updatedAt: now,
-        createdAt: createdAt,
-        snapshot: normalizeWorkspaceSnapshot(opts.snapshot),
-      };
-    }
-
-    function normalizeWorkspaceRecord(id, record) {
-      var source = record && typeof record === 'object' ? record : {};
-      var normalized = createWorkspaceRecord(id, {
-        seq: source.seq,
-        name: source.name,
-        generationId: source.generationId,
-        createdAt: source.createdAt,
-        pendingOpenPrep: source.pendingOpenPrep === true,
-        snapshot: source.snapshot,
-      });
-      normalized.updatedAt = Number(source.updatedAt || normalized.updatedAt);
-      if (!Number.isFinite(normalized.updatedAt) || normalized.updatedAt <= 0) normalized.updatedAt = Date.now();
-      normalized.createdAt = Number(source.createdAt || normalized.updatedAt);
-      if (!Number.isFinite(normalized.createdAt) || normalized.createdAt <= 0) normalized.createdAt = normalized.updatedAt;
-      return normalized;
-    }
-
-    function getWorkspaceHostState() {
-      var host = state.xmindCaseGen && typeof state.xmindCaseGen === 'object' ? state.xmindCaseGen : {};
-      if (!Array.isArray(host.workspaceOrder)) host.workspaceOrder = [];
-      if (!host.workspaces || typeof host.workspaces !== 'object') host.workspaces = {};
-      host.activeWorkspaceId = String(host.activeWorkspaceId || '');
-      host.mirrorWorkspaceId = String(host.mirrorWorkspaceId || '');
-      host.openButtonDotVisible = host.openButtonDotVisible === true;
-      host.nextWorkspaceSeq = Number(host.nextWorkspaceSeq || 1);
-      if (!Number.isFinite(host.nextWorkspaceSeq) || host.nextWorkspaceSeq < 1) host.nextWorkspaceSeq = 1;
-      state.xmindCaseGen = host;
-      return host;
-    }
-
-    function workspaceSnapshotHasContent(snapshot) {
-      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
-      var xmindPart = source.xmind && typeof source.xmind === 'object' ? source.xmind : {};
-      var sharedPart = source.shared && typeof source.shared === 'object' ? source.shared : {};
-      if (Array.isArray(sharedPart.caseGenModules) && sharedPart.caseGenModules.length) return true;
-      if (sharedPart.caseGenResults && Object.keys(sharedPart.caseGenResults).length) return true;
-      if (Array.isArray(sharedPart.importedCases) && sharedPart.importedCases.length) return true;
-      if (String(sharedPart.rawText || '').trim()) return true;
-      if (String(sharedPart.caseText || '').trim()) return true;
-      if (String(sharedPart.requirementLabel || '').trim()) return true;
-      if (xmindPart.prep && xmindPart.prep.completed === true) return true;
-      if (Array.isArray(xmindPart.history) && xmindPart.history.length) return true;
-      return false;
-    }
-
-    function workspaceSnapshotHasGeneratedContent(snapshot) {
-      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
-      var xmindPart = source.xmind && typeof source.xmind === 'object' ? source.xmind : {};
-      var sharedPart = source.shared && typeof source.shared === 'object' ? source.shared : {};
-      if (Array.isArray(sharedPart.caseGenModules) && sharedPart.caseGenModules.length) return true;
-      if (sharedPart.caseGenResults && Object.keys(sharedPart.caseGenResults).length) return true;
-      if (Array.isArray(xmindPart.history) && xmindPart.history.length) return true;
-      return false;
-    }
-
-    function caseGenSettingsDifferFromDefault(settings) {
-      var next = cloneCaseGenSettingsValue(settings);
-      var defaults = createDefaultCaseGenSettings();
-      return SHARED_WORKSPACE_CASEGEN_SETTING_KEYS.some(function(key) {
-        return JSON.stringify(next[key]) !== JSON.stringify(defaults[key]);
-      });
-    }
-
-    function workspaceSnapshotHasPrepDraft(snapshot) {
-      var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
-      var xmindPart = source.xmind && typeof source.xmind === 'object' ? source.xmind : {};
-      var sharedPart = source.shared && typeof source.shared === 'object' ? source.shared : {};
-      var prep = xmindPart.prep && typeof xmindPart.prep === 'object' ? xmindPart.prep : {};
-      if (String(prep.requirementMode || '').trim()) return true;
-      if (String(prep.requirementSupplement || '').trim()) return true;
-      if (String(prep.manualRequirementLabel || '').trim()) return true;
-      if (Array.isArray(prep.manualRequirementBlocks) && prep.manualRequirementBlocks.length) return true;
-      if (String(prep.caseImportMode || '').trim()) return true;
-      if (prep.completed === true || prep.baseLocked === true) return true;
-      if (caseGenSettingsDifferFromDefault(sharedPart.caseGenSettings)) return true;
-      return false;
-    }
-
     function getWorkspaceSnapshotRequirementIdentity(snapshot) {
       var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
       var xmindPart = source.xmind && typeof source.xmind === 'object' ? source.xmind : {};
@@ -3705,18 +3097,6 @@
       });
     }
 
-    function isDefaultWorkspaceRecordName(value) {
-      var text = value === null || value === undefined ? '' : String(value || '').trim();
-      if (!text) return true;
-      return /^生成\d+$/u.test(text);
-    }
-
-    function buildDefaultWorkspaceRecordName(seq) {
-      var value = Number(seq || 0);
-      if (!Number.isFinite(value) || value <= 0) value = 1;
-      return '生成' + String(value);
-    }
-
     function deriveLiveWorkspaceRecordName(fallback) {
       var prep = getPrepState();
       if (prep.requirementMode === 'manual') {
@@ -3733,292 +3113,6 @@
         if (importLabel) return importLabel;
       }
       return fallbackText;
-    }
-
-    function resetActiveWorkspaceRecordNameToDefault() {
-      var host = ensureWorkspaceHostState();
-      var activeId = String(host.activeWorkspaceId || '');
-      if (!activeId || !host.workspaces[activeId]) return false;
-      host.workspaces[activeId].name = buildDefaultWorkspaceRecordName(host.workspaces[activeId].seq);
-      host.workspaces[activeId].updatedAt = Date.now();
-      return true;
-    }
-
-    function resetActiveWorkspaceRecordSnapshotToInitial(drawerOpen, fullscreen) {
-      var host = ensureWorkspaceHostState();
-      var activeId = String(host.activeWorkspaceId || '');
-      if (!activeId || !host.workspaces[activeId]) return false;
-      host.workspaces[activeId].snapshot = createWorkspaceSnapshot({
-        drawerOpen: drawerOpen === true,
-        fullscreen: fullscreen === true,
-      });
-      host.workspaces[activeId].updatedAt = Date.now();
-      return true;
-    }
-
-    function captureWorkspaceSnapshot(workspaceId) {
-      var host = ensureWorkspaceHostState();
-      var stableId = String(workspaceId || '');
-      if (!stableId || !host.workspaces[stableId]) return null;
-      if (stableId === String(host.activeWorkspaceId || '')) {
-        syncSummaryDraftIntoState();
-        host.workspaces[stableId].snapshot = createWorkspaceSnapshotFromCurrent();
-        host.workspaces[stableId].updatedAt = Date.now();
-      }
-      return host.workspaces[stableId].snapshot || null;
-    }
-
-    function ensureWorkspaceHostState() {
-      var host = getWorkspaceHostState();
-      var order = Array.isArray(host.workspaceOrder) ? host.workspaceOrder.slice() : [];
-      var nextWorkspaces = {};
-      order.forEach(function(id) {
-        var stableId = String(id || '').trim();
-        if (!stableId) return;
-        nextWorkspaces[stableId] = normalizeWorkspaceRecord(stableId, host.workspaces[stableId]);
-      });
-      Object.keys(host.workspaces || {}).forEach(function(id) {
-        var stableId = String(id || '').trim();
-        if (!stableId || nextWorkspaces[stableId]) return;
-        nextWorkspaces[stableId] = normalizeWorkspaceRecord(stableId, host.workspaces[stableId]);
-        order.push(stableId);
-      });
-      host.workspaceOrder = order.filter(function(id, idx) {
-        return id && order.indexOf(id) === idx;
-      });
-      host.workspaces = nextWorkspaces;
-      if (!host.activeWorkspaceId && host.workspaceOrder.length) {
-        host.activeWorkspaceId = String(host.workspaceOrder[0] || '');
-      }
-      if (host.activeWorkspaceId && host.workspaceOrder.indexOf(host.activeWorkspaceId) === -1) {
-        host.activeWorkspaceId = host.workspaceOrder[0] ? String(host.workspaceOrder[0] || '') : '';
-      }
-      if (!host.mirrorWorkspaceId && host.activeWorkspaceId) {
-        host.mirrorWorkspaceId = String(host.activeWorkspaceId || '');
-      }
-      if (host.mirrorWorkspaceId && host.workspaceOrder.indexOf(host.mirrorWorkspaceId) === -1) {
-        host.mirrorWorkspaceId = host.activeWorkspaceId
-          ? String(host.activeWorkspaceId || '')
-          : (host.workspaceOrder[0] ? String(host.workspaceOrder[0] || '') : '');
-      }
-      return host;
-    }
-
-    function getActiveWorkspaceId() {
-      var host = ensureWorkspaceHostState();
-      return String(host.activeWorkspaceId || '');
-    }
-
-    function getMirrorWorkspaceId() {
-      var host = ensureWorkspaceHostState();
-      if (host.mirrorWorkspaceId && host.workspaces && host.workspaces[host.mirrorWorkspaceId]) {
-        return String(host.mirrorWorkspaceId || '');
-      }
-      if (host.activeWorkspaceId && host.workspaces && host.workspaces[host.activeWorkspaceId]) {
-        return String(host.activeWorkspaceId || '');
-      }
-      return host.workspaceOrder.length ? String(host.workspaceOrder[0] || '') : '';
-    }
-
-    function getWorkspaceUiSelectedId() {
-      if (isDrawerOpen()) return getActiveWorkspaceId();
-      return getMirrorWorkspaceId();
-    }
-
-    function setMirrorWorkspaceSelection(workspaceId) {
-      var host = ensureWorkspaceHostState();
-      var stableId = String(workspaceId || '');
-      if (!stableId || !host.workspaces[stableId]) {
-        stableId = host.activeWorkspaceId
-          ? String(host.activeWorkspaceId || '')
-          : (host.workspaceOrder[0] ? String(host.workspaceOrder[0] || '') : '');
-      }
-      host.mirrorWorkspaceId = stableId;
-      return stableId;
-    }
-
-    function getWorkspaceRecord(workspaceId) {
-      var host = ensureWorkspaceHostState();
-      var stableId = workspaceId ? String(workspaceId || '') : getActiveWorkspaceId();
-      if (!stableId) return null;
-      return host.workspaces && host.workspaces[stableId] ? host.workspaces[stableId] : null;
-    }
-
-    function clearManagedTasksForWorkspace(workspaceId, options) {
-      var stableId = String(workspaceId || '');
-      var manager = getXmindTaskManager();
-      if (!stableId || !manager || typeof manager.clearTasksForWorkspace !== 'function') return 0;
-      var opts = options || {};
-      return Number(manager.clearTasksForWorkspace(stableId, {
-        includeRunning: opts.includeRunning === true,
-        action: opts.action || 'workspace-clear',
-      }) || 0);
-    }
-
-    function rotateWorkspaceGeneration(workspaceId) {
-      var record = getWorkspaceRecord(workspaceId);
-      if (!record) return '';
-      record.generationId = buildWorkspaceGenerationId();
-      record.updatedAt = Date.now();
-      return record.generationId;
-    }
-
-    function ensureWorkspaceRecordFromCurrentContent(options) {
-      var opts = options || {};
-      var host = ensureWorkspaceHostState();
-      if (host.activeWorkspaceId && host.workspaces[host.activeWorkspaceId]) return String(host.activeWorkspaceId || '');
-      if (host.workspaceOrder.length > 0) return getActiveWorkspaceId();
-      var currentSnapshot = createWorkspaceSnapshotFromCurrent({
-        skipSummaryDraftSync: opts.skipSummaryDraftSync === true,
-        skipViewStateCapture: opts.skipViewStateCapture === true,
-        overrideViewState: opts.overrideViewState && typeof opts.overrideViewState === 'object'
-          ? opts.overrideViewState
-          : null,
-      });
-      if (!workspaceSnapshotHasContent(currentSnapshot)) return '';
-      var seq = Number(host.nextWorkspaceSeq || 1);
-      if (!Number.isFinite(seq) || seq < 1) seq = 1;
-      var workspaceId = buildWorkspaceId(seq);
-      host.nextWorkspaceSeq = seq + 1;
-      host.workspaces[workspaceId] = createWorkspaceRecord(workspaceId, {
-        seq: seq,
-        name: deriveLiveWorkspaceRecordName(buildDefaultWorkspaceRecordName(seq)),
-        pendingOpenPrep: false,
-        snapshot: currentSnapshot,
-      });
-      host.workspaceOrder.push(workspaceId);
-      host.activeWorkspaceId = workspaceId;
-      host.mirrorWorkspaceId = workspaceId;
-      return workspaceId;
-    }
-
-    function saveActiveWorkspaceSnapshot(options) {
-      var opts = options || {};
-      var host = ensureWorkspaceHostState();
-      var activeId = String(host.activeWorkspaceId || '');
-      if (!activeId || !host.workspaces[activeId]) {
-        activeId = ensureWorkspaceRecordFromCurrentContent({
-          skipSummaryDraftSync: opts.skipSummaryDraftSync === true,
-          skipViewStateCapture: opts.skipViewStateCapture === true,
-          overrideViewState: opts.overrideViewState && typeof opts.overrideViewState === 'object'
-            ? opts.overrideViewState
-            : null,
-        });
-        host = ensureWorkspaceHostState();
-      }
-      if (!activeId || !host.workspaces[activeId]) return false;
-      if (opts.skipSummaryDraftSync !== true) {
-        syncSummaryDraftIntoState();
-      }
-      var computedSnapshot = createWorkspaceSnapshotFromCurrent({
-        skipSummaryDraftSync: true,
-        skipViewStateCapture: opts.skipViewStateCapture === true,
-        overrideViewState: opts.overrideViewState && typeof opts.overrideViewState === 'object'
-          ? opts.overrideViewState
-          : null,
-      });
-      var existingXmindSnapshot = host.workspaces[activeId].snapshot && host.workspaces[activeId].snapshot.xmind
-        ? cloneJson(host.workspaces[activeId].snapshot.xmind, createInitialXmindState())
-        : null;
-      var existingSharedSnapshot = host.workspaces[activeId].snapshot && host.workspaces[activeId].snapshot.shared
-        ? normalizeWorkspaceSharedState(host.workspaces[activeId].snapshot.shared)
-        : null;
-      var shouldPreserveExistingGeneratedShared = Boolean(
-        opts.forceShared !== true
-        && existingSharedSnapshot
-        && (isPageSuspending() || (typeof document !== 'undefined' && document && document.visibilityState === 'hidden'))
-        && workspaceSnapshotHasGeneratedContent({ shared: existingSharedSnapshot })
-        && !workspaceSnapshotHasGeneratedContent({ shared: computedSnapshot.shared })
-      );
-      if (shouldPreserveExistingGeneratedShared) {
-        computedSnapshot.shared = existingSharedSnapshot;
-      }
-      if (
-        !shouldPreserveExistingGeneratedShared
-        &&
-        opts.forceShared !== true
-        && isDrawerOpen() !== true
-        && workspaceShadowDepth <= 0
-        && host.workspaces[activeId].snapshot
-      ) {
-        computedSnapshot.shared = normalizeWorkspaceSharedState(host.workspaces[activeId].snapshot.shared);
-      }
-      if (opts.preserveExistingXmind === true && existingXmindSnapshot) {
-        if (
-          opts.overrideViewState
-          && typeof opts.overrideViewState === 'object'
-        ) {
-          existingXmindSnapshot.viewState = normalizeStoredViewState(opts.overrideViewState, {
-            drawerOpen: opts.overrideViewState.drawerOpen === true,
-            fullscreen: opts.overrideViewState.fullscreen === true,
-          });
-        }
-        computedSnapshot.xmind = existingXmindSnapshot;
-      }
-      host.workspaces[activeId].snapshot = computedSnapshot;
-      if (opts.preserveRecordName !== true) {
-        host.workspaces[activeId].name = deriveLiveWorkspaceRecordName(host.workspaces[activeId].name);
-      }
-      host.workspaces[activeId].updatedAt = Date.now();
-      return true;
-    }
-
-    function hydrateWorkspaceSnapshot(workspaceId, options) {
-      var opts = options || {};
-      var host = ensureWorkspaceHostState();
-      var stableId = String(workspaceId || '');
-      var record = stableId && host.workspaces[stableId] ? host.workspaces[stableId] : null;
-      if (!record) return false;
-      var sharedSnapshot = normalizeWorkspaceSharedState(record.snapshot && record.snapshot.shared ? record.snapshot.shared : null);
-      if (!sharedSnapshot.requirementLabel && !isDefaultWorkspaceRecordName(record.name)) {
-        sharedSnapshot.requirementLabel = String(record.name || '').trim();
-        if (!sharedSnapshot.requirementLabelSource) {
-          sharedSnapshot.requirementLabelSource = 'workspace';
-        }
-      }
-      host.activeWorkspaceId = stableId;
-      host.mirrorWorkspaceId = stableId;
-      applySharedWorkspaceSnapshot(sharedSnapshot);
-      applyActiveXmindStateSnapshot(record.snapshot && record.snapshot.xmind ? record.snapshot.xmind : null);
-      getWorkspaceHostState().activeWorkspaceId = stableId;
-      getWorkspaceHostState().mirrorWorkspaceId = stableId;
-      getWorkspaceHostState().workspaceOrder = host.workspaceOrder.slice();
-      getWorkspaceHostState().workspaces = host.workspaces;
-      getWorkspaceHostState().nextWorkspaceSeq = host.nextWorkspaceSeq;
-      getWorkspaceHostState().openButtonDotVisible = host.openButtonDotVisible === true;
-      if (Object.prototype.hasOwnProperty.call(opts, 'keepDrawerOpen')) {
-        var keepDrawerOpen = opts.keepDrawerOpen === true;
-        getViewState().drawerOpen = keepDrawerOpen;
-        getViewState().fullscreen = keepDrawerOpen && drawerEl && drawerEl.classList
-          ? drawerEl.classList.contains('xmind-drawer-fullscreen')
-          : false;
-      }
-      syncInlineStatusFromState();
-      syncKnowledgeBaseToolbarState();
-      return true;
-    }
-
-    function buildWorkspaceDisplayName(record) {
-      var snapshot = record && record.snapshot ? record.snapshot : {};
-      var shared = snapshot && snapshot.shared && typeof snapshot.shared === 'object' ? snapshot.shared : {};
-      var xmind = snapshot && snapshot.xmind && typeof snapshot.xmind === 'object' ? snapshot.xmind : {};
-      var prep = xmind && xmind.prep && typeof xmind.prep === 'object' ? xmind.prep : {};
-      var recordName = record && record.name ? String(record.name || '').trim() : '';
-      var label = '';
-      label = shared.requirementLabel ? String(shared.requirementLabel || '').trim() : '';
-      if (label === '当前需求') label = '';
-      if (!label && prep.requirementMode === 'manual') {
-        label = prep.manualRequirementLabel ? String(prep.manualRequirementLabel || '').trim() : '';
-      }
-      if (!label && !isDefaultWorkspaceRecordName(recordName)) {
-        label = recordName;
-      }
-      if (!label && shared.lastRawImportName) {
-        label = normalizeRequirementLabelFromFileName(shared.lastRawImportName || '');
-      }
-      if (!label) label = recordName;
-      if (!label) label = buildDefaultWorkspaceRecordName(record && record.seq);
-      return label;
     }
 
     function resetRequirementPrepInputs() {
@@ -6384,15 +5478,6 @@
       setPrepField('manualRequirementBlocks', next);
     }
 
-    function hasManualRequirementContent() {
-      return Boolean(getManualRequirementText()) || getManualRequirementImages().length > 0;
-    }
-
-    function hasDocumentRequirementContent() {
-      var rawTextEl = document.getElementById('rawText');
-      return Boolean(rawTextEl && String(rawTextEl.value || '').trim());
-    }
-
     function hasImportedBaselineCases() {
       var rootState = state && state.xmindCaseGen && typeof state.xmindCaseGen === 'object'
         ? state.xmindCaseGen
@@ -6430,10 +5515,6 @@
       return getVisibleBaselineCaseList().length > 0;
     }
 
-    function getRequirementContextText() {
-      return getSelectedRequirementSource().text;
-    }
-
     function hasRequirementReady() {
       return getSelectedRequirementSource().isReady === true;
     }
@@ -6448,36 +5529,6 @@
     function isPrepCompleted() {
       var prep = getPrepState();
       return Boolean(prep.completed) && hasRequirementReady() && hasCaseStepReady();
-    }
-
-    function buildRequirementSummaryInfo() {
-      var requirementSource = getSelectedRequirementSource();
-      if (requirementSource.mode === 'manual') {
-        var manualMeta = '';
-        if (!requirementSource.hasLabel && !requirementSource.hasBodyContent) {
-          manualMeta = '请先填写需求名称，并填写文本或上传图片。';
-        } else if (!requirementSource.hasLabel) {
-          manualMeta = '请先填写需求名称，用作根节点标题。';
-        } else if (!requirementSource.hasBodyContent) {
-          manualMeta = '请先填写文本或上传图片。';
-        } else {
-          manualMeta = '需求名：' + requirementSource.label + '，文本 ' + String(requirementSource.text.length) + ' 字'
-            + (requirementSource.imageCount ? '，图片 ' + String(requirementSource.imageCount) + ' 张' : '');
-        }
-        return {
-          done: requirementSource.isReady === true,
-          title: requirementSource.label || '未填写需求名称',
-          meta: manualMeta,
-        };
-      }
-      var importName = requirementSource.importName || '当前文档';
-      return {
-        done: requirementSource.isReady === true,
-        title: requirementSource.label || (requirementSource.isReady === true ? '已导入需求文档' : '未导入需求文档'),
-        meta: requirementSource.isReady === true
-          ? ('来源：' + importName + '，正文 ' + String(requirementSource.text.length) + ' 字' + (requirementSource.supplement ? '，补充已填写' : ''))
-          : '请先导入需求文档。',
-      };
     }
 
     function buildCasesSummaryInfo() {
@@ -6514,259 +5565,6 @@
         title: '已导入已有用例',
         meta: '当前共 ' + String(list.length) + ' 条，将作为 XMind 可见基线。',
       };
-    }
-
-    function buildSummaryCardsHtml() {
-      var requirement = buildRequirementSummaryInfo();
-      var cases = buildCasesSummaryInfo();
-      return ''
-        + '<div class="xmind-casegen-summary-grid">'
-        +   '<div class="xmind-casegen-summary-card">'
-        +     '<div class="xmind-casegen-summary-head">'
-        +       '<span class="xmind-casegen-summary-label">当前需求</span>'
-        +       '<span class="xmind-casegen-prep-bool ' + (requirement.done ? 'is-yes' : 'is-no') + '">' + (requirement.done ? '✓' : '✕') + '</span>'
-        +     '</div>'
-        +     '<strong class="xmind-casegen-summary-title">' + escapeHtml(requirement.title) + '</strong>'
-        +     '<p class="hint xmind-casegen-summary-meta">' + escapeHtml(requirement.meta) + '</p>'
-        +   '</div>'
-        +   '<div class="xmind-casegen-summary-card">'
-        +     '<div class="xmind-casegen-summary-head">'
-        +       '<span class="xmind-casegen-summary-label">参考用例</span>'
-        +       '<span class="xmind-casegen-prep-bool ' + (cases.done ? 'is-yes' : 'is-no') + '">' + (cases.done ? '✓' : '✕') + '</span>'
-        +     '</div>'
-        +     '<strong class="xmind-casegen-summary-title">' + escapeHtml(cases.title) + '</strong>'
-        +     '<p class="hint xmind-casegen-summary-meta">' + escapeHtml(cases.meta) + '</p>'
-        +   '</div>'
-        + '</div>';
-    }
-
-    function padDatePart(value) {
-      var num = Number(value) || 0;
-      return num < 10 ? ('0' + String(num)) : String(num);
-    }
-
-    function formatHistoryTimestamp(timestamp) {
-      var time = Number(timestamp);
-      if (!Number.isFinite(time) || time <= 0) return '-';
-      var date = new Date(time);
-      if (isNaN(date.getTime())) return '-';
-      return date.getFullYear()
-        + '-' + padDatePart(date.getMonth() + 1)
-        + '-' + padDatePart(date.getDate())
-        + ' ' + padDatePart(date.getHours())
-        + ':' + padDatePart(date.getMinutes())
-        + ':' + padDatePart(date.getSeconds());
-    }
-
-    function getRootHistoryActionLabel(actionId, hadAiContentBeforeAction) {
-      if (actionId === ROOT_ACTIONS.FULL_CASES) return getRootFullCasesLabel(hadAiContentBeforeAction === true);
-      if (actionId === ROOT_ACTIONS.FULL_MODULES) return '生成全量模块';
-      if (actionId === ROOT_ACTIONS.REGENERATE_MODULES) return '重新生成模块';
-      if (actionId === ROOT_ACTIONS.EXISTING_CASES) return '已有模块补全用例';
-      if (actionId === ROOT_ACTIONS.TOPUP_MODULES) return '补全模块';
-      if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES) return '补全模块+用例';
-      if (actionId === ROOT_ACTIONS.APPEND_ALL) return '追加生成全部模块+用例';
-      return String(actionId || '');
-    }
-
-    function getModuleHistoryActionLabel(actionId, moduleEntry, hadAiCasesBeforeAction) {
-      if (actionId === MODULE_ACTIONS.FULL_CASES) {
-        if (typeof hadAiCasesBeforeAction === 'boolean') {
-          return hadAiCasesBeforeAction ? '重新生成全量用例' : '生成全量用例';
-        }
-        return getModuleFullCasesLabel(moduleEntry);
-      }
-      if (actionId === MODULE_ACTIONS.APPEND) return '追加生成';
-      return String(actionId || '');
-    }
-
-    function getGenerationFailureLabel(scope, actionId, options) {
-      var opts = options || {};
-      if (scope === 'module') {
-        if (actionId === MODULE_ACTIONS.APPEND) return '追加失败';
-        if (actionId === MODULE_ACTIONS.FULL_CASES) {
-          return opts.hadAiCasesBeforeAction === true ? '重新生成失败' : '生成失败';
-        }
-        return '生成失败';
-      }
-      if (
-        actionId === ROOT_ACTIONS.TOPUP_MODULES
-        || actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES
-        || actionId === ROOT_ACTIONS.EXISTING_CASES
-      ) {
-        return '补全失败';
-      }
-      if (actionId === ROOT_ACTIONS.APPEND_ALL) return '追加失败';
-      if (actionId === ROOT_ACTIONS.REGENERATE_MODULES) return '重新生成失败';
-      if (actionId === ROOT_ACTIONS.FULL_CASES) {
-        return opts.hadAiContentBeforeAction === true ? '重新生成失败' : '生成失败';
-      }
-      return '生成失败';
-    }
-
-    function buildHistoryLocationLabel(scope, moduleTitle) {
-      if (scope === 'module') {
-        return '模块节点 · ' + (normalizeModuleTitle(moduleTitle) || '当前模块');
-      }
-      return '根节点 · ' + getRequirementLabelText();
-    }
-
-    function normalizeHistoryDurationMs(value) {
-      var durationMs = Number(value || 0);
-      if (!Number.isFinite(durationMs) || durationMs <= 0) return 0;
-      return Math.round(durationMs);
-    }
-
-    function getTaskModelRequestDurationMs(task) {
-      var totalDurationMs = normalizeHistoryDurationMs(task && task.modelRequestTotalDurationMs);
-      if (totalDurationMs > 0) return totalDurationMs;
-      var lastDurationMs = normalizeHistoryDurationMs(task && task.modelRequestDurationMs);
-      if (lastDurationMs > 0) return lastDurationMs;
-      return normalizeHistoryDurationMs(task && task.durationMs);
-    }
-
-    function formatHistoryDuration(durationMs) {
-      var value = normalizeHistoryDurationMs(durationMs);
-      if (!value) return '';
-      if (value < 1000) return (value / 1000).toFixed(1) + ' 秒';
-      if (value < 60000) {
-        var seconds = value / 1000;
-        return (seconds < 10 ? seconds.toFixed(1) : String(Math.round(seconds))) + ' 秒';
-      }
-      var totalSeconds = Math.round(value / 1000);
-      var minutes = Math.floor(totalSeconds / 60);
-      var remainingSeconds = totalSeconds % 60;
-      return String(minutes) + ' 分 ' + String(remainingSeconds) + ' 秒';
-    }
-
-    function normalizeHistoryDetails(details) {
-      var map = {};
-      (Array.isArray(details) ? details : []).forEach(function(item) {
-        if (!item) return;
-        var moduleTitle = normalizeModuleTitle(item.module || item.moduleTitle || '');
-        var key = normalizeModuleKey(moduleTitle || '');
-        var stableKey = key || ('module-' + String(Object.keys(map).length + 1));
-        if (!map[stableKey]) {
-          map[stableKey] = {
-            module: moduleTitle || '未命名模块',
-            caseCount: 0,
-            durationMs: 0,
-          };
-        }
-        var caseCount = Number(item.caseCount);
-        if (!Number.isFinite(caseCount) || caseCount < 0) caseCount = 0;
-        map[stableKey].caseCount += caseCount;
-        map[stableKey].durationMs = Math.max(
-          Number(map[stableKey].durationMs || 0),
-          normalizeHistoryDurationMs(item.durationMs)
-        );
-      });
-      return Object.keys(map).map(function(key) {
-        return map[key];
-      });
-    }
-
-    function normalizeHistoryDiagnostics(items) {
-      var result = [];
-      var seen = {};
-      (Array.isArray(items) ? items : []).forEach(function(item) {
-        var text = String(item || '').trim();
-        if (!text || seen[text]) return;
-        seen[text] = true;
-        result.push(text);
-      });
-      return result;
-    }
-
-    function normalizeHistoryDedupeRecords(items) {
-      var result = [];
-      var seen = {};
-      (Array.isArray(items) ? items : []).forEach(function(item) {
-        if (!item || typeof item !== 'object') return;
-        var moduleTitle = normalizeModuleTitle(item.module || item.moduleTitle || '');
-        var title = String(item.title || item.caseTitle || item.case_title || '').replace(/\s+/g, ' ').trim();
-        var reason = normalizeHistoryDedupeReason(item.reason || item.removeReason || item.remove_reason || '');
-        var mergedInto = String(item.mergedInto || item.merged_into || item.keepTitle || item.keep_title || '').replace(/\s+/g, ' ').trim();
-        var duplicateOf = String(item.duplicateOf || item.duplicate_of || item.duplicateWith || item.duplicate_with || item.sameAs || item.same_as || '').replace(/\s+/g, ' ').trim();
-        var duplicatePoint = normalizeHistoryDedupeOptionalReason(item.duplicatePoint || item.duplicate_point || item.overlapPoint || item.overlap_point || item.samePoint || item.same_point || item.overlap || '');
-        var mergedFrom = normalizeHistoryDedupeStringList(item.mergedFrom || item.merged_from || item.sourceTitles || item.source_titles || item.beforeTitles || item.before_titles || []);
-        if (!title && mergedFrom.length) title = mergedFrom[0];
-        if (!moduleTitle || !title) return;
-        var actionType = normalizeHistoryDedupeActionType(item.type || item.action || item.actionType || item.action_type || item.kind || '', {
-          duplicateOf: duplicateOf,
-          mergedInto: mergedInto,
-          mergedFrom: mergedFrom,
-        });
-        var key = normalizeModuleKey(moduleTitle) + '::' + title.toLowerCase() + '::' + reason + '::'
-          + actionType + '::' + duplicateOf + '::' + duplicatePoint + '::' + mergedInto + '::' + mergedFrom.join('|');
-        if (seen[key]) return;
-        seen[key] = true;
-        result.push({
-          module: moduleTitle,
-          title: title,
-          reason: reason,
-          actionType: actionType,
-          duplicateOf: duplicateOf,
-          duplicatePoint: duplicatePoint,
-          mergedInto: mergedInto,
-          mergedFrom: mergedFrom,
-        });
-      });
-      return result;
-    }
-
-    function normalizeHistoryDedupeStringList(value) {
-      var source = Array.isArray(value)
-        ? value
-        : (value === null || value === undefined ? [] : [value]);
-      var seen = {};
-      return source.map(function(item) {
-        if (item && typeof item === 'object') {
-          return String(item.title || item.caseTitle || item.case_title || item.name || '').replace(/\s+/g, ' ').trim();
-        }
-        return String(item || '').replace(/\s+/g, ' ').trim();
-      }).filter(function(item) {
-        if (!item || seen[item]) return false;
-        seen[item] = true;
-        return true;
-      });
-    }
-
-    function normalizeHistoryDedupeActionType(value, detail) {
-      var raw = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
-      if (raw === 'merge' || raw === 'merged' || raw === 'combine' || raw.indexOf('合并') !== -1) return 'merge';
-      if (raw === 'duplicate' || raw === 'dup' || raw.indexOf('重复') !== -1) return 'duplicate';
-      if (detail && Array.isArray(detail.mergedFrom) && detail.mergedFrom.length) return 'merge';
-      if (detail && detail.duplicateOf) return 'duplicate';
-      if (detail && detail.mergedInto) return 'merge';
-      return 'removed';
-    }
-
-    function normalizeHistoryDedupeReason(value) {
-      var text = String(value || '').replace(/\s+/g, ' ').trim();
-      text = text.replace(/^原因[：:]\s*/, '').replace(/^因为\s*/, '').trim();
-      if (!text) return '覆盖高度重叠';
-      var cutAt = -1;
-      ['，', '。', '；', ';', '.', '、'].forEach(function(mark) {
-        var index = text.indexOf(mark);
-        if (index > 0 && (cutAt === -1 || index < cutAt)) cutAt = index;
-      });
-      if (cutAt > 0) text = text.slice(0, cutAt).trim();
-      if (text.length > 24) text = text.slice(0, 24).trim() + '…';
-      return text || '覆盖高度重叠';
-    }
-
-    function normalizeHistoryDedupeOptionalReason(value) {
-      var text = String(value || '').replace(/\s+/g, ' ').trim();
-      if (!text) return '';
-      return normalizeHistoryDedupeReason(text);
-    }
-
-    function normalizeHistoryPreviewText(value) {
-      var text = String(value || '').replace(/\s+/g, ' ').trim();
-      if (!text) return '';
-      if (text.length <= 140) return text;
-      return text.slice(0, 140).trim() + '…';
     }
 
     function recordGenerationHistory(payload) {
@@ -6809,265 +5607,10 @@
       persistXmindState(true);
     }
 
-    function buildHistoryDiagnosticSectionsHtml(diagnostics) {
-      var detailedDiagnostics = [];
-      var chipDiagnostics = [];
-      (Array.isArray(diagnostics) ? diagnostics : []).forEach(function(item) {
-        var text = String(item || '').trim();
-        if (!text) return;
-        if (/^错误信息：/.test(text) || text.length > 120) {
-          detailedDiagnostics.push(text);
-          return;
-        }
-        chipDiagnostics.push(text);
-      });
-      var sections = [];
-      if (detailedDiagnostics.length) {
-        sections.push(
-          '<div class="xmind-casegen-history-diagnostics xmind-casegen-history-diagnostics-blocks">'
-            + detailedDiagnostics.map(function(text) {
-              var clean = String(text || '').trim();
-              var match = clean.match(/^([^：]{2,20}：)\s*(.+)$/);
-              var label = match ? String(match[1] || '') : '';
-              var value = match ? String(match[2] || '') : clean;
-              return '<div class="xmind-casegen-history-diagnostic-block">'
-                + (label
-                  ? '<strong class="xmind-casegen-history-diagnostic-block-label">' + escapeHtml(label) + '</strong>'
-                  : '')
-                + '<span class="xmind-casegen-history-diagnostic-block-text">' + escapeHtml(value) + '</span>'
-                + '</div>';
-            }).join('')
-          + '</div>'
-        );
-      }
-      if (chipDiagnostics.length) {
-        sections.push(
-          '<div class="xmind-casegen-history-diagnostics">'
-            + chipDiagnostics.map(function(text) {
-              return '<span class="xmind-casegen-history-diagnostic-chip">' + escapeHtml(text) + '</span>';
-            }).join('')
-          + '</div>'
-        );
-      }
-      return sections.join('');
-    }
-
-    function appendUniqueHistoryDedupeTitle(list, title) {
-      var text = String(title || '').replace(/\s+/g, ' ').trim();
-      if (!text) return;
-      if (list.indexOf(text) === -1) list.push(text);
-    }
-
-    function buildHistoryDedupeDisplayItems(items) {
-      var result = [];
-      var mergeMap = {};
-      (Array.isArray(items) ? items : []).forEach(function(item) {
-        if (!item) return;
-        if (item.actionType === 'merge') {
-          var mergedFromSeed = Array.isArray(item.mergedFrom) && item.mergedFrom.length
-            ? item.mergedFrom.slice()
-            : [item.title];
-          appendUniqueHistoryDedupeTitle(mergedFromSeed, item.title);
-          var mergeKey = [
-            'merge',
-            normalizeModuleKey(item.module || ''),
-            String(item.mergedInto || '').toLowerCase(),
-            mergedFromSeed.join('|').toLowerCase(),
-          ].join('::');
-          if (!mergeMap[mergeKey]) {
-            mergeMap[mergeKey] = {
-              module: item.module,
-              title: '',
-              reason: item.reason,
-              actionType: 'merge',
-              duplicateOf: '',
-              duplicatePoint: '',
-              mergedInto: item.mergedInto,
-              mergedFrom: [],
-            };
-            result.push(mergeMap[mergeKey]);
-          }
-          mergedFromSeed.forEach(function(title) {
-            appendUniqueHistoryDedupeTitle(mergeMap[mergeKey].mergedFrom, title);
-          });
-          if (!mergeMap[mergeKey].mergedInto && item.mergedInto) {
-            mergeMap[mergeKey].mergedInto = item.mergedInto;
-          }
-          return;
-        }
-        result.push(item);
-      });
-      result.forEach(function(item) {
-        if (item && item.actionType === 'merge') {
-          var count = Array.isArray(item.mergedFrom) ? item.mergedFrom.length : 0;
-          item.title = count > 1 ? ('合并前 ' + String(count) + ' 条用例') : (item.mergedFrom[0] || item.title || '合并用例');
-        }
-      });
-      return result;
-    }
-
-    function buildHistoryDedupeTitleListHtml(titles) {
-      var list = normalizeHistoryDedupeStringList(titles);
-      if (!list.length) return '<span class="xmind-casegen-history-dedupe-muted">未提供</span>';
-      return '<span class="xmind-casegen-history-dedupe-title-list">'
-        + list.map(function(title) {
-          return '<span class="xmind-casegen-history-dedupe-title-chip" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</span>';
-        }).join('')
-      + '</span>';
-    }
-
-    function buildHistoryDedupeDetailHtml(item) {
-      var actionType = item && item.actionType ? String(item.actionType || '') : 'removed';
-      var reason = item && item.reason ? String(item.reason || '') : '覆盖高度重叠';
-      if (actionType === 'duplicate') {
-        return '<span class="xmind-casegen-history-dedupe-badge is-duplicate">重复</span>'
-          + '<span class="xmind-casegen-history-dedupe-detail-main">'
-            + (item.duplicateOf
-              ? ('与「' + escapeHtml(item.duplicateOf) + '」重复')
-              : escapeHtml(reason))
-          + '</span>'
-          + (item.duplicatePoint
-            ? '<span class="xmind-casegen-history-dedupe-detail-sub">重复点：' + escapeHtml(item.duplicatePoint) + '</span>'
-            : '');
-      }
-      if (actionType === 'merge') {
-        var mergeSourceTitles = Array.isArray(item.mergedFrom) && item.mergedFrom.length ? item.mergedFrom : [item.title];
-        return '<span class="xmind-casegen-history-dedupe-badge is-merge">合并</span>'
-          + '<span class="xmind-casegen-history-dedupe-merge-flow">'
-            + '<span class="xmind-casegen-history-dedupe-merge-label">合并前</span>'
-            + buildHistoryDedupeTitleListHtml(mergeSourceTitles)
-            + '<span class="xmind-casegen-history-dedupe-merge-label">合并后</span>'
-            + '<strong class="xmind-casegen-history-dedupe-merge-target" title="' + escapeHtml(item.mergedInto || '') + '">' + escapeHtml(item.mergedInto || '未提供') + '</strong>'
-          + '</span>'
-          + '<span class="xmind-casegen-history-dedupe-detail-sub">' + escapeHtml(reason) + '</span>';
-      }
-      return '<span class="xmind-casegen-history-dedupe-badge is-removed">删除</span>'
-        + '<span class="xmind-casegen-history-dedupe-detail-main">' + escapeHtml(reason) + '</span>';
-    }
-
-    function buildHistoryDedupeRecordsHtml(records) {
-      var list = normalizeHistoryDedupeRecords(records);
-      if (!list.length) return '';
-      var groups = [];
-      var groupMap = {};
-      list.forEach(function(item) {
-        var moduleName = item.module || '未命名模块';
-        var key = normalizeModuleKey(moduleName) || moduleName;
-        if (!groupMap[key]) {
-          groupMap[key] = {
-            module: moduleName,
-            items: [],
-          };
-          groups.push(groupMap[key]);
-        }
-        groupMap[key].items.push(item);
-      });
-      return '<div class="xmind-casegen-history-dedupe-records">'
-        + '<div class="xmind-casegen-history-dedupe-head">'
-          + '<strong class="xmind-casegen-history-dedupe-title">去重记录</strong>'
-          + '<span class="xmind-casegen-history-dedupe-summary">已去重 ' + escapeHtml(String(list.length)) + ' 条用例</span>'
-        + '</div>'
-        + '<div class="xmind-casegen-history-dedupe-module-list">'
-          + groups.map(function(group) {
-            return '<section class="xmind-casegen-history-dedupe-module-block">'
-              + '<div class="xmind-casegen-history-dedupe-module-head">'
-                + '<span class="xmind-casegen-history-dedupe-module">' + escapeHtml(group.module || '未命名模块') + '</span>'
-                + '<span class="xmind-casegen-history-dedupe-module-count">' + escapeHtml(String(group.items.length)) + ' 条</span>'
-              + '</div>'
-              + '<div class="xmind-casegen-history-dedupe-table" role="table" aria-label="' + escapeHtml(group.module || '未命名模块') + '去重明细">'
-                + '<div class="xmind-casegen-history-dedupe-row xmind-casegen-history-dedupe-row-head" role="row">'
-                  + '<span role="columnheader">处理的用例</span>'
-                  + '<span role="columnheader">处理关系</span>'
-                + '</div>'
-                + buildHistoryDedupeDisplayItems(group.items).map(function(item) {
-                  var detailText = item.actionType === 'duplicate'
-                    ? ((item.duplicateOf ? ('与「' + item.duplicateOf + '」重复') : item.reason) + (item.duplicatePoint ? ('，重复点：' + item.duplicatePoint) : ''))
-                    : (item.actionType === 'merge'
-                      ? ('合并前：' + normalizeHistoryDedupeStringList(Array.isArray(item.mergedFrom) && item.mergedFrom.length ? item.mergedFrom : [item.title]).join('、') + '；合并后：' + (item.mergedInto || '未提供'))
-                      : item.reason);
-                  return '<div class="xmind-casegen-history-dedupe-row" role="row">'
-                    + '<span class="xmind-casegen-history-dedupe-case" role="cell" title="' + escapeHtml(item.title || '未命名用例') + '">' + escapeHtml(item.title || '未命名用例') + '</span>'
-                    + '<span class="xmind-casegen-history-dedupe-reason" role="cell" title="' + escapeHtml(detailText) + '">' + buildHistoryDedupeDetailHtml(item) + '</span>'
-                  + '</div>';
-                }).join('')
-              + '</div>'
-            + '</section>';
-          }).join('')
-        + '</div>'
-      + '</div>';
-    }
-
     function renderHistoryDialog() {
       if (!summaryDialogBodyEl) return;
-      var history = ensureState().history || [];
-      if (!Array.isArray(history) || !history.length) {
-        summaryDialogBodyEl.innerHTML = '<div class="xmind-casegen-history-empty">暂无生成记录</div>';
-        return;
-      }
-      summaryDialogBodyEl.innerHTML = '<div class="xmind-casegen-history-list">'
-        + history.map(function(entry) {
-          var details = Array.isArray(entry.details) ? entry.details : [];
-          var diagnostics = normalizeHistoryDiagnostics(entry && entry.diagnostics);
-          var dedupeRecords = normalizeHistoryDedupeRecords(entry && entry.dedupeRecords);
-          var resultKind = entry && entry.resultKind ? String(entry.resultKind) : 'changed';
-          var summaryText = entry && entry.summaryText ? String(entry.summaryText) : '';
-          if (!summaryText) {
-            summaryText = '生成模块 ' + String(Number(entry.moduleCount) || 0) + ' 个';
-            if (resultKind === 'error') summaryText = '本次生成未成功';
-            else if (resultKind === 'cancelled') summaryText = '本次生成已中断';
-            else if (resultKind === 'no-change' && !details.length) summaryText = '本次没有新增结果';
-          }
-          var detailHtml = details.length
-            ? '<div class="xmind-casegen-history-detail-list">'
-                + details.map(function(detail) {
-                  var durationText = formatHistoryDuration(detail && detail.durationMs);
-                  return '<div class="xmind-casegen-history-detail">'
-                    + '<strong class="xmind-casegen-history-detail-module">' + escapeHtml(detail.module || '未命名模块') + '</strong>'
-                    + '<span class="xmind-casegen-history-detail-count">'
-                      + String(Number(detail.caseCount) || 0) + ' 条用例'
-                      + (durationText ? (' · 耗时 ' + escapeHtml(durationText)) : '')
-                    + '</span>'
-                    + '</div>';
-                }).join('')
-              + '</div>'
-            : '<div class="xmind-casegen-history-empty-inline">本次未生成新的模块或用例</div>';
-          var reasonHtml = entry && entry.reasonText
-            ? '<div class="xmind-casegen-history-reason' + (resultKind === 'error' ? ' is-error' : (resultKind === 'cancelled' ? ' is-cancelled' : '')) + '">'
-                + '<strong class="xmind-casegen-history-reason-label">' + (
-                  resultKind === 'error'
-                    ? '失败原因：'
-                    : (resultKind === 'cancelled' ? '中断原因：' : '未新增原因：')
-                ) + '</strong>'
-                + '<span class="xmind-casegen-history-reason-text">' + escapeHtml(entry.reasonText) + '</span>'
-              + '</div>'
-            : '';
-          var previewHtml = entry && entry.previewText
-            ? '<div class="xmind-casegen-history-preview">'
-                + '<strong class="xmind-casegen-history-preview-label">模型返回片段：</strong>'
-                + '<span class="xmind-casegen-history-preview-text">' + escapeHtml(entry.previewText) + '</span>'
-              + '</div>'
-            : '';
-          var diagnosticsHtml = buildHistoryDiagnosticSectionsHtml(diagnostics);
-          var dedupeRecordsHtml = buildHistoryDedupeRecordsHtml(dedupeRecords);
-          return '<article class="xmind-casegen-history-card">'
-            + '<div class="xmind-casegen-history-head">'
-            +   '<div class="xmind-casegen-history-copy">'
-            +     '<strong class="xmind-casegen-history-location">' + escapeHtml(entry.locationLabel || '-') + '</strong>'
-            +     '<span class="xmind-casegen-history-time">' + escapeHtml(formatHistoryTimestamp(entry.createdAt)) + '</span>'
-            +   '</div>'
-            +   '<span class="xmind-casegen-history-pill">' + escapeHtml(entry.actionLabel || '-') + '</span>'
-            + '</div>'
-            + '<div class="xmind-casegen-history-summary">' + escapeHtml(summaryText) + '</div>'
-            + detailHtml
-            + reasonHtml
-            + previewHtml
-            + dedupeRecordsHtml
-            + diagnosticsHtml
-            + '</article>';
-        }).join('')
-        + '</div>';
+      summaryDialogBodyEl.innerHTML = buildHistoryListHtml(ensureState().history || []);
     }
-
     function renderOpenedSummaryDialog() {
       if (summaryDialogOpen !== true) return;
       hideCoverageCaseDetailTooltip();
@@ -9116,54 +7659,18 @@
       var xmindRoot = xmind.root && typeof xmind.root === 'object' ? xmind.root : {};
       var moduleStates = xmind.modules && typeof xmind.modules === 'object' ? xmind.modules : {};
       var includeAiLayer = xmindRoot.hideAiLayer !== true;
-      var baselineGrouped = groupCasesByModule(getSnapshotBaselineCaseList(snapshot));
-      var order = baselineGrouped.order.slice();
-      var map = {};
-
-      order.forEach(function(key) {
-        var info = baselineGrouped.map[key];
-        map[key] = {
-          moduleKey: key,
-          title: info.title,
-          baselineCases: info.cases.slice(),
-          aiCases: [],
-          aiModule: null,
-          aiModuleId: '',
-        };
-      });
-
-      if (includeAiLayer !== false) modules.forEach(function(mod, index) {
-        if (!mod) return;
-        var title = normalizeModuleTitle(mod.title || mod.module || ('模块' + (index + 1)));
-        var key = normalizeModuleKey(title);
-        var moduleId = String(mod.id || '');
-        if (!key) return;
-        if (!map[key]) {
-          map[key] = {
-            moduleKey: key,
-            title: title,
-            baselineCases: [],
-            aiCases: [],
-            aiModule: null,
-            aiModuleId: '',
-          };
-          order.push(key);
+      return buildVisibleModuleContextFromSources(
+        getSnapshotBaselineCaseList(snapshot),
+        includeAiLayer !== false ? modules : [],
+        function(mod, moduleId) {
+          var moduleState = moduleId && moduleStates[moduleId] && typeof moduleStates[moduleId] === 'object'
+            ? moduleStates[moduleId]
+            : null;
+          return moduleState && moduleState.hideResults === true
+            ? []
+            : safeParseWorkspaceCaseList(moduleId ? results[moduleId] : '');
         }
-        map[key].aiModule = mod;
-        map[key].aiModuleId = moduleId;
-        map[key].title = title;
-        var moduleState = moduleId && moduleStates[moduleId] && typeof moduleStates[moduleId] === 'object'
-          ? moduleStates[moduleId]
-          : null;
-        map[key].aiCases = moduleState && moduleState.hideResults === true
-          ? []
-          : safeParseWorkspaceCaseList(moduleId ? results[moduleId] : '');
-      });
-      return {
-        order: order,
-        map: map,
-        list: order.map(function(key) { return map[key]; }),
-      };
+      );
     }
 
     function summarizeVisibleModuleContext(context) {
@@ -9476,17 +7983,10 @@
       };
     }
 
-    function buildVisibleModuleContext(options) {
-      var opts = options || {};
-      var rootState = ensureRootUiState();
-      var includeAiLayer = opts.includeAiLayer === true
-        ? true
-        : (opts.includeAiLayer !== false && !(rootState && rootState.hideAiLayer === true));
-      var baselineList = getVisibleBaselineCaseList();
+    function buildVisibleModuleContextFromSources(baselineList, modules, readAiCases) {
       var baselineGrouped = groupCasesByModule(baselineList);
       var order = baselineGrouped.order.slice();
       var map = {};
-
       order.forEach(function(key) {
         var info = baselineGrouped.map[key];
         map[key] = {
@@ -9498,11 +7998,11 @@
           aiModuleId: '',
         };
       });
-
-      if (includeAiLayer !== false) (state.caseGenModules || []).forEach(function(mod, index) {
+      (modules || []).forEach(function(mod, index) {
         if (!mod) return;
         var title = normalizeModuleTitle(mod.title || mod.module || ('模块' + (index + 1)));
         var key = normalizeModuleKey(title);
+        var moduleId = String(mod.id || '');
         if (!key) return;
         if (!map[key]) {
           map[key] = {
@@ -9516,19 +8016,31 @@
           order.push(key);
         }
         map[key].aiModule = mod;
-        map[key].aiModuleId = String(mod.id || '');
+        map[key].aiModuleId = moduleId;
         map[key].title = title;
-        var moduleState = ensureModuleUiState(mod.id);
-        map[key].aiCases = moduleState && moduleState.hideResults === true
-          ? []
-          : getAiCasesForModule(mod.id);
+        map[key].aiCases = typeof readAiCases === 'function' ? readAiCases(mod, moduleId) : [];
       });
-
       return {
         order: order,
         map: map,
         list: order.map(function(key) { return map[key]; }),
       };
+    }
+
+    function buildVisibleModuleContext(options) {
+      var opts = options || {};
+      var rootState = ensureRootUiState();
+      var includeAiLayer = opts.includeAiLayer === true
+        ? true
+        : (opts.includeAiLayer !== false && !(rootState && rootState.hideAiLayer === true));
+      return buildVisibleModuleContextFromSources(
+        getVisibleBaselineCaseList(),
+        includeAiLayer !== false ? (state.caseGenModules || []) : [],
+        function(mod) {
+          var moduleState = ensureModuleUiState(mod.id);
+          return moduleState && moduleState.hideResults === true ? [] : getAiCasesForModule(mod.id);
+        }
+      );
     }
 
     function ensureVisibleModuleContext(value) {
@@ -9647,260 +8159,6 @@
       state.caseGenModules.push(created);
       ensureState().hasModuleSkeleton = true;
       return created;
-    }
-
-    function normalizeCasePriority(priority) {
-      var text = normalizeText(priority).toUpperCase();
-      if (text === 'P0' || text === 'P1' || text === 'P2') return text;
-      return 'P1';
-    }
-
-    function compactCaseTitle(title) {
-      var text = normalizeText(title);
-      if (!text) return '未命名用例';
-      text = text.replace(/^[\d一二三四五六七八九十]+[、.．)\]\s-]+/, '').trim();
-      if (text.length <= 28) return text;
-      var parts = text.split(/[，。；：,:]/);
-      var first = normalizeText(parts[0] || '');
-      if (first && first.length <= 28) return first;
-      return text.slice(0, 28).trim();
-    }
-
-    function normalizeCaseSteps(steps) {
-      var list = [];
-      if (Array.isArray(steps)) {
-        list = steps.map(function(item) { return normalizeText(item); }).filter(Boolean);
-      } else {
-        var text = normalizeText(steps);
-        if (text) {
-          list = text.split(/\n+/).map(function(item) { return normalizeText(item); }).filter(Boolean);
-          if (!list.length) list = [text];
-        }
-      }
-      return list.map(function(item, index) {
-        var clean = item.replace(/^\d+[、.．)\]\s-]+/, '').trim();
-        return String(index + 1) + '、' + (clean || ('步骤' + String(index + 1)));
-      });
-    }
-
-    function normalizeCaseItem(item, fallbackModule) {
-      if (!item || typeof item !== 'object') return null;
-      var moduleTitle = normalizeModuleTitle(item.module || fallbackModule || '未命名模块');
-      var title = compactCaseTitle(item.title || item.case_title || item['用例标题'] || moduleTitle);
-      var expected = stringifyField(item.expected || item.result || item['预期结果']);
-      if (!title) return null;
-      return {
-        module: moduleTitle,
-        title: title,
-        priority: normalizeCasePriority(item.priority || item.level || item['优先级']),
-        preconditions: stringifyField(item.preconditions || item.precondition || item['前提条件']),
-        steps: normalizeCaseSteps(item.steps || item.actions || item['操作步骤']),
-        expected: expected || '-',
-      };
-    }
-
-    function normalizeFallbackCaseList(list, fallbackModule) {
-      var result = [];
-      var seen = {};
-      (Array.isArray(list) ? list : []).forEach(function(item) {
-        var normalized = normalizeCaseItem(item, fallbackModule);
-        var titleKey = normalizeCaseTitle(normalized && normalized.title ? normalized.title : '');
-        if (!normalized || !titleKey || seen[titleKey]) return;
-        seen[titleKey] = true;
-        result.push(normalized);
-      });
-      return result;
-    }
-
-    function buildCaseSignature(item, fallbackModule) {
-      var normalized = normalizeCaseItem(item, fallbackModule);
-      if (!normalized) return '';
-      var steps = Array.isArray(normalized.steps) ? normalized.steps.slice() : [];
-      return [
-        normalizeCaseTitle(normalized.title),
-        normalizeCasePriority(normalized.priority),
-        normalizeText(normalized.preconditions),
-        steps.map(function(step) { return normalizeText(step); }).join('||'),
-        normalizeText(normalized.expected),
-      ].join('##');
-    }
-
-    function extractJsonPayload(text) {
-      var raw = stripCodeFence(text || '');
-      if (!raw) return null;
-      try {
-        return JSON.parse(raw);
-      } catch (err) {}
-      var start = raw.indexOf('{');
-      var end = raw.lastIndexOf('}');
-      if (start >= 0 && end > start) {
-        try {
-          return JSON.parse(raw.slice(start, end + 1));
-        } catch (err2) {}
-      }
-      var arrStart = raw.indexOf('[');
-      var arrEnd = raw.lastIndexOf(']');
-      if (arrStart >= 0 && arrEnd > arrStart) {
-        try {
-          return JSON.parse(raw.slice(arrStart, arrEnd + 1));
-        } catch (err3) {}
-      }
-      return null;
-    }
-
-    function summarizeModelOutputText(text, maxLength) {
-      var limit = Number(maxLength);
-      var clean = String(text || '').replace(/\s+/g, ' ').trim();
-      if (!clean) return '';
-      if (!Number.isFinite(limit) || limit <= 0) limit = 120;
-      if (clean.length <= limit) return clean;
-      return clean.slice(0, limit).trim() + '…';
-    }
-
-    function normalizeHistoryLongText(text, maxLength) {
-      var limit = Number(maxLength);
-      var clean = String(text || '').replace(/\s+/g, ' ').trim();
-      if (!clean) return '';
-      if (!Number.isFinite(limit) || limit <= 0) limit = 2000;
-      if (clean.length <= limit) return clean;
-      return clean.slice(0, limit).trim() + '…';
-    }
-
-    function createModelOutputDiagnostics() {
-      return {
-        rawHasText: false,
-        rawPreview: '',
-        parseStatus: '',
-        parseMode: '',
-        payloadKind: '',
-        sourceKind: '',
-        missingModulesArray: false,
-        emptyModulesArray: false,
-        moduleCandidateCount: 0,
-        normalizedModuleCount: 0,
-        skippedNonObjectModules: 0,
-        caseCandidateCount: 0,
-        normalizedCaseCount: 0,
-        skippedInvalidCases: 0,
-      };
-    }
-
-    function extractJsonPayloadDetailed(text) {
-      var raw = stripCodeFence(text || '');
-      var diagnostics = createModelOutputDiagnostics();
-      diagnostics.rawHasText = Boolean(raw);
-      diagnostics.rawPreview = summarizeModelOutputText(raw, 120);
-      if (!raw) {
-        diagnostics.parseStatus = 'empty';
-        return {
-          payload: null,
-          diagnostics: diagnostics,
-        };
-      }
-      try {
-        diagnostics.parseStatus = 'json';
-        diagnostics.parseMode = 'direct';
-        return {
-          payload: JSON.parse(raw),
-          diagnostics: diagnostics,
-        };
-      } catch (err) {}
-      var start = raw.indexOf('{');
-      var end = raw.lastIndexOf('}');
-      if (start >= 0 && end > start) {
-        try {
-          diagnostics.parseStatus = 'json';
-          diagnostics.parseMode = 'object-slice';
-          return {
-            payload: JSON.parse(raw.slice(start, end + 1)),
-            diagnostics: diagnostics,
-          };
-        } catch (err2) {}
-      }
-      var arrStart = raw.indexOf('[');
-      var arrEnd = raw.lastIndexOf(']');
-      if (arrStart >= 0 && arrEnd > arrStart) {
-        try {
-          diagnostics.parseStatus = 'json';
-          diagnostics.parseMode = 'array-slice';
-          return {
-            payload: JSON.parse(raw.slice(arrStart, arrEnd + 1)),
-            diagnostics: diagnostics,
-          };
-        } catch (err3) {}
-      }
-      diagnostics.parseStatus = /[\{\[]/.test(raw) ? 'invalid-json' : 'plain-text';
-      return {
-        payload: null,
-        diagnostics: diagnostics,
-      };
-    }
-
-    function normalizeModelModulesOutputDetailed(content) {
-      var extracted = extractJsonPayloadDetailed(content);
-      var payload = extracted.payload;
-      var diagnostics = extracted.diagnostics || createModelOutputDiagnostics();
-      var arr = [];
-      if (Array.isArray(payload)) {
-        arr = payload;
-        diagnostics.payloadKind = 'array';
-        diagnostics.sourceKind = 'root-array';
-      } else if (payload && typeof payload === 'object') {
-        diagnostics.payloadKind = 'object';
-        if (Array.isArray(payload.modules)) {
-          arr = payload.modules;
-          diagnostics.sourceKind = 'modules';
-        } else if (Array.isArray(payload.data)) {
-          arr = payload.data;
-          diagnostics.sourceKind = 'data';
-        } else {
-          diagnostics.missingModulesArray = true;
-        }
-      } else if (payload !== null && payload !== undefined) {
-        diagnostics.payloadKind = typeof payload;
-        diagnostics.missingModulesArray = true;
-      }
-
-      diagnostics.moduleCandidateCount = Array.isArray(arr) ? arr.length : 0;
-      diagnostics.emptyModulesArray = diagnostics.moduleCandidateCount === 0 && Boolean(diagnostics.sourceKind);
-
-      var list = (Array.isArray(arr) ? arr : []).map(function(item) {
-        if (!item || typeof item !== 'object') {
-          diagnostics.skippedNonObjectModules += 1;
-          return null;
-        }
-        var moduleTitle = normalizeModuleTitle(item.module || item.title || item.name || '未命名模块');
-        if (!moduleTitle) return null;
-        diagnostics.normalizedModuleCount += 1;
-        var moduleInfo = {
-          module: moduleTitle,
-          key_scenarios: normalizeArrayField(item.key_scenarios || item.scenarios),
-          test_points: normalizeArrayField(item.test_points || item.points),
-          coupled_modules: normalizeArrayField(item.coupled_modules || item.coupled),
-          cases: [],
-        };
-        var cases = Array.isArray(item.cases) ? item.cases : [];
-        diagnostics.caseCandidateCount += cases.length;
-        cases.forEach(function(caseItem) {
-          var normalized = normalizeCaseItem(caseItem, moduleTitle);
-          if (!normalized) {
-            diagnostics.skippedInvalidCases += 1;
-            return;
-          }
-          diagnostics.normalizedCaseCount += 1;
-          moduleInfo.cases.push(normalized);
-        });
-        return moduleInfo;
-      }).filter(Boolean);
-
-      return {
-        list: list,
-        diagnostics: diagnostics,
-      };
-    }
-
-    function normalizeModelModulesOutput(content) {
-      return normalizeModelModulesOutputDetailed(content).list;
     }
 
     function buildVisibleModuleSnapshot(context) {
@@ -10114,216 +8372,6 @@
       return Promise.resolve(ok === true);
     }
 
-    function createOperationContract(actionId, moduleEntry) {
-      if (actionId === ROOT_ACTIONS.FULL_CASES) {
-        return {
-          scope: 'root',
-          mode: 'full_cases',
-          targetModule: '',
-          allowNewModules: true,
-          generateCasesForNewModules: false,
-          generateCasesForExistingModules: false,
-          dedupeAgainstVisibleModules: false,
-          dedupeAgainstVisibleCases: false,
-        };
-      }
-      if (actionId === ROOT_ACTIONS.FULL_MODULES) {
-        return {
-          scope: 'root',
-          mode: 'full_modules',
-          targetModule: '',
-          allowNewModules: true,
-          generateCasesForNewModules: false,
-          generateCasesForExistingModules: false,
-          dedupeAgainstVisibleModules: true,
-          dedupeAgainstVisibleCases: false,
-        };
-      }
-      if (actionId === ROOT_ACTIONS.REGENERATE_MODULES) {
-        return {
-          scope: 'root',
-          mode: 'regenerate_modules',
-          targetModule: '',
-          allowNewModules: true,
-          generateCasesForNewModules: false,
-          generateCasesForExistingModules: false,
-          dedupeAgainstVisibleModules: false,
-          dedupeAgainstVisibleCases: false,
-        };
-      }
-      if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
-        return createExistingCasesDiscoveryContract({
-          scope: 'root',
-          mode: 'existing_modules_cases',
-          targetModule: '',
-          allowNewModules: true,
-          generateCasesForNewModules: false,
-          generateCasesForExistingModules: false,
-          dedupeAgainstVisibleModules: true,
-          dedupeAgainstVisibleCases: true,
-        });
-      }
-      if (actionId === ROOT_ACTIONS.TOPUP_MODULES) {
-        return {
-          scope: 'root',
-          mode: 'topup_modules',
-          targetModule: '',
-          allowNewModules: true,
-          generateCasesForNewModules: false,
-          generateCasesForExistingModules: false,
-          dedupeAgainstVisibleModules: true,
-          dedupeAgainstVisibleCases: false,
-        };
-      }
-      if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES) {
-        return {
-          scope: 'root',
-          mode: 'topup_modules_cases',
-          targetModule: '',
-          allowNewModules: true,
-          generateCasesForNewModules: true,
-          generateCasesForExistingModules: false,
-          dedupeAgainstVisibleModules: true,
-          dedupeAgainstVisibleCases: false,
-        };
-      }
-      if (actionId === ROOT_ACTIONS.APPEND_ALL) {
-        return {
-          scope: 'root',
-          mode: 'append_all_modules_cases',
-          targetModule: '',
-          allowNewModules: true,
-          generateCasesForNewModules: true,
-          generateCasesForExistingModules: true,
-          dedupeAgainstVisibleModules: false,
-          dedupeAgainstVisibleCases: true,
-          importedBaselineCompletion: true,
-          generationPolicy: createImportedBaselineCompletionPolicy(),
-        };
-      }
-      if (actionId === MODULE_ACTIONS.APPEND) {
-        return {
-          scope: 'module',
-          mode: 'module_append_cases',
-          targetModule: moduleEntry ? moduleEntry.title : '',
-          allowNewModules: false,
-          generateCasesForNewModules: false,
-          generateCasesForExistingModules: true,
-          dedupeAgainstVisibleModules: false,
-          dedupeAgainstVisibleCases: true,
-        };
-      }
-      if (actionId === MODULE_ACTIONS.FULL_CASES) {
-        return {
-          scope: 'module',
-          mode: 'module_full_cases',
-          targetModule: moduleEntry ? moduleEntry.title : '',
-          allowNewModules: false,
-          generateCasesForNewModules: false,
-          generateCasesForExistingModules: true,
-          dedupeAgainstVisibleModules: false,
-          dedupeAgainstVisibleCases: false,
-        };
-      }
-      return {
-        scope: 'module',
-        mode: 'module_full_cases',
-        targetModule: moduleEntry ? moduleEntry.title : '',
-        allowNewModules: false,
-        generateCasesForNewModules: false,
-        generateCasesForExistingModules: true,
-        dedupeAgainstVisibleModules: false,
-        dedupeAgainstVisibleCases: true,
-      };
-    }
-
-    function createExistingCasesCompletionPolicy() {
-      return {
-        source: 'xmind_existing_cases_completion',
-        generationStrategy: 'requirement_completion',
-        completionStrength: 'full_reasonable_completion',
-        onlyGenerateForClearCoverageGaps: false,
-        returnEmptyWhenCovered: false,
-        protectImportedCases: true,
-        avoidImportedCaseLinearExpansion: true,
-      };
-    }
-
-    function createImportedBaselineCompletionPolicy() {
-      return {
-        source: 'xmind_imported_baseline_completion',
-        generationStrategy: 'requirement_completion',
-        completionStrength: 'full_reasonable_completion',
-        onlyGenerateForClearCoverageGaps: false,
-        returnEmptyWhenCovered: false,
-        protectImportedCases: true,
-        avoidImportedCaseLinearExpansion: true,
-      };
-    }
-
-    function createExistingCasesDiscoveryContract(contract) {
-      var next = cloneJson(contract, {});
-      next.existingCasesCompletion = true;
-      next.discoveryThenModuleCases = true;
-      next.generationPolicy = createExistingCasesCompletionPolicy();
-      next.allowNewModules = true;
-      next.generateCasesForNewModules = false;
-      next.generateCasesForExistingModules = false;
-      next.dedupeAgainstVisibleModules = true;
-      next.dedupeAgainstVisibleCases = true;
-      return next;
-    }
-
-    function applyExistingCasesCompletionPolicy(contract) {
-      var next = cloneJson(contract, {});
-      next.existingCasesCompletion = true;
-      next.discoveryThenModuleCases = true;
-      next.generationPolicy = createExistingCasesCompletionPolicy();
-      next.onlyGenerateForClearCoverageGaps = false;
-      next.returnEmptyWhenCovered = false;
-      next.allowNewModules = false;
-      next.generateCasesForNewModules = false;
-      next.generateCasesForExistingModules = true;
-      next.dedupeAgainstVisibleCases = true;
-      return next;
-    }
-
-    function applyImportedBaselineCompletionPolicy(contract) {
-      var next = cloneJson(contract, {});
-      next.importedBaselineCompletion = true;
-      next.discoveryThenModuleCases = true;
-      next.generationPolicy = createImportedBaselineCompletionPolicy();
-      next.onlyGenerateForClearCoverageGaps = false;
-      next.returnEmptyWhenCovered = false;
-      next.allowNewModules = false;
-      next.generateCasesForNewModules = false;
-      next.generateCasesForExistingModules = true;
-      next.dedupeAgainstVisibleCases = true;
-      return next;
-    }
-
-    function getExistingCasesCompletionPolicy(contract) {
-      if (!contract || typeof contract !== 'object') return null;
-      var mode = contract.mode ? String(contract.mode || '') : '';
-      if (contract.existingCasesCompletion === true || mode === 'existing_modules_cases') {
-        return contract.generationPolicy && typeof contract.generationPolicy === 'object'
-          ? contract.generationPolicy
-          : createExistingCasesCompletionPolicy();
-      }
-      return null;
-    }
-
-    function getImportedBaselineCompletionPolicy(contract) {
-      if (!contract || typeof contract !== 'object') return null;
-      var mode = contract.mode ? String(contract.mode || '') : '';
-      if (contract.importedBaselineCompletion === true || mode === 'append_all_modules_cases') {
-        return contract.generationPolicy && typeof contract.generationPolicy === 'object'
-          ? contract.generationPolicy
-          : createImportedBaselineCompletionPolicy();
-      }
-      return null;
-    }
-
     function buildXmindPrompt(contract) {
       var settingsSnapshot = buildXmindGenerationOptionsSnapshot();
       var assignedPrompt = state.assignments && state.assignments.xmindCaseGenPrompt
@@ -10452,53 +8500,6 @@
         text: sections.join('\n\n'),
         images: requirementSource.images,
       };
-    }
-
-    function buildKnowledgeBaseVisibleModuleSummary(visibleContext) {
-      return (visibleContext && Array.isArray(visibleContext.list) ? visibleContext.list : []).slice(0, 12).map(function(entry) {
-        var visibleCases = getVisibleCasesForModuleEntry(entry).slice(0, 8).map(function(row) {
-          var normalized = normalizeCaseItem(row && row.item, entry && entry.title ? entry.title : '');
-          return normalized && normalized.title ? String(normalized.title || '') : '';
-        }).filter(Boolean);
-        return {
-          module: entry && entry.title ? String(entry.title || '') : '',
-          key_scenarios: entry && entry.aiModule && Array.isArray(entry.aiModule.scenarios)
-            ? entry.aiModule.scenarios.slice(0, 8)
-            : [],
-          test_points: entry && entry.aiModule && Array.isArray(entry.aiModule.points)
-            ? entry.aiModule.points.slice(0, 8)
-            : [],
-          case_titles: visibleCases,
-        };
-      }).filter(function(item) {
-        return Boolean(item && item.module);
-      });
-    }
-
-    function buildKnowledgeBaseVisibleCaseSummary(visibleContext, moduleEntry) {
-      var entries = [];
-      if (moduleEntry) {
-        entries.push(moduleEntry);
-      }
-      (visibleContext && Array.isArray(visibleContext.list) ? visibleContext.list : []).forEach(function(entry) {
-        if (!entry) return;
-        if (moduleEntry && String(entry.moduleKey || '') === String(moduleEntry.moduleKey || '')) return;
-        entries.push(entry);
-      });
-      var result = [];
-      entries.slice(0, 8).forEach(function(entry) {
-        getVisibleCasesForModuleEntry(entry).slice(0, moduleEntry ? 16 : 6).forEach(function(row) {
-          if (!row || !row.item) return;
-          var normalized = normalizeCaseItem(row.item, entry && entry.title ? entry.title : '');
-          var title = normalized && normalized.title ? String(normalized.title || '') : '';
-          if (!title) return;
-          result.push({
-            module: entry && entry.title ? String(entry.title || '') : '',
-            title: title,
-          });
-        });
-      });
-      return result.slice(0, 24);
     }
 
     function buildKnowledgeBaseQueryContext(requirementSource) {
@@ -11275,375 +9276,6 @@
       };
     }
 
-    function createFilterDiagnostics() {
-      return {
-        inputModuleCount: 0,
-        inputCaseCount: 0,
-        outputModuleCount: 0,
-        outputCaseCount: 0,
-        skippedDuplicateOutputModules: 0,
-        skippedTargetMismatchModules: 0,
-        skippedNewModulesNotAllowed: 0,
-        skippedDuplicateVisibleModules: 0,
-        skippedCaseDuplicateWithinModule: 0,
-        skippedCaseDuplicateVisible: 0,
-        clearedCasesForNewModules: 0,
-        clearedCasesForExistingModules: 0,
-      };
-    }
-
-    function filterModulesByContract(modules, contract, visibleContext) {
-      var visibleMap = visibleContext && visibleContext.map ? visibleContext.map : {};
-      var targetKey = normalizeModuleKey(contract.targetModule || '');
-      var finalModules = [];
-      var seenModules = {};
-      var diagnostics = createFilterDiagnostics();
-
-      diagnostics.inputModuleCount = Array.isArray(modules) ? modules.length : 0;
-      (Array.isArray(modules) ? modules : []).forEach(function(item) {
-        diagnostics.inputCaseCount += Array.isArray(item && item.cases) ? item.cases.length : 0;
-      });
-
-      (Array.isArray(modules) ? modules : []).forEach(function(item) {
-        var moduleTitle = normalizeModuleTitle(item.module || '');
-        var moduleKey = normalizeModuleKey(moduleTitle);
-        if (!moduleKey) return;
-        if (seenModules[moduleKey]) {
-          diagnostics.skippedDuplicateOutputModules += 1;
-          return;
-        }
-        seenModules[moduleKey] = true;
-        var existsVisible = Boolean(visibleMap[moduleKey]);
-        if (contract.scope === 'module' && targetKey && moduleKey !== targetKey) {
-          diagnostics.skippedTargetMismatchModules += 1;
-          return;
-        }
-        if (contract.allowNewModules !== true && !existsVisible) {
-          diagnostics.skippedNewModulesNotAllowed += 1;
-          return;
-        }
-        if (contract.dedupeAgainstVisibleModules === true && existsVisible) {
-          diagnostics.skippedDuplicateVisibleModules += 1;
-          return;
-        }
-
-        var nextItem = {
-          module: moduleTitle,
-          key_scenarios: normalizeArrayField(item.key_scenarios),
-          test_points: normalizeArrayField(item.test_points),
-          coupled_modules: normalizeArrayField(item.coupled_modules),
-          cases: [],
-        };
-
-        var caseSeen = {};
-        var visibleCaseSeen = {};
-        if (contract.dedupeAgainstVisibleCases === true && visibleMap[moduleKey]) {
-          getVisibleCasesForModuleEntry(visibleMap[moduleKey]).forEach(function(row) {
-            var key = normalizeCaseTitle(row.item && row.item.title);
-            if (key) visibleCaseSeen[key] = true;
-          });
-        }
-
-        (item.cases || []).forEach(function(caseItem) {
-          var normalizedCase = normalizeCaseItem(caseItem, moduleTitle);
-          if (!normalizedCase) return;
-          var titleKey = normalizeCaseTitle(normalizedCase.title);
-          if (!titleKey) return;
-          if (caseSeen[titleKey]) {
-            diagnostics.skippedCaseDuplicateWithinModule += 1;
-            return;
-          }
-          if (contract.dedupeAgainstVisibleCases === true && visibleCaseSeen[titleKey]) {
-            diagnostics.skippedCaseDuplicateVisible += 1;
-            return;
-          }
-          caseSeen[titleKey] = true;
-          nextItem.cases.push(normalizedCase);
-        });
-
-        if (existsVisible !== true && contract.generateCasesForNewModules !== true) {
-          diagnostics.clearedCasesForNewModules += nextItem.cases.length;
-          nextItem.cases = [];
-        }
-        if (existsVisible === true && contract.generateCasesForExistingModules !== true) {
-          diagnostics.clearedCasesForExistingModules += nextItem.cases.length;
-          nextItem.cases = [];
-        }
-        finalModules.push(nextItem);
-        diagnostics.outputModuleCount += 1;
-        diagnostics.outputCaseCount += nextItem.cases.length;
-      });
-
-      return {
-        list: finalModules,
-        diagnostics: diagnostics,
-      };
-    }
-
-    function mergeCasesWithoutDuplicates(existingList, addedList, visibleList) {
-      var result = Array.isArray(existingList) ? existingList.slice() : [];
-      var visible = Array.isArray(visibleList) ? visibleList : [];
-      var existingSeen = {};
-      result.forEach(function(item) {
-        var key = normalizeCaseTitle(item && item.title);
-        if (key) existingSeen[key] = true;
-      });
-      visible.forEach(function(item) {
-        var key = normalizeCaseTitle(item && item.title);
-        if (key) existingSeen[key] = true;
-      });
-      var appended = [];
-      var appendedSeen = {};
-      var duplicateAgainstExisting = 0;
-      var duplicateWithinAdded = 0;
-      (Array.isArray(addedList) ? addedList : []).forEach(function(item) {
-        var key = normalizeCaseTitle(item && item.title);
-        if (!key) return;
-        if (existingSeen[key]) {
-          duplicateAgainstExisting += 1;
-          return;
-        }
-        if (appendedSeen[key]) {
-          duplicateWithinAdded += 1;
-          return;
-        }
-        appendedSeen[key] = true;
-        appended.push(item);
-        result.push(item);
-      });
-      return {
-        merged: result,
-        appended: appended,
-        diagnostics: {
-          candidateCount: Array.isArray(addedList) ? addedList.length : 0,
-          appendedCount: appended.length,
-          duplicateAgainstExisting: duplicateAgainstExisting,
-          duplicateWithinAdded: duplicateWithinAdded,
-        },
-      };
-    }
-
-    function getDiagnosticsMetric(diag, key) {
-      var value = diag && Number(diag[key]);
-      if (!Number.isFinite(value) || value < 0) return 0;
-      return value;
-    }
-
-    function appendDiagnosticMetric(list, label, count, unit) {
-      var value = Number(count);
-      if (!Number.isFinite(value) || value <= 0) return;
-      list.push(label + ' ' + String(value) + ' ' + String(unit || ''));
-    }
-
-    function isRootAppendLikeAction(actionId) {
-      return actionId === ROOT_ACTIONS.TOPUP_MODULES
-        || actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES
-        || actionId === ROOT_ACTIONS.APPEND_ALL;
-    }
-
-    function getFriendlyRootEmptyModulesText(actionId) {
-      if (actionId === ROOT_ACTIONS.TOPUP_MODULES) return '当前没有需要补充的新模块。';
-      if (actionId === ROOT_ACTIONS.TOPUP_MODULES_CASES) return '当前没有需要补充的新模块。';
-      if (actionId === ROOT_ACTIONS.EXISTING_CASES) return '当前已有模块下没有需要补充的新用例。';
-      if (actionId === ROOT_ACTIONS.APPEND_ALL) return '当前没有需要补充的新模块或新用例。';
-      if (actionId === ROOT_ACTIONS.FULL_MODULES || actionId === ROOT_ACTIONS.REGENERATE_MODULES) {
-        return '这次没有生成出任何模块。';
-      }
-      if (actionId === ROOT_ACTIONS.FULL_CASES) return '这次没有生成出任何模块或用例。';
-      return '这次没有生成出新的模块或用例。';
-    }
-
-    function getFriendlyModuleEmptyCasesText(actionId) {
-      if (actionId === MODULE_ACTIONS.APPEND) return '当前模块没有需要补充的新用例。';
-      if (actionId === MODULE_ACTIONS.FULL_CASES) return '这次没有为当前模块生成出用例。';
-      return '这次没有为当前模块生成出新的用例。';
-    }
-
-    function buildGenerationErrorInfo(err) {
-      var rawMessage = err && err.message ? String(err.message) : '未知错误';
-      var detailText = normalizeHistoryLongText(rawMessage, 2000);
-      var reasonText = '模型调用出错，请稍后重试。';
-      if (/XMind 请求体超出当前上限/.test(rawMessage)) {
-        reasonText = rawMessage;
-      } else if (
-        /context length|maximum context|context window|maximum context length|max context|too many tokens|token limit|prompt too long|input is too long|request too large|payload too large|context_length_exceeded|maximum token|超出.*上下文|上下文.*超限|输入.*过长/i.test(rawMessage)
-      ) {
-        reasonText = '模型上下文超限，请在设置中提高知识库注入上限、目录送模上限或 XMind 请求体上限后重试。';
-      } else if (/超时/.test(rawMessage)) {
-        reasonText = '模型响应超时，请稍后重试。';
-      } else if (/503|service unavailable/i.test(rawMessage)) {
-        reasonText = '模型服务暂时不可用，请稍后重试。';
-      } else if (/network|fetch|failed to fetch|网络/i.test(rawMessage)) {
-        reasonText = '模型连接失败，请检查网络后重试。';
-      }
-      return {
-        resultKind: 'error',
-        reasonText: reasonText,
-        diagnostics: detailText ? ['错误信息：' + detailText] : [],
-        previewText: '',
-      };
-    }
-
-    function buildModelOutputNoChangeInfo(scope, actionId, modelDiagnostics) {
-      var diagnostics = [];
-      var previewText = modelDiagnostics && modelDiagnostics.rawPreview ? String(modelDiagnostics.rawPreview) : '';
-      var reasonText = '';
-      if (!modelDiagnostics) return null;
-
-      if (modelDiagnostics.parseStatus === 'empty') {
-        reasonText = '模型这次没有返回内容。';
-        diagnostics.push('模型返回为空');
-      } else if (modelDiagnostics.parseStatus === 'plain-text') {
-        reasonText = '模型返回的是说明文字，不是系统可识别的结果。';
-        diagnostics.push('返回格式：说明文字');
-      } else if (modelDiagnostics.parseStatus === 'invalid-json') {
-        reasonText = '模型返回结果格式不完整，系统暂时没法识别。';
-        diagnostics.push('返回格式有问题');
-      } else if (modelDiagnostics.missingModulesArray === true) {
-        reasonText = '模型有返回内容，但没有给出可识别的模块列表。';
-        diagnostics.push('没有返回模块列表');
-      } else if (modelDiagnostics.emptyModulesArray === true) {
-        reasonText = scope === 'module'
-          ? getFriendlyModuleEmptyCasesText(actionId)
-          : getFriendlyRootEmptyModulesText(actionId);
-        diagnostics.push(scope === 'module' ? '模型返回空结果' : '模块列表为空');
-      } else if (getDiagnosticsMetric(modelDiagnostics, 'moduleCandidateCount') > 0 && getDiagnosticsMetric(modelDiagnostics, 'normalizedModuleCount') <= 0) {
-        reasonText = '模型有返回模块内容，但格式不完整，系统没法识别。';
-        appendDiagnosticMetric(diagnostics, '未识别模块', getDiagnosticsMetric(modelDiagnostics, 'skippedNonObjectModules'), '个');
-      } else if (getDiagnosticsMetric(modelDiagnostics, 'caseCandidateCount') > 0 && getDiagnosticsMetric(modelDiagnostics, 'normalizedCaseCount') <= 0) {
-        reasonText = '模型有返回用例内容，但格式不完整，系统没法识别。';
-        appendDiagnosticMetric(diagnostics, '未识别用例', getDiagnosticsMetric(modelDiagnostics, 'skippedInvalidCases'), '条');
-      } else {
-        return null;
-      }
-
-      return {
-        resultKind: 'no-change',
-        reasonText: reasonText,
-        diagnostics: diagnostics,
-        previewText: previewText,
-      };
-    }
-
-    function buildRootNoChangeInfo(actionId, filterDiagnostics, applyDiagnostics, modelDiagnostics) {
-      var rawModuleCount = getDiagnosticsMetric(filterDiagnostics, 'inputModuleCount');
-      var rawCaseCount = getDiagnosticsMetric(filterDiagnostics, 'inputCaseCount');
-      var outputModuleCount = getDiagnosticsMetric(filterDiagnostics, 'outputModuleCount');
-      var outputCaseCount = getDiagnosticsMetric(filterDiagnostics, 'outputCaseCount');
-      var duplicateVisibleModules = getDiagnosticsMetric(filterDiagnostics, 'skippedDuplicateVisibleModules');
-      var duplicateVisibleCases = getDiagnosticsMetric(filterDiagnostics, 'skippedCaseDuplicateVisible')
-        + getDiagnosticsMetric(applyDiagnostics, 'duplicateAgainstExistingCases');
-      var duplicateOutputModules = getDiagnosticsMetric(filterDiagnostics, 'skippedDuplicateOutputModules');
-      var duplicateOutputCases = getDiagnosticsMetric(filterDiagnostics, 'skippedCaseDuplicateWithinModule')
-        + getDiagnosticsMetric(applyDiagnostics, 'duplicateWithinAddedCases');
-      var targetMismatchModules = getDiagnosticsMetric(filterDiagnostics, 'skippedTargetMismatchModules');
-      var blockedNewModules = getDiagnosticsMetric(filterDiagnostics, 'skippedNewModulesNotAllowed');
-      var reasonText = '';
-      var diagnostics = [];
-      var previewText = '';
-
-      appendDiagnosticMetric(diagnostics, '已有模块已覆盖', duplicateVisibleModules, '个');
-      appendDiagnosticMetric(diagnostics, '已有用例已覆盖', duplicateVisibleCases, '条');
-      appendDiagnosticMetric(diagnostics, '模型结果里有重复模块', duplicateOutputModules, '个');
-      appendDiagnosticMetric(diagnostics, '模型结果里有重复用例', duplicateOutputCases, '条');
-      appendDiagnosticMetric(diagnostics, '返回了当前目标外的模块', targetMismatchModules, '个');
-      appendDiagnosticMetric(diagnostics, '本次动作不允许新增模块', blockedNewModules, '个');
-
-      if (rawModuleCount <= 0 && rawCaseCount <= 0) {
-        var modelOutputIssue = buildModelOutputNoChangeInfo('root', actionId, modelDiagnostics);
-        if (modelOutputIssue) {
-          return modelOutputIssue;
-        }
-        reasonText = '这次没有拿到可用的生成结果。';
-        if (modelDiagnostics && modelDiagnostics.rawPreview) previewText = modelDiagnostics.rawPreview;
-      } else if (duplicateVisibleModules > 0 && outputModuleCount <= 0) {
-        reasonText = '当前模块已经覆盖，不需要再补充新模块。';
-      } else if (duplicateVisibleCases > 0 && outputModuleCount > 0) {
-        reasonText = '当前已有用例已经覆盖，本轮没有补出新的用例。';
-      } else if (duplicateVisibleCases > 0 && outputCaseCount <= 0) {
-        reasonText = '当前已有内容已经覆盖，本轮没有补出新的结果。';
-      } else if (targetMismatchModules > 0 || blockedNewModules > 0) {
-        reasonText = '模型返回的内容和当前操作不匹配，所以这次没有采用。';
-      } else if (outputModuleCount > 0 && outputCaseCount <= 0) {
-        if (actionId === ROOT_ACTIONS.EXISTING_CASES || actionId === ROOT_ACTIONS.APPEND_ALL) {
-          reasonText = '模型识别到了模块，但判断当前没有需要补充的新用例。';
-        } else if (isRootAppendLikeAction(actionId)) {
-          reasonText = '当前没有需要补充的新模块。';
-        } else {
-          reasonText = '模型识别到了模块，但这次没有生成出新的用例。';
-        }
-      } else if (duplicateOutputModules > 0 || duplicateOutputCases > 0) {
-        reasonText = '模型返回内容里有重复项，整理后没有留下新的结果。';
-      } else {
-        reasonText = '这次没有生成出新的模块或用例。';
-      }
-
-      return {
-        resultKind: 'no-change',
-        reasonText: reasonText,
-        diagnostics: diagnostics,
-        previewText: previewText,
-      };
-    }
-
-    function buildModuleNoChangeInfo(actionId, filterDiagnostics, mergeDiagnostics, targetOutput, modelDiagnostics) {
-      var rawModuleCount = getDiagnosticsMetric(filterDiagnostics, 'inputModuleCount');
-      var rawCaseCount = getDiagnosticsMetric(filterDiagnostics, 'inputCaseCount');
-      var outputModuleCount = getDiagnosticsMetric(filterDiagnostics, 'outputModuleCount');
-      var outputCaseCount = getDiagnosticsMetric(filterDiagnostics, 'outputCaseCount');
-      var duplicateVisibleCases = getDiagnosticsMetric(filterDiagnostics, 'skippedCaseDuplicateVisible')
-        + getDiagnosticsMetric(mergeDiagnostics, 'duplicateAgainstExisting');
-      var duplicateOutputCases = getDiagnosticsMetric(filterDiagnostics, 'skippedCaseDuplicateWithinModule')
-        + getDiagnosticsMetric(mergeDiagnostics, 'duplicateWithinAdded');
-      var targetMismatchModules = getDiagnosticsMetric(filterDiagnostics, 'skippedTargetMismatchModules');
-      var blockedNewModules = getDiagnosticsMetric(filterDiagnostics, 'skippedNewModulesNotAllowed');
-      var reasonText = '';
-      var diagnostics = [];
-      var targetCaseCount = Array.isArray(targetOutput && targetOutput.cases) ? targetOutput.cases.length : 0;
-      var previewText = '';
-
-      appendDiagnosticMetric(diagnostics, '已有用例已覆盖', duplicateVisibleCases, '条');
-      appendDiagnosticMetric(diagnostics, '模型结果里有重复用例', duplicateOutputCases, '条');
-      appendDiagnosticMetric(diagnostics, '返回了当前目标外的模块', targetMismatchModules, '个');
-      appendDiagnosticMetric(diagnostics, '本次动作不允许新增模块', blockedNewModules, '个');
-
-      if (rawModuleCount <= 0 && rawCaseCount <= 0) {
-        var modelOutputIssue = buildModelOutputNoChangeInfo('module', actionId, modelDiagnostics);
-        if (modelOutputIssue) {
-          return modelOutputIssue;
-        }
-        reasonText = '这次没有拿到可用的生成结果。';
-        if (modelDiagnostics && modelDiagnostics.rawPreview) previewText = modelDiagnostics.rawPreview;
-      } else if (actionId === MODULE_ACTIONS.APPEND) {
-        if (duplicateVisibleCases > 0) {
-          reasonText = '当前模块已有用例已经覆盖，本轮没有补出新的用例。';
-        } else if (targetMismatchModules > 0 || blockedNewModules > 0 || outputModuleCount <= 0) {
-          reasonText = '模型返回的内容没有命中当前模块，所以这次没有采用。';
-        } else if (duplicateOutputCases > 0 && targetCaseCount <= 0) {
-          reasonText = '模型返回内容里有重复项，整理后没有留下新的用例。';
-        } else if (targetCaseCount <= 0 || outputCaseCount <= 0) {
-          reasonText = '当前模块没有需要补充的新用例。';
-        } else {
-          reasonText = '这次没有补出新的用例。';
-        }
-      } else if (targetMismatchModules > 0 || blockedNewModules > 0 || outputModuleCount <= 0) {
-        reasonText = '模型返回的内容没有命中当前模块，所以这次没有采用。';
-      } else if (duplicateOutputCases > 0 && targetCaseCount <= 0) {
-        reasonText = '模型返回内容里有重复项，整理后没有留下新的用例。';
-      } else if (targetCaseCount <= 0 || outputCaseCount <= 0) {
-        reasonText = '这次没有为当前模块生成出用例。';
-      } else {
-        reasonText = '这次没有生成出新的用例。';
-      }
-
-      return {
-        resultKind: 'no-change',
-        reasonText: reasonText,
-        diagnostics: diagnostics,
-        previewText: previewText,
-      };
-    }
-
     function clearAllTopupHighlights() {
       var rootState = ensureState();
       Object.keys(rootState.modules || {}).forEach(function(key) {
@@ -12116,13 +9748,6 @@
       });
     }
 
-    function resolveTopupHighlightHost(wrapperEl) {
-      if (!wrapperEl || !wrapperEl.parentElement) return null;
-      var childrenEl = wrapperEl.parentElement;
-      if (!childrenEl.tagName || String(childrenEl.tagName).toLowerCase() !== 'me-children') return null;
-      return childrenEl.parentElement || null;
-    }
-
     function getTopupHighlightViewerElement() {
       if (!mindContainer) return null;
       if (mindContainer.classList && mindContainer.classList.contains('xmind-structure-viewer')) return mindContainer;
@@ -12536,19 +10161,6 @@
 
     function hasAnyAiModules() {
       return Array.isArray(state.caseGenModules) && state.caseGenModules.length > 0;
-    }
-
-    function hasAnyVisibleContent() {
-      var context = buildVisibleModuleContext();
-      return context.list.some(function(entry) {
-        return getVisibleCasesForModuleEntry(entry).length > 0;
-      });
-    }
-
-    function hasOnlyAiModuleSkeleton() {
-      return Array.isArray(state.caseGenModules)
-        && state.caseGenModules.length > 0
-        && !hasAnyAiCases();
     }
 
     function isRootActionId(actionId) {
@@ -14460,14 +12072,30 @@
       };
     }
 
+    function buildManagedTaskRequestEnvelope(payload, taskInput, workspaceId, options) {
+      var opts = options || {};
+      return Object.assign({}, payload || {}, {
+        prompt: String(taskInput && taskInput.prompt ? taskInput.prompt : ''),
+        requestMode: opts.forceText === true
+          ? 'text'
+          : String(taskInput && taskInput.requestMode ? taskInput.requestMode : 'text'),
+        requestText: String(taskInput && taskInput.requestText ? taskInput.requestText : ''),
+        contentBlocks: opts.forceText === true ? [] : cloneJson(taskInput && taskInput.contentBlocks, []),
+        degradedToTextOnly: opts.forceText === true ? false : taskInput && taskInput.degradedToTextOnly === true,
+        model: cloneJson(taskInput && taskInput.model, null),
+        reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
+        temperature: Number(taskInput && taskInput.temperature),
+        restoreContext: buildManagedTaskRestoreContext({
+          workspaceId: workspaceId,
+          compact: true,
+        }),
+      });
+    }
+
     function buildRootTaskPayload(actionId, taskInput, options) {
       var opts = options || {};
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
-      var restoreContext = buildManagedTaskRestoreContext({
-        workspaceId: taskWorkspaceId,
-        compact: true,
-      });
-      return {
+      return buildManagedTaskRequestEnvelope({
         workspaceId: taskWorkspaceId,
         scope: 'root',
         actionId: actionId,
@@ -14477,32 +12105,19 @@
         hadAiContentBeforeAction: opts.hadAiContentBeforeAction === true,
         hadAiLayerBeforeAction: opts.hadAiLayerBeforeAction === true,
         hadAiCasesBeforeAction: opts.hadAiCasesBeforeAction === true,
-        prompt: String(taskInput && taskInput.prompt ? taskInput.prompt : ''),
-        requestMode: String(taskInput && taskInput.requestMode ? taskInput.requestMode : 'text'),
-        requestText: String(taskInput && taskInput.requestText ? taskInput.requestText : ''),
-        contentBlocks: cloneJson(taskInput && taskInput.contentBlocks, []),
-        degradedToTextOnly: taskInput && taskInput.degradedToTextOnly === true,
-        model: cloneJson(taskInput && taskInput.model, null),
-        reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
-        temperature: Number(taskInput && taskInput.temperature),
-        restoreContext: restoreContext,
         rootPipelineId: String(opts.rootPipelineId || ''),
         rootPipelineActionId: String(opts.rootPipelineActionId || ''),
         pipelineStage: String(opts.pipelineStage || ''),
         historySuppressed: opts.historySuppressed === true,
         notifySuppressed: opts.notifySuppressed === true,
         skipCoverageRetry: opts.skipCoverageRetry === true,
-      };
+      }, taskInput, taskWorkspaceId);
     }
 
     function buildModuleTaskPayload(moduleEntry, actionId, taskInput, options) {
       var opts = options || {};
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
-      var restoreContext = buildManagedTaskRestoreContext({
-        workspaceId: taskWorkspaceId,
-        compact: true,
-      });
-      return {
+      return buildManagedTaskRequestEnvelope({
         workspaceId: taskWorkspaceId,
         scope: 'module',
         actionId: actionId,
@@ -14514,29 +12129,20 @@
         historyActionLabel: String(opts.historyActionLabel || ''),
         createdModuleBeforeAction: opts.createdModuleBeforeAction === true,
         hadAiCasesBeforeAction: opts.hadAiCasesBeforeAction === true,
-        prompt: String(taskInput && taskInput.prompt ? taskInput.prompt : ''),
-        requestMode: String(taskInput && taskInput.requestMode ? taskInput.requestMode : 'text'),
-        requestText: String(taskInput && taskInput.requestText ? taskInput.requestText : ''),
-        contentBlocks: cloneJson(taskInput && taskInput.contentBlocks, []),
-        degradedToTextOnly: taskInput && taskInput.degradedToTextOnly === true,
-        model: cloneJson(taskInput && taskInput.model, null),
-        reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
-        temperature: Number(taskInput && taskInput.temperature),
         fallbackCases: normalizeFallbackCaseList(opts.fallbackCases, opts.moduleTitle || (moduleEntry && moduleEntry.title) || ''),
-        restoreContext: restoreContext,
         rootPipelineId: String(opts.rootPipelineId || ''),
         rootPipelineActionId: String(opts.rootPipelineActionId || ''),
         rootPipelineNewModule: opts.rootPipelineNewModule === true,
         historySuppressed: opts.historySuppressed === true,
         notifySuppressed: opts.notifySuppressed === true,
-      };
+      }, taskInput, taskWorkspaceId);
     }
 
     function buildDedupeTaskPayload(taskInput, options) {
       var opts = options || {};
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
       var dedupeMode = normalizeDedupeMode(taskInput && taskInput.dedupeMode ? taskInput.dedupeMode : opts.dedupeMode);
-      return {
+      return buildManagedTaskRequestEnvelope({
         workspaceId: taskWorkspaceId,
         scope: 'dedupe',
         actionId: DEDUPE_ACTION_ID,
@@ -14582,30 +12188,18 @@
             duplicateWhenSameTestPurposeAndPoint: true,
           },
         },
-        prompt: String(taskInput && taskInput.prompt ? taskInput.prompt : ''),
-        requestMode: 'text',
-        requestText: String(taskInput && taskInput.requestText ? taskInput.requestText : ''),
-        contentBlocks: [],
-        degradedToTextOnly: false,
-        model: cloneJson(taskInput && taskInput.model, null),
-        reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
-        temperature: Number(taskInput && taskInput.temperature),
         dedupePartialModulesResponseAllowed: taskInput && taskInput.partialModulesResponseAllowed === true,
-        restoreContext: buildManagedTaskRestoreContext({
-          workspaceId: taskWorkspaceId,
-          compact: true,
-        }),
         rootPipelineId: String(opts.rootPipelineId || ''),
         rootPipelineActionId: String(opts.rootPipelineActionId || ''),
         historySuppressed: opts.historySuppressed === true,
         notifySuppressed: opts.notifySuppressed === true,
-      };
+      }, taskInput, taskWorkspaceId, { forceText: true });
     }
 
     function buildCoverageTaskPayload(taskInput, options) {
       var opts = options || {};
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
-      return {
+      return buildManagedTaskRequestEnvelope({
         workspaceId: taskWorkspaceId,
         scope: 'coverage',
         actionId: COVERAGE_ACTION_ID,
@@ -14621,21 +12215,9 @@
           directRequirementCoverageOnly: true,
           preserveRequirementText: true,
         },
-        prompt: String(taskInput && taskInput.prompt ? taskInput.prompt : ''),
-        requestMode: 'text',
-        requestText: String(taskInput && taskInput.requestText ? taskInput.requestText : ''),
-        contentBlocks: [],
-        degradedToTextOnly: false,
-        model: cloneJson(taskInput && taskInput.model, null),
-        reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
-        temperature: Number(taskInput && taskInput.temperature),
-        restoreContext: buildManagedTaskRestoreContext({
-          workspaceId: taskWorkspaceId,
-          compact: true,
-        }),
         historySuppressed: true,
         notifySuppressed: false,
-      };
+      }, taskInput, taskWorkspaceId, { forceText: true });
     }
 
     function enrichWorkspaceRestoreContext(context, workspaceId, record) {
@@ -14736,169 +12318,6 @@
         result.rootPipeline = cloneRootPipelineSnapshot(getRootPipelineState());
       }
       return enrichWorkspaceRestoreContext(result, targetWorkspaceId, getWorkspaceRecord(targetWorkspaceId));
-    }
-
-    function isMeaningfulRestoreResult(raw) {
-      var text = raw === null || raw === undefined ? '' : String(raw || '').trim();
-      return Boolean(text && !/^\[\s*\]$/.test(text));
-    }
-
-    function mergeRestoreResultMap(existingResults, nextResults) {
-      var mergedResults = {};
-      var currentResults = existingResults && typeof existingResults === 'object' ? existingResults : {};
-      var incomingResults = nextResults && typeof nextResults === 'object' ? nextResults : {};
-      Object.keys(currentResults).forEach(function(key) {
-        mergedResults[key] = currentResults[key];
-      });
-      Object.keys(incomingResults).forEach(function(key) {
-        if (isMeaningfulRestoreResult(incomingResults[key]) || !isMeaningfulRestoreResult(mergedResults[key])) {
-          mergedResults[key] = incomingResults[key];
-        }
-      });
-      return mergedResults;
-    }
-
-    function normalizeRestoreOperationSnapshots(list) {
-      return (Array.isArray(list) ? list : []).map(function(item) {
-        if (!item || typeof item !== 'object') return null;
-        return {
-          id: String(item.id || ''),
-          scope: item.scope === 'module' ? 'module' : 'root',
-          moduleId: item.moduleId ? String(item.moduleId || '') : '',
-          caseGenModules: cloneJson(item.caseGenModules, []),
-          caseGenResults: cloneJson(item.caseGenResults, {}),
-          caseSelections: cloneJson(item.caseSelections, {}),
-          caseGenSuggestions: cloneJson(item.caseGenSuggestions, {}),
-          caseGenModuleStatus: cloneJson(item.caseGenModuleStatus, {}),
-          caseGenProgress: cloneJson(item.caseGenProgress, {}),
-          caseGenTiming: cloneJson(item.caseGenTiming, {}),
-          caseGenSource: String(item.caseGenSource || ''),
-          createdAt: Number(item.createdAt || 0),
-        };
-      }).filter(function(item) {
-        return Boolean(item && item.id);
-      });
-    }
-
-    function deriveNextOperationSnapshotId(list, fallback) {
-      var nextId = Number(fallback || 0);
-      if (!Number.isFinite(nextId) || nextId < 0) nextId = 0;
-      (Array.isArray(list) ? list : []).forEach(function(item) {
-        if (!item || !item.id) return;
-        var match = String(item.id || '').match(/op-snap-(\d+)$/);
-        if (!match) return;
-        var value = Number(match[1]);
-        if (!Number.isFinite(value) || value < 0) return;
-        if ((value + 1) > nextId) nextId = value + 1;
-      });
-      return nextId > 0 ? nextId : 1;
-    }
-
-    function buildOperationSnapshotRestoreVersion(list, nextSnapshotId) {
-      var normalizedList = normalizeRestoreOperationSnapshots(list);
-      var latestCreatedAt = 0;
-      normalizedList.forEach(function(item) {
-        var createdAt = Number(item && item.createdAt || 0);
-        if (!Number.isFinite(createdAt) || createdAt < 0) return;
-        if (createdAt > latestCreatedAt) latestCreatedAt = createdAt;
-      });
-      return {
-        list: normalizedList,
-        length: normalizedList.length,
-        latestCreatedAt: latestCreatedAt,
-        nextSnapshotId: deriveNextOperationSnapshotId(normalizedList, nextSnapshotId),
-      };
-    }
-
-    function shouldPreferRestoreOperationSnapshots(baseVersion, incomingVersion) {
-      var base = baseVersion || buildOperationSnapshotRestoreVersion([], 1);
-      var incoming = incomingVersion || buildOperationSnapshotRestoreVersion([], 1);
-      if (!incoming.length) return false;
-      if (!base.length) return true;
-      if (incoming.nextSnapshotId > base.nextSnapshotId) return true;
-      if (incoming.length > base.length) return true;
-      if (incoming.latestCreatedAt > base.latestCreatedAt) return true;
-      return false;
-    }
-
-    function mergeTaskRestoreContext(baseContext, incomingContext) {
-      var recoveryCore = getWorkspaceRecoveryCore();
-      if (
-        baseContext
-        && incomingContext
-        && recoveryCore
-        && typeof recoveryCore.areRestoreContextsCompatible === 'function'
-        && recoveryCore.areRestoreContextsCompatible(baseContext, incomingContext) !== true
-      ) {
-        return cloneJson(baseContext, {});
-      }
-      var base = baseContext && typeof baseContext === 'object' ? cloneJson(baseContext, {}) : {};
-      var incoming = incomingContext && typeof incomingContext === 'object' ? cloneJson(incomingContext, {}) : {};
-
-      function pickString(existingValue, nextValue) {
-        var nextText = nextValue === null || nextValue === undefined ? '' : String(nextValue || '').trim();
-        if (nextText) return nextValue;
-        return existingValue;
-      }
-
-      base.workspaceId = pickString(base.workspaceId, incoming.workspaceId);
-      base.workspaceGenerationId = pickString(base.workspaceGenerationId, incoming.workspaceGenerationId);
-      base.workspaceCreatedAt = Number(base.workspaceCreatedAt || incoming.workspaceCreatedAt || 0) || 0;
-      base.requirementFingerprint = pickString(base.requirementFingerprint, incoming.requirementFingerprint);
-      base.requirementLabel = normalizePersistedRequirementLabel(pickString(base.requirementLabel, incoming.requirementLabel));
-      base.requirementLabelSource = pickString(base.requirementLabelSource, incoming.requirementLabelSource);
-      base.lastRawImportName = pickString(base.lastRawImportName, incoming.lastRawImportName);
-      base.rawText = pickString(base.rawText, incoming.rawText);
-      base.caseText = pickString(base.caseText, incoming.caseText);
-
-      if (Array.isArray(incoming.importedCases) && incoming.importedCases.length) {
-        base.importedCases = cloneJson(incoming.importedCases, []);
-      }
-
-      var baseModules = Array.isArray(base.caseGenModules) ? base.caseGenModules : [];
-      var incomingModules = Array.isArray(incoming.caseGenModules) ? incoming.caseGenModules : [];
-      if (incomingModules.length >= baseModules.length) {
-        base.caseGenModules = cloneJson(incomingModules, []);
-      }
-
-      base.caseGenResults = mergeRestoreResultMap(base.caseGenResults, incoming.caseGenResults);
-      var baseOperationVersion = buildOperationSnapshotRestoreVersion(base.operationSnapshots, base.nextSnapshotId);
-      var incomingOperationVersion = buildOperationSnapshotRestoreVersion(incoming.operationSnapshots, incoming.nextSnapshotId);
-      if (shouldPreferRestoreOperationSnapshots(baseOperationVersion, incomingOperationVersion)) {
-        base.operationSnapshots = cloneJson(incomingOperationVersion.list, []);
-        base.nextSnapshotId = incomingOperationVersion.nextSnapshotId;
-      } else {
-        base.operationSnapshots = cloneJson(baseOperationVersion.list, []);
-        base.nextSnapshotId = Math.max(
-          baseOperationVersion.nextSnapshotId,
-          incomingOperationVersion.nextSnapshotId
-        );
-      }
-
-      var baseHistory = Array.isArray(base.history) ? base.history : [];
-      var incomingHistory = Array.isArray(incoming.history) ? incoming.history : [];
-      if (incomingHistory.length >= baseHistory.length) {
-        base.history = cloneJson(incomingHistory, []);
-      }
-      base.rootPipeline = mergeRootPipelineSnapshot(base.rootPipeline, incoming.rootPipeline);
-
-      var basePrep = base.prep && typeof base.prep === 'object' ? base.prep : createDefaultPrepState();
-      var incomingPrep = incoming.prep && typeof incoming.prep === 'object' ? incoming.prep : {};
-      basePrep.step = Math.max(Number(basePrep.step || STEP_REQUIREMENT), Number(incomingPrep.step || STEP_REQUIREMENT));
-      if (incomingPrep.requirementMode) basePrep.requirementMode = String(incomingPrep.requirementMode || '');
-      if (incomingPrep.requirementSupplement) basePrep.requirementSupplement = String(incomingPrep.requirementSupplement || '');
-      if (incomingPrep.manualRequirementLabel) basePrep.manualRequirementLabel = String(incomingPrep.manualRequirementLabel || '');
-      if (Array.isArray(incomingPrep.manualRequirementBlocks) && incomingPrep.manualRequirementBlocks.length) {
-        basePrep.manualRequirementBlocks = cloneJson(incomingPrep.manualRequirementBlocks, []);
-      }
-      if (incomingPrep.caseImportMode) basePrep.caseImportMode = String(incomingPrep.caseImportMode || '');
-      basePrep.baseLocked = basePrep.baseLocked === true || incomingPrep.baseLocked === true;
-      basePrep.completed = basePrep.completed === true || incomingPrep.completed === true;
-      base.prep = basePrep;
-
-      base.viewState = mergeStoredViewState(base.viewState, incoming.viewState);
-
-      return base;
     }
 
     function syncRunningTaskRestoreContexts(workspaceId, options) {
@@ -16618,6 +14037,8 @@
         duplicateAgainstExisting: 0,
         duplicateWithinAdded: 0,
       };
+      var noChangeMessage = '';
+      var noChangeRenderReason = '';
 
       if (actionId === MODULE_ACTIONS.APPEND) {
         var merged = mergeCasesWithoutDuplicates(currentAiCases, targetOutput.cases || [], visibleCases);
@@ -16625,87 +14046,59 @@
         appended = merged.appended;
         mergeDiagnostics = merged.diagnostics || mergeDiagnostics;
         if (!appended.length) {
-          markOpenButtonCompletionNotice({ persist: false });
-          var appendNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
-          if (task && task.createdModuleBeforeAction === true && task.snapshotId) {
-            rollbackCaseGenOperationSnapshotEntry(task.snapshotId);
-          } else if (task && task.snapshotId) {
-            discardCaseGenOperationSnapshotEntry(task.snapshotId);
-          }
-          if (task && task.createdModuleBeforeAction === true) {
-            removeAiModuleRecord(moduleId);
-          }
-          if (moduleState) {
-            moduleState.running = false;
-            moduleState.taskId = '';
-            moduleState.hideResults = false;
-            moduleState.snapshotId = '';
-          }
-          recordGenerationHistory({
-            scope: 'module',
-            moduleTitle: historyModuleTitle,
-            actionId: actionId,
-            actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, resolvedEntry, task && task.hadAiCasesBeforeAction),
-            moduleCount: 1,
-            details: [{
-              module: historyModuleTitle,
-              caseCount: 0,
-              durationMs: getTaskModelRequestDurationMs(task),
-            }],
-            resultKind: appendNoChangeInfo.resultKind,
-            reasonText: appendNoChangeInfo.reasonText,
-            diagnostics: appendNoChangeInfo.diagnostics,
-            previewText: appendNoChangeInfo.previewText,
-          });
-          notifyStatus('当前模块未补充到新的用例', 'warn', { forceInline: true });
-          if (isDrawerOpen()) queueTerminalMindRender({ reason: 'module-task-append-empty', persist: false, anchorNodeId: anchorNodeId });
-          persistManagedTaskWorkspaceState(true);
-          return false;
+          noChangeMessage = '当前模块未补充到新的用例';
+          noChangeRenderReason = 'module-task-append-empty';
+        } else {
+          commitCaseList(moduleId, nextList, Number(task && task.durationMs || 0), '', 'keep-valid');
+          if (moduleState) setModuleTopupHighlight(moduleState, resolvedEntry.title, visibleCases.length, appended.length);
         }
-        commitCaseList(moduleId, nextList, Number(task && task.durationMs || 0), '', 'keep-valid');
-        if (moduleState) setModuleTopupHighlight(moduleState, resolvedEntry.title, visibleCases.length, appended.length);
       } else {
         nextList = Array.isArray(targetOutput.cases) ? targetOutput.cases.slice() : [];
         if (!nextList.length) {
-          markOpenButtonCompletionNotice({ persist: false });
-          var fullNoChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
-          if (task && task.createdModuleBeforeAction === true && task.snapshotId) {
-            rollbackCaseGenOperationSnapshotEntry(task.snapshotId);
-          } else if (task && task.snapshotId) {
-            discardCaseGenOperationSnapshotEntry(task.snapshotId);
-          }
-          if (task && task.createdModuleBeforeAction === true) {
-            removeAiModuleRecord(moduleId);
-          }
-          if (moduleState) {
-            moduleState.running = false;
-            moduleState.taskId = '';
-            moduleState.hideResults = false;
-            moduleState.snapshotId = '';
-          }
-          recordGenerationHistory({
-            scope: 'module',
-            moduleTitle: historyModuleTitle,
-            actionId: actionId,
-            actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, resolvedEntry, task && task.hadAiCasesBeforeAction),
-            moduleCount: 1,
-            details: [{
-              module: historyModuleTitle,
-              caseCount: 0,
-              durationMs: getTaskModelRequestDurationMs(task),
-            }],
-            resultKind: fullNoChangeInfo.resultKind,
-            reasonText: fullNoChangeInfo.reasonText,
-            diagnostics: fullNoChangeInfo.diagnostics,
-            previewText: fullNoChangeInfo.previewText,
-          });
-          notifyStatus('当前模块未生成到有效用例', 'warn', { forceInline: true });
-          if (isDrawerOpen()) queueTerminalMindRender({ reason: 'module-task-full-empty', persist: false, anchorNodeId: anchorNodeId });
-          persistManagedTaskWorkspaceState(true);
-          return false;
+          noChangeMessage = '当前模块未生成到有效用例';
+          noChangeRenderReason = 'module-task-full-empty';
+        } else {
+          commitCaseList(moduleId, nextList, Number(task && task.durationMs || 0), '', '');
+          if (moduleState) clearModuleTopupHighlight(moduleState);
         }
-        commitCaseList(moduleId, nextList, Number(task && task.durationMs || 0), '', '');
-        if (moduleState) clearModuleTopupHighlight(moduleState);
+      }
+      if (noChangeMessage) {
+        markOpenButtonCompletionNotice({ persist: false });
+        var noChangeInfo = buildModuleNoChangeInfo(actionId, filtered.diagnostics, mergeDiagnostics, targetOutput, normalizedOutput.diagnostics);
+        if (task && task.createdModuleBeforeAction === true && task.snapshotId) {
+          rollbackCaseGenOperationSnapshotEntry(task.snapshotId);
+        } else if (task && task.snapshotId) {
+          discardCaseGenOperationSnapshotEntry(task.snapshotId);
+        }
+        if (task && task.createdModuleBeforeAction === true) {
+          removeAiModuleRecord(moduleId);
+        }
+        if (moduleState) {
+          moduleState.running = false;
+          moduleState.taskId = '';
+          moduleState.hideResults = false;
+          moduleState.snapshotId = '';
+        }
+        recordGenerationHistory({
+          scope: 'module',
+          moduleTitle: historyModuleTitle,
+          actionId: actionId,
+          actionLabel: task && task.historyActionLabel ? task.historyActionLabel : getModuleHistoryActionLabel(actionId, resolvedEntry, task && task.hadAiCasesBeforeAction),
+          moduleCount: 1,
+          details: [{
+            module: historyModuleTitle,
+            caseCount: 0,
+            durationMs: getTaskModelRequestDurationMs(task),
+          }],
+          resultKind: noChangeInfo.resultKind,
+          reasonText: noChangeInfo.reasonText,
+          diagnostics: noChangeInfo.diagnostics,
+          previewText: noChangeInfo.previewText,
+        });
+        notifyStatus(noChangeMessage, 'warn', { forceInline: true });
+        if (isDrawerOpen()) queueTerminalMindRender({ reason: noChangeRenderReason, persist: false, anchorNodeId: anchorNodeId });
+        persistManagedTaskWorkspaceState(true);
+        return false;
       }
       markOpenButtonCompletionNotice({ persist: false });
 
@@ -18207,14 +15600,6 @@
       return true;
     }
 
-    function buildWorkspaceId(seq) {
-      var recoveryCore = getWorkspaceRecoveryCore();
-      if (recoveryCore && typeof recoveryCore.createWorkspaceId === 'function') {
-        return recoveryCore.createWorkspaceId(seq, Date.now(), Math.random());
-      }
-      return 'xmind-workspace-' + String(seq || 1) + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-    }
-
     function createWorkspaceSnapshotFromCurrent(options) {
       var opts = options || {};
       if (opts.skipSummaryDraftSync !== true) {
@@ -18644,26 +16029,10 @@
       return false;
     }
 
-    function applyDrawerOpenLayoutState() {
-      var body = document && document.body ? document.body : null;
-      var root = document && document.documentElement ? document.documentElement : null;
-      if (body && body.classList && !body.classList.contains('drawer-open')) {
-        body.classList.add('drawer-open');
-      }
-      if (root && root.classList && !root.classList.contains('drawer-open')) {
-        root.classList.add('drawer-open');
-      }
-    }
-
     function releaseDrawerOpenLayoutState() {
-      var body = document && document.body ? document.body : null;
-      var root = document && document.documentElement ? document.documentElement : null;
-      var otherOpen = document && document.querySelector
-        ? document.querySelector('.drawer.open:not(#xmindCaseGenDrawer), .drawer.closing:not(#xmindCaseGenDrawer)')
-        : null;
-      if (otherOpen) return;
-      if (body && body.classList) body.classList.remove('drawer-open');
-      if (root && root.classList) root.classList.remove('drawer-open');
+      if (drawerScrollLockPort && typeof drawerScrollLockPort.release === 'function') {
+        drawerScrollLockPort.release('xmindCaseGenDrawer');
+      }
     }
 
     function finalizeDrawerClosedLifecycle() {
@@ -18682,9 +16051,7 @@
       clearStoreValidationState(true);
       if (isPageSuspending()) {
         syncOpenButtonState();
-        if (drawerEl && drawerEl.classList) {
-          drawerEl.classList.remove('xmind-drawer-fullscreen');
-        }
+        setDrawerFullscreenState(false);
         destroyMind();
         return;
       }
@@ -18692,9 +16059,7 @@
       // 旧流程数据只在用户切回旧视图时再按需恢复，避免收起瞬间触发大范围旧流程重渲染。
       finalizeLegacyWorkflowRestore();
       syncOpenButtonState();
-      if (drawerEl && drawerEl.classList) {
-        drawerEl.classList.remove('xmind-drawer-fullscreen');
-      }
+      setDrawerFullscreenState(false);
       closeSummaryDialog({ skipPersist: true });
       destroyMind();
       flushDeferredCasesGenPageRender();
@@ -18797,7 +16162,7 @@
         persistDrawerClosedIntentState(true);
         drawerEl.classList.remove('open');
         drawerEl.classList.remove('closing');
-        drawerEl.classList.remove('xmind-drawer-fullscreen');
+        setDrawerFullscreenState(false);
         releaseDrawerOpenLayoutState();
         syncOpenButtonState();
         if (deferredDrawerCloseCleanupTimer) {
