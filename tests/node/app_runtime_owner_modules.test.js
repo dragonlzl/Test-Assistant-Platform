@@ -64,6 +64,7 @@ var moduleSpecs = [
   },
 ];
 var fullLoadOrder = moduleSpecs.map(function(spec) { return spec.file; }).concat([
+  'persistentModelTaskManager.js',
   'missingReminderAiManager.js',
   'caseLibraryAiGenManager.js',
   'xmindCaseGenTaskStore.js',

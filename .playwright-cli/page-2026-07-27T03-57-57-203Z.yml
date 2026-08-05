@@ -1,0 +1,264 @@
+- generic [active]:
+  - generic:
+    - complementary:
+      - generic:
+        - generic: 当前用户
+        - strong: 未登录
+        - button "用户菜单": 个人
+        - generic:
+          - button "登出"
+      - generic:
+        - heading "用例助手" [level=1]
+        - generic:
+          - button "? 页面说明":
+            - generic: "?"
+            - generic: 页面说明
+          - button "G 功能引导":
+            - generic: G
+            - generic: 功能引导
+      - generic:
+        - generic: 页面路径
+        - generic: 暂无路径
+      - navigation:
+        - generic:
+          - button "AI 功能"
+          - text: ◆ ◆ ◆ ◆ ◆
+        - generic:
+          - button "用例相关"
+          - text: ◆ ◆ ◆ ◆
+        - generic:
+          - button "管理"
+          - text: ◆ ◆ ◆
+        - generic:
+          - button "设置"
+          - text: ◆
+      - button "回到顶部"
+      - button "跳到底部"
+      - generic:
+        - generic:
+          - button "xmind用例生成进度"
+          - button "个人备忘"
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic: xmind用例生成进度
+                  - button "收起" [expanded]
+                - generic: 点击打开对应 XMind 生成页签
+              - generic:
+                - paragraph: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+    - generic:
+      - generic:
+        - generic: 一键执行步骤
+        - generic:
+          - generic:
+            - generic: "1"
+            - generic: 导入
+          - generic:
+            - generic: "2"
+            - generic: 评审
+          - generic:
+            - generic: "3"
+            - generic: 清洗
+          - generic:
+            - generic: "4"
+            - generic: 对比完整性
+          - generic:
+            - generic: "5"
+            - generic: 拆分
+          - generic:
+            - generic: "6"
+            - generic: 用例导入
+          - generic:
+            - generic: "7"
+            - generic: 覆盖对比
+      - main:
+        - generic:
+          - heading "导入需求文档" [level=2]
+          - generic:
+            - generic:
+              - generic:
+                - paragraph: 点击选择或拖拽文件，解析后的原始需求文档会展示在右侧文本框，可手工修改后再进行清洗。
+                - generic:
+                  - generic:
+                    - strong: 点击选择
+                    - generic: 或拖拽文件到此处
+                  - generic: 未选择文件
+                - paragraph
+              - generic:
+                - textbox "原始需求将出现在这里，也可以直接粘贴/输入..."
+                - generic:
+                  - button "保存调试TXT"
+                  - button "导入调试TXT"
+        - generic:
+          - heading "需求评审" [level=2]
+          - generic:
+            - generic:
+              - generic:
+                - paragraph: 基于原始需求快速识别不明确项与潜在分支，便于评审时沟通澄清。仅在已导入需求后可执行。
+                - generic:
+                  - button "需求分析" [disabled]
+                - paragraph
+                - paragraph:
+                  - text: 模型用时：
+                  - strong: "-- 秒"
+              - generic:
+                - textbox "评审结果 JSON 将展示于此，必要时可手动补充说明"
+                - generic:
+                  - button "复制评审JSON"
+                  - button "导出评审JSON"
+                  - button "导入评审JSON"
+        - generic:
+          - heading "需求澄清点视图" [level=2]
+          - generic:
+            - paragraph: 汇总所有评审中发现的不明确点，可逐条补充澄清结果并同步回评审 JSON。
+            - generic:
+              - button "前往视图确认澄清" [disabled]
+            - paragraph
+        - generic:
+          - heading "需求清洗" [level=2]
+          - generic:
+            - generic:
+              - generic:
+                - paragraph: 执行清洗后，可复制或保存结果，方便进一步审查。
+                - generic:
+                  - button "开始清洗"
+                  - button "复制清洗结果"
+                - paragraph
+                - paragraph:
+                  - text: 模型用时：
+                  - strong: "-- 秒"
+              - generic:
+                - textbox "清洗后的需求将出现在这里..."
+                - generic:
+                  - button "保存调试TXT"
+                  - button "导入调试TXT"
+        - generic:
+          - heading "清洗结果视图" [level=2]
+          - generic:
+            - paragraph: 列表展示清洗条目，可点击定位相关原始需求段落，快速核对清洗准确性。
+            - generic:
+              - button "展开视图"
+        - generic:
+          - heading "对比完整性" [level=2]
+          - generic:
+            - generic:
+              - generic:
+                - paragraph: 使用指派的对比模型检查清洗结果是否覆盖原始需求。
+                - generic:
+                  - button "开始对比"
+                - paragraph
+                - paragraph:
+                  - text: 模型用时：
+                  - strong: "-- 秒"
+              - generic:
+                - paragraph:
+                  - text: 结果 JSON 字段：
+                  - code: coverage
+                  - text: =覆盖率，
+                  - code: missing
+                  - text: =未覆盖模块列表。
+                - textbox "覆盖率和未覆盖要点将展示于此"
+                - generic:
+                  - button "导出调试JSON"
+                  - button "导入调试JSON"
+        - generic:
+          - heading "测试模块拆分" [level=2]
+          - generic:
+            - generic:
+              - generic:
+                - paragraph: 将清洗结果进一步拆分为具体测试模块，用于测试设计。请让模型输出 JSON 数组，字段：module、key_scenarios、test_points、coupled_modules。
+                - generic:
+                  - button "开始拆分"
+                - paragraph
+                - paragraph:
+                  - text: 模型用时：
+                  - strong: "-- 秒"
+              - generic:
+                - textbox "拆分的测试模块将展示于此"
+                - generic:
+                  - button "生成用例"
+                  - button "保存调试TXT"
+                  - button "导入调试TXT"
+        - generic:
+          - heading "拆分视图" [level=2]
+          - generic:
+            - paragraph: 按模块查看拆分结构，便于核对场景与要点。
+            - generic:
+              - button "展开拆分视图" [disabled]
+        - generic:
+          - heading "测试用例导入（XMind）" [level=2]
+          - generic:
+            - generic:
+              - generic:
+                - paragraph: 可导入单份或多份 XMind/JSON/txt 测试用例，解析后可在右侧查看并用于覆盖对比。
+                - generic:
+                  - generic:
+                    - strong: 点击选择
+                    - generic: 或拖拽测试用例到此处
+                  - generic: 未导入文件
+                - generic:
+                  - button "从用例库中选择"
+                - paragraph
+              - generic:
+                - textbox "解析后的测试用例文本，可手动编辑..."
+                - generic:
+                  - button "保存调试TXT"
+                  - button "导入调试TXT"
+        - generic:
+          - heading "测试用例视图" [level=2]
+          - generic:
+            - paragraph: 基于当前 XMind/文本内容渲染列表视图，可快速查看模块、用例标题、优先级等字段。
+            - generic:
+              - button "打开用例视图"
+              - generic: 请先上传或输入 XMind 测试用例
+        - generic:
+          - heading "测试用例覆盖对比" [level=2]
+          - generic:
+            - generic:
+              - generic:
+                - paragraph: 使用专用模型，对比“测试模块拆分”与“测试用例”之间的覆盖情况，识别缺失或冗余点。
+                - generic:
+                  - button "执行覆盖对比"
+                - paragraph
+                - paragraph:
+                  - text: 模型用时：
+                  - strong: "-- 秒"
+              - generic:
+                - paragraph:
+                  - text: 结果 JSON 字段：
+                  - code: coverage
+                  - text: =覆盖率，
+                  - code: missing
+                  - text: =缺失模块列表（结构与“测试模块拆分”一致），
+                  - code: extra
+                  - text: =用例中多余的点。
+                - textbox "覆盖率与缺少/多余点将在此展示"
+                - generic:
+                  - button "导出对比结果"
+                  - button "导入对比结果"
+        - generic:
+          - heading "缺失模块视图" [level=2]
+          - generic:
+            - paragraph:
+              - text: 运行“测试用例覆盖对比”后，可在此查看缺失模块详情，并复制
+              - code: missing
+              - text: 字段 JSON。
+            - generic:
+              - button "前往勾选缺失模块生成缺失用例" [disabled]
+            - paragraph
+        - option "请选择项目" [selected]
+        - option "请选择版本" [selected]
+        - option "请选择项目" [selected]
+        - option "请选择版本" [selected]
+        - generic:
+          - heading "执行视图" [level=2]
+          - generic: 暂无执行用例，请在“用例导入”中导入，或在“执行分配”中选择历史记录
+        - option "非复用模板" [selected]
+        - option "复用模板"
+        - option "请选择版本" [selected]
+        - option "管理员"
+        - option "普通用户" [selected]
+        - option "组长"
+        - option "组员" [selected]

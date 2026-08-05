@@ -28,6 +28,24 @@ async function waitForAppReady(page) {
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 20000 });
 }
 
+async function switchToTempExecPage(page) {
+  const navigation = page.waitForURL((url) => url.pathname.endsWith('/case-exec.html'), { timeout: 20000 });
+  await page.evaluate(() => {
+    if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('tempexec');
+  }).catch((error) => {
+    if (!error || !/Execution context was destroyed/i.test(error.message || '')) throw error;
+  });
+  await navigation;
+  await page.waitForFunction(() => {
+    var app = window.app;
+    return Boolean(
+      app && app._inited === true && app.authReady === true && app.state
+      && app.state.activeTab === 'tempexec'
+      && app.tempExecApi && typeof app.tempExecApi.renderTempExecView === 'function'
+    );
+  }, null, { timeout: 20000 });
+}
+
 test.describe('执行视图复用子项对齐', () => {
   test('复用子项执行选择框与实际结果列中心对齐', async ({ page }) => {
     const serverState = { settings: [] };
@@ -78,12 +96,7 @@ test.describe('执行视图复用子项对齐', () => {
 
     await page.goto(base + '/index.html');
     await waitForAppReady(page);
-
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') {
-        window.app.switchTab('tempexec');
-      }
-    });
+    await switchToTempExecPage(page);
 
     await page.waitForSelector('.reuse-status', { state: 'attached', timeout: 8000 });
     await page.click('.reuse-status');

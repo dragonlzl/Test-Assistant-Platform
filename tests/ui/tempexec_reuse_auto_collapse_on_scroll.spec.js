@@ -7,6 +7,25 @@ async function waitForAppReady(page) {
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 20000 });
 }
 
+async function switchToTempExecPage(page) {
+  const navigation = page.waitForURL((url) => url.pathname.endsWith('/case-exec.html'), { timeout: 20000 });
+  await page.evaluate(() => {
+    if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('tempexec');
+  }).catch((error) => {
+    if (!error || !/Execution context was destroyed/i.test(error.message || '')) throw error;
+  });
+  await navigation;
+  await page.waitForFunction(() => {
+    var app = window.app;
+    return Boolean(
+      app && app._inited === true && app.authReady === true && app.state
+      && app.state.activeTab === 'tempexec'
+      && app.tempExecApi
+      && typeof app.tempExecApi.autoCollapseTempExecReusePanels === 'function'
+    );
+  }, null, { timeout: 20000 });
+}
+
 test.describe('执行视图复用子项滚动自动收起', () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
@@ -65,25 +84,37 @@ test.describe('执行视图复用子项滚动自动收起', () => {
     await page.goto(base + '/index.html');
     await waitForAppReady(page);
 
+    await switchToTempExecPage(page);
     await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') {
-        window.app.switchTab('tempexec');
-      }
       if (window.app && window.app.api && typeof window.app.api.applyTempExecPageSize === 'function') {
         window.app.api.applyTempExecPageSize(200);
       }
       if (window.scrollTo) window.scrollTo(0, 0);
     });
     await page.waitForSelector('[data-section-id="tempexec-view"]:not(.hidden)');
+    await page.waitForSelector('[data-temp-reuse-panel="reuse-auto-collapse-file"][data-index="0"]');
     await page.evaluate(() => {
       window.__scrollCount = 0;
       window.addEventListener('scroll', () => { window.__scrollCount += 1; });
     });
-    await page.evaluate(() => {
+    const openedState = await page.evaluate(() => {
       if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.toggleTempExecReusePanel === 'function') {
         window.app.tempExecApi.toggleTempExecReusePanel('reuse-auto-collapse-file', [0]);
       }
+      const api = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      const row = document.querySelector('[data-temp-reuse-row="reuse-auto-collapse-file"][data-index="0"]');
+      const rect = row && row.getBoundingClientRect ? row.getBoundingClientRect() : null;
+      return {
+        openSetSize: api && typeof api.ensureTempExecReuseOpen === 'function'
+          ? api.ensureTempExecReuseOpen('reuse-auto-collapse-file').size
+          : 0,
+        scrollTop: window.scrollY || document.documentElement.scrollTop || 0,
+        viewportHeight: window.innerHeight || document.documentElement.clientHeight || 0,
+        rowTop: rect ? rect.top : null,
+        rowBottom: rect ? rect.bottom : null,
+      };
     });
+    expect(openedState.openSetSize).toBe(1);
     const openSetSize = await page.evaluate(() => {
       if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.ensureTempExecReuseOpen === 'function') {
         return window.app.tempExecApi.ensureTempExecReuseOpen('reuse-auto-collapse-file').size || 0;

@@ -3,6 +3,9 @@
   if (!apiClient) return;
 
   var utils = window.app && window.app.utils ? window.app.utils : {};
+  var runtimeContextOwner = window.app.caseLibrary.runtimeContext;
+  var drawerRequestControllerOwner = window.app.caseLibrary.drawerRequestController;
+  var editDrawerWorkflowOwner = window.app.caseLibrary.editDrawerWorkflowController;
   var diffModel = window.app.caseLibrary.diffModel;
   var xmindModelOwner = window.app.caseLibrary.xmindModel;
   var xmindWorkspaceControllerOwner = window.app.caseLibrary.xmindWorkspaceController;
@@ -13,6 +16,7 @@
   var aiGenViewOwner = window.app.caseLibrary.aiGenViewAdapter;
   var aiGenControllerOwner = window.app.caseLibrary.aiGenController;
   var viewStateStoreOwner = window.app.caseLibrary.viewStateStore;
+  var viewRestoreControllerOwner = window.app.caseLibrary.viewRestoreController;
   var missingReminderModelOwner = window.app.caseLibrary.missingReminderModel;
   var missingReminderViewOwner = window.app.caseLibrary.missingReminderViewAdapter;
   var missingReminderControllerOwner = window.app.caseLibrary.missingReminderController;
@@ -135,791 +139,17 @@
     return Promise.resolve({ ok: ok });
   }
 
-  function isCaseLibraryActive() {
-    var globalState = window.app && window.app.state ? window.app.state : {};
-    var tabName = globalState && globalState.activeTab ? globalState.activeTab : '';
-    if (tabName === 'case-library') return true;
-    var visible = document.querySelector('section[data-tab-section="case-library"]:not(.hidden)');
-    return Boolean(visible);
-  }
+  var drawerRequestController = drawerRequestControllerOwner.create({
+    window: window,
+    document: document,
+    storage: typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+    getSelectDrawer: function() { return selectExecDrawerControllerInstance; },
+    getMissingDrawer: function() { return missingDrawerInstance; },
+  });
 
-  var selectExecRequestSessionKey = 'tap-case-library-select-exec-request';
-  var missingDrawerRequestSessionKey = 'tap-case-library-missing-drawer-request';
-  var tempExecAssignRequestSessionKey = 'tap-temp-exec-assign-request';
-  var missingDrawerOpenTimer = 0;
-  var missingDrawerSkipTimer = 0;
-
-  function markSelectExecDrawerRequest() {
-    try {
-      if (window.app) window.app.__caseLibrarySelectExecRequest = true;
-    } catch (err) {
-      // ignore
-    }
-    if (typeof sessionStorage !== 'undefined') {
-      try {
-        sessionStorage.setItem(selectExecRequestSessionKey, '1');
-      } catch (err) {
-        // ignore
-      }
-    }
-  }
-
-  function markMissingDrawerRequest() {
-    try {
-      if (window.app) window.app.__caseLibraryMissingDrawerRequest = true;
-    } catch (err) {
-      // ignore
-    }
-    if (typeof sessionStorage !== 'undefined') {
-      try {
-        sessionStorage.setItem(missingDrawerRequestSessionKey, '1');
-      } catch (err) {
-        // ignore
-      }
-    }
-  }
-
-  function markTempExecAssignRequest(payload) {
-    if (!payload || typeof payload !== 'object') return;
-    try {
-      if (window.app) window.app.__tempExecAssignRequest = payload;
-    } catch (err) {
-      // ignore
-    }
-    if (typeof sessionStorage !== 'undefined') {
-      try {
-        sessionStorage.setItem(tempExecAssignRequestSessionKey, JSON.stringify(payload));
-      } catch (err) {
-        // ignore
-      }
-    }
-  }
-
-  function requestTempExecAssignDrawer(options) {
-    var opts = options && typeof options === 'object' ? options : {};
-    var caseName = opts.caseName || opts.name || '';
-    var versionName = opts.versionName || opts.version || '';
-    var name = caseName ? String(caseName) : '';
-    var version = versionName ? String(versionName) : '';
-    if (!name) name = '用例';
-    if (!version) version = '未分配版本';
-    var payload = { name: name, versionName: version, at: Date.now() };
-    markTempExecAssignRequest(payload);
-    try {
-      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
-        window.dispatchEvent(new CustomEvent('temp-exec-assign-request', { detail: payload }));
-      }
-    } catch (err) {
-      // ignore
-    }
-    return payload;
-  }
-
-  function consumeSelectExecDrawerRequest() {
-    var consumed = false;
-    try {
-      if (window.app && window.app.__caseLibrarySelectExecRequest) {
-        window.app.__caseLibrarySelectExecRequest = false;
-        consumed = true;
-      }
-    } catch (err) {
-      // ignore
-    }
-    if (typeof sessionStorage !== 'undefined') {
-      try {
-        var stored = sessionStorage.getItem(selectExecRequestSessionKey) || '';
-        if (!consumed && stored === '1') consumed = true;
-        if (consumed) sessionStorage.removeItem(selectExecRequestSessionKey);
-      } catch (err) {
-        // ignore
-      }
-    }
-    return consumed;
-  }
-
-  function consumeMissingDrawerRequest() {
-    var consumed = false;
-    try {
-      if (window.app && window.app.__caseLibraryMissingDrawerRequest) {
-        window.app.__caseLibraryMissingDrawerRequest = false;
-        consumed = true;
-      }
-    } catch (err) {
-      // ignore
-    }
-    if (typeof sessionStorage !== 'undefined') {
-      try {
-        var stored = sessionStorage.getItem(missingDrawerRequestSessionKey) || '';
-        if (!consumed && stored === '1') consumed = true;
-        if (consumed) sessionStorage.removeItem(missingDrawerRequestSessionKey);
-      } catch (err) {
-        // ignore
-      }
-    }
-    return consumed;
-  }
-
-  function peekMissingDrawerRequest() {
-    var found = false;
-    try {
-      if (window.app && window.app.__caseLibraryMissingDrawerRequest) {
-        found = true;
-      }
-    } catch (err) {
-      // ignore
-    }
-    if (!found && typeof sessionStorage !== 'undefined') {
-      try {
-        var stored = sessionStorage.getItem(missingDrawerRequestSessionKey) || '';
-        if (stored === '1') found = true;
-      } catch (err) {
-        // ignore
-      }
-    }
-    return found;
-  }
-
-  function openSelectExecDrawerDirect() {
-    return selectExecDrawerControllerInstance ? selectExecDrawerControllerInstance.open() : false;
-  }
-
-  function hasOtherOpenDrawers(drawerEl) {
-    if (!drawerEl || typeof document === 'undefined' || !document.querySelectorAll) return false;
-    var openDrawers = document.querySelectorAll('.drawer.open, .drawer.closing');
-    if (!openDrawers || !openDrawers.length) return false;
-    for (var i = 0; i < openDrawers.length; i += 1) {
-      var node = openDrawers[i];
-      if (node && node !== drawerEl) return true;
-    }
-    return false;
-  }
-
-  function markDrawerSkipClose(drawerId, ttlMs) {
-    if (!drawerId) return;
-    try {
-      if (window.app) {
-        window.app.__drawerSkipCloseId = String(drawerId);
-        window.app.__drawerCloseGuard = { id: String(drawerId), until: Date.now() + Number(ttlMs || 0) };
-      }
-    } catch (err) {
-      // ignore
-    }
-    var ttl = Number(ttlMs);
-    if (!isFinite(ttl) || ttl <= 0) return;
-    if (missingDrawerSkipTimer) {
-      clearTimeout(missingDrawerSkipTimer);
-      missingDrawerSkipTimer = 0;
-    }
-    missingDrawerSkipTimer = setTimeout(function() {
-      missingDrawerSkipTimer = 0;
-      try {
-        if (window.app) {
-          if (window.app.__drawerSkipCloseId === String(drawerId)) {
-            window.app.__drawerSkipCloseId = '';
-          }
-          if (window.app.__drawerCloseGuard && String(window.app.__drawerCloseGuard.id || '') === String(drawerId)) {
-            window.app.__drawerCloseGuard = null;
-          }
-        }
-      } catch (err2) {
-        // ignore
-      }
-    }, ttl);
-  }
-
-  function openMissingDrawerDirect(options) {
-    var opts = options || {};
-    var skipClose = Boolean(opts.skipClose);
-    var waitClose = opts.waitClose === undefined ? !skipClose : Boolean(opts.waitClose);
-    var delayMs = Number(opts.delayMs);
-    if (!isFinite(delayMs) || delayMs < 0) delayMs = 360;
-    var maxWaitMs = Number(opts.maxWaitMs);
-    if (!isFinite(maxWaitMs) || maxWaitMs < 0) maxWaitMs = 900;
-    var pollInterval = Number(opts.pollIntervalMs);
-    if (!isFinite(pollInterval) || pollInterval <= 0) pollInterval = 60;
-    var drawerEl = missingDrawerInstance && missingDrawerInstance.element
-      ? missingDrawerInstance.element
-      : document.getElementById('caseLibraryMissingDrawer');
-    if (drawerEl && drawerEl.classList && drawerEl.classList.contains('open')) {
-      return true;
-    }
-    if (missingDrawerOpenTimer) {
-      clearTimeout(missingDrawerOpenTimer);
-      missingDrawerOpenTimer = 0;
-    }
-    var shouldDelay = false;
-    if (!skipClose && window.app && window.app.drawer && typeof window.app.drawer.closeAllDrawers === 'function') {
-      shouldDelay = hasOtherOpenDrawers(drawerEl);
-      window.app.drawer.closeAllDrawers();
-    }
-    if (shouldDelay && waitClose) {
-      // 避免与其他抽屉关闭动画叠加导致开合抖动，等待关闭完成再打开
-      var startAt = Date.now();
-      var attemptOpen = function() {
-        if (missingDrawerOpenTimer) {
-          clearTimeout(missingDrawerOpenTimer);
-          missingDrawerOpenTimer = 0;
-        }
-        var hasOther = hasOtherOpenDrawers(drawerEl);
-        if (hasOther && Date.now() - startAt < maxWaitMs) {
-          missingDrawerOpenTimer = setTimeout(attemptOpen, pollInterval);
-          return;
-        }
-        missingDrawerOpenTimer = 0;
-        openMissingDrawerDirect({ skipClose: true, waitClose: false });
-      };
-      missingDrawerOpenTimer = setTimeout(attemptOpen, delayMs);
-      return true;
-    }
-    markDrawerSkipClose('caseLibraryMissingDrawer', 800);
-    if (missingDrawerInstance && typeof missingDrawerInstance.open === 'function') {
-      missingDrawerInstance.open();
-      return true;
-    }
-    var fallbackBtn = document.getElementById('openCaseLibraryMissingDrawerBtn');
-    if (fallbackBtn && typeof fallbackBtn.click === 'function') {
-      fallbackBtn.click();
-      return true;
-    }
-    return false;
-  }
-
-  function openSelectExecDrawer(options) {
-    var opts = options || {};
-    var allowInactive = Boolean(opts.allowInactive || opts.force || opts.skipTabCheck);
-    if (!allowInactive && !isCaseLibraryActive()) {
-      markSelectExecDrawerRequest();
-      return false;
-    }
-    consumeSelectExecDrawerRequest();
-    return openSelectExecDrawerDirect();
-  }
-
-  function scheduleMissingDrawerOpen(options) {
-    var opts = options || {};
-    var attempts = Number(opts.attempts);
-    if (!isFinite(attempts) || attempts <= 0) attempts = 3;
-    var interval = Number(opts.intervalMs);
-    if (!isFinite(interval) || interval <= 0) interval = 160;
-    var delay = Number(opts.delayMs);
-    if (!isFinite(delay) || delay < 0) delay = 0;
-    function isOpen() {
-      if (missingDrawerOpenTimer) return true;
-      var el = missingDrawerInstance && missingDrawerInstance.element
-        ? missingDrawerInstance.element
-        : document.getElementById('caseLibraryMissingDrawer');
-      return Boolean(el && el.classList && el.classList.contains('open'));
-    }
-    function tryOpen() {
-      if (isOpen()) return;
-      openMissingDrawerDirect({ waitClose: true });
-      setTimeout(function() {
-        if (isOpen()) return;
-        attempts -= 1;
-        if (attempts <= 0) return;
-        setTimeout(tryOpen, interval);
-      }, interval);
-    }
-    setTimeout(tryOpen, delay);
-  }
-
-  function openMissingDrawer(options) {
-    var opts = options || {};
-    var allowInactive = Boolean(opts.allowInactive || opts.force || opts.skipTabCheck);
-    if (!allowInactive && !isCaseLibraryActive()) {
-      markMissingDrawerRequest();
-      return false;
-    }
-    consumeMissingDrawerRequest();
-    return openMissingDrawerDirect();
-  }
-
-  var dom = {
-    root: document.getElementById('caseLibrary'),
-    status: document.getElementById('caseLibraryStatus'),
-    jumpToExecBtn: document.getElementById('caseLibraryJumpExecBtn'),
-    autoCaseLibrarySelectBtn: document.getElementById('autoCaseLibrarySelectBtn'),
-    caseLibraryImportSelectBtn: document.getElementById('caseLibraryImportSelectBtn'),
-    writerDrawerOpenBtn: document.getElementById('openCaseLibraryWriterDrawerBtn'),
-    editDrawerOpenBtn: document.getElementById('openCaseLibraryEditDrawerBtn'),
-
-    editCard: document.getElementById('caseLibraryEditCard'),
-    editCardTitle: document.getElementById('caseLibraryEditCardTitle'),
-    editProject: document.getElementById('caseLibraryEditProject'),
-    editVersion: document.getElementById('caseLibraryEditVersion'),
-    editFileName: document.getElementById('caseLibraryEditFileName'),
-	    editSearchInput: document.getElementById('caseLibraryEditSearchInput'),
-	    editClearSearchBtn: document.getElementById('caseLibraryEditClearSearchBtn'),
-	    editBatchDeleteBtn: document.getElementById('caseLibraryEditBatchDeleteBtn'),
-	    editBatchAddCountInput: document.getElementById('caseLibraryEditBatchAddCountInput'),
-	    editBatchAddBtn: document.getElementById('caseLibraryEditBatchAddBtn'),
-	    editToExecBtn: document.getElementById('caseLibraryEditToExecBtn'),
-    editStatus: document.getElementById('caseLibraryEditStatus'),
-    editView: document.getElementById('caseLibraryEditView'),
-    editorPaginationTop: document.getElementById('caseLibraryEditorPaginationTop'),
-    editorPaginationBottom: document.getElementById('caseLibraryEditorPaginationBottom'),
-    editorSelectAll: document.getElementById('caseLibraryEditorSelectAll'),
-    editorTableHost: document.getElementById('caseLibraryEditorTableHost'),
-    aiGenBtn: document.getElementById('caseLibraryAiGenBtn'),
-    xmindViewBtn: document.getElementById('caseLibraryXmindViewBtn'),
-    aiGenDrawer: document.getElementById('caseLibraryAiGenDrawer'),
-    aiGenDropZone: document.getElementById('caseLibraryAiGenDropZone'),
-    aiGenFileInput: document.getElementById('caseLibraryAiGenFileInput'),
-    aiGenFileName: document.getElementById('caseLibraryAiGenFileName'),
-    aiGenImportStatus: document.getElementById('caseLibraryAiGenImportStatus'),
-    aiGenRequirementInput: document.getElementById('caseLibraryAiGenRequirementInput'),
-    aiGenClearRequirementBtn: document.getElementById('caseLibraryAiGenClearRequirement'),
-    aiGenRunBtn: document.getElementById('caseLibraryAiGenRunBtn'),
-    aiGenStatus: document.getElementById('caseLibraryAiGenStatus'),
-    aiGenResult: document.getElementById('caseLibraryAiGenResult'),
-    aiGenResultBody: document.getElementById('caseLibraryAiGenResultBody'),
-    aiGenSelectAllBtn: document.getElementById('caseLibraryAiGenSelectAllBtn'),
-    aiGenSelectNoneBtn: document.getElementById('caseLibraryAiGenSelectNoneBtn'),
-    aiGenDiscardBtn: document.getElementById('caseLibraryAiGenDiscardBtn'),
-    aiGenRegenerateBtn: document.getElementById('caseLibraryAiGenRegenerateBtn'),
-    aiGenSelectAllToggle: document.getElementById('caseLibraryAiGenSelectAllToggle'),
-    aiGenResultSummary: document.getElementById('caseLibraryAiGenResultSummary'),
-    aiGenSelectionHint: document.getElementById('caseLibraryAiGenSelectionHint'),
-    aiGenAppendBtn: document.getElementById('caseLibraryAiGenAppendBtn'),
-    missingReminderTop: document.getElementById('caseLibraryMissingReminderTop'),
-    missingReminderBottom: document.getElementById('caseLibraryMissingReminderBottom'),
-    missingCard: document.getElementById('caseLibraryMissingCard'),
-    missingCardTitle: document.getElementById('caseLibraryMissingCardTitle'),
-    missingProject: document.getElementById('caseLibraryMissingProject'),
-    missingModules: document.getElementById('caseLibraryMissingModules'),
-    missingBatchDeleteBtn: document.getElementById('caseLibraryMissingBatchDeleteBtn'),
-    missingStatus: document.getElementById('caseLibraryMissingStatus'),
-    missingView: document.getElementById('caseLibraryMissingView'),
-    missingTypePills: document.getElementById('caseLibraryMissingTypePills'),
-
-    missingImportDropZone: document.getElementById('caseLibraryMissingImportDropZone'),
-    missingImportInput: document.getElementById('caseLibraryMissingImportInput'),
-    missingImportFileHint: document.getElementById('caseLibraryMissingImportFileHint'),
-    missingImportProjectSelect: document.getElementById('caseLibraryMissingImportProjectSelect'),
-    missingImportConfirmBtn: document.getElementById('caseLibraryMissingImportConfirmBtn'),
-    missingImportStatus: document.getElementById('caseLibraryMissingImportStatus'),
-    missingImportDiffTitle: document.getElementById('caseLibraryMissingImportDiffTitle'),
-    missingImportDiffStatus: document.getElementById('caseLibraryMissingImportDiffStatus'),
-    missingImportDiffMeta: document.getElementById('caseLibraryMissingImportDiffMeta'),
-    missingImportStructureWrap: document.getElementById('caseLibraryMissingImportStructureWrap'),
-    missingImportStructureBody: document.getElementById('caseLibraryMissingImportStructureBody'),
-    missingImportDiffBody: document.getElementById('caseLibraryMissingImportDiffBody'),
-    missingImportDiffConfirmBtn: document.getElementById('caseLibraryMissingImportDiffConfirmBtn'),
-
-    importDropZone: document.getElementById('caseLibraryImportDropZone'),
-    importInput: document.getElementById('caseLibraryImportInput'),
-    importFileHint: document.getElementById('caseLibraryImportFileHint'),
-    importProjectSelect: document.getElementById('caseLibraryImportProjectSelect'),
-    importVersionSelect: document.getElementById('caseLibraryImportVersionSelect'),
-    importExcelTemplateTypeSelect: document.getElementById('caseLibraryImportExcelTemplateType'),
-    importExcelTemplateBtn: document.getElementById('caseLibraryImportExcelTemplateBtn'),
-    importXmindTemplateBtn: document.getElementById('caseLibraryImportXmindTemplateBtn'),
-    importConfirmBtn: document.getElementById('caseLibraryImportConfirmBtn'),
-    importStatus: document.getElementById('caseLibraryImportStatus'),
-    writerPublishDrawer: document.getElementById('caseLibraryWriterPublishDrawer'),
-    writerPublishHint: document.getElementById('caseLibraryWriterPublishHint'),
-    writerPublishFileNameInput: document.getElementById('caseLibraryWriterPublishFileNameInput'),
-    writerPublishFileNameStatus: document.getElementById('caseLibraryWriterPublishFileNameStatus'),
-    writerPublishProjectSelect: document.getElementById('caseLibraryWriterPublishProjectSelect'),
-    writerPublishVersionSelect: document.getElementById('caseLibraryWriterPublishVersionSelect'),
-    writerPublishConfirmBtn: document.getElementById('caseLibraryWriterPublishConfirmBtn'),
-    writerPublishStatus: document.getElementById('caseLibraryWriterPublishStatus'),
-
-	    importDiffTitle: document.getElementById('caseLibraryImportDiffTitle'),
-    importDiffStatus: document.getElementById('caseLibraryImportDiffStatus'),
-    importDiffMeta: document.getElementById('caseLibraryImportDiffMeta'),
-    importDiffLocateBar: document.getElementById('caseLibraryImportDiffLocateBar'),
-	    importDiffTableHost: document.getElementById('caseLibraryImportDiffTableHost'),
-	    importDiffOverwriteBtn: document.getElementById('caseLibraryImportDiffOverwriteBtn'),
-	    importInvalidTitle: document.getElementById('caseLibraryImportInvalidTitle'),
-	    importInvalidStatus: document.getElementById('caseLibraryImportInvalidStatus'),
-	    importInvalidLocateBar: document.getElementById('caseLibraryImportInvalidLocateBar'),
-	    importInvalidBody: document.getElementById('caseLibraryImportInvalidBody'),
-	    importInvalidConfirmBtn: document.getElementById('caseLibraryImportInvalidConfirmBtn'),
-      importDuplicateTitle: document.getElementById('caseLibraryImportDuplicateTitle'),
-      importDuplicateStatus: document.getElementById('caseLibraryImportDuplicateStatus'),
-      importDuplicateBody: document.getElementById('caseLibraryImportDuplicateBody'),
-      importDuplicateConfirmBtn: document.getElementById('caseLibraryImportDuplicateConfirmBtn'),
-
-    editDrawerProjectSelect: document.getElementById('caseLibraryEditProjectSelect'),
-    editDrawerVersionSelect: document.getElementById('caseLibraryEditVersionSelect'),
-    editDrawerOwnerFilterSelect: document.getElementById('caseLibraryEditOwnerFilterSelect'),
-    editDrawerFileSearchInput: document.getElementById('caseLibraryEditFileSearchInput'),
-    editDrawerChangeVersionSelect: document.getElementById('caseLibraryEditChangeVersionSelect'),
-    editDrawerChangeVersionBtn: document.getElementById('caseLibraryEditChangeVersionBtn'),
-    editDrawerConfirmBtn: document.getElementById('caseLibraryEditConfirmBtn'),
-    editDrawerShareBtn: document.getElementById('caseLibraryEditShareBtn'),
-    editDrawerExportXmindBtn: document.getElementById('caseLibraryEditExportXmindBtn'),
-    editDrawerExportExcelBtn: document.getElementById('caseLibraryEditExportExcelBtn'),
-    editDrawerDeleteBtn: document.getElementById('caseLibraryEditDeleteBtn'),
-    editDrawerSelectAll: document.getElementById('caseLibraryEditSelectAll'),
-    editDrawerStatus: document.getElementById('caseLibraryEditDrawerStatus'),
-    editDrawerListBody: document.getElementById('caseLibraryEditListBody'),
-    editDrawerPaginationTop: document.getElementById('caseLibraryEditDrawerPaginationTop'),
-    editDrawerPaginationBottom: document.getElementById('caseLibraryEditDrawerPaginationBottom'),
-    missingDrawerProjectSelect: document.getElementById('caseLibraryMissingProjectSelect'),
-    missingDrawerModuleSelect: document.getElementById('caseLibraryMissingModuleSelect'),
-    missingDrawerTypeSelect: document.getElementById('caseLibraryMissingTypeSelect'),
-    missingDrawerTypeAddBtn: document.getElementById('caseLibraryMissingTypeAddBtn'),
-    missingDrawerTypeManageBtn: document.getElementById('caseLibraryMissingTypeManageBtn'),
-    missingDrawerTypeGrid: document.getElementById('caseLibraryMissingTypeGrid'),
-    missingDrawerQueryBtn: document.getElementById('caseLibraryMissingQueryBtn'),
-    missingDrawerAddModuleBtn: document.getElementById('caseLibraryMissingAddModuleBtn'),
-    missingDrawerBatchViewBtn: document.getElementById('caseLibraryMissingBatchViewBtn'),
-    missingDrawerDeleteBtn: document.getElementById('caseLibraryMissingDeleteBtn'),
-    missingDrawerExportXmindBtn: document.getElementById('caseLibraryMissingExportXmindBtn'),
-    missingDrawerExportExcelBtn: document.getElementById('caseLibraryMissingExportExcelBtn'),
-    missingDrawerSelectAll: document.getElementById('caseLibraryMissingSelectAll'),
-    missingDrawerStatus: document.getElementById('caseLibraryMissingDrawerStatus'),
-    missingDrawerListBody: document.getElementById('caseLibraryMissingListBody'),
-    missingDrawerPaginationTop: document.getElementById('caseLibraryMissingDrawerPaginationTop'),
-    missingDrawerPaginationBottom: document.getElementById('caseLibraryMissingDrawerPaginationBottom'),
-    missingTypeAddProjectName: document.getElementById('caseLibraryMissingTypeAddProjectName'),
-    missingTypeNameInput: document.getElementById('caseLibraryMissingTypeNameInput'),
-    missingTypeAddConfirmBtn: document.getElementById('caseLibraryMissingTypeAddConfirmBtn'),
-    missingTypeAddStatus: document.getElementById('caseLibraryMissingTypeAddStatus'),
-    missingTypeManageBody: document.getElementById('caseLibraryMissingTypeManageBody'),
-    missingTypeManageStatus: document.getElementById('caseLibraryMissingTypeManageStatus'),
-    missingAddProjectName: document.getElementById('caseLibraryMissingAddProjectName'),
-    missingAddModuleNameInput: document.getElementById('caseLibraryMissingModuleNameInput'),
-    missingAddConfirmBtn: document.getElementById('caseLibraryMissingAddConfirmBtn'),
-    missingAddStatus: document.getElementById('caseLibraryMissingAddStatus'),
-    missingEditProjectName: document.getElementById('caseLibraryMissingEditProjectName'),
-    missingEditModuleNameInput: document.getElementById('caseLibraryMissingEditModuleNameInput'),
-    missingEditConfirmBtn: document.getElementById('caseLibraryMissingEditConfirmBtn'),
-    missingEditStatus: document.getElementById('caseLibraryMissingEditStatus'),
-    shareDrawerCaseName: document.getElementById('caseLibraryShareCaseName'),
-    shareDrawerSourceProject: document.getElementById('caseLibraryShareSourceProject'),
-    shareDrawerSourceVersion: document.getElementById('caseLibraryShareSourceVersion'),
-    shareDrawerProjectSelect: document.getElementById('caseLibraryShareProjectSelect'),
-    shareDrawerVersionSelect: document.getElementById('caseLibraryShareVersionSelect'),
-    shareDrawerConfirmBtn: document.getElementById('caseLibraryShareConfirmBtn'),
-    shareDrawerStatus: document.getElementById('caseLibraryShareStatus'),
-
-    selectProjectSelect: document.getElementById('caseLibrarySelectProjectSelect'),
-    selectOpenButton: document.getElementById('openCaseLibrarySelectExecDrawerBtn'),
-    selectVersionSelect: document.getElementById('caseLibrarySelectVersionSelect'),
-    selectSearchInput: document.getElementById('caseLibrarySelectSearchInput'),
-    selectConfirmBtn: document.getElementById('caseLibrarySelectConfirmBtn'),
-    selectSelectAll: document.getElementById('caseLibrarySelectSelectAll'),
-    selectBatchExecBtn: document.getElementById('caseLibrarySelectBatchExecBtn'),
-    selectStatus: document.getElementById('caseLibrarySelectDrawerStatus'),
-    selectTableHost: document.getElementById('caseLibrarySelectExecTableHost'),
-    selectPaginationTop: document.getElementById('caseLibrarySelectDrawerPaginationTop'),
-    selectPaginationBottom: document.getElementById('caseLibrarySelectDrawerPaginationBottom'),
-
-    associationCaseName: document.getElementById('caseLibraryAssociationCaseName'),
-    associationStatus: document.getElementById('caseLibraryAssociationStatus'),
-    associationAddBtn: document.getElementById('caseLibraryAssociationAddBtn'),
-    associationListTableHost: document.getElementById('caseLibraryAssociationListTableHost'),
-
-    associationPickStatus: document.getElementById('caseLibraryAssociationPickStatus'),
-    associationPickVersionSelect: document.getElementById('caseLibraryAssociationPickVersionSelect'),
-    associationPickSearchInput: document.getElementById('caseLibraryAssociationPickSearchInput'),
-    associationPickRefreshBtn: document.getElementById('caseLibraryAssociationPickRefreshBtn'),
-    associationPickQueryBtn: document.getElementById('caseLibraryAssociationPickQueryBtn'),
-    associationPickNextBtn: document.getElementById('caseLibraryAssociationPickNextBtn'),
-    associationCandidateTableHost: document.getElementById('caseLibraryAssociationCandidateTableHost'),
-    associationPickSubCaseName: document.getElementById('caseLibraryAssociationPickSubCaseName'),
-    associationPickSelectAll: document.getElementById('caseLibraryAssociationPickSelectAll'),
-    associationItemTableHost: document.getElementById('caseLibraryAssociationItemTableHost'),
-    associationPickPaginationTop: document.getElementById('caseLibraryAssociationPickPaginationTop'),
-    associationPickPaginationBottom: document.getElementById('caseLibraryAssociationPickPaginationBottom'),
-    associationPickConfirmBtn: document.getElementById('caseLibraryAssociationPickConfirmBtn'),
-    associationDeleteConfirmBtn: document.getElementById('caseLibraryAssociationDeleteConfirmBtn'),
-
-    importSelectProjectSelect: document.getElementById('caseLibraryImportSelectProjectSelect'),
-    importSelectVersionSelect: document.getElementById('caseLibraryImportSelectVersionSelect'),
-    importSelectSearchInput: document.getElementById('caseLibraryImportSelectSearchInput'),
-    importSelectQueryBtn: document.getElementById('caseLibraryImportSelectQueryBtn'),
-    importSelectBatchBtn: document.getElementById('caseLibraryImportSelectBatchBtn'),
-    importSelectSelectAll: document.getElementById('caseLibraryImportSelectSelectAll'),
-    importSelectStatus: document.getElementById('caseLibraryImportSelectStatus'),
-    importSelectListBody: document.getElementById('caseLibraryImportSelectListBody'),
-    importSelectPaginationTop: document.getElementById('caseLibraryImportSelectPaginationTop'),
-    importSelectPaginationBottom: document.getElementById('caseLibraryImportSelectPaginationBottom'),
-
-    historyDrawerProjectSelect: document.getElementById('caseLibraryHistoryProjectSelect'),
-    historyDrawerVersionSelect: document.getElementById('caseLibraryHistoryVersionSelect'),
-    historyDrawerSearchInput: document.getElementById('caseLibraryHistorySearchInput'),
-    historyDrawerQueryBtn: document.getElementById('caseLibraryHistoryQueryBtn'),
-    historyDrawerClearBtn: document.getElementById('caseLibraryHistoryClearBtn'),
-    historyDrawerStatus: document.getElementById('caseLibraryHistoryDrawerStatus'),
-    historyDrawerTableHost: document.getElementById('caseLibraryHistoryDrawerTableHost'),
-    historyDrawerPaginationTop: document.getElementById('caseLibraryHistoryDrawerPaginationTop'),
-    historyDrawerPaginationBottom: document.getElementById('caseLibraryHistoryDrawerPaginationBottom'),
-
-    historyDetailCard: document.getElementById('caseLibraryHistoryDetailCard'),
-    historyStatus: document.getElementById('caseLibraryHistoryStatus'),
-    historyCaseName: document.getElementById('caseLibraryHistoryCaseName'),
-    historyRefreshBtn: document.getElementById('caseLibraryHistoryRefreshBtn'),
-    historyHideBtn: document.getElementById('caseLibraryHistoryHideBtn'),
-    historyAppendPill: document.getElementById('caseLibraryHistoryAppendPill'),
-    historyAddedPill: document.getElementById('caseLibraryHistoryAddedPill'),
-    historyUpdatedPill: document.getElementById('caseLibraryHistoryUpdatedPill'),
-    historyDeletedPill: document.getElementById('caseLibraryHistoryDeletedPill'),
-    historyImportPill: document.getElementById('caseLibraryHistoryImportPill'),
-    historyReimportPill: document.getElementById('caseLibraryHistoryReimportPill'),
-    historyFileDeletedPill: document.getElementById('caseLibraryHistoryFileDeletedPill'),
-    historyPaginationTop: document.getElementById('caseLibraryHistoryPaginationTop'),
-    historyPaginationBottom: document.getElementById('caseLibraryHistoryPaginationBottom'),
-    historyTableHost: document.getElementById('caseLibraryHistoryTableHost'),
-  };
-
-  var state = {
-    projects: [],
-    projectNameById: {},
-
-    versionsByProject: {},
-    versionNameByProject: {},
-
-    importDrawer: {
-      files: [],
-      projectId: null,
-      versionId: null,
-      loading: false,
-    },
-
-    writer: {
-      loading: false,
-      projectId: null,
-      versionId: null,
-      draftItems: [],
-      draftFileName: '',
-      fileNameInput: '',
-      fileNameClean: '',
-      fileNameDuplicate: false,
-      fileNameChecking: false,
-      duplicateCaseFileId: null,
-      summary: null,
-      publishing: false,
-      lastImportedCaseFileId: null,
-    },
-
-	    importDiff: {
-        mode: 'import',
-        caseFileId: null,
-	      fileName: '',
-	      cleanName: '',
-	      importedCleanName: '',
-	      source: '',
-	      projectId: null,
-	      importVersionId: null,
-	      dbVersionId: null,
-	      importItems: [],
-	      dbItems: [],
-	      loading: false,
-        confirming: false,
-	    },
-
-	    importInvalid: {
-	      file: null,
-	      fileName: '',
-	      cleanName: '',
-	      source: '',
-	      projectId: null,
-	      versionId: null,
-	      structuralErrors: [],
-	      items: [],
-	      invalid: [],
-	      loading: false,
-	      locateIndex: -1,
-	    },
-
-    editDrawer: {
-      projectId: null,
-      versionId: null,
-      ownerFilter: 'all',
-      ownerFilterTouched: false,
-      changeVersionId: null,
-      fileSearchText: '',
-      files: [],
-      execByFileId: {},
-      loading: false,
-      selection: new Set(),
-      pageIndex: 0,
-      restoring: false,
-    },
-
-    shareDrawer: {
-      caseFile: null,
-      caseFiles: [],
-      projectId: null,
-      versionId: null,
-      loading: false,
-      versionLoadFailed: false,
-      projects: [],
-      projectNameById: {},
-      versionsByProject: {},
-      versionNameByProject: {},
-      previousDrawer: null,
-      reopenPrevious: false,
-    },
-
-    associationDrawer: {
-      caseFile: null,
-      processing: false,
-      previousDrawer: null,
-      pendingAction: '',
-      pendingAssociationId: null,
-    },
-
-    associationPickDrawer: {
-      mode: 'create',
-      mainCaseFile: null,
-      associationId: null,
-      subCaseFile: null,
-      originalSubCaseFileId: null,
-      originalSelectedCaseItemIds: [],
-      versionId: null,
-      processing: false,
-      previousDrawer: null,
-    },
-
-    importSelectDrawer: {
-      projectId: null,
-      versionId: null,
-      searchText: '',
-      files: [],
-      loading: false,
-      processing: false,
-      selection: new Set(),
-      skipCloseImport: false,
-      pageIndex: 0,
-      loadSeq: 0,
-    },
-
-    historyQueryDrawer: {
-      projectId: null,
-      versionId: null,
-    },
-
-    historyDetail: {
-      projectId: null,
-      fileNameClean: '',
-      isDeleted: false,
-      versionId: null,
-      restoring: false,
-    },
-
-    editor: {
-      caseFile: null,
-      items: [],
-      searchText: '',
-      pageIndex: 0,
-      batchAddCount: 5,
-      selection: new Set(),
-      remarkOpen: new Set(),
-      pendingOp: null,
-      pendingTimer: null,
-      pendingInterval: null,
-      pendingToast: null,
-      pendingRemaining: 0,
-      restoring: false,
-    },
-
-    aiGen: {
-      caseFileId: null,
-      requirementText: '',
-      requirementFileName: '',
-      loading: false,
-      generated: false,
-      error: '',
-      modules: [],
-      selection: new Set(),
-      taskSignature: '',
-      taskId: '',
-    },
-
-    missingReminder: {
-      projectId: null,
-      signature: '',
-      items: [],
-      matchedModules: [],
-      matchedTypes: [],
-      loading: false,
-      loaded: false,
-      seq: 0,
-      refreshTimer: null,
-    },
-
-    missingDrawer: {
-      projectId: null,
-      moduleId: null,
-      modules: [],
-      loading: false,
-      processing: false,
-      selection: new Set(),
-      pageIndex: 0,
-      moduleCompletion: {},
-      moduleCompletionLoading: {},
-      moduleCompletionSeq: 0,
-    },
-
-    missingType: {
-      projectId: null,
-      types: [],
-      loading: false,
-      selection: new Set(),
-    },
-
-    missingTypeAdd: {
-      projectId: null,
-      loading: false,
-      source: '',
-    },
-
-    missingTypeManage: {
-      loading: false,
-    },
-
-    missingAdd: {
-      projectId: null,
-      loading: false,
-    },
-
-    missingEdit: {
-      moduleId: null,
-      projectId: null,
-      name: '',
-      loading: false,
-    },
-
-    missingView: {
-      projectId: null,
-      modules: [],
-      moduleIds: [],
-      items: [],
-      selection: new Set(),
-      pageIndex: 0,
-      restoring: false,
-      pendingOp: null,
-      pendingTimer: null,
-      pendingInterval: null,
-      pendingToast: null,
-      pendingRemaining: 0,
-      autoSaveTimers: {},
-      autoSaveInFlight: {},
-      typeFilters: new Set(),
-    },
-    missingImport: {
-      projectId: null,
-      files: [],
-      items: [],
-      structuralErrors: [],
-      loading: false,
-      pending: false,
-      invalid: [],
-    },
-    missingImportDiff: {
-      projectId: null,
-      rows: [],
-      newItems: [],
-      duplicateCount: 0,
-      pendingItemsByModule: [],
-      structuralErrors: [],
-    },
-  };
+  var runtimeContext = runtimeContextOwner.create({ document: document });
+  var dom = runtimeContext.dom;
+  var state = runtimeContext.state;
 
   var viewStateStore = viewStateStoreOwner.create({
     storage: typeof localStorage !== 'undefined' ? localStorage : null,
@@ -1557,7 +787,7 @@
     openConfirmDrawer: openConfirmDrawer,
     confirmOverwrite: function(message) { return window.confirm(message); },
     getVersionName: getVersionName,
-    requestAssignDrawer: requestTempExecAssignDrawer,
+    requestAssignDrawer: drawerRequestController.requestTempExecAssign,
     activateExecView: activateTempExecView,
   });
   var transferItemsToTempExec = execTransferService.transfer;
@@ -1630,6 +860,62 @@
     showBlockHint: showCaseLibraryBlockHint,
   });
 
+  var editDrawerWorkflow = editDrawerWorkflowOwner.create({
+    state: state,
+    dom: dom,
+    apiClient: apiClient,
+    getListController: ensureEditListController,
+    setListData: setEditListControllerData,
+    setStatus: setStatus,
+    normalizeId: normalizeId,
+    syncProjectOptions: syncProjectOptions,
+    syncVersionOptions: syncVersionOptions,
+    syncChangeVersionOptions: syncEditDrawerChangeVersionOptions,
+    syncOwnerFilterOptions: syncEditDrawerOwnerFilterOptions,
+    persistState: persistEditDrawerState,
+    isDrawerOpen: function() { return isDrawerInstanceOpen(editDrawerInstance); },
+    getDrawer: function() { return editDrawerInstance || null; },
+    getShareController: function() { return shareController; },
+    logOperation: safeLogOperation,
+    getXmindBuilder: getXmindBuilder,
+    getDownloadBlob: getDownloadBlob,
+    getJsZip: function() {
+      return typeof JSZip !== 'undefined' ? JSZip : (window.JSZip ? window.JSZip : null);
+    },
+    sanitizeDownloadName: sanitizeDownloadName,
+    buildExcelBlob: buildCaseLibraryExcelBlob,
+    getVersionName: getVersionName,
+    openConfirmDrawer: openConfirmDrawer,
+    isAdminUser: isAdminUser,
+    loadVersions: loadVersions,
+    getCurrentUserId: getCurrentUserId,
+    resolvePage: resolveDrawerPage,
+    alertUser: function(message) { window.alert(message); },
+    showEditorCard: showEditorCard,
+    syncAiGenContext: syncCaseLibraryAiGenContext,
+    clearEditorPersistence: clearEditorPersistedState,
+    setEditorStatus: function(message, type) { setStatus(dom.editStatus, message, type); },
+  });
+  var resetEditDrawer = editDrawerWorkflow.reset;
+  var handleEditDrawerVersionChange = editDrawerWorkflow.handleVersionChange;
+  var handleEditDrawerChangeVersionSelectChange = editDrawerWorkflow.handleChangeVersionSelectChange;
+  var handleEditDrawerOwnerFilterChange = editDrawerWorkflow.handleOwnerFilterChange;
+  var handleEditDrawerFileSearchInput = editDrawerWorkflow.handleFileSearchInput;
+  var updateEditDrawerLoadedStatus = editDrawerWorkflow.updateLoadedStatus;
+  var getSelectedEditDrawerCaseFiles = editDrawerWorkflow.getSelectedFiles;
+  var openShareDrawerFromSelection = editDrawerWorkflow.openShareFromSelection;
+  var exportEditDrawerSelectionToXmind = editDrawerWorkflow.exportSelectionToXmind;
+  var exportEditDrawerSelectionToExcel = editDrawerWorkflow.exportSelectionToExcel;
+  var handleEditDrawerProjectChange = editDrawerWorkflow.handleProjectChange;
+  var getEditDrawerVisibleFiles = editDrawerWorkflow.getVisibleFiles;
+  var getEditDrawerPagedFiles = editDrawerWorkflow.getPagedFiles;
+  var syncEditDrawerControls = editDrawerWorkflow.syncControls;
+  var renderEditDrawerList = editDrawerWorkflow.render;
+  var confirmEditDrawerChangeVersion = editDrawerWorkflow.confirmChangeVersion;
+  var deleteSelectedCaseFiles = editDrawerWorkflow.deleteSelected;
+  var loadEditDrawerFiles = editDrawerWorkflow.loadFiles;
+  var findCaseFileInEditDrawer = editDrawerWorkflow.findFile;
+
   var historyDrawerController = historyDrawerControllerOwner.create({
     state: state,
     dom: dom,
@@ -1665,6 +951,22 @@
   var persistHistoryDetailSelection = historyDrawerController.persistDetailSelection;
   var readHistoryDetailPersistedState = historyDrawerController.readDetailPersistedState;
   var restoreHistoryDetailFromPersistedState = historyDrawerController.restoreDetail;
+  var viewRestoreController = viewRestoreControllerOwner.create({
+    isAuthReady: isAuthReady,
+    getCurrentUserId: getCurrentUserId,
+    getCurrentLoginSeq: getCurrentLoginSeq,
+    readLastView: readCaseLibraryLastViewPersistedState,
+    readEditor: readEditorPersistedState,
+    readHistory: readHistoryDetailPersistedState,
+    readMissing: readMissingViewPersistedState,
+    restoreEditor: restoreEditorFromPersistedState,
+    restoreHistory: restoreHistoryDetailFromPersistedState,
+    restoreMissing: restoreMissingViewFromPersistedState,
+    prepareEditor: function() { setHistoryDetailVisible(false); showEditorCard(true); },
+    prepareMissing: function() { setHistoryDetailVisible(false); showEditorCard(false); },
+    hideMissing: function() { showMissingCard(false); },
+  });
+  var restoreCaseLibraryLastSelection = viewRestoreController.restoreLastSelection;
 
   function ensureAssociationListController() {
     if (associationListControllerInstance) return associationListControllerInstance;
@@ -3092,626 +2394,8 @@
     syncImportConfirmEnabled();
   }
 
-  function confirmImportToDb() {
-    return importWorkflowController.confirm();
-  }
+  var confirmImportToDb = importWorkflowController.confirm;
 
-  function resetEditDrawer() {
-    var controller = ensureEditListController();
-    if (controller) controller.reset();
-    state.editDrawer.files = [];
-    state.editDrawer.execByFileId = {};
-    state.editDrawer.changeVersionId = null;
-    setStatus(dom.editDrawerStatus, '', '');
-    syncProjectOptions(dom.editDrawerProjectSelect, '请选择项目');
-    if (dom.editDrawerProjectSelect) dom.editDrawerProjectSelect.value = '';
-    if (dom.editDrawerVersionSelect) {
-      dom.editDrawerVersionSelect.disabled = true;
-      dom.editDrawerVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
-      dom.editDrawerVersionSelect.value = '';
-    }
-    if (dom.editDrawerChangeVersionSelect) {
-      dom.editDrawerChangeVersionSelect.disabled = true;
-      dom.editDrawerChangeVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
-      dom.editDrawerChangeVersionSelect.value = '';
-    }
-    syncEditDrawerOwnerFilterOptions();
-    if (dom.editDrawerFileSearchInput) dom.editDrawerFileSearchInput.value = '';
-    if (dom.editDrawerShareBtn) dom.editDrawerShareBtn.disabled = true;
-    if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
-    if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
-    syncEditDrawerControls();
-  }
-
-  function handleEditDrawerVersionChange() {
-    var controller = ensureEditListController();
-    if (controller) controller.setVersion(normalizeId(dom.editDrawerVersionSelect ? dom.editDrawerVersionSelect.value : ''));
-    updateEditDrawerLoadedStatus();
-    persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
-  }
-
-  function handleEditDrawerChangeVersionSelectChange() {
-    state.editDrawer.changeVersionId = normalizeId(dom.editDrawerChangeVersionSelect ? dom.editDrawerChangeVersionSelect.value : '');
-    syncEditDrawerControls();
-  }
-
-  function handleEditDrawerOwnerFilterChange() {
-    var controller = ensureEditListController();
-    if (controller) {
-      controller.setOwnerFilter(
-        dom.editDrawerOwnerFilterSelect ? dom.editDrawerOwnerFilterSelect.value : '',
-        true
-      );
-    }
-    updateEditDrawerLoadedStatus();
-    persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
-  }
-
-  function handleEditDrawerFileSearchInput() {
-    if (!dom.editDrawerFileSearchInput) return;
-    var controller = ensureEditListController();
-    if (controller) controller.setSearch(dom.editDrawerFileSearchInput.value || '');
-    updateEditDrawerLoadedStatus();
-    persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
-  }
-
-  function updateEditDrawerLoadedStatus(list, force) {
-    if (!dom.editDrawerStatus) return;
-    if (!force && state.editDrawer.loading) return;
-    var files = Array.isArray(list) ? list : getEditDrawerVisibleFiles();
-    var totalItems = 0;
-    files.forEach(function(f) {
-      var count = Number(f && f.item_count);
-      if (!Number.isFinite(count) || count < 0) count = 0;
-      totalItems += count;
-    });
-    var fileCount = files.length;
-    var msg = '已加载 ' + fileCount + ' 份用例文件，共' + totalItems + '条用例。';
-    setStatus(dom.editDrawerStatus, msg, fileCount ? 'ok' : 'warn');
-  }
-
-  function getSelectedEditDrawerCaseFiles() {
-    var controller = ensureEditListController();
-    return controller ? controller.getSelectedFiles() : [];
-  }
-
-  function openShareDrawerFromSelection() {
-    if (state.editDrawer.loading) return;
-    var files = getSelectedEditDrawerCaseFiles();
-    if (!files.length) {
-      setStatus(dom.editDrawerStatus, '请先勾选要共享的用例文件', 'warn');
-      return;
-    }
-    var first = files[0];
-    safeLogOperation('open_share_case_file', 'case_file', first.id, {
-      file_name: first.file_name_clean || '',
-      selected_count: files.length,
-    });
-    if (!shareController.open(files, { previousDrawer: editDrawerInstance || null })) {
-      setStatus(dom.editDrawerStatus, '共享抽屉不可用', 'warn');
-    }
-  }
-
-  function exportEditDrawerSelectionToXmind() {
-    if (state.editDrawer.loading) return;
-    var files = getSelectedEditDrawerCaseFiles();
-    if (!files.length) {
-      setStatus(dom.editDrawerStatus, '请先勾选要导出的用例文件', 'warn');
-      return;
-    }
-    var builder = getXmindBuilder();
-    if (!builder) {
-      setStatus(dom.editDrawerStatus, '缺少 XMind 导出依赖', 'err');
-      return;
-    }
-    if (!apiClient || typeof apiClient.listCaseItems !== 'function') {
-      setStatus(dom.editDrawerStatus, '后端用例条目接口未就绪', 'err');
-      return;
-    }
-    var downloadBlob = getDownloadBlob();
-    var zipCtor = (typeof JSZip !== 'undefined' ? JSZip : (window.JSZip ? window.JSZip : null));
-    var isBatch = files.length > 1;
-    var zip = isBatch && zipCtor ? new zipCtor() : null;
-    var success = 0;
-    var fail = 0;
-    if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
-    setStatus(dom.editDrawerStatus, (isBatch ? ('批量导出 XMind（' + files.length + '份）...') : '正在导出 XMind...'), '');
-
-    var chain = Promise.resolve();
-    files.forEach(function(f) {
-      chain = chain.then(function() {
-        var fallbackName = '';
-        if (f) {
-          fallbackName = f.file_name_clean || f.file_name || f.name || '';
-        }
-        var baseName = fallbackName ? String(fallbackName) : ('用例#' + (f && f.id ? f.id : ''));
-        return apiClient
-          .listCaseItems(f.id)
-          .then(function(items) { return builder(items || [], baseName, ''); })
-          .then(function(pkg) {
-            if (!pkg || !pkg.blob) throw new Error('无导出内容');
-            var fileName = sanitizeDownloadName(baseName, '.xmind');
-            if (zip) {
-              zip.file(fileName, pkg.blob);
-            } else {
-              downloadBlob(fileName, pkg.blob);
-            }
-            success += 1;
-          })
-          .catch(function(err) {
-            fail += 1;
-            console.error(err);
-          });
-      });
-    });
-    chain
-      .then(function() {
-        if (zip) {
-          if (!success) throw new Error('全部导出失败');
-          return zip.generateAsync({ type: 'blob' }).then(function(blob) {
-            downloadBlob('用例批量导出_xmind.zip', blob);
-          });
-        }
-        return null;
-      })
-      .then(function() {
-        setStatus(dom.editDrawerStatus, '导出完成：成功 ' + success + ' 份，失败 ' + fail + ' 份', fail ? 'warn' : 'ok');
-        if (success) {
-          var fileNames = files
-            .map(function(f) {
-              if (!f) return '';
-              return String(f.file_name_clean || f.file_name || f.name || '').trim();
-            })
-            .filter(Boolean);
-          safeLogOperation('export_case_files_xmind', 'case_file', files.length === 1 ? files[0].id : null, {
-            format: 'xmind',
-            count: files.length,
-            success: success,
-            fail: fail,
-            case_file_ids: files.map(function(f) { return f && f.id ? f.id : null; }).filter(function(v) { return v !== null; }),
-            file_name: files.length === 1 && fileNames.length ? fileNames[0] : null,
-            file_names: fileNames,
-          });
-        }
-      })
-      .catch(function(err) {
-        setStatus(dom.editDrawerStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
-      })
-      .finally(function() {
-        if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = false;
-      });
-  }
-
-  function exportEditDrawerSelectionToExcel() {
-    if (state.editDrawer.loading) return;
-    var files = getSelectedEditDrawerCaseFiles();
-    if (!files.length) {
-      setStatus(dom.editDrawerStatus, '请先勾选要导出的用例文件', 'warn');
-      return;
-    }
-    if (!apiClient || typeof apiClient.listCaseItems !== 'function') {
-      setStatus(dom.editDrawerStatus, '后端用例条目接口未就绪', 'err');
-      return;
-    }
-    var downloadBlob = getDownloadBlob();
-    var zipCtor = (typeof JSZip !== 'undefined' ? JSZip : (window.JSZip ? window.JSZip : null));
-    var isBatch = files.length > 1;
-    var zip = isBatch && zipCtor ? new zipCtor() : null;
-    var success = 0;
-    var fail = 0;
-    if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
-    setStatus(dom.editDrawerStatus, (isBatch ? ('批量导出 Excel（' + files.length + '份）...') : '正在导出 Excel...'), '');
-
-    var chain = Promise.resolve();
-    files.forEach(function(f) {
-      chain = chain.then(function() {
-        var fallbackName = '';
-        if (f) {
-          fallbackName = f.file_name_clean || f.file_name || f.name || '';
-        }
-        var baseName = fallbackName ? String(fallbackName) : ('用例#' + (f && f.id ? f.id : ''));
-        return apiClient
-          .listCaseItems(f.id)
-          .then(function(items) { return buildCaseLibraryExcelBlob(items || [], baseName); })
-          .then(function(blob) {
-            var fileName = sanitizeDownloadName(baseName, '.xlsx');
-            if (zip) {
-              zip.file(fileName, blob);
-            } else {
-              downloadBlob(fileName, blob);
-            }
-            success += 1;
-          })
-          .catch(function(err) {
-            fail += 1;
-            console.error(err);
-          });
-      });
-    });
-    chain
-      .then(function() {
-        if (zip) {
-          if (!success) throw new Error('全部导出失败');
-          return zip.generateAsync({ type: 'blob' }).then(function(blob) {
-            downloadBlob('用例批量导出_excel.zip', blob);
-          });
-        }
-        return null;
-      })
-      .then(function() {
-        setStatus(dom.editDrawerStatus, '导出完成：成功 ' + success + ' 份，失败 ' + fail + ' 份', fail ? 'warn' : 'ok');
-        if (success) {
-          var fileNames = files
-            .map(function(f) {
-              if (!f) return '';
-              return String(f.file_name_clean || f.file_name || f.name || '').trim();
-            })
-            .filter(Boolean);
-          safeLogOperation('export_case_files_excel', 'case_file', files.length === 1 ? files[0].id : null, {
-            format: 'xlsx',
-            count: files.length,
-            success: success,
-            fail: fail,
-            case_file_ids: files.map(function(f) { return f && f.id ? f.id : null; }).filter(function(v) { return v !== null; }),
-            file_name: files.length === 1 && fileNames.length ? fileNames[0] : null,
-            file_names: fileNames,
-          });
-        }
-      })
-      .catch(function(err) {
-        setStatus(dom.editDrawerStatus, '导出失败：' + (err && err.message ? err.message : '未知错误'), 'err');
-      })
-      .finally(function() {
-        if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = false;
-      });
-  }
-
-  function handleEditDrawerProjectChange() {
-    var projectId = normalizeId(dom.editDrawerProjectSelect ? dom.editDrawerProjectSelect.value : '');
-    var controller = ensureEditListController();
-    if (controller) controller.setProject(projectId);
-    state.editDrawer.files = [];
-    state.editDrawer.execByFileId = {};
-    state.editDrawer.changeVersionId = null;
-    if (dom.editDrawerVersionSelect) {
-      dom.editDrawerVersionSelect.disabled = true;
-      dom.editDrawerVersionSelect.innerHTML = '<option value=\"\">全部版本</option>';
-      dom.editDrawerVersionSelect.value = '';
-    }
-    if (dom.editDrawerChangeVersionSelect) {
-      dom.editDrawerChangeVersionSelect.disabled = true;
-      dom.editDrawerChangeVersionSelect.innerHTML = '<option value=\"\">请选择版本</option>';
-      dom.editDrawerChangeVersionSelect.value = '';
-    }
-    if (dom.editDrawerExportXmindBtn) dom.editDrawerExportXmindBtn.disabled = true;
-    if (dom.editDrawerExportExcelBtn) dom.editDrawerExportExcelBtn.disabled = true;
-    renderEditDrawerList();
-    if (!projectId) {
-      setStatus(dom.editDrawerStatus, '请先选择项目', 'warn');
-      syncEditDrawerControls();
-      persistEditDrawerState({
-        drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')),
-        force_clear: true,
-      });
-      return;
-    }
-    persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
-    loadEditDrawerFiles();
-  }
-
-  function getEditDrawerVisibleFiles() {
-    var controller = ensureEditListController();
-    return controller ? controller.getVisibleFiles() : [];
-  }
-
-  function getEditDrawerPagedFiles() {
-    var controller = ensureEditListController();
-    if (!controller) return { page: resolveDrawerPage(0, 0), list: [], total: 0 };
-    var page = controller.getPageData();
-    return {
-      page: page,
-      list: controller.getPageRows(),
-      total: page.total,
-    };
-  }
-
-  function syncEditDrawerControls() {
-    var controller = ensureEditListController();
-    if (controller) controller.syncControls();
-  }
-
-  function renderEditDrawerList() {
-    var controller = ensureEditListController();
-    if (controller) controller.render();
-  }
-
-  function confirmEditDrawerChangeVersion() {
-    if (state.editDrawer.loading) return;
-    var projectId = normalizeId(dom.editDrawerProjectSelect ? dom.editDrawerProjectSelect.value : '');
-    state.editDrawer.projectId = projectId;
-    if (!projectId) {
-      setStatus(dom.editDrawerStatus, '请先选择项目', 'warn');
-      return;
-    }
-    var targetVersionId = normalizeId(dom.editDrawerChangeVersionSelect ? dom.editDrawerChangeVersionSelect.value : '');
-    state.editDrawer.changeVersionId = targetVersionId;
-    if (!targetVersionId) {
-      setStatus(dom.editDrawerStatus, '请先选择更换版本', 'warn');
-      syncEditDrawerControls();
-      return;
-    }
-    var selection = state.editDrawer.selection instanceof Set ? state.editDrawer.selection : new Set();
-    state.editDrawer.selection = selection;
-    if (!selection.size) {
-      setStatus(dom.editDrawerStatus, '请先勾选要更换版本的用例文件', 'warn');
-      syncEditDrawerControls();
-      return;
-    }
-    if (!apiClient || typeof apiClient.changeCaseFileVersion !== 'function') {
-      setStatus(dom.editDrawerStatus, '后端更换版本接口未就绪', 'err');
-      return;
-    }
-
-    var list = Array.isArray(state.editDrawer.files) ? state.editDrawer.files : [];
-    var ids = Array.from(selection);
-    var effectiveIds = [];
-    ids.forEach(function(id) {
-      var found = list.find(function(f) { return f && String(f.id) === String(id); });
-      if (!found) return;
-      if (String(found.version_id || '') === String(targetVersionId)) return;
-      effectiveIds.push(String(id));
-    });
-    if (!effectiveIds.length) {
-      setStatus(dom.editDrawerStatus, '所选用例已在目标版本', 'warn');
-      return;
-    }
-
-    var versionName = getVersionName(projectId, targetVersionId);
-    var confirmMsg = '是否确认把所选用例的版本更换版本为' + versionName + '？';
-    openConfirmDrawer({
-      title: '确认更换版本',
-      message: confirmMsg,
-      confirmText: '确认更换',
-      cancelText: '取消',
-      previousDrawer: editDrawerInstance || null,
-    }).then(function(res) {
-      if (!res || res.ok !== true) {
-        setStatus(dom.editDrawerStatus, '已取消更换版本', 'warn');
-        return;
-      }
-      var editController = ensureEditListController();
-      if (editController) editController.setProcessing(true);
-      setStatus(dom.editDrawerStatus, '更换版本中...', '');
-      apiClient
-        .changeCaseFileVersion({
-          project_id: projectId,
-          target_version_id: targetVersionId,
-          case_file_ids: effectiveIds,
-        })
-        .then(function(resp) {
-          var updatedIds = Array.isArray(resp && resp.updated_ids) ? resp.updated_ids : [];
-          var skippedIds = Array.isArray(resp && resp.skipped_ids) ? resp.skipped_ids : [];
-          var missingIds = Array.isArray(resp && resp.missing_ids) ? resp.missing_ids : [];
-          var updatedSet = {};
-          updatedIds.forEach(function(id) { updatedSet[String(id)] = true; });
-          var nowText = new Date().toISOString();
-          (state.editDrawer.files || []).forEach(function(f) {
-            if (!f || f.id === null || f.id === undefined) return;
-            if (!updatedSet[String(f.id)]) return;
-            f.version_id = targetVersionId;
-            f.updated_at = nowText;
-          });
-          setEditListControllerData(state.editDrawer.files || [], null, {
-            projectId: projectId,
-            execByFileId: state.editDrawer.execByFileId,
-          });
-          if (editController) editController.clearSelection();
-          var msg = '更换版本完成：成功 ' + updatedIds.length + ' 份';
-          if (skippedIds.length) msg += '，跳过 ' + skippedIds.length + ' 份';
-          if (missingIds.length) msg += '，缺失 ' + missingIds.length + ' 份';
-          setStatus(dom.editDrawerStatus, msg, missingIds.length ? 'warn' : 'ok');
-        })
-        .catch(function(err) {
-          setStatus(dom.editDrawerStatus, err && err.message ? err.message : '更换版本失败', 'err');
-        })
-        .finally(function() {
-          if (editController) editController.setProcessing(false);
-          persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
-        });
-    });
-  }
-
-  function deleteSelectedCaseFiles() {
-    if (state.editDrawer.loading) return;
-    if (!isAdminUser()) {
-      setStatus(dom.editDrawerStatus, '仅管理员可删除', 'warn');
-      return;
-    }
-    var selection = state.editDrawer.selection instanceof Set ? state.editDrawer.selection : new Set();
-    state.editDrawer.selection = selection;
-    if (!selection.size) {
-      setStatus(dom.editDrawerStatus, '请先勾选要删除的用例文件', 'warn');
-      return;
-    }
-    if (!apiClient || typeof apiClient.deleteCaseFile !== 'function') {
-      setStatus(dom.editDrawerStatus, '后端删除接口未就绪', 'err');
-      return;
-    }
-    var ids = Array.from(selection);
-    var list = Array.isArray(state.editDrawer.files) ? state.editDrawer.files : [];
-
-    // 删除前强校验：只要存在于任意执行页（有人执行），必须先在执行页解散（删除执行集）再删库。
-    var execByFileId = state.editDrawer.execByFileId && typeof state.editDrawer.execByFileId === 'object'
-      ? state.editDrawer.execByFileId
-      : {};
-    var blocked = [];
-    ids.forEach(function(id) {
-      var key = String(id);
-      var execInfo = execByFileId[key] ? execByFileId[key] : null;
-      var activeUsers = execInfo && Array.isArray(execInfo.active_users) ? execInfo.active_users : [];
-      if (activeUsers && activeUsers.length) {
-        blocked.push({ id: key, activeUsers: activeUsers });
-      }
-    });
-    if (blocked.length) {
-      var lines = blocked.map(function(b) {
-        var found = list.find(function(f) { return f && String(f.id) === String(b.id); });
-        var name = found && found.file_name_clean ? String(found.file_name_clean) : ('文件#' + b.id);
-        var usersText = (b.activeUsers || []).filter(Boolean).join('、') || '未知人员';
-        return '- ' + name + '（' + usersText + '）';
-      });
-      var tip =
-        '以下用例文件正在执行页中，解散前无法删除：\n' +
-        lines.join('\n') +
-        '\n\n请先通知正在执行人，在执行页面的分配页面中解散该份用例（移除/删除执行集），解散后再删除。';
-      setStatus(dom.editDrawerStatus, '存在执行中用例，已阻止删除', 'warn');
-      window.alert(tip);
-      return;
-    }
-
-    var items = ids.map(function(id) {
-      var found = list.find(function(f) { return f && String(f.id) === String(id); });
-      var name = found && found.file_name_clean ? String(found.file_name_clean) : ('文件#' + id);
-      var count = found && (found.item_count || found.item_count === 0) ? Number(found.item_count) : NaN;
-      var countText = (isFinite(count) && count >= 0) ? (String(Math.floor(count)) + '条') : '?条';
-      return { name: name, countText: countText };
-    });
-    var pairs = (items || []).map(function(it) {
-      if (!it) return '';
-      return String(it.name || '用例') + '，' + String(it.countText || '?条');
-    }).filter(Boolean);
-    var head = pairs.slice(0, 6).join('、');
-    var suffix = pairs.length > 6 ? (' 等' + pairs.length + '份') : '';
-    var confirmMsg = '是否确认删除用例：' + head + suffix + '？';
-    openConfirmDrawer({
-      title: '确认删除用例',
-      message: confirmMsg,
-      confirmText: '确认删除',
-      cancelText: '取消',
-      danger: true,
-      previousDrawer: editDrawerInstance || null,
-    }).then(function(res) {
-      if (!res || res.ok !== true) return;
-      var editController = ensureEditListController();
-      if (editController) editController.setProcessing(true);
-      setStatus(dom.editDrawerStatus, '删除中...', '');
-      var success = 0;
-      var fail = 0;
-      var deletedIds = [];
-      var chain = Promise.resolve();
-      ids.forEach(function(id) {
-        chain = chain.then(function() {
-          return apiClient
-            .deleteCaseFile(id)
-            .then(function() {
-              success += 1;
-              deletedIds.push(String(id));
-            })
-            .catch(function(err) {
-              fail += 1;
-              var msg = err && err.message ? err.message : '删除失败';
-              setStatus(dom.editDrawerStatus, '删除失败：' + msg, 'err');
-            });
-        });
-      });
-      chain.then(function() {
-        var msg = '删除完成：成功 ' + success + ' 份，失败 ' + fail + ' 份';
-        setStatus(dom.editDrawerStatus, msg, fail ? 'warn' : 'ok');
-      }).finally(function() {
-        if (deletedIds.length) {
-          var deletedSet = new Set(deletedIds);
-          state.editDrawer.files = (state.editDrawer.files || []).filter(function(f) {
-            if (!f || f.id === null || f.id === undefined) return true;
-            return !deletedSet.has(String(f.id));
-          });
-          // 若当前编辑视图正在编辑被删除的用例文件，需立即清空视图，避免误以为仍可编辑。
-          var editorFile = state.editor && state.editor.caseFile ? state.editor.caseFile : null;
-          if (editorFile && editorFile.id !== null && editorFile.id !== undefined) {
-            if (deletedSet.has(String(editorFile.id))) {
-              state.editor.caseFile = null;
-              state.editor.items = [];
-              state.editor.searchText = '';
-              state.editor.pageIndex = 0;
-              state.editor.selection = new Set();
-              state.editor.remarkOpen = new Set();
-              showEditorCard(false);
-              syncCaseLibraryAiGenContext();
-              clearEditorPersistedState();
-              setStatus(dom.editStatus, '当前编辑用例已被删除', 'warn');
-            }
-          }
-        }
-        setEditListControllerData(state.editDrawer.files || [], null, {
-          projectId: state.editDrawer.projectId,
-          execByFileId: state.editDrawer.execByFileId,
-        });
-        if (editController) {
-          editController.clearSelection();
-          editController.setProcessing(false);
-        }
-      });
-    });
-  }
-
-  function loadEditDrawerFiles() {
-    var projectId = normalizeId(dom.editDrawerProjectSelect ? dom.editDrawerProjectSelect.value : '');
-    var versionId = normalizeId(dom.editDrawerVersionSelect ? dom.editDrawerVersionSelect.value : '') ||
-      normalizeId(state.editDrawer && state.editDrawer.versionId ? state.editDrawer.versionId : '');
-    var controller = ensureEditListController();
-    var controllerState = controller ? controller.getState() : null;
-    if (controller && String(controllerState.projectId || '') !== String(projectId || '')) {
-      controller.setProject(projectId);
-      controllerState = controller.getState();
-    }
-    if (controller && String(controllerState.versionId || '') !== String(versionId || '')) {
-      controller.setVersion(versionId);
-    }
-    state.editDrawer.files = [];
-    state.editDrawer.execByFileId = {};
-    if (!projectId) {
-      setStatus(dom.editDrawerStatus, '请先选择项目', 'warn');
-      return;
-    }
-    setStatus(dom.editDrawerStatus, '加载用例库...', '');
-    if (controller) controller.setLoading({ projectId: projectId, preserveSelection: true });
-    Promise.all([apiClient.listCaseFiles(projectId), loadVersions(projectId), apiClient.listExecSetsByCaseFile(projectId)])
-      .then(function(res) {
-        var files = Array.isArray(res && res[0]) ? res[0] : [];
-        var execSets = Array.isArray(res && res[2]) ? res[2] : [];
-        if (dom.editDrawerVersionSelect) {
-          syncVersionOptions(dom.editDrawerVersionSelect, projectId, '全部版本');
-          dom.editDrawerVersionSelect.disabled = false;
-          if (versionId) {
-            dom.editDrawerVersionSelect.value = String(versionId);
-          } else {
-            dom.editDrawerVersionSelect.value = '';
-          }
-        }
-        syncEditDrawerChangeVersionOptions(projectId);
-        setEditListControllerData(files, execSets, { projectId: projectId });
-        updateEditDrawerLoadedStatus(getEditDrawerVisibleFiles(), true);
-      })
-      .catch(function(err) {
-        if (controller) {
-          controller.setData([], {
-            projectId: projectId,
-            currentUserId: getCurrentUserId(),
-            projectNameById: state.projectNameById,
-            versionNameByProject: state.versionNameByProject,
-          });
-        }
-        setStatus(dom.editDrawerStatus, err && err.message ? err.message : '加载失败', 'err');
-      })
-      .finally(function() {
-        syncEditDrawerControls();
-        persistEditDrawerState({ drawer_open: Boolean(editDrawerInstance && editDrawerInstance.element && editDrawerInstance.element.classList && editDrawerInstance.element.classList.contains('open')) });
-      });
-  }
-
-  function findCaseFileInEditDrawer(id) {
-    var controller = ensureEditListController();
-    return controller ? controller.findFile(id) : null;
-  }
 
 	  function openEditorForCaseFile(caseFile) {
 	    if (!caseFile || !caseFile.id) return;
@@ -3802,7 +2486,7 @@
     resolveTypeNames: resolveMissingItemTypeNames,
     resolveTypeLabel: resolveMissingTypeLabel,
     formatTypeLabel: formatMissingItemTypeLabel,
-    openMissingDrawer: openMissingDrawer,
+    openMissingDrawer: drawerRequestController.openMissing,
     openConfirmDrawer: openConfirmDrawer,
     showToast: showCenterToast,
     getCore: getCore,
@@ -3865,98 +2549,32 @@
     startPendingToast: startPendingToast,
   });
 
-  function ensureCaseLibraryAiGenState() {
-    return aiGenController.getState();
-  }
-
-  function syncCaseLibraryAiGenContext() {
-    return aiGenController.syncContext();
-  }
-
-  function syncCaseLibraryAiGenTaskState() {
-    return aiGenController.syncTaskState();
-  }
-
-  function syncCaseLibraryAiGenButton() {
-    return aiGenController.syncButton();
-  }
-
-  function syncCaseLibraryAiGenRunBtn() {
-    return aiGenController.syncRunButton();
-  }
-
-  function syncCaseLibraryAiGenNavBadge() {
-    return aiGenController.syncNavBadge();
-  }
-
-  function markCaseLibraryAiGenNavBadgeRead() {
-    return aiGenController.markNavBadgeRead();
-  }
-
-  function markCaseLibraryAiGenEditBadgeRead(fileId) {
-    return aiGenController.markEditBadgeRead(fileId);
-  }
-
-  function shouldShowCaseLibraryAiGenEditBadge(fileId) {
-    return aiGenController.shouldShowEditBadge(fileId);
-  }
-
-  function openCaseLibraryAiGenPrepAndRun(options) {
-    return aiGenController.openPrepAndRun(options);
-  }
-
-  function handleCaseLibraryAiGenFile(file) {
-    return aiGenController.handleFile(file);
-  }
-
-  function clearCaseLibraryAiGenRequirement() {
-    return aiGenController.clearRequirement();
-  }
-
-  function runCaseLibraryAiGen(prepContext) {
-    return aiGenController.run(prepContext);
-  }
-
-  function selectAllCaseLibraryAiGenCases() {
-    return aiGenController.selectAll();
-  }
-
-  function clearCaseLibraryAiGenSelection() {
-    return aiGenController.clearSelection();
-  }
-
-  function discardCaseLibraryAiGenResult(options) {
-    return aiGenController.discardResult(options);
-  }
-
-  function handleCaseLibraryAiGenRegenerate() {
-    return aiGenController.regenerate();
-  }
-
-  function appendCaseLibraryAiGenSelection(anchorEl) {
-    return aiGenController.appendSelection(anchorEl);
-  }
-
-  function hasNativeLabelTrigger(zone, input) {
-    return aiGenController.hasNativeLabelTrigger(zone, input);
-  }
+  var ensureCaseLibraryAiGenState = aiGenController.getState;
+  var syncCaseLibraryAiGenContext = aiGenController.syncContext;
+  var syncCaseLibraryAiGenTaskState = aiGenController.syncTaskState;
+  var syncCaseLibraryAiGenButton = aiGenController.syncButton;
+  var syncCaseLibraryAiGenRunBtn = aiGenController.syncRunButton;
+  var syncCaseLibraryAiGenNavBadge = aiGenController.syncNavBadge;
+  var markCaseLibraryAiGenNavBadgeRead = aiGenController.markNavBadgeRead;
+  var markCaseLibraryAiGenEditBadgeRead = aiGenController.markEditBadgeRead;
+  var shouldShowCaseLibraryAiGenEditBadge = aiGenController.shouldShowEditBadge;
+  var openCaseLibraryAiGenPrepAndRun = aiGenController.openPrepAndRun;
+  var handleCaseLibraryAiGenFile = aiGenController.handleFile;
+  var clearCaseLibraryAiGenRequirement = aiGenController.clearRequirement;
+  var runCaseLibraryAiGen = aiGenController.run;
+  var selectAllCaseLibraryAiGenCases = aiGenController.selectAll;
+  var clearCaseLibraryAiGenSelection = aiGenController.clearSelection;
+  var discardCaseLibraryAiGenResult = aiGenController.discardResult;
+  var handleCaseLibraryAiGenRegenerate = aiGenController.regenerate;
+  var appendCaseLibraryAiGenSelection = aiGenController.appendSelection;
+  var hasNativeLabelTrigger = aiGenController.hasNativeLabelTrigger;
   // “＋”新增用例高亮：仅保留在本次页面生命周期（刷新后清空），避免写入 localStorage/DB。
   var caseLibraryNewAddedCaseUiKeysByFileId = {};
 
   function ensureNonEnumerableKey(obj, keyName, value) {
-    if (!obj || typeof obj !== 'object') return '';
-    var has = false;
-    try { has = Object.prototype.hasOwnProperty.call(obj, keyName); } catch (err) { has = false; }
-    if (has) {
-      try { return String(obj[keyName] || ''); } catch (e) { return ''; }
-    }
-    var v = value || ('ui-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2, 6));
-    try {
-      Object.defineProperty(obj, keyName, { value: v, enumerable: false, configurable: true, writable: true });
-    } catch (err2) {
-      try { obj[keyName] = v; } catch (err3) {}
-    }
-    return String(v || '');
+    var core = typeof window !== 'undefined' && window.app ? window.app.uiIdentityCore : null;
+    if (!core || typeof core.ensureNonEnumerableKey !== 'function') return '';
+    return core.ensureNonEnumerableKey(obj, keyName, value);
   }
 
   function getCaseLibraryEditorUiKey(item) {
@@ -4450,93 +3068,6 @@
       });
   }
 
-  function restoreCaseLibraryLastSelection() {
-    if (!isAuthReady()) return Promise.resolve(null);
-    var lastView = readCaseLibraryLastViewPersistedState();
-    if (lastView) {
-      var userId = getCurrentUserId();
-      var loginSeq = getCurrentLoginSeq();
-      var okByUser = userId && String(lastView.user_id || '') === String(userId);
-      var okByLogin = loginSeq && String(lastView.login_seq || '') === String(loginSeq);
-      if (okByUser || okByLogin) {
-        var viewName = lastView.view ? String(lastView.view) : '';
-        if (viewName === 'history') {
-          return restoreHistoryDetailFromPersistedState().then(function(ok) {
-            if (ok) return 'history';
-            setHistoryDetailVisible(false);
-            showEditorCard(true);
-            return restoreEditorFromPersistedState().then(function(ok2) { return ok2 ? 'editor' : null; });
-          });
-        }
-        if (viewName === 'editor') {
-          setHistoryDetailVisible(false);
-          showEditorCard(true);
-          return restoreEditorFromPersistedState().then(function(ok) {
-            if (ok) return 'editor';
-            return restoreHistoryDetailFromPersistedState().then(function(ok2) { return ok2 ? 'history' : null; });
-          });
-        }
-        if (viewName === 'missing') {
-          setHistoryDetailVisible(false);
-          showEditorCard(false);
-          return restoreMissingViewFromPersistedState().then(function(ok) {
-            if (ok) return 'missing';
-            showMissingCard(false);
-            return restoreEditorFromPersistedState().then(function(ok2) {
-              if (ok2) return 'editor';
-              return restoreHistoryDetailFromPersistedState().then(function(ok3) { return ok3 ? 'history' : null; });
-            });
-          });
-        }
-      }
-    }
-
-    var editorPersisted = readEditorPersistedState();
-    var historyPersisted = readHistoryDetailPersistedState();
-    var missingPersisted = readMissingViewPersistedState();
-    var editorAt = editorPersisted && isFinite(Number(editorPersisted.saved_at)) ? Number(editorPersisted.saved_at) : 0;
-    var historyAt = historyPersisted && isFinite(Number(historyPersisted.saved_at)) ? Number(historyPersisted.saved_at) : 0;
-    var missingAt = missingPersisted && isFinite(Number(missingPersisted.saved_at)) ? Number(missingPersisted.saved_at) : 0;
-    var preferHistory = historyAt > editorAt;
-    var preferMissing = missingAt > historyAt && missingAt > editorAt;
-
-    if (preferMissing) {
-      return restoreMissingViewFromPersistedState().then(function(ok) {
-        if (ok) return 'missing';
-        showMissingCard(false);
-        setHistoryDetailVisible(false);
-        showEditorCard(true);
-        return restoreEditorFromPersistedState().then(function(ok2) {
-          if (ok2) return 'editor';
-          return restoreHistoryDetailFromPersistedState().then(function(ok3) { return ok3 ? 'history' : null; });
-        });
-      });
-    }
-    if (preferHistory) {
-      return restoreHistoryDetailFromPersistedState().then(function(ok) {
-        if (ok) return 'history';
-        setHistoryDetailVisible(false);
-        showEditorCard(true);
-        return restoreEditorFromPersistedState().then(function(ok2) {
-          if (ok2) return 'editor';
-          if (missingAt) {
-            return restoreMissingViewFromPersistedState().then(function(ok3) { return ok3 ? 'missing' : null; });
-          }
-          return null;
-        });
-      });
-    }
-    setHistoryDetailVisible(false);
-    showEditorCard(true);
-    return restoreEditorFromPersistedState().then(function(ok) {
-      if (ok) return 'editor';
-      if (missingAt && missingAt >= historyAt) {
-        return restoreMissingViewFromPersistedState().then(function(ok2) { return ok2 ? 'missing' : null; });
-      }
-      return restoreHistoryDetailFromPersistedState().then(function(ok2) { return ok2 ? 'history' : null; });
-      });
-  }
-
   function isEditorCardVisible() {
     return Boolean(dom.editCard && dom.editCard.classList && !dom.editCard.classList.contains('hidden'));
   }
@@ -4605,27 +3136,18 @@
 
   function positionCaseLibraryBlockHint(hintEl, anchorRect) {
     if (!hintEl || !anchorRect) return;
-    var rect = anchorRect;
     var hintRect = hintEl.getBoundingClientRect ? hintEl.getBoundingClientRect() : null;
-    var hintW = hintRect && hintRect.width ? hintRect.width : 260;
-    var hintH = hintRect && hintRect.height ? hintRect.height : 44;
+    var core = typeof window !== 'undefined' && window.app ? window.app.overlayGeometryCore : null;
+    if (!core || typeof core.computeAnchoredOverlayPosition !== 'function') return;
     var vw = window.innerWidth || document.documentElement.clientWidth || 0;
     var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-    var margin = 8;
-    var width = Number(rect.width) || 0;
-    var height = Number(rect.height) || 0;
-    var leftBase = Number(rect.left) || 0;
-    var topBase = Number(rect.top) || 0;
-    var bottomBase = Number.isFinite(Number(rect.bottom)) ? Number(rect.bottom) : (topBase + height);
-    var centerX = leftBase + width / 2;
-    var left = centerX - hintW / 2;
-    if (vw) left = Math.min(Math.max(margin, left), Math.max(margin, vw - hintW - margin));
-    var aboveTop = topBase - 10 - hintH;
-    var belowTop = bottomBase + 10;
-    var top = aboveTop >= margin ? aboveTop : belowTop;
-    if (vh) top = Math.min(Math.max(margin, top), Math.max(margin, vh - hintH - margin));
-    hintEl.style.left = Math.round(left) + 'px';
-    hintEl.style.top = Math.round(top) + 'px';
+    var position = core.computeAnchoredOverlayPosition(anchorRect, {
+      width: hintRect && hintRect.width ? hintRect.width : 260,
+      height: hintRect && hintRect.height ? hintRect.height : 44,
+    }, { width: vw, height: vh });
+    if (!position) return;
+    hintEl.style.left = position.left + 'px';
+    hintEl.style.top = position.top + 'px';
   }
 
   function showCaseLibraryBlockHint(anchorRect, message, durationMs) {
@@ -4649,33 +3171,9 @@
   }
 
   function captureCaseLibraryAnchorRect(anchorEl) {
-    if (!anchorEl) return null;
-    if (typeof anchorEl === 'object' && anchorEl.left !== undefined && anchorEl.top !== undefined) {
-      var left0 = Number(anchorEl.left) || 0;
-      var top0 = Number(anchorEl.top) || 0;
-      var width0 = Number(anchorEl.width) || 0;
-      var height0 = Number(anchorEl.height) || 0;
-      var bottom0 = Number.isFinite(Number(anchorEl.bottom)) ? Number(anchorEl.bottom) : (top0 + height0);
-      return { left: left0, top: top0, width: width0, height: height0, bottom: bottom0 };
-    }
-    if (typeof anchorEl.getBoundingClientRect !== 'function') return null;
-    try {
-      var rect = anchorEl.getBoundingClientRect();
-      if (!rect) return null;
-      var left = Number(rect.left) || 0;
-      var top = Number(rect.top) || 0;
-      var width = Number(rect.width) || 0;
-      var height = Number(rect.height) || 0;
-      return {
-        left: left,
-        top: top,
-        width: width,
-        height: height,
-        bottom: Number.isFinite(Number(rect.bottom)) ? Number(rect.bottom) : (top + height),
-      };
-    } catch (err) {
-      return null;
-    }
+    var core = typeof window !== 'undefined' && window.app ? window.app.overlayGeometryCore : null;
+    if (!core || typeof core.captureAnchorRect !== 'function') return null;
+    return core.captureAnchorRect(anchorEl);
   }
 
   function saveCaseItemAtIndex(index, reason) {
@@ -5052,7 +3550,7 @@
 		  function restoreCaseLibraryAfterActivated() {
 		    if (restoreAfterActivatedPromise) return restoreAfterActivatedPromise;
 		    restoreAfterActivatedPromise = (function() {
-          var pendingMissingDrawer = peekMissingDrawerRequest();
+          var pendingMissingDrawer = drawerRequestController.peekMissing();
           if (pendingMissingDrawer && state.missingDrawer) {
             state.missingDrawer.keepOpenOnce = true;
           }
@@ -5066,12 +3564,12 @@
 		      return ensureProjectsReady()
 		        .then(function() { return restoreCaseLibraryLastSelection(); })
 		        .then(function(view) {
-          if (consumeSelectExecDrawerRequest()) {
-            openSelectExecDrawerDirect();
+          if (drawerRequestController.consumeSelect()) {
+            drawerRequestController.openSelectDirect();
             return view;
           }
-          if (consumeMissingDrawerRequest()) {
-            scheduleMissingDrawerOpen({ attempts: 4, intervalMs: 180 });
+          if (drawerRequestController.consumeMissing()) {
+            drawerRequestController.scheduleMissingOpen({ attempts: 4, intervalMs: 180 });
             if (state.missingDrawer) state.missingDrawer.keepOpenOnce = false;
             return view;
           }
@@ -5192,11 +3690,11 @@
     bindEvents();
     window.app = window.app || {};
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
-    window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
-    window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
-    window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
+    window.app.caseLibraryApi.openSelectExecDrawer = drawerRequestController.openSelect;
+    window.app.caseLibraryApi.requestSelectExecDrawer = drawerRequestController.requestSelect;
+    window.app.caseLibraryApi.openMissingDrawer = drawerRequestController.openMissing;
     window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
-    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
+    window.app.caseLibraryApi.requestMissingDrawer = drawerRequestController.requestMissing;
     if (hasImportSelectDrawer) {
       window.app.caseLibraryApi.openImportSelectDrawer = importSelectController.open;
     }
@@ -5296,11 +3794,11 @@
     scheduleAutoRestoreProbe();
     window.app = window.app || {};
     window.app.caseLibraryApi = window.app.caseLibraryApi || {};
-    window.app.caseLibraryApi.openSelectExecDrawer = openSelectExecDrawer;
-    window.app.caseLibraryApi.requestSelectExecDrawer = markSelectExecDrawerRequest;
-    window.app.caseLibraryApi.openMissingDrawer = openMissingDrawer;
+    window.app.caseLibraryApi.openSelectExecDrawer = drawerRequestController.openSelect;
+    window.app.caseLibraryApi.requestSelectExecDrawer = drawerRequestController.requestSelect;
+    window.app.caseLibraryApi.openMissingDrawer = drawerRequestController.openMissing;
     window.app.caseLibraryApi.openWriterDrawer = openCaseLibraryWriterStructure;
-    window.app.caseLibraryApi.requestMissingDrawer = markMissingDrawerRequest;
+    window.app.caseLibraryApi.requestMissingDrawer = drawerRequestController.requestMissing;
     window.app.caseLibraryApi.openImportSelectDrawer = importSelectController.open;
     window.app.caseLibraryApi.openImportDiffForExternal = importReviewController.openImportDiffForExternal;
     window.app.caseLibraryApi.openAppendDiffForExternal = importReviewController.openAppendDiffForExternal;

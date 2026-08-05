@@ -4,6 +4,9 @@
   var resolveFn = null;
   var suspended = null;
   var inputConfig = null;
+  var resolveAfterClose = false;
+  var deferredResult = null;
+  var hasDeferredResult = false;
 
   var dom = {
     drawer: document.getElementById('appConfirmDrawer'),
@@ -86,12 +89,14 @@
       closeButtons: ['appConfirmDrawerCancelBtn'],
       onClose: function() {
         resumeDrawer();
-        if (!resolved) {
-          if (typeof resolveFn === 'function') resolveFn({ ok: false, reason: 'close' });
-        }
+        if (hasDeferredResult && typeof resolveFn === 'function') resolveFn(deferredResult);
+        else if (!resolved && typeof resolveFn === 'function') resolveFn({ ok: false, reason: 'close' });
         resolveFn = null;
         resolved = false;
         inputConfig = null;
+        resolveAfterClose = false;
+        deferredResult = null;
+        hasDeferredResult = false;
         clearStatus();
       },
     });
@@ -194,6 +199,11 @@
   function finalize(result) {
     if (resolved) return;
     resolved = true;
+    if (resolveAfterClose) {
+      deferredResult = result;
+      hasDeferredResult = true;
+      return;
+    }
     if (typeof resolveFn === 'function') resolveFn(result);
     resolveFn = null;
   }
@@ -249,6 +259,9 @@
     }
     resolved = false;
     resolveFn = null;
+    resolveAfterClose = Boolean(options && options.resolveAfterClose === true);
+    deferredResult = null;
+    hasDeferredResult = false;
     // 清理上一次确认抽屉遗留的挂起状态，避免叠加导致页面不可操作。
     resumeDrawer();
     clearSuspendedDrawers();

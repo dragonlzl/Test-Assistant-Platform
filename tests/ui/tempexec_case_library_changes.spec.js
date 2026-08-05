@@ -78,6 +78,14 @@ async function clickSemantic(page, selector) {
   await page.locator(selector).evaluate((element) => element.click());
 }
 
+async function closeDiffDrawerIfOpen(page) {
+  const drawer = page.locator('#tempExecCaseLibraryDiffDrawer');
+  const isOpen = await drawer.evaluate((element) => element.classList.contains('open'));
+  if (!isOpen) return;
+  await page.click('#closeTempExecCaseLibraryDiffDrawerBtn');
+  await expect(drawer).not.toHaveClass(/open/);
+}
+
 test.describe('执行页-用例库变更同步与diff抽屉', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
@@ -380,6 +388,10 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     const syncGate = new Promise((resolve) => {
       releaseSync = resolve;
     });
+    let markSyncStarted = null;
+    const syncStarted = new Promise((resolve) => {
+      markSyncStarted = resolve;
+    });
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -413,6 +425,10 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
       }
 
       if (pathName === `/api/exec/sets/${execSet.id}/case-library-sync` && method === 'POST') {
+        if (typeof markSyncStarted === 'function') {
+          markSyncStarted();
+          markSyncStarted = null;
+        }
         if (syncGate) await syncGate;
         const diffEntry = {
           kind: 'updated',
@@ -477,15 +493,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await ensureAuthed(page, token, user);
     await waitAppReady(page, 30000);
 
-    const syncReq = page.waitForRequest((req) => {
-      return req.url().includes(`/api/exec/sets/${execSet.id}/case-library-sync`) && req.method() === 'POST';
-    });
-    await page.evaluate(() => {
-      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
-        window.app.tempExecApi.loadTempExecState();
-      }
-    });
-    await syncReq;
+    await syncStarted;
 
     const openedBefore = await page.evaluate(() => {
       var drawer = document.getElementById('tempExecCaseLibraryDiffDrawer');
@@ -1222,6 +1230,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
     const btn = page.locator('#tempExecCaseLibraryChangesBtn');
     await expect(btn).toBeEnabled();
+    await closeDiffDrawerIfOpen(page);
     await btn.click();
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('旧标题');
@@ -1375,8 +1384,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(btn).toBeEnabled();
     await expect(btn).not.toHaveClass(/has-new/);
 
-    const rowCount = await page.locator('#tempExecView tr.case-row').count();
-    expect(rowCount).toBe(2);
+    await expect(page.locator('#tempExecView tr.case-row')).toHaveCount(2);
   });
 
   test('存在多份变更时可切换用例diff；自动弹不影响当前选中用例；可点击“选择用例”切换执行视图', async ({ page }) => {
@@ -2164,6 +2172,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
       return null;
     });
 
+    await closeDiffDrawerIfOpen(page);
     await page.click('#tempExecCaseLibraryChangesBtn');
     const body = page.locator('#tempExecCaseLibraryDiffBody');
     await expect(body.locator('.tap-vtable-semantic-table tbody tr')).toHaveCount(2);

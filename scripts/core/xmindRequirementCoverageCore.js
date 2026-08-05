@@ -3,15 +3,7 @@
 
   function init(options) {
     var opts = options || {};
-
-    function cloneJson(value, fallback) {
-      if (value === undefined || value === null) return fallback;
-      try {
-        return JSON.parse(JSON.stringify(value));
-      } catch (err) {
-        return fallback;
-      }
-    }
+    var cloneJson = window.app.jsonCloneCore.cloneJson;
 
     function normalizeText(value) {
       return String(value === null || value === undefined ? '' : value).replace(/\s+/g, ' ').trim();

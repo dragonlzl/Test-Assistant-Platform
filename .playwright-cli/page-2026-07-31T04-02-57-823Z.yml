@@ -1,0 +1,236 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic "用例助手" [ref=e5]: TA
+      - navigation "主功能导航" [ref=e6]:
+        - button "AI 功能" [ref=e7] [cursor=pointer]:
+          - generic [ref=e8]: AI
+        - button "用例相关" [ref=e10] [cursor=pointer]:
+          - generic [ref=e11]: TC
+        - button "管理" [ref=e13] [cursor=pointer]:
+          - generic [ref=e14]: AD
+        - button "设置" [ref=e16] [cursor=pointer]:
+          - generic [ref=e17]: ST
+      - button "收起二级导航" [expanded] [ref=e19] [cursor=pointer]: <
+    - generic [ref=e20]:
+      - strong [ref=e22]: 管理
+      - generic [ref=e23]:
+        - generic [ref=e24]: 当前用户
+        - strong [ref=e25]: admin
+        - generic [ref=e26]: 管理员
+        - button "用户菜单" [ref=e27] [cursor=pointer]: 个人
+        - generic:
+          - button "登出"
+      - generic [ref=e29]:
+        - button "管理" [ref=e30] [cursor=pointer]
+        - button "项目管理" [ref=e31] [cursor=pointer]
+      - navigation [ref=e32]:
+        - button "AI 功能" [ref=e33] [cursor=pointer]
+        - button "用例相关" [ref=e35] [cursor=pointer]
+        - generic [ref=e36]:
+          - button "管理" [ref=e37] [cursor=pointer]
+          - generic [ref=e38]:
+            - button "项目管理" [ref=e39] [cursor=pointer]
+            - button "人员管理" [ref=e40] [cursor=pointer]
+            - button "操作记录" [ref=e41] [cursor=pointer]
+        - button "设置" [ref=e42] [cursor=pointer]
+      - button "回到顶部" [ref=e43] [cursor=pointer]
+      - button "跳到底部" [ref=e44] [cursor=pointer]
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - button "xmind用例生成进度" [ref=e47] [cursor=pointer]
+          - button "个人备忘" [ref=e49] [cursor=pointer]
+        - generic [ref=e52]:
+          - generic [ref=e53]:
+            - generic [ref=e54]:
+              - generic [ref=e55]: xmind用例生成进度
+              - button "收起" [expanded] [ref=e56] [cursor=pointer]
+            - generic [ref=e57]: 点击打开对应 XMind 生成页签
+          - paragraph [ref=e59]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=e60]:
+    - generic [ref=e62]:
+      - generic [ref=e63]: 项目管理导航
+      - paragraph [ref=e64]: 项目与版本维护入口汇总，点击卡片快速操作。
+      - generic [ref=e65]:
+        - button "刷新项目" [ref=e66] [cursor=pointer]
+        - button "新建项目" [ref=e72] [cursor=pointer]
+    - main [ref=e76]:
+      - generic [ref=e77]:
+        - heading "项目管理" [level=2] [ref=e78]
+        - generic [ref=e79]:
+          - paragraph [ref=e81]: 已加载 11 个项目
+          - table [ref=e83]:
+            - rowgroup [ref=e84]:
+              - row [ref=e85]:
+                - columnheader "项目名称" [ref=e86]
+                - columnheader "描述" [ref=e87]
+                - columnheader "版本" [ref=e88]
+                - columnheader "创建时间" [ref=e89]
+                - columnheader "操作" [ref=e90]
+            - rowgroup [ref=e91]:
+              - row [ref=e92]:
+                - cell "元气骑士" [ref=e93]
+                - cell "元气骑士项目" [ref=e95]
+                - cell "7.8.0 删除 7.9.0 删除 8.0.0 删除 8.1.0 删除 8.2.0 删除 8.3.0 删除 900 删除 912 删除 999 删除 新建911 删除" [ref=e97]:
+                  - generic [ref=e98]:
+                    - generic [ref=e99]:
+                      - generic [ref=e100]: 7.8.0
+                      - button "删除" [ref=e101] [cursor=pointer]
+                    - generic [ref=e102]:
+                      - generic [ref=e103]: 7.9.0
+                      - button "删除" [ref=e104] [cursor=pointer]
+                    - generic [ref=e105]:
+                      - generic [ref=e106]: 8.0.0
+                      - button "删除" [ref=e107] [cursor=pointer]
+                    - generic [ref=e108]:
+                      - generic [ref=e109]: 8.1.0
+                      - button "删除" [ref=e110] [cursor=pointer]
+                    - generic [ref=e111]:
+                      - generic [ref=e112]: 8.2.0
+                      - button "删除" [ref=e113] [cursor=pointer]
+                    - generic [ref=e114]:
+                      - generic [ref=e115]: 8.3.0
+                      - button "删除" [ref=e116] [cursor=pointer]
+                    - generic [ref=e117]:
+                      - generic [ref=e118]: "900"
+                      - button "删除" [ref=e119] [cursor=pointer]
+                    - generic [ref=e120]:
+                      - generic [ref=e121]: "912"
+                      - button "删除" [ref=e122] [cursor=pointer]
+                    - generic [ref=e123]:
+                      - generic [ref=e124]: "999"
+                      - button "删除" [ref=e125] [cursor=pointer]
+                    - generic [ref=e126]:
+                      - generic [ref=e127]: 新建911
+                      - button "删除" [ref=e128] [cursor=pointer]
+                - cell "2025/12/11 18:12:16" [ref=e129]
+                - cell [ref=e131]:
+                  - generic [ref=e132]:
+                    - button "编辑" [ref=e133] [cursor=pointer]
+                    - button "新增版本" [ref=e134] [cursor=pointer]
+                    - button "删除" [ref=e135] [cursor=pointer]
+              - row [ref=e136]:
+                - cell "元气骑士前传" [ref=e137]
+                - cell "—" [ref=e139]
+                - cell "1.0.0 删除" [ref=e141]:
+                  - generic [ref=e143]:
+                    - generic [ref=e144]: 1.0.0
+                    - button "删除" [ref=e145] [cursor=pointer]
+                - cell "2025/12/14 09:50:37" [ref=e146]
+                - cell [ref=e148]:
+                  - generic [ref=e149]:
+                    - button "编辑" [ref=e150] [cursor=pointer]
+                    - button "新增版本" [ref=e151] [cursor=pointer]
+                    - button "删除" [ref=e152] [cursor=pointer]
+              - row [ref=e153]:
+                - cell "测试999" [ref=e154]
+                - cell "—" [ref=e156]
+                - cell "1 删除 111 删除" [ref=e158]:
+                  - generic [ref=e159]:
+                    - generic [ref=e160]:
+                      - generic [ref=e161]: "1"
+                      - button "删除" [ref=e162] [cursor=pointer]
+                    - generic [ref=e163]:
+                      - generic [ref=e164]: "111"
+                      - button "删除" [ref=e165] [cursor=pointer]
+                - cell "2025/12/20 09:39:52" [ref=e166]
+                - cell [ref=e168]:
+                  - generic [ref=e169]:
+                    - button "编辑" [ref=e170] [cursor=pointer]
+                    - button "新增版本" [ref=e171] [cursor=pointer]
+                    - button "删除" [ref=e172] [cursor=pointer]
+              - row [ref=e173]:
+                - cell "autotest-exec-overview-1767926180210" [ref=e174]
+                - cell "exec overview api spec" [ref=e176]
+                - cell "v1 删除" [ref=e178]:
+                  - generic [ref=e180]:
+                    - generic [ref=e181]: v1
+                    - button "删除" [ref=e182] [cursor=pointer]
+                - cell "2026/1/9 10:36:20" [ref=e183]
+                - cell [ref=e185]:
+                  - generic [ref=e186]:
+                    - button "编辑" [ref=e187] [cursor=pointer]
+                    - button "新增版本" [ref=e188] [cursor=pointer]
+                    - button "删除" [ref=e189] [cursor=pointer]
+              - row [ref=e190]:
+                - cell "opslog-proj-1768292273101" [ref=e191]
+                - cell "ops log project" [ref=e193]
+                - cell "v1 删除" [ref=e195]:
+                  - generic [ref=e197]:
+                    - generic [ref=e198]: v1
+                    - button "删除" [ref=e199] [cursor=pointer]
+                - cell "2026/1/13 16:17:53" [ref=e200]
+                - cell [ref=e202]:
+                  - generic [ref=e203]:
+                    - button "编辑" [ref=e204] [cursor=pointer]
+                    - button "新增版本" [ref=e205] [cursor=pointer]
+                    - button "删除" [ref=e206] [cursor=pointer]
+              - row [ref=e207]:
+                - cell "opslog-exec-1768292273288" [ref=e208]
+                - cell "ops log exec contribution" [ref=e210]
+                - cell "v1 删除" [ref=e212]:
+                  - generic [ref=e214]:
+                    - generic [ref=e215]: v1
+                    - button "删除" [ref=e216] [cursor=pointer]
+                - cell "2026/1/13 16:17:53" [ref=e217]
+                - cell [ref=e219]:
+                  - generic [ref=e220]:
+                    - button "编辑" [ref=e221] [cursor=pointer]
+                    - button "新增版本" [ref=e222] [cursor=pointer]
+                    - button "删除" [ref=e223] [cursor=pointer]
+              - row [ref=e224]:
+                - cell "opslog-missing-1768292273386" [ref=e225]
+                - cell "ops log missing cases" [ref=e227]
+                - cell "暂无版本" [ref=e229]
+                - cell "2026/1/13 16:17:53" [ref=e232]
+                - cell [ref=e234]:
+                  - generic [ref=e235]:
+                    - button "编辑" [ref=e236] [cursor=pointer]
+                    - button "新增版本" [ref=e237] [cursor=pointer]
+                    - button "删除" [ref=e238] [cursor=pointer]
+              - row [ref=e239]:
+                - cell "opslog-proj-1768292538582" [ref=e240]
+                - cell "ops log project" [ref=e242]
+                - cell "v1 删除" [ref=e244]:
+                  - generic [ref=e246]:
+                    - generic [ref=e247]: v1
+                    - button "删除" [ref=e248] [cursor=pointer]
+                - cell "2026/1/13 16:22:18" [ref=e249]
+                - cell [ref=e251]:
+                  - generic [ref=e252]:
+                    - button "编辑" [ref=e253] [cursor=pointer]
+                    - button "新增版本" [ref=e254] [cursor=pointer]
+                    - button "删除" [ref=e255] [cursor=pointer]
+              - row [ref=e256]:
+                - cell "opslog-exec-1768292538751" [ref=e257]
+                - cell "ops log exec contribution" [ref=e259]
+                - cell "v1 删除" [ref=e261]:
+                  - generic [ref=e263]:
+                    - generic [ref=e264]: v1
+                    - button "删除" [ref=e265] [cursor=pointer]
+                - cell "2026/1/13 16:22:18" [ref=e266]
+                - cell [ref=e268]:
+                  - generic [ref=e269]:
+                    - button "编辑" [ref=e270] [cursor=pointer]
+                    - button "新增版本" [ref=e271] [cursor=pointer]
+                    - button "删除" [ref=e272] [cursor=pointer]
+              - row [ref=e273]:
+                - cell "opslog-missing-1768292538839" [ref=e274]
+                - cell "ops log missing cases" [ref=e276]
+                - cell "暂无版本" [ref=e278]
+                - cell "2026/1/13 16:22:18" [ref=e281]
+                - cell [ref=e283]:
+                  - generic [ref=e284]:
+                    - button "编辑" [ref=e285] [cursor=pointer]
+                    - button "新增版本" [ref=e286] [cursor=pointer]
+                    - button "删除" [ref=e287] [cursor=pointer]
+              - row [ref=e288]:
+                - cell "autotest-1772268446008" [ref=e289]
+                - cell "api spec project updated" [ref=e291]
+                - cell "暂无版本" [ref=e293]
+                - cell "2026/2/28 16:47:26" [ref=e296]
+                - cell [ref=e298]:
+                  - generic [ref=e299]:
+                    - button "编辑" [ref=e300] [cursor=pointer]
+                    - button "新增版本" [ref=e301] [cursor=pointer]
+                    - button "删除" [ref=e302] [cursor=pointer]

@@ -1,0 +1,77 @@
+- generic [ref=f1e2]:
+  - complementary [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - generic "用例助手" [ref=f1e5]: TA
+      - navigation "主功能导航" [ref=f1e6]:
+        - button "AI 功能" [ref=f1e7] [cursor=pointer]:
+          - generic [ref=f1e8]: AI
+        - button "用例相关" [ref=f1e10] [cursor=pointer]:
+          - generic [ref=f1e11]: TC
+        - button "管理" [ref=f1e13] [cursor=pointer]:
+          - generic [ref=f1e14]: AD
+        - button "设置" [ref=f1e16] [cursor=pointer]:
+          - generic [ref=f1e17]: ST
+      - button "收起二级导航" [expanded] [ref=f1e19] [cursor=pointer]: <
+    - generic [ref=f1e20]:
+      - strong [ref=f1e22]: 功能导航
+      - generic [ref=f1e23]:
+        - generic [ref=f1e24]: 当前用户
+        - strong [ref=f1e25]: e2e
+        - generic [ref=f1e26]: 管理员
+        - button "用户菜单" [ref=f1e27] [cursor=pointer]: 个人
+        - generic:
+          - button "登出"
+      - button "review" [ref=f1e30] [cursor=pointer]
+      - navigation [ref=f1e31]:
+        - button "AI 功能 需先配置模型/指派" [ref=f1e32] [cursor=pointer]:
+          - generic [ref=f1e33]: AI 功能
+          - generic [ref=f1e34]: 需先配置模型/指派
+        - button "用例相关" [ref=f1e35] [cursor=pointer]
+        - button "管理" [ref=f1e36] [cursor=pointer]
+        - button "设置" [ref=f1e37] [cursor=pointer]
+      - button "回到顶部" [ref=f1e38] [cursor=pointer]
+      - button "跳到底部" [ref=f1e39] [cursor=pointer]
+      - generic [ref=f1e40]:
+        - generic [ref=f1e41]:
+          - button "xmind用例生成进度" [ref=f1e42] [cursor=pointer]
+          - button "个人备忘" [ref=f1e44] [cursor=pointer]
+        - generic [ref=f1e47]:
+          - generic [ref=f1e48]:
+            - generic [ref=f1e49]:
+              - generic [ref=f1e50]: xmind用例生成进度
+              - button "收起" [expanded] [ref=f1e51] [cursor=pointer]
+            - generic [ref=f1e52]: 点击打开对应 XMind 生成页签
+          - paragraph [ref=f1e54]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f1e55]:
+    - generic [ref=f1e56]:
+      - generic [ref=f1e57]: 一键执行步骤
+      - generic [ref=f1e58]:
+        - generic [ref=f1e59] [cursor=pointer]:
+          - generic [ref=f1e60]: "1"
+          - generic [ref=f1e61]: 导入
+          - generic [ref=f1e62]: ▶
+        - generic [ref=f1e64] [cursor=pointer]:
+          - generic [ref=f1e65]: "2"
+          - generic [ref=f1e66]: 评审
+          - generic [ref=f1e67]: ▶
+        - generic [ref=f1e69] [cursor=pointer]:
+          - generic [ref=f1e70]: "3"
+          - generic [ref=f1e71]: 清洗
+          - generic [ref=f1e72]: ▶
+        - generic [ref=f1e74] [cursor=pointer]:
+          - generic [ref=f1e75]: "4"
+          - generic [ref=f1e76]: 对比完整性
+          - generic [ref=f1e77]: ▶
+        - generic [ref=f1e79] [cursor=pointer]:
+          - generic [ref=f1e80]: "5"
+          - generic [ref=f1e81]: 拆分
+          - generic [ref=f1e82]: ▶
+        - generic [ref=f1e84] [cursor=pointer]:
+          - generic [ref=f1e85]: "6"
+          - generic [ref=f1e86]: 用例导入
+          - generic [ref=f1e87]: ▶
+        - generic [ref=f1e89] [cursor=pointer]:
+          - generic [ref=f1e90]: "7"
+          - generic [ref=f1e91]: 覆盖对比
+          - generic [ref=f1e92]: ▶
+    - main [ref=f1e93]

@@ -1,11 +1,15 @@
 (function(factory) {
-  var api = factory(typeof window !== 'undefined' ? window : null);
+  var defaultRoot = typeof window !== 'undefined' ? window : null;
+  var cloneJson = typeof module !== 'undefined' && module.exports
+    ? require('../../core/jsonCloneCore.js').cloneJson
+    : defaultRoot.app.jsonCloneCore.cloneJson;
+  var api = factory(defaultRoot, cloneJson);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') {
     window.app = window.app || {};
     window.app.xmindCaseGenTaskStore = api;
   }
-})(function(defaultRoot) {
+})(function(defaultRoot, cloneJson) {
   function resolveStorage(options, root) {
     if (options && options.storage !== undefined) return options.storage;
     try {
@@ -37,15 +41,6 @@
         return JSON.parse(raw);
       } catch (err) {
         return null;
-      }
-    }
-
-    function cloneJson(value, fallback) {
-      if (value === undefined || value === null) return fallback;
-      try {
-        return JSON.parse(JSON.stringify(value));
-      } catch (err) {
-        return fallback;
       }
     }
 

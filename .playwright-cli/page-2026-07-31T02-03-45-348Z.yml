@@ -1,0 +1,246 @@
+- generic [ref=f9e2]:
+  - complementary [ref=f9e3]:
+    - generic [ref=f9e4]:
+      - generic "用例助手" [ref=f9e5]: TA
+      - navigation "主功能导航" [ref=f9e6]:
+        - button "AI 功能" [ref=f9e7] [cursor=pointer]:
+          - generic [ref=f9e8]: AI
+        - button "用例相关" [ref=f9e10] [cursor=pointer]:
+          - generic [ref=f9e11]: TC
+        - button "管理" [ref=f9e13] [cursor=pointer]:
+          - generic [ref=f9e14]: AD
+        - button "设置" [ref=f9e16] [cursor=pointer]:
+          - generic [ref=f9e17]: ST
+      - button "收起二级导航" [expanded] [ref=f9e19] [cursor=pointer]: <
+    - generic [ref=f9e20]:
+      - strong [ref=f9e22]: 设置
+      - generic [ref=f9e23]:
+        - generic [ref=f9e24]: 当前用户
+        - strong [ref=f9e25]: e2e
+        - generic [ref=f9e26]: 管理员
+        - button "用户菜单" [ref=f9e27] [cursor=pointer]: 个人
+        - generic:
+          - button "登出"
+      - generic [ref=f9e29]:
+        - button "设置" [ref=f9e30] [cursor=pointer]
+        - button "通用设置" [ref=f9e31] [cursor=pointer]
+      - navigation [ref=f9e32]:
+        - button "AI 功能 需先配置模型/指派" [ref=f9e33] [cursor=pointer]:
+          - generic [ref=f9e34]: AI 功能
+          - generic [ref=f9e35]: 需先配置模型/指派
+        - button "用例相关" [ref=f9e36] [cursor=pointer]
+        - button "管理" [ref=f9e37] [cursor=pointer]
+        - generic [ref=f9e38]:
+          - button "设置" [ref=f9e39] [cursor=pointer]
+          - button "通用设置" [ref=f9e41] [cursor=pointer]
+      - button "回到顶部" [ref=f9e42] [cursor=pointer]
+      - button "跳到底部" [ref=f9e43] [cursor=pointer]
+      - generic [ref=f9e44]:
+        - generic [ref=f9e45]:
+          - button "xmind用例生成进度" [ref=f9e46] [cursor=pointer]
+          - button "个人备忘" [ref=f9e48] [cursor=pointer]
+        - generic [ref=f9e51]:
+          - generic [ref=f9e52]:
+            - generic [ref=f9e53]:
+              - generic [ref=f9e54]: xmind用例生成进度
+              - button "收起" [expanded] [ref=f9e55] [cursor=pointer]
+            - generic [ref=f9e56]: 点击打开对应 XMind 生成页签
+          - paragraph [ref=f9e58]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f9e59]:
+    - generic [ref=f9e61]:
+      - generic [ref=f9e62]: 设置导航
+      - paragraph [ref=f9e63]: 设置项入口汇总于此，点击卡片快速定位。
+      - generic [ref=f9e64]:
+        - button "飞书通知配置" [ref=f9e65] [cursor=pointer]
+        - button "执行视图列显示" [ref=f9e70] [cursor=pointer]
+        - button "通用设置" [ref=f9e75] [cursor=pointer]
+    - main [ref=f9e84]:
+      - generic [ref=f9e85]:
+        - heading "飞书通知配置" [level=2] [ref=f9e86]
+        - generic [ref=f9e87]:
+          - paragraph [ref=f9e88]: 仅“一键执行”流程会触发通知：覆盖率不足 100% 会推送失败提醒，完整执行成功会推送成功提醒。
+          - generic [ref=f9e89]:
+            - generic [ref=f9e90]: 飞书机器人
+            - generic [ref=f9e91]:
+              - generic [ref=f9e92]: Webhook：
+              - textbox "https://open.feishu.cn/open-apis/bot/v2/hook/xxxx" [ref=f9e93]
+            - generic [ref=f9e94]:
+              - generic [ref=f9e95]: "@角色ID："
+              - textbox "到“飞书开放平台→企业管理→成员管理”复制成员 open_id（推荐）或 user_id" [ref=f9e96]
+          - generic [ref=f9e97]:
+            - button "保存配置" [ref=f9e98] [cursor=pointer]
+            - button "发送测试通知" [ref=f9e99] [cursor=pointer]
+          - paragraph [ref=f9e100]
+          - paragraph [ref=f9e101]: 请确保浏览器可访问该地址，建议使用群机器人以便团队及时获知执行状态。
+      - generic [ref=f9e102]:
+        - heading "执行视图列显示" [level=2] [ref=f9e103]
+        - generic [ref=f9e104]:
+          - paragraph [ref=f9e105]: 控制“用例执行”视图的表头展示，仅影响显示，不会修改用例数据。用例标题/实际结果/备注/缺陷链接为必选。
+          - generic [ref=f9e106]:
+            - generic [ref=f9e107]:
+              - checkbox "选择框（必选）" [checked] [disabled] [ref=f9e108]
+              - text: 选择框（必选）
+            - generic [ref=f9e109]:
+              - checkbox "编号" [checked] [ref=f9e110]
+              - text: 编号
+            - generic [ref=f9e111]:
+              - checkbox "模块" [checked] [ref=f9e112]
+              - text: 模块
+            - generic [ref=f9e113]:
+              - checkbox "优先级" [checked] [ref=f9e114]
+              - text: 优先级
+            - generic [ref=f9e115]:
+              - checkbox "前提条件" [checked] [ref=f9e116]
+              - text: 前提条件
+            - generic [ref=f9e117]:
+              - checkbox "操作步骤" [checked] [ref=f9e118]
+              - text: 操作步骤
+            - generic [ref=f9e119]:
+              - checkbox "预期结果" [checked] [ref=f9e120]
+              - text: 预期结果
+            - generic [ref=f9e121]: 用例标题（必选）
+            - generic [ref=f9e122]: 实际结果（必选）
+            - generic [ref=f9e123]: 备注（必选）
+            - generic [ref=f9e124]: 缺陷链接（必选）
+          - paragraph [ref=f9e125]
+      - generic [ref=f9e126]:
+        - heading "通用设置" [level=2] [ref=f9e127]
+        - generic [ref=f9e128]:
+          - generic [ref=f9e129]:
+            - generic [ref=f9e130]:
+              - strong [ref=f9e131]: 全局分页设置
+              - paragraph [ref=f9e132]: 设置列表类视图每页展示条数（用例执行 / 用例归档 / 执行总览等），范围 5-200 条，默认为 20。
+            - spinbutton "请输入条数" [ref=f9e134]: "20"
+          - button "保存分页设置" [ref=f9e136] [cursor=pointer]
+          - paragraph [ref=f9e137]
+          - generic [ref=f9e139]:
+            - generic [ref=f9e140]:
+              - strong [ref=f9e141]: 用例视图字号
+              - paragraph [ref=f9e142]: 设置用例执行/用例库编辑视图字号，范围 11-16，默认为 13。
+            - spinbutton "请输入字号" [ref=f9e144]: "13"
+          - button "保存字号" [ref=f9e146] [cursor=pointer]
+          - paragraph [ref=f9e147]
+          - generic [ref=f9e149]:
+            - generic [ref=f9e150]:
+              - strong [ref=f9e151]: Case Assistant 项目路径
+              - paragraph [ref=f9e152]: 用于 Electron 环境下调用 case-assistant:request。仅支持绝对目录路径；为空或格式非法时将自动跳过该调用。
+            - textbox "如：E:/workspace/project 或 /Users/name/project" [ref=f9e154]
+          - button "保存项目路径" [ref=f9e156] [cursor=pointer]
+          - paragraph [ref=f9e157]
+          - generic [ref=f9e159]:
+            - generic [ref=f9e160]:
+              - strong [ref=f9e161]: 共享知识库地址
+              - paragraph [ref=f9e162]: "可选配置。保存后，XMind 用例生成会在每次生成前执行规则检索、AI 精筛，并把最终结果作为知识库上下文注入。示例：`http://192.168.50.10:8003/sk/`。"
+            - textbox "如：http://192.168.50.10:8003/sk/" [ref=f9e164]
+          - generic [ref=f9e165]:
+            - button "保存知识库地址" [ref=f9e166] [cursor=pointer]
+            - button "校验地址" [ref=f9e167] [cursor=pointer]
+          - paragraph [ref=f9e168]
+          - generic [ref=f9e170]:
+            - generic [ref=f9e171]:
+              - strong [ref=f9e172]: 知识库/XMind 上限设置
+              - paragraph [ref=f9e173]: 用于放宽 AI 目录检索、知识库上下文注入和 XMind 多模态请求体的本地上限。默认值已提高；若模型提示上下文或请求过大，可继续在这里调高。
+            - generic [ref=f9e174]:
+              - generic [ref=f9e175]:
+                - generic [ref=f9e176]: 目录送模上限（字符）
+                - spinbutton "目录送模上限（字符）" [ref=f9e177]: "120000"
+              - generic [ref=f9e178]:
+                - generic [ref=f9e179]: 知识库注入上限（字符）
+                - spinbutton "知识库注入上限（字符）" [ref=f9e180]: "24000"
+              - generic [ref=f9e181]:
+                - generic [ref=f9e182]: XMind 请求体上限（字符）
+                - spinbutton "XMind 请求体上限（字符）" [ref=f9e183]: "4000000"
+          - button "保存知识库上限" [ref=f9e185] [cursor=pointer]
+          - paragraph [ref=f9e186]
+          - generic [ref=f9e188]:
+            - generic [ref=f9e189]:
+              - strong [ref=f9e190]: 用例库生成用例覆盖度阈值
+              - paragraph [ref=f9e191]: 设置用例库 AI 生成用例的覆盖度阈值，范围 50-100，默认 90。
+            - spinbutton "请输入阈值" [ref=f9e193]: "90"
+          - button "保存阈值" [ref=f9e195] [cursor=pointer]
+          - paragraph [ref=f9e196]
+          - generic [ref=f9e198]:
+            - generic [ref=f9e199]:
+              - strong [ref=f9e200]: 页面主题
+              - paragraph [ref=f9e201]: 选择页面配色主题，保存后生效并同步到账号。
+            - combobox [ref=f9e203]:
+              - option "白色主题" [selected]
+              - option "黑色主题"
+          - button "保存主题" [ref=f9e205] [cursor=pointer]
+          - paragraph [ref=f9e206]
+          - generic [ref=f9e208]:
+            - generic [ref=f9e209]:
+              - strong [ref=f9e210]: 易漏用例提醒区域
+              - paragraph [ref=f9e211]: 选择易漏用例提醒区域展示位置，可选上方或下方。
+            - combobox [ref=f9e213]:
+              - option "上方" [selected]
+              - option "下方"
+          - button "保存展示位置" [ref=f9e215] [cursor=pointer]
+          - paragraph [ref=f9e216]
+          - generic [ref=f9e218]:
+            - generic [ref=f9e219]:
+              - strong [ref=f9e220]: 易漏用例命中设定
+              - paragraph [ref=f9e221]: 选择提醒区的第一优先级命中条件，至少勾选一个。
+            - generic [ref=f9e222]:
+              - generic [ref=f9e223]:
+                - checkbox "类型" [checked] [ref=f9e224]
+                - text: 类型
+              - generic [ref=f9e225]:
+                - checkbox "模块" [checked] [ref=f9e226]
+                - text: 模块
+          - button "保存命中设定" [ref=f9e228] [cursor=pointer]
+          - paragraph [ref=f9e229]
+          - generic [ref=f9e231]:
+            - generic [ref=f9e232]:
+              - strong [ref=f9e233]: 易漏用例推荐（大模型）
+              - paragraph [ref=f9e234]: 开启后可在提醒区点击 AI 推荐生成关联易漏用例。
+            - combobox [ref=f9e236]:
+              - option "关闭" [selected]
+              - option "开启"
+          - button "保存开关" [ref=f9e238] [cursor=pointer]
+          - paragraph [ref=f9e239]
+          - heading "页面说明自动弹出" [level=3] [ref=f9e241]
+          - paragraph [ref=f9e242]: 进入主要功能页面时自动弹出页面说明，可按页面独立关闭。
+          - generic [ref=f9e243]:
+            - generic [ref=f9e244]:
+              - checkbox "全部" [checked] [ref=f9e245]
+              - text: 全部
+            - generic [ref=f9e246]:
+              - checkbox "一键执行" [checked] [ref=f9e247]
+              - text: 一键执行
+            - generic [ref=f9e248]:
+              - checkbox "功能流程" [checked] [ref=f9e249]
+              - text: 功能流程
+            - generic [ref=f9e250]:
+              - checkbox "用例生成" [checked] [ref=f9e251]
+              - text: 用例生成
+            - generic [ref=f9e252]:
+              - checkbox "功能指派" [checked] [ref=f9e253]
+              - text: 功能指派
+            - generic [ref=f9e254]:
+              - checkbox "模型管理" [checked] [ref=f9e255]
+              - text: 模型管理
+            - generic [ref=f9e256]:
+              - checkbox "用例执行" [checked] [ref=f9e257]
+              - text: 用例执行
+            - generic [ref=f9e258]:
+              - checkbox "用例库" [checked] [ref=f9e259]
+              - text: 用例库
+            - generic [ref=f9e260]:
+              - checkbox "用例归档" [checked] [ref=f9e261]
+              - text: 用例归档
+            - generic [ref=f9e262]:
+              - checkbox "执行总览" [checked] [ref=f9e263]
+              - text: 执行总览
+          - paragraph [ref=f9e264]
+          - heading "导航栏智能收起" [level=3] [ref=f9e266]
+          - paragraph [ref=f9e267]: 勾选后向下滚动会自动收起顶部导航；滚动到顶部继续向上滚动可自动展开。
+          - generic [ref=f9e269]:
+            - checkbox "启用导航栏智能收起" [ref=f9e270]
+            - text: 启用导航栏智能收起
+          - paragraph [ref=f9e271]
+          - generic [ref=f9e274]:
+            - strong [ref=f9e275]: 项目排序
+            - paragraph [ref=f9e276]: 拖拽项目卡片调整展示顺序；点击卡片可设置默认项目（影响各页面项目卡片/下拉框的顺序与默认选中）。
+          - paragraph [ref=f9e278]: 暂无可排序项目
+          - paragraph [ref=f9e279]: 请求失败，状态码 404

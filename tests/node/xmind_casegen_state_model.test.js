@@ -351,6 +351,8 @@ function verifyOwnershipAndLoadOrder() {
     );
   });
   assert.ok(/stateModelFactory\.create\(/.test(parentSource));
+  assert.ok(/createRootPipelineId: function\(\)/.test(parentSource));
+  assert.strictEqual(parentSource.indexOf('createRootPipelineId: buildRootPipelineId'), -1);
 
   ['index.html', 'ai-workflow.html'].forEach(function(fileName) {
     var html = fs.readFileSync(path.join(projectRoot, fileName), 'utf8');

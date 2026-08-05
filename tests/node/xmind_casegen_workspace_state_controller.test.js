@@ -334,27 +334,38 @@ function verifyOwnershipAndLoadOrder() {
   ].forEach(function(name) {
     assert.ok(parentSource.indexOf('function ' + name + '(') === -1, name + ' must remain retired');
   });
-  assert.match(parentSource, /function buildVisibleModuleContextFromSources\(/);
-  var snapshotContextSource = parentSource.slice(
-    parentSource.indexOf('function buildWorkspaceVisibleModuleContextFromSnapshot('),
-    parentSource.indexOf('function summarizeVisibleModuleContext(')
+  var caseSourceModelSource = fs.readFileSync(path.join(
+    projectRoot,
+    'scripts/modules/xmindCasegen/xmindCasegenCaseSourceModel.js'
+  ), 'utf8');
+  assert.match(caseSourceModelSource, /function buildVisibleModuleContextFromSources\(/);
+  var snapshotContextSource = caseSourceModelSource.slice(
+    caseSourceModelSource.indexOf('function buildWorkspaceVisibleModuleContextFromSnapshot('),
+    caseSourceModelSource.indexOf('function getAiCasesForModule(')
   );
-  var liveContextSource = parentSource.slice(
-    parentSource.indexOf('function buildVisibleModuleContext('),
-    parentSource.indexOf('function ensureVisibleModuleContext(')
+  var liveContextSource = caseSourceModelSource.slice(
+    caseSourceModelSource.indexOf('function buildVisibleModuleContext('),
+    caseSourceModelSource.indexOf('function ensureVisibleModuleContext(')
   );
   assert.match(snapshotContextSource, /return buildVisibleModuleContextFromSources\(/);
   assert.match(liveContextSource, /return buildVisibleModuleContextFromSources\(/);
+  assert.doesNotMatch(parentSource, /function buildVisibleModuleContextFromSources\(/);
+  assert.doesNotMatch(parentSource, /function buildWorkspaceVisibleModuleContextFromSnapshot\(/);
   assert.ok(/workspaceStateControllerFactory\.create\(/.test(parentSource));
 
   ['index.html', 'ai-workflow.html'].forEach(function(fileName) {
     var html = fs.readFileSync(path.join(projectRoot, fileName), 'utf8');
     var stateModelIndex = html.indexOf('./scripts/modules/xmindCasegen/xmindCasegenStateModel.js');
     var controllerIndex = html.indexOf('./scripts/modules/xmindCasegen/xmindCasegenWorkspaceStateController.js');
+    var caseSourceIndex = html.indexOf('./scripts/modules/xmindCasegen/xmindCasegenCaseSourceModel.js');
     var parentIndex = html.indexOf('./scripts/modules/xmindCasegen.js');
     assert.ok(
-      stateModelIndex >= 0 && stateModelIndex < controllerIndex && controllerIndex < parentIndex,
-      fileName + ' must load state model and workspace controller before parent'
+      stateModelIndex >= 0
+        && stateModelIndex < controllerIndex
+        && controllerIndex < parentIndex
+        && caseSourceIndex >= 0
+        && caseSourceIndex < parentIndex,
+      fileName + ' must load state, workspace, and case-source owners before parent'
     );
   });
 }

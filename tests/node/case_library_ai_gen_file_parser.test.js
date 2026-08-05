@@ -1,5 +1,8 @@
 const assert = require('assert');
+const sharedFileParserOwner = require('../../scripts/modules/casePageAiGenFileParser.js');
 const fileParserOwner = require('../../scripts/modules/caseLibrary/caseLibraryAiGenFileParser.js');
+
+assert.strictEqual(fileParserOwner, sharedFileParserOwner);
 
 function testPureParsing() {
   assert.strictEqual(

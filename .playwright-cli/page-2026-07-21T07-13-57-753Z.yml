@@ -1,0 +1,244 @@
+- generic [ref=f1e2]:
+  - complementary [ref=f1e3]:
+    - generic [ref=f1e4]:
+      - generic [ref=f1e5]: 当前用户
+      - strong [ref=f1e6]: 未登录
+      - button "用户菜单" [ref=f1e8] [cursor=pointer]: 个人
+      - generic:
+        - button "登出"
+    - generic [ref=f1e9]:
+      - heading "用例助手" [level=1] [ref=f1e10]
+      - generic [ref=f1e11]:
+        - button "? 页面说明" [ref=f1e12] [cursor=pointer]:
+          - generic [ref=f1e13]: "?"
+          - generic [ref=f1e14]: 页面说明
+        - button "G 功能引导" [ref=f1e15] [cursor=pointer]:
+          - generic [ref=f1e16]: G
+          - generic [ref=f1e17]: 功能引导
+    - generic [ref=f1e18]:
+      - generic [ref=f1e19]: 页面路径
+      - generic [ref=f1e21]: 暂无路径
+    - navigation [ref=f1e22]:
+      - generic [ref=f1e23]:
+        - button "AI 功能" [ref=f1e24] [cursor=pointer]
+        - text: ◆ ◆ ◆ ◆ ◆
+      - generic [ref=f1e26]:
+        - button "用例相关" [ref=f1e27] [cursor=pointer]
+        - text: ◆ ◆ ◆ ◆
+      - generic [ref=f1e28]:
+        - button "管理" [ref=f1e29] [cursor=pointer]
+        - text: ◆ ◆ ◆
+      - generic [ref=f1e30]:
+        - button "设置" [ref=f1e31] [cursor=pointer]
+        - text: ◆
+    - button "回到顶部" [ref=f1e32] [cursor=pointer]
+    - button "跳到底部" [ref=f1e33] [cursor=pointer]
+    - generic [ref=f1e34]:
+      - generic [ref=f1e35]:
+        - button "xmind用例生成进度" [ref=f1e36] [cursor=pointer]
+        - button "个人备忘" [ref=f1e38] [cursor=pointer]
+      - generic [ref=f1e41]:
+        - generic [ref=f1e42]:
+          - generic [ref=f1e43]:
+            - generic [ref=f1e44]: xmind用例生成进度
+            - button "收起" [expanded] [ref=f1e45] [cursor=pointer]
+          - generic [ref=f1e46]: 点击打开对应 XMind 生成页签
+        - paragraph [ref=f1e48]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f1e49]:
+    - generic [ref=f1e50]:
+      - generic [ref=f1e51]: 一键执行步骤
+      - generic [ref=f1e52]:
+        - generic [ref=f1e53] [cursor=pointer]:
+          - generic [ref=f1e54]: "1"
+          - generic [ref=f1e55]: 导入
+        - generic [ref=f1e58] [cursor=pointer]:
+          - generic [ref=f1e59]: "2"
+          - generic [ref=f1e60]: 评审
+        - generic [ref=f1e63] [cursor=pointer]:
+          - generic [ref=f1e64]: "3"
+          - generic [ref=f1e65]: 清洗
+        - generic [ref=f1e68] [cursor=pointer]:
+          - generic [ref=f1e69]: "4"
+          - generic [ref=f1e70]: 对比完整性
+        - generic [ref=f1e73] [cursor=pointer]:
+          - generic [ref=f1e74]: "5"
+          - generic [ref=f1e75]: 拆分
+        - generic [ref=f1e78] [cursor=pointer]:
+          - generic [ref=f1e79]: "6"
+          - generic [ref=f1e80]: 用例导入
+        - generic [ref=f1e83] [cursor=pointer]:
+          - generic [ref=f1e84]: "7"
+          - generic [ref=f1e85]: 覆盖对比
+    - main [ref=f1e87]:
+      - generic [ref=f1e88]:
+        - heading "导入需求文档" [level=2] [ref=f1e89]
+        - generic [ref=f1e91]:
+          - generic [ref=f1e92]:
+            - paragraph [ref=f1e93]: 点击选择或拖拽文件，解析后的原始需求文档会展示在右侧文本框，可手工修改后再进行清洗。
+            - generic [ref=f1e94]:
+              - generic [ref=f1e95]:
+                - strong [ref=f1e96]: 点击选择
+                - generic [ref=f1e97]: 或拖拽文件到此处
+              - generic [ref=f1e98]: 未选择文件
+            - paragraph [ref=f1e99]
+          - generic [ref=f1e100]:
+            - textbox "原始需求将出现在这里，也可以直接粘贴/输入..." [ref=f1e101]
+            - generic [ref=f1e102]:
+              - button "保存调试TXT" [ref=f1e103] [cursor=pointer]
+              - button "导入调试TXT" [ref=f1e104] [cursor=pointer]
+      - generic [ref=f1e105]:
+        - heading "需求评审" [level=2] [ref=f1e106]
+        - generic [ref=f1e108]:
+          - generic [ref=f1e109]:
+            - paragraph [ref=f1e110]: 基于原始需求快速识别不明确项与潜在分支，便于评审时沟通澄清。仅在已导入需求后可执行。
+            - button "需求分析" [disabled] [ref=f1e112]
+            - paragraph [ref=f1e113]
+            - paragraph [ref=f1e114]:
+              - text: 模型用时：
+              - strong [ref=f1e115]: "-- 秒"
+          - generic [ref=f1e116]:
+            - textbox "评审结果 JSON 将展示于此，必要时可手动补充说明" [ref=f1e117]
+            - generic [ref=f1e118]:
+              - button "复制评审JSON" [ref=f1e119] [cursor=pointer]
+              - button "导出评审JSON" [ref=f1e120] [cursor=pointer]
+              - button "导入评审JSON" [ref=f1e121] [cursor=pointer]
+      - generic [ref=f1e122]:
+        - heading "需求澄清点视图" [level=2] [ref=f1e123]
+        - generic [ref=f1e124]:
+          - paragraph [ref=f1e125]: 汇总所有评审中发现的不明确点，可逐条补充澄清结果并同步回评审 JSON。
+          - button "前往视图确认澄清" [disabled] [ref=f1e127]
+          - paragraph [ref=f1e128]
+      - generic [ref=f1e129]:
+        - heading "需求清洗" [level=2] [ref=f1e130]
+        - generic [ref=f1e132]:
+          - generic [ref=f1e133]:
+            - paragraph [ref=f1e134]: 执行清洗后，可复制或保存结果，方便进一步审查。
+            - generic [ref=f1e135]:
+              - button "开始清洗" [ref=f1e136] [cursor=pointer]
+              - button "复制清洗结果" [ref=f1e137] [cursor=pointer]
+            - paragraph [ref=f1e138]
+            - paragraph [ref=f1e139]:
+              - text: 模型用时：
+              - strong [ref=f1e140]: "-- 秒"
+          - generic [ref=f1e141]:
+            - textbox "清洗后的需求将出现在这里..." [ref=f1e142]
+            - generic [ref=f1e143]:
+              - button "保存调试TXT" [ref=f1e144] [cursor=pointer]
+              - button "导入调试TXT" [ref=f1e145] [cursor=pointer]
+      - generic [ref=f1e146]:
+        - heading "清洗结果视图" [level=2] [ref=f1e147]
+        - generic [ref=f1e148]:
+          - paragraph [ref=f1e149]: 列表展示清洗条目，可点击定位相关原始需求段落，快速核对清洗准确性。
+          - button "展开视图" [ref=f1e151] [cursor=pointer]
+      - generic [ref=f1e152]:
+        - heading "对比完整性" [level=2] [ref=f1e153]
+        - generic [ref=f1e155]:
+          - generic [ref=f1e156]:
+            - paragraph [ref=f1e157]: 使用指派的对比模型检查清洗结果是否覆盖原始需求。
+            - button "开始对比" [ref=f1e159] [cursor=pointer]
+            - paragraph [ref=f1e160]
+            - paragraph [ref=f1e161]:
+              - text: 模型用时：
+              - strong [ref=f1e162]: "-- 秒"
+          - generic [ref=f1e163]:
+            - paragraph [ref=f1e164]:
+              - text: 结果 JSON 字段：
+              - code [ref=f1e165]: coverage
+              - text: =覆盖率，
+              - code [ref=f1e166]: missing
+              - text: =未覆盖模块列表。
+            - textbox "覆盖率和未覆盖要点将展示于此" [ref=f1e167]
+            - generic [ref=f1e168]:
+              - button "导出调试JSON" [ref=f1e169] [cursor=pointer]
+              - button "导入调试JSON" [ref=f1e170] [cursor=pointer]
+      - generic [ref=f1e171]:
+        - heading "测试模块拆分" [level=2] [ref=f1e172]
+        - generic [ref=f1e174]:
+          - generic [ref=f1e175]:
+            - paragraph [ref=f1e176]: 将清洗结果进一步拆分为具体测试模块，用于测试设计。请让模型输出 JSON 数组，字段：module、key_scenarios、test_points、coupled_modules。
+            - button "开始拆分" [ref=f1e178] [cursor=pointer]
+            - paragraph [ref=f1e179]
+            - paragraph [ref=f1e180]:
+              - text: 模型用时：
+              - strong [ref=f1e181]: "-- 秒"
+          - generic [ref=f1e182]:
+            - textbox "拆分的测试模块将展示于此" [ref=f1e183]
+            - generic [ref=f1e184]:
+              - button "生成用例" [ref=f1e185] [cursor=pointer]
+              - button "保存调试TXT" [ref=f1e186] [cursor=pointer]
+              - button "导入调试TXT" [ref=f1e187] [cursor=pointer]
+      - generic [ref=f1e188]:
+        - heading "拆分视图" [level=2] [ref=f1e189]
+        - generic [ref=f1e190]:
+          - paragraph [ref=f1e191]: 按模块查看拆分结构，便于核对场景与要点。
+          - button "展开拆分视图" [disabled] [ref=f1e193]
+      - generic [ref=f1e194]:
+        - heading "测试用例导入（XMind）" [level=2] [ref=f1e195]
+        - generic [ref=f1e197]:
+          - generic [ref=f1e198]:
+            - paragraph [ref=f1e199]: 可导入单份或多份 XMind/JSON/txt 测试用例，解析后可在右侧查看并用于覆盖对比。
+            - generic [ref=f1e200]:
+              - generic [ref=f1e201]:
+                - strong [ref=f1e202]: 点击选择
+                - generic [ref=f1e203]: 或拖拽测试用例到此处
+              - generic [ref=f1e204]: 未导入文件
+            - button "从用例库中选择" [ref=f1e207] [cursor=pointer]
+            - paragraph [ref=f1e208]
+          - generic [ref=f1e209]:
+            - textbox "解析后的测试用例文本，可手动编辑..." [ref=f1e210]
+            - generic [ref=f1e211]:
+              - button "保存调试TXT" [ref=f1e212] [cursor=pointer]
+              - button "导入调试TXT" [ref=f1e213] [cursor=pointer]
+      - generic [ref=f1e214]:
+        - heading "测试用例视图" [level=2] [ref=f1e215]
+        - generic [ref=f1e216]:
+          - paragraph [ref=f1e217]: 基于当前 XMind/文本内容渲染列表视图，可快速查看模块、用例标题、优先级等字段。
+          - generic [ref=f1e218]:
+            - button "打开用例视图" [ref=f1e219] [cursor=pointer]
+            - generic [ref=f1e220]: 请先上传或输入 XMind 测试用例
+      - generic [ref=f1e221]:
+        - heading "测试用例覆盖对比" [level=2] [ref=f1e222]
+        - generic [ref=f1e224]:
+          - generic [ref=f1e225]:
+            - paragraph [ref=f1e226]: 使用专用模型，对比“测试模块拆分”与“测试用例”之间的覆盖情况，识别缺失或冗余点。
+            - button "执行覆盖对比" [ref=f1e228] [cursor=pointer]
+            - paragraph [ref=f1e229]
+            - paragraph [ref=f1e231]:
+              - text: 模型用时：
+              - strong [ref=f1e232]: "-- 秒"
+          - generic [ref=f1e233]:
+            - paragraph [ref=f1e234]:
+              - text: 结果 JSON 字段：
+              - code [ref=f1e235]: coverage
+              - text: =覆盖率，
+              - code [ref=f1e236]: missing
+              - text: =缺失模块列表（结构与“测试模块拆分”一致），
+              - code [ref=f1e237]: extra
+              - text: =用例中多余的点。
+            - textbox "覆盖率与缺少/多余点将在此展示" [ref=f1e238]
+            - generic [ref=f1e239]:
+              - button "导出对比结果" [ref=f1e240] [cursor=pointer]
+              - button "导入对比结果" [ref=f1e241] [cursor=pointer]
+      - generic [ref=f1e242]:
+        - heading "缺失模块视图" [level=2] [ref=f1e243]
+        - generic [ref=f1e244]:
+          - paragraph [ref=f1e245]:
+            - text: 运行“测试用例覆盖对比”后，可在此查看缺失模块详情，并复制
+            - code [ref=f1e246]: missing
+            - text: 字段 JSON。
+          - button "前往勾选缺失模块生成缺失用例" [disabled] [ref=f1e248]
+          - paragraph [ref=f1e249]
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=f1e250]:
+        - heading "执行视图" [level=2] [ref=f1e251]
+        - generic [ref=f1e252]: 暂无执行用例，请在“用例导入”中导入，或在“执行分配”中选择历史记录
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择版本" [selected]
+      - option "管理员"
+      - option "普通用户" [selected]
+      - option "组长"
+      - option "组员" [selected]

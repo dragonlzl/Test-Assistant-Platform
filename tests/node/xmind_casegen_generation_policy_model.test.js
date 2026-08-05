@@ -84,6 +84,12 @@ var policy = policyFactory.create({
     var text = normalizeText(value);
     return text.length > maxLength ? (text.slice(0, maxLength) + '…') : text;
   },
+  normalizeModelModulesOutputDetailed: function(value) {
+    return {
+      list: Array.isArray(value) ? value : [],
+      diagnostics: { parseStatus: Array.isArray(value) ? 'json' : 'empty' },
+    };
+  },
 });
 
 function verifyOperationContracts() {
@@ -244,6 +250,52 @@ function verifyCaseMerge() {
   assert.strictEqual(added.length, 4);
 }
 
+function verifyModuleTaskResultResolution() {
+  var moduleEntry = {
+    title: '登录',
+    rows: [{ item: { title: '已有用例', expected: '旧结果' } }],
+  };
+  var visibleContext = { map: { '登录': moduleEntry } };
+  var appendResult = policy.resolveModuleTaskResult({
+    resultRaw: [
+      { module: '其他', cases: [{ title: '忽略用例' }] },
+      { module: '登录', cases: [{ title: '已有用例' }, { title: '新增用例' }] },
+    ],
+    contract: policy.createOperationContract(moduleActions.APPEND, moduleEntry),
+    visibleContext: visibleContext,
+    moduleEntry: moduleEntry,
+    currentAiCases: [{ title: '已有 AI 用例' }],
+    actionId: moduleActions.APPEND,
+  });
+  assert.strictEqual(appendResult.targetOutput.module, '登录');
+  assert.deepStrictEqual(
+    appendResult.nextList.map(function(item) { return item.title; }),
+    ['已有 AI 用例', '新增用例']
+  );
+  assert.deepStrictEqual(
+    appendResult.appended.map(function(item) { return item.title; }),
+    ['新增用例']
+  );
+  assert.strictEqual(appendResult.filtered.diagnostics.skippedTargetMismatchModules, 1);
+
+  var emptyResult = policy.resolveModuleTaskResult({
+    resultRaw: [],
+    contract: policy.createOperationContract(moduleActions.FULL_CASES, moduleEntry),
+    visibleContext: visibleContext,
+    moduleEntry: moduleEntry,
+    actionId: moduleActions.FULL_CASES,
+  });
+  assert.deepStrictEqual(emptyResult.targetOutput, {
+    module: '登录',
+    key_scenarios: [],
+    test_points: [],
+    coupled_modules: [],
+    cases: [],
+  });
+  assert.deepStrictEqual(emptyResult.nextList, []);
+  assert.strictEqual(emptyResult.normalizedOutput.diagnostics.parseStatus, 'json');
+}
+
 function verifyErrorsAndNoChangeReasons() {
   assert.strictEqual(
     policy.buildGenerationErrorInfo(new Error('request timeout 超时')).reasonText,
@@ -297,20 +349,27 @@ function verifyErrorsAndNoChangeReasons() {
 
   assert.strictEqual(policy.getDiagnosticsMetric({ value: -1 }, 'value'), 0);
   assert.strictEqual(policy.getDiagnosticsMetric({ value: '3' }, 'value'), 3);
+  assert.strictEqual(policy.getFriendlyRootEmptyModulesText(rootActions.TOPUP_MODULES), '当前没有需要补充的新模块。');
+  assert.strictEqual(policy.getFriendlyRootEmptyModulesText(rootActions.FULL_CASES), '这次没有生成出任何模块或用例。');
 }
 
 function verifyOwnershipAndLoadOrder() {
   var parentSource = fs.readFileSync(path.join(projectRoot, 'scripts/modules/xmindCasegen.js'), 'utf8');
+  var completionSource = fs.readFileSync(path.join(
+    projectRoot,
+    'scripts/modules/xmindCasegen/xmindCasegenGenerationCompletionController.js'
+  ), 'utf8');
   assert.match(parentSource, /window\.app\.xmindCasegenGenerationPolicyModel/);
   assert.match(parentSource, /generationPolicyModelFactory\.create\(\{/);
   assert.ok(!/function createOperationContract\(/.test(parentSource));
   assert.ok(!/function filterModulesByContract\(/.test(parentSource));
   assert.ok(!/function mergeCasesWithoutDuplicates\(/.test(parentSource));
+  assert.ok(!/function resolveModuleTaskResult\(/.test(parentSource));
   assert.ok(!/function buildRootNoChangeInfo\(/.test(parentSource));
   assert.ok(!/function buildModuleNoChangeInfo\(/.test(parentSource));
-  var moduleSuccessSource = parentSource.slice(
-    parentSource.indexOf('function completeModuleTaskSuccess('),
-    parentSource.indexOf('function completeModuleTaskError(')
+  var moduleSuccessSource = completionSource.slice(
+    completionSource.indexOf('function completeModuleTaskSuccess('),
+    completionSource.indexOf('function completeModuleTaskError(')
   );
   assert.strictEqual((moduleSuccessSource.match(/caseCount: 0/g) || []).length, 1);
   ['index.html', 'ai-workflow.html'].forEach(function(page) {
@@ -325,6 +384,7 @@ verifyOperationContracts();
 verifyCompletionPolicies();
 verifyContractFiltering();
 verifyCaseMerge();
+verifyModuleTaskResultResolution();
 verifyErrorsAndNoChangeReasons();
 verifyOwnershipAndLoadOrder();
 console.log('xmind casegen generation policy model tests passed');

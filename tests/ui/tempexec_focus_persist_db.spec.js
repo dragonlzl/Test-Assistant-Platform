@@ -19,6 +19,10 @@ async function switchToTab(page, tabName) {
   await page.evaluate((name) => {
     if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(name);
   }, tabName);
+  if (tabName === 'tempexec') {
+    await page.waitForURL(/\/case-exec\.html(?:[?#]|$)/, { timeout: 30000 });
+  }
+  await waitAppReady(page, 30000);
 }
 
 function createApiHandler(serverState) {

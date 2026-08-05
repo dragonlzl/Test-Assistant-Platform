@@ -55,7 +55,9 @@ function buildModules() {
   return modules;
 }
 
+loadCore('scripts/core/jsonCloneCore.js');
 loadCore('scripts/core/xmindDedupeBatchCore.js');
+loadCore('scripts/core/xmindDedupeContractModel.js');
 loadCore('scripts/core/xmindCaseDedupeCore.js');
 
 var batchCore = context.window.app.xmindDedupeBatchCore;
@@ -112,6 +114,13 @@ assert.ok(batchRequest.requestText.indexOf('完整需求正文必须保留') !==
 assert.ok(batchRequest.requestText.indexOf('只读的跨批次用例摘要') !== -1);
 assert.ok(batchRequest.prompt.indexOf('target_modules 是本批唯一可编辑用例') !== -1);
 assert.ok(batchRequest.prompt.indexOf('不得返回或改写只读引用模块') !== -1);
+assert.ok(batchRequest.prompt.indexOf('modules 必须返回全部 target_modules') !== -1);
+var batchOperationContract = JSON.parse(
+  batchRequest.requestText.split('【operation_contract(JSON)】\n')[1].split('\n\n【原始需求文档/需求描述】')[0]
+);
+assert.strictEqual(batchOperationContract.module_return_policy.return_all_input_modules, true);
+assert.strictEqual(batchOperationContract.module_return_policy.partial_modules_response_allowed, false);
+assert.strictEqual(batchOperationContract.review_method, 'exhaustive_global_pairwise_scan');
 
 var batchEntries = plan.batches.map(function(batch, batchIndex) {
   var resultModules = batch.modules.map(function(module, moduleIndex) {

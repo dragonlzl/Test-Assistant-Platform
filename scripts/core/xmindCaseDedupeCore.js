@@ -3,6 +3,15 @@
 
   function init(options) {
     var opts = options || {};
+    var contractModel = opts.contractModel
+      || (window.app && window.app.xmindDedupeContractModel
+        ? window.app.xmindDedupeContractModel
+        : null);
+    if (!contractModel
+      || typeof contractModel.buildModelOperationContract !== 'function'
+      || typeof contractModel.buildReturnPolicyPrompt !== 'function') {
+      throw new Error('xmindDedupeContractModel 未加载');
+    }
 
     function normalizeText(value) {
       return String(value === null || value === undefined ? '' : value).replace(/\s+/g, ' ').trim();
@@ -20,14 +29,7 @@
       return normalizeModuleTitle(value).toLowerCase();
     }
 
-    function cloneJson(value, fallback) {
-      if (value === undefined || value === null) return fallback;
-      try {
-        return JSON.parse(JSON.stringify(value));
-      } catch (err) {
-        return fallback;
-      }
-    }
+    var cloneJson = window.app.jsonCloneCore.cloneJson;
 
     function normalizeCaseList(list) {
       return (Array.isArray(list) ? list : []).map(function(item) {
@@ -283,6 +285,7 @@
       var dedupeMode = normalizeDedupeMode(mode);
       var promptOptions = options && typeof options === 'object' ? options : {};
       var batchMode = promptOptions.batchMode === true;
+      var returnPolicyPrompt = contractModel.buildReturnPolicyPrompt({ batchMode: batchMode });
       var modeLines = isDedupeSimplifyMode(dedupeMode)
         ? [
           '本次策略：去重并精简。',
@@ -295,14 +298,7 @@
           '不要主动压缩用例数量，不要为了精简而删除有独立覆盖价值的业务路径、异常路径、边界条件或权限/安全场景。',
           '除必要合并重复用例外，尽量保留原用例标题、步骤、预期。',
         ];
-      var batchLines = batchMode
-        ? [
-          '本次为全局去重的有界批次：target_modules 是本批唯一可编辑用例；readonly_reference_modules 是更早批次的只读用例摘要。',
-          '必须把 target_modules 与 readonly_reference_modules 一起用于重复候选审查，但只能删除、合并或改写 target_modules 中的用例。',
-          '当目标用例与只读引用重复时，保留只读引用对应覆盖，仅在目标模块中删除或合并重复项；不得返回或改写只读引用模块。',
-          'modules 只能返回 target_modules 中发生变化的模块，removed_cases 也只能记录 target_modules 中被处理的用例。',
-        ]
-        : [];
+      var batchLines = returnPolicyPrompt.batchContextLines;
       return [
         '你是资深测试用例评审专家，请对 XMind AI 生成用例做整份用例全局去重。',
         '最终目标：这些用例会被用于保障项目产品质量，帮助团队更早发现缺陷、降低回归风险、提升用户体验稳定性。',
@@ -316,18 +312,18 @@
         'C. 对同义表达保持敏感：例如“禁用/禁止/不可用”、“可发射/可使用/允许触发”、“数量显示/储存显示/显示一致性”等，如果测试目的、测试点、触发条件和预期结果基本一致，应判为重复候选。',
         'D. 只有当两条用例分别验证不同业务对象、不同用户路径、不同状态流转、不同异常/边界/权限/数据风险点时，才应保留为独立覆盖；不能仅因模块不同而保留重复用例。',
         'E. 输出前必须确认整份用例集、每个输入模块以及所有模块内和跨模块重复候选都已完成审查，并把所有明确重复或合并关系写入 removed_cases；不得只返回第一批发现的重复项。',
-        'F. modules 允许只返回发生变化的模块；发生删除、合并、改写的模块必须返回该模块完整 cases。未发生变化的模块可以省略，系统会原样保留；如果返回未变化模块，也必须原样带回 moduleId、moduleKey、module 和 cases。',
+        returnPolicyPrompt.reviewLine,
         '约束：',
         '1. 只能处理输入模块中已有的用例，不得新增模块。',
         '2. 不要为了减少数量牺牲有独立测试目的、独立测试点的关键功能、异常、边界、权限、数据校验、状态流转覆盖。',
         '3. 只有在合并重复用例或开启“去重并精简”时，才允许改写标题、步骤、预期。',
-        '4. 发生变化的模块必须返回该模块的 moduleId、moduleKey、module 和完整 cases 数组；未变化模块可以不返回。',
+        returnPolicyPrompt.moduleConstraintLine,
         '5. 只返回 JSON，不要输出解释文本。',
         '6. 必须在 removed_cases 中逐条列出去掉、重复或合并的原用例，并说明处理关系；没有去掉则返回空数组。',
         '7. 如果是重复删除，removed_cases.type 返回 "duplicate"，duplicate_with 写保留的用例标题，duplicate_point 用 12 个中文字以内说明重复点，例如“步骤和预期一致”“校验目标相同”。',
         '8. 如果是合并，removed_cases.type 返回 "merge"，merged_from 写合并前的原用例标题数组，merged_into 写合并后的用例标题。',
         '9. removed_cases.reason 必须言简意赅，控制在 20 个中文字以内，只写核心原因，如“覆盖高度重叠”“步骤重复”“场景已合并”。',
-        '返回格式：{"modules":[{"moduleId":"输入中的moduleId","moduleKey":"输入中的moduleKey","module":"发生变化的模块名","cases":[{"module":"模块名","title":"用例标题","priority":"P1","preconditions":"前置条件","steps":["1、步骤"],"expected":"预期结果"}]}],"removed_cases":[{"type":"duplicate","module":"模块名","title":"被去掉的原用例标题","reason":"步骤重复","duplicate_with":"保留用例标题","duplicate_point":"步骤和预期一致"},{"type":"merge","module":"模块名","title":"被合并的原用例标题","reason":"场景已合并","merged_from":["合并前用例1","合并前用例2"],"merged_into":"合并后用例标题"}],"summary":{"removed":0,"reason":"简述"}}',
+        '返回格式：{"modules":[{"moduleId":"输入中的moduleId","moduleKey":"输入中的moduleKey","module":"输入模块名","cases":[{"module":"模块名","title":"用例标题","priority":"P1","preconditions":"前置条件","steps":["1、步骤"],"expected":"预期结果"}]}],"removed_cases":[{"type":"duplicate","module":"模块名","title":"被去掉的原用例标题","reason":"步骤重复","duplicate_with":"保留用例标题","duplicate_point":"步骤和预期一致"},{"type":"merge","module":"模块名","title":"被合并的原用例标题","reason":"场景已合并","merged_from":["合并前用例1","合并前用例2"],"merged_into":"合并后用例标题"}],"summary":{"removed":0,"reason":"简述"}}',
       ].join('\n');
     }
 
@@ -351,50 +347,16 @@
       var requirementSupplement = String(source.requirementSupplement || '').trim();
       var dedupeMode = normalizeDedupeMode(source.dedupeMode || source.mode);
       var payload = {
-        operation_contract: {
-          scope: 'xmind_ai_cases',
-          mode: 'ai_dedupe_simplify',
-          dedupe_mode: dedupeMode,
+        operation_contract: contractModel.buildModelOperationContract({
           dedupeMode: dedupeMode,
-          simplify: isDedupeSimplifyMode(dedupeMode),
           strength: source.strength || 'conservative',
           source: source.source || 'manual-toolbar',
-          batch_mode: batchMode,
-          batch_index: Number(source.batchIndex || 0),
-          batch_count: Number(source.batchCount || 0),
-          return_full_replacement: false,
-          return_changed_modules_only_allowed: true,
-          editable_scope: 'ai_generated_cases_only',
-          quality_goal: 'improve_product_quality_without_reducing_coverage_or_defect_detection_value',
-          dedupe_scope: 'all_input_modules_global',
-          dedupe_order: ['within_module', 'cross_module'],
-          cross_module_dedupe: true,
-          editable_module_keys: modules.map(function(item) { return item.moduleKey; }),
-          readonly_reference_module_keys: referenceModules.map(function(item) { return item.moduleKey; }),
-          readonly_reference_policy: batchMode ? {
-            compare_against_references: true,
-            references_are_not_editable: true,
-            keep_reference_when_duplicate: true,
-            return_reference_modules: false,
-          } : null,
-          module_return_policy: {
-            return_all_input_modules: false,
-            preserve_module_id_and_key: true,
-            unchanged_modules_must_be_returned: false,
-            partial_modules_response_allowed: true,
-          },
-          review_method: 'global_candidate_cluster_scan',
-          duplicate_detection_policy: {
-            compare_fields: ['module', 'title', 'preconditions', 'steps', 'expected', 'test_purpose', 'test_point', 'validation_goal'],
-            require_full_module_scan: true,
-            require_global_case_scan: true,
-            stop_after_first_duplicate: false,
-            treat_synonyms_as_duplicate_candidates: true,
-            prefer_same_module_dedupe: false,
-            cross_module_dedupe: true,
-            duplicate_when_same_test_purpose_and_point: true,
-          },
-        },
+          batchMode: batchMode,
+          batchIndex: Number(source.batchIndex || 0),
+          batchCount: Number(source.batchCount || 0),
+          editableModuleKeys: modules.map(function(item) { return item.moduleKey; }),
+          readonlyReferenceModuleKeys: referenceModules.map(function(item) { return item.moduleKey; }),
+        }),
         requirement: {
           label: String(source.requirementLabel || ''),
           text: requirementText || '（无文本需求）',
@@ -403,14 +365,6 @@
         modules: modules,
         referenceModules: referenceModules,
       };
-      if (!batchMode) {
-        delete payload.operation_contract.batch_mode;
-        delete payload.operation_contract.batch_index;
-        delete payload.operation_contract.batch_count;
-        delete payload.operation_contract.editable_module_keys;
-        delete payload.operation_contract.readonly_reference_module_keys;
-        delete payload.operation_contract.readonly_reference_policy;
-      }
       var requestText = [
         '【operation_contract(JSON)】',
         JSON.stringify(payload.operation_contract, null, 2),
@@ -438,7 +392,7 @@
         referenceModules: referenceModules,
         batchMode: batchMode,
         dedupeMode: dedupeMode,
-        partialModulesResponseAllowed: true,
+        partialModulesResponseAllowed: payload.operation_contract.module_return_policy.partial_modules_response_allowed,
         beforeCaseCount: modules.reduce(function(total, item) {
           return total + (Array.isArray(item.cases) ? item.cases.length : 0);
         }, 0),

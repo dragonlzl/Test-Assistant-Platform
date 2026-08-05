@@ -15,6 +15,7 @@ var entryPages = [
   'admin.html',
   'settings.html',
 ];
+var sharedTaskManagerFile = 'persistentModelTaskManager.js';
 var managerSpecs = [
   {
     file: 'missingReminderAiManager.js',
@@ -37,6 +38,12 @@ var managerSpecs = [
     globalName: 'autoWorkflowManagerModule',
   },
 ];
+
+var sharedTaskManagerPath = path.join(projectRoot, 'scripts/modules/app', sharedTaskManagerFile);
+var sharedTaskManagerSource = fs.readFileSync(sharedTaskManagerPath, 'utf8');
+var sharedTaskManagerApi = require(sharedTaskManagerPath);
+assert.strictEqual(typeof sharedTaskManagerApi.create, 'function', 'shared task manager should export create');
+assert.match(sharedTaskManagerSource, /window\.app\.persistentModelTaskManager = api/);
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -70,7 +77,8 @@ managerSpecs.forEach(function(spec) {
 
 entryPages.forEach(function(page) {
   var source = fs.readFileSync(path.join(projectRoot, page), 'utf8');
-  var previousIndex = -1;
+  var previousIndex = source.indexOf('./scripts/modules/app/' + sharedTaskManagerFile);
+  assert.ok(previousIndex >= 0, page + ' should load the shared task manager');
   managerSpecs.forEach(function(spec) {
     var scriptPath = './scripts/modules/app/' + spec.file;
     var currentIndex = source.indexOf(scriptPath);
@@ -79,6 +87,51 @@ entryPages.forEach(function(page) {
   });
   assert.ok(source.indexOf('./scripts/modules/app.js') > previousIndex, page + ' should load app.js last');
 });
+
+async function verifySharedTaskManagerContract() {
+  var storage = createMemoryStorage();
+  var manager = sharedTaskManagerApi.create({
+    storage: storage,
+    storagePrefix: 'test-managed-task:',
+    taskIdPrefix: 'test-managed-task-',
+    eventName: 'test-managed-task',
+    scenes: ['scene-a'],
+    executeTask: function(context) {
+      assert.strictEqual(context.scene, 'scene-a');
+      assert.strictEqual(context.userText, 'payload');
+      return Promise.resolve('done-value');
+    },
+    buildSuccessPatch: function(result) { return { resultValue: result }; },
+    formatError: function(message) { return 'failed:' + message; },
+  });
+  var task = manager.createTask('scene-a', {
+    model: { baseUrl: 'http://model.test', model: 'test-model' },
+    userText: 'payload',
+  });
+  assert.match(task.id, /^test-managed-task-/);
+  await manager.startTask('scene-a', task, { force: true });
+  var storedTask = manager.getTask('scene-a');
+  assert.strictEqual(storedTask.status, 'done');
+  assert.strictEqual(storedTask.resultValue, 'done-value');
+  manager.updateTask('scene-a', { marker: 'updated' }, 'test-update');
+  assert.strictEqual(manager.getTask('scene-a').marker, 'updated');
+  manager.clearTask('scene-a');
+  assert.strictEqual(manager.getTask('scene-a'), null);
+
+  var failingManager = sharedTaskManagerApi.create({
+    storage: storage,
+    storagePrefix: 'test-failing-task:',
+    taskIdPrefix: 'test-failing-task-',
+    scenes: ['scene-b'],
+    executeTask: function() { return Promise.reject(new Error('boom')); },
+    formatError: function(message) { return 'failed:' + message; },
+  });
+  await failingManager.startTask('scene-b', failingManager.createTask('scene-b', {
+    userText: 'payload',
+  }), { force: true });
+  assert.strictEqual(failingManager.getTask('scene-b').status, 'error');
+  assert.strictEqual(failingManager.getTask('scene-b').error, 'failed:boom');
+}
 
 async function verifyManagedModelTask(moduleName, expectedField, modelResult) {
   global.localStorage = createMemoryStorage();
@@ -161,6 +214,7 @@ function verifyXmindManagerApi() {
 async function main() {
   var originalStorage = global.localStorage;
   try {
+    await verifySharedTaskManagerContract();
     await verifyManagedModelTask('missingReminderAiManager.js', 'resultIds', '{"ids":["case-1"]}');
     await verifyManagedModelTask('caseLibraryAiGenManager.js', 'resultRaw', 'generated-cases');
     await verifyAutoWorkflowTask();

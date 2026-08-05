@@ -172,22 +172,36 @@ async function testControllerLifecycle() {
 function testOwnershipAndEntryOrder() {
   const root = path.resolve(__dirname, '../..');
   const parent = fs.readFileSync(path.join(root, 'scripts/modules/caseLibrary.js'), 'utf8');
+  const workflow = fs.readFileSync(
+    path.join(root, 'scripts/modules/caseLibrary/caseLibraryEditDrawerWorkflowController.js'),
+    'utf8'
+  );
   const view = fs.readFileSync(path.join(root, 'scripts/modules/caseLibrary/caseLibraryShareViewAdapter.js'), 'utf8');
   const controller = fs.readFileSync(path.join(root, 'scripts/modules/caseLibrary/caseLibraryShareController.js'), 'utf8');
   assert.ok(parent.indexOf('shareControllerOwner.create') !== -1);
+  assert.ok(parent.indexOf('editDrawerWorkflowOwner.create') !== -1);
   assert.ok(parent.indexOf('function submitShareCaseFiles') === -1);
   assert.ok(parent.indexOf('function confirmShareCaseFile') === -1);
-  assert.ok(parent.indexOf('shareController.open(files') !== -1);
+  assert.ok(parent.indexOf('shareController.open(files') === -1);
+  assert.ok(workflow.indexOf('getShareController') !== -1);
+  assert.ok(workflow.indexOf('shareController.open(files') !== -1);
   assert.ok(view.indexOf('apiClient') === -1);
   assert.ok(controller.indexOf('.innerHTML') === -1);
 
   const entries = ['admin.html', 'ai-tools.html', 'ai-workflow.html', 'case-exec.html', 'case-library.html', 'index.html', 'settings.html'];
-  const scripts = ['caseLibraryShareViewAdapter.js', 'caseLibraryShareController.js', 'caseLibrary.js'];
+  const scripts = [
+    'caseLibraryEditDrawerWorkflowController.js',
+    'caseLibraryShareViewAdapter.js',
+    'caseLibraryShareController.js',
+    'caseLibrary.js',
+  ];
   entries.forEach(function(entry) {
     const html = fs.readFileSync(path.join(root, entry), 'utf8');
     const indexes = scripts.map(function(script) { return html.indexOf(script); });
     assert.ok(indexes.every(function(index) { return index >= 0; }), entry + ' is missing share owner');
-    assert.ok(indexes[0] < indexes[1] && indexes[1] < indexes[2]);
+    for (let i = 1; i < indexes.length; i += 1) {
+      assert.ok(indexes[i - 1] < indexes[i], entry + ' has invalid share owner order');
+    }
   });
 }
 

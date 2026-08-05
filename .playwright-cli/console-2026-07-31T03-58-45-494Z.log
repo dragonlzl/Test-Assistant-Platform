@@ -1,0 +1,12 @@
+[     461ms] [VERBOSE] [DOM] Multiple forms should be contained in their own form elements; break up complex forms into ones that represent a single action: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8080/login.html?redirect=%2Findex.html:0
+[   47208ms] TypeError: cloneJson is not a function
+    at http://127.0.0.1:8080/scripts/modules/xmindCasegen/xmindCasegenWorkspaceStateController.js:178:21
+    at Array.forEach (<anonymous>)
+    at extractActiveXmindStateSnapshot (http://127.0.0.1:8080/scripts/modules/xmindCasegen/xmindCasegenWorkspaceStateController.js:176:27)
+    at Object.createWorkspaceSnapshotFromCurrent (http://127.0.0.1:8080/scripts/modules/xmindCasegen/xmindCasegenWorkspaceSessionController.js:1156:27)
+    at Object.captureCurrent (http://127.0.0.1:8080/scripts/modules/xmindCasegen.js:1042:45)
+    at ensureWorkspaceRecordFromCurrentContent (http://127.0.0.1:8080/scripts/modules/xmindCasegen/xmindCasegenWorkspaceStateController.js:271:42)
+    at saveActiveWorkspaceSnapshot (http://127.0.0.1:8080/scripts/modules/xmindCasegen/xmindCasegenWorkspaceStateController.js:300:20)
+    at persistXmindState (http://127.0.0.1:8080/scripts/modules/xmindCasegen/xmindCasegenWorkspaceStateController.js:411:7)
+    at persistXmindState (http://127.0.0.1:8080/scripts/modules/xmindCasegen.js:2293:55)
+    at render (http://127.0.0.1:8080/scripts/modules/xmindCasegen/xmindCasegenMindRendererController.js:347:46)

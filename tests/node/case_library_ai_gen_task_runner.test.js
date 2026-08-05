@@ -1,5 +1,6 @@
 const assert = require('assert');
 const taskRunnerOwner = require('../../scripts/modules/caseLibrary/caseLibraryAiGenTaskRunner.js');
+const sharedTaskRunnerOwner = require('../../scripts/modules/casePageAiGenTaskRunner.js');
 
 function createModel() {
   return {
@@ -196,10 +197,70 @@ async function testManagedResultResolution() {
   await restarted.promise;
 }
 
+function testTempExecSceneContract() {
+  let currentTask = null;
+  const calls = [];
+  const manager = {
+    getTask: function(scene) {
+      assert.strictEqual(scene, 'temp-exec');
+      return currentTask;
+    },
+    createTask: function(scene, payload) {
+      currentTask = Object.assign({ id: 'temp-task-1', scene: scene, status: 'running' }, payload);
+      calls.push({ type: 'create', scene: scene, payload: payload });
+      return currentTask;
+    },
+    startTask: function(scene, task, options) {
+      calls.push({ type: 'start', scene: scene, task: task, options: options || null });
+    },
+  };
+  const runner = sharedTaskRunnerOwner.create({
+    scene: 'temp-exec',
+    runTokenPrefix: 'temp-exec',
+    model: createModel(),
+    getManager: function() { return manager; },
+    getCore: function() {
+      return {
+        getAssignedModel: function() { return { id: 'model-temp' }; },
+        callModelWithConfig: function() { return Promise.resolve('{}'); },
+      };
+    },
+    getAssignments: function() { return {}; },
+    getDefaultPrompt: function() { return 'prompt'; },
+    resolveFileMeta: function(file) {
+      return {
+        id: file.id,
+        name: file.name,
+        projectId: file.projectId,
+        versionId: file.versionId,
+      };
+    },
+    now: function() { return 2000; },
+    random: function() { return 0.25; },
+  });
+  const prepared = runner.prepare({
+    caseFile: { id: 'exec-1', name: '执行用例', projectId: 8, versionId: 9 },
+    items: [{ module: '支付', title: '支付成功' }],
+    requirementText: '支付需求',
+  });
+  assert.ok(prepared.runToken.indexOf('temp-exec-1jk-') === 0);
+  const execution = runner.start(prepared);
+  assert.strictEqual(execution.mode, 'managed');
+  assert.strictEqual(calls[0].scene, 'temp-exec');
+  assert.strictEqual(calls[0].payload.caseFileName, '执行用例');
+  assert.strictEqual(calls[0].payload.versionIdAtRun, 9);
+  assert.strictEqual(calls[0].payload.versionAssigned, true);
+  assert.strictEqual(runner.getCurrentTask('exec-1'), currentTask);
+  runner.resume(true);
+  assert.strictEqual(calls[calls.length - 1].options.force, true);
+}
+
 async function main() {
+  assert.strictEqual(taskRunnerOwner, sharedTaskRunnerOwner);
   testPreparationAndManagedStart();
   await testDirectExecution();
   await testManagedResultResolution();
+  testTempExecSceneContract();
   console.log('case library AI generation task runner tests passed');
 }
 

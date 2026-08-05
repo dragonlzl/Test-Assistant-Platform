@@ -140,4 +140,50 @@ test.describe('Shared DrawerShell lifecycle', () => {
       decoratedAfterDestroy: false,
     });
   });
+
+  test('optionally resolves confirmation after the previous drawer is fully resumed', async ({ page }) => {
+    await setup(page);
+
+    await page.evaluate(() => {
+      const drawer = document.createElement('div');
+      drawer.id = 'drawerShellConfirmPrevious';
+      drawer.className = 'drawer';
+      drawer.innerHTML = [
+        '<div class="drawer-mask"></div>',
+        '<div class="drawer-panel">',
+        '<div class="drawer-header"><button data-drawer-close>关闭</button></div>',
+        '</div>',
+      ].join('');
+      document.body.appendChild(drawer);
+      window.__drawerShellConfirmPrevious = window.app.drawer.createDrawer({ drawerId: drawer.id });
+      window.__drawerShellConfirmPrevious.open();
+      window.__drawerShellConfirmState = 'pending';
+      window.__drawerShellConfirmResult = null;
+      window.app.confirmDrawer.open({
+        title: '生命周期确认',
+        message: '确认后等待抽屉完全关闭',
+        previousDrawer: window.__drawerShellConfirmPrevious,
+        resolveAfterClose: true,
+      }).then(function(result) {
+        window.__drawerShellConfirmState = 'resolved';
+        window.__drawerShellConfirmResult = result;
+      });
+    });
+
+    await expect(page.locator('#drawerShellConfirmPrevious')).toHaveClass(/drawer-suspended/);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    const immediate = await page.evaluate(() => ({
+      state: window.__drawerShellConfirmState,
+      confirmClass: document.getElementById('appConfirmDrawer').className,
+      previousClass: document.getElementById('drawerShellConfirmPrevious').className,
+    }));
+    expect(immediate.state).toBe('pending');
+    expect(immediate.confirmClass).toContain('closing');
+    expect(immediate.previousClass).toContain('drawer-suspended');
+
+    await expect.poll(() => page.evaluate(() => window.__drawerShellConfirmState)).toBe('resolved');
+    await expect(page.locator('#appConfirmDrawer')).not.toHaveClass(/\b(?:open|closing)\b/);
+    await expect(page.locator('#drawerShellConfirmPrevious')).not.toHaveClass(/drawer-suspended/);
+    expect(await page.evaluate(() => window.__drawerShellConfirmResult)).toEqual({ ok: true });
+  });
 });

@@ -14,6 +14,12 @@ var taskStoreSource = fs.readFileSync(
   path.join(projectRoot, 'scripts/modules/app/xmindCaseGenTaskStore.js'),
   'utf8'
 );
+var appRuntimeSource = fs.readFileSync(path.join(projectRoot, 'scripts/core/appRuntime.js'), 'utf8');
+var xmindCasegenSource = fs.readFileSync(
+  path.join(projectRoot, 'scripts/modules/xmindCasegen.js'),
+  'utf8'
+);
+var indexHtml = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8');
 var workflowHtml = fs.readFileSync(path.join(projectRoot, 'ai-workflow.html'), 'utf8');
 var caseLibraryHtml = fs.readFileSync(path.join(projectRoot, 'case-library.html'), 'utf8');
 
@@ -25,6 +31,9 @@ assert.match(taskManagerSource, /taskStoreModule\.create\(\{/);
 assert.match(taskManagerSource, /function canResumeTaskRequests\(\)\s*\{[\s\S]*?requestScheduler[\s\S]*?requestScheduler\.acquire/);
 assert.match(taskManagerSource, /function resumeTasks\(options\)\s*\{\s*if \(!canResumeTaskRequests\(\)\) return 0;/);
 assert.match(taskManagerSource, /function resumeOrphanedTasks\(\)\s*\{\s*if \(!canResumeTaskRequests\(\)\) return 0;/);
+assert.match(appRuntimeSource, /xmindKnowledgeBaseApi:\s*xmindKnowledgeBaseApi/);
+assert.match(xmindCasegenSource, /throw new Error\('xmindKnowledgeBaseApi 未完整初始化'\)/);
+assert.ok(!/function createFallbackKnowledgeBaseState\(/.test(xmindCasegenSource));
 
 var workflowSchedulerIndex = workflowHtml.indexOf('./scripts/core/xmindRequestSchedulerCore.js');
 var workflowStoreIndex = workflowHtml.indexOf('./scripts/modules/app/xmindCaseGenTaskStore.js');
@@ -33,6 +42,11 @@ var workflowAppIndex = workflowHtml.indexOf('./scripts/modules/app.js');
 assert.ok(workflowSchedulerIndex >= 0 && workflowSchedulerIndex < workflowManagerIndex);
 assert.ok(workflowStoreIndex >= 0 && workflowStoreIndex < workflowManagerIndex);
 assert.ok(workflowManagerIndex < workflowAppIndex);
+[indexHtml, workflowHtml].forEach(function(source) {
+  var knowledgeBaseIndex = source.indexOf('./scripts/modules/xmindKnowledgeBase.js');
+  var xmindCasegenIndex = source.indexOf('./scripts/modules/xmindCasegen.js');
+  assert.ok(knowledgeBaseIndex >= 0 && knowledgeBaseIndex < xmindCasegenIndex);
+});
 assert.ok(
   caseLibraryHtml.indexOf('./scripts/modules/app/xmindCaseGenTaskStore.js')
     < caseLibraryHtml.indexOf('./scripts/modules/app/xmindCaseGenTaskManager.js')

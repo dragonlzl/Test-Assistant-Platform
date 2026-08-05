@@ -1,0 +1,91 @@
+- generic [ref=f14e2]:
+  - complementary [ref=f14e3]:
+    - generic [ref=f14e4]:
+      - generic "用例助手" [ref=f14e5]: TA
+      - navigation "主功能导航" [ref=f14e6]:
+        - button "AI 功能" [ref=f14e7] [cursor=pointer]:
+          - generic [ref=f14e8]: AI
+        - button "用例相关" [ref=f14e10] [cursor=pointer]:
+          - generic [ref=f14e11]: TC
+        - button "管理" [ref=f14e13] [cursor=pointer]:
+          - generic [ref=f14e14]: AD
+        - button "设置" [ref=f14e16] [cursor=pointer]:
+          - generic [ref=f14e17]: ST
+      - button "展开二级导航" [ref=f14e19] [cursor=pointer]: ">"
+  - generic [ref=f14e20]:
+    - generic [ref=f14e21]:
+      - generic [ref=f14e22]: 一键执行步骤
+      - generic [ref=f14e23]:
+        - generic [ref=f14e24] [cursor=pointer]:
+          - generic [ref=f14e25]: "1"
+          - generic [ref=f14e26]: 导入
+          - generic [ref=f14e27]: ▶
+        - generic [ref=f14e29] [cursor=pointer]:
+          - generic [ref=f14e30]: "2"
+          - generic [ref=f14e31]: 评审
+          - generic [ref=f14e32]: ▶
+        - generic [ref=f14e34] [cursor=pointer]:
+          - generic [ref=f14e35]: "3"
+          - generic [ref=f14e36]: 清洗
+          - generic [ref=f14e37]: ▶
+        - generic [ref=f14e39] [cursor=pointer]:
+          - generic [ref=f14e40]: "4"
+          - generic [ref=f14e41]: 对比完整性
+          - generic [ref=f14e42]: ▶
+        - generic [ref=f14e44] [cursor=pointer]:
+          - generic [ref=f14e45]: "5"
+          - generic [ref=f14e46]: 拆分
+          - generic [ref=f14e47]: ▶
+        - generic [ref=f14e49] [cursor=pointer]:
+          - generic [ref=f14e50]: "6"
+          - generic [ref=f14e51]: 用例导入
+          - generic [ref=f14e52]: ▶
+        - generic [ref=f14e54] [cursor=pointer]:
+          - generic [ref=f14e55]: "7"
+          - generic [ref=f14e56]: 覆盖对比
+          - generic [ref=f14e57]: ▶
+    - main [ref=f14e58]:
+      - generic [ref=f14e59]:
+        - heading "导入数据" [level=2] [ref=f14e60]
+        - generic [ref=f14e62]:
+          - generic [ref=f14e63]:
+            - paragraph [ref=f14e64]: 将原始需求文档拖入或点击选择，等同于“导入需求文档”的操作。
+            - generic [ref=f14e65]:
+              - generic [ref=f14e66]:
+                - strong [ref=f14e67]: 原始需求
+                - generic [ref=f14e68]: 拖拽或点击选择
+              - generic [ref=f14e69]: 导入后内容会同步到左侧“导入需求”模块
+            - generic [ref=f14e70]: 未导入需求
+            - paragraph [ref=f14e72]: 图片上下文：0 张（当前仅文本）。一键执行后续步骤模型能力：评审模型：GPT5.5公司（标签：vision、reasoning、chat，可识别图片）；清洗模型：GPT5.5公司（标签：vision、reasoning、chat，可识别图片）。 当前不含图片，后续步骤将仅基于文本。
+            - button "清除原始需求" [disabled] [ref=f14e74]
+          - generic [ref=f14e75]:
+            - paragraph [ref=f14e76]: 导入 XMind/文本用例后可直接用于覆盖对比。
+            - generic [ref=f14e77]:
+              - generic [ref=f14e78]:
+                - strong [ref=f14e79]: 测试用例
+                - generic [ref=f14e80]: 拖拽或点击选择
+              - generic [ref=f14e81]: 导入结果同步到“测试用例导入”模块
+            - generic [ref=f14e82]: 未导入文件
+            - button "从用例库中选择" [ref=f14e85] [cursor=pointer]
+      - generic [ref=f14e86]:
+        - heading "自动执行工作流" [level=2] [ref=f14e87]
+        - generic [ref=f14e88]:
+          - paragraph [ref=f14e89]: 自动按顺序执行：导入需求 → 需求评审 → 需求清洗 → 对比完整性 → 测试模块拆分 → 测试用例覆盖对比。执行前请确保已导入需求与测试用例，并在“功能指派”中配置所有模型。
+          - generic [ref=f14e90]:
+            - checkbox "需要人工确认需求澄清后再继续自动流程" [ref=f14e91]
+            - generic [ref=f14e92]: 需要人工确认需求澄清后再继续自动流程
+          - generic [ref=f14e93]:
+            - button "一键执行" [ref=f14e94] [cursor=pointer]
+            - button "中断全部执行" [ref=f14e95] [cursor=pointer]
+          - paragraph [ref=f14e96]
+      - generic [ref=f14e97]:
+        - heading "清洗后需求覆盖率" [level=2] [ref=f14e98]
+        - generic [ref=f14e99]:
+          - paragraph [ref=f14e100]: 展示“对比完整性”步骤返回的覆盖率；低于 100% 表示清洗结果缺失，需要重新清洗并修正。
+          - button "覆盖缺失视图" [disabled] [ref=f14e102]
+          - paragraph [ref=f14e103]: 覆盖率：--
+      - generic [ref=f14e104]:
+        - heading "用例缺失测试点" [level=2] [ref=f14e105]
+        - generic [ref=f14e106]:
+          - paragraph [ref=f14e107]: 同步显示“测试用例覆盖对比”后的缺失模块详情，与功能流程中的“缺失模块视图”一致，点击右侧抽屉查看并处理。
+          - button "前往勾选缺失模块生成缺失用例" [disabled] [ref=f14e109]

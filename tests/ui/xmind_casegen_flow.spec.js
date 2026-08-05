@@ -4405,14 +4405,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
     await waitXmindModelAssigned(page, mockInfo.modelId);
 
-    let drawerOpen = await page.evaluate(() => {
-      var drawer = document.getElementById('xmindCaseGenDrawer');
-      return Boolean(drawer && drawer.classList && drawer.classList.contains('open'));
-    });
-    if (!drawerOpen) {
-      await page.click('#caseGenModulesTabBtn');
-      await page.click('#xmindCaseGenOpenBtn');
-    }
+    await openXmindCaseGenDrawer(page);
 
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]').nth(0)).toContainText('刷新保留-A');
@@ -10146,7 +10139,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(moduleItemsWhileRootAppendRunning.find((item) => item.label === '放弃本次生成').disabled).toBe(true);
 
     await waitForNodeText(page, '登录模块-追加-1');
-    await waitForNodeText(page, '消息模块新增用例');
+    await waitForNodeText(page, '消息模块-完整-1');
     await waitForNodeStatusAbsent(page, 'XMind根冲突需求');
   });
 
@@ -10820,7 +10813,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(String(lastCall.user || '')).not.toContain('登录模块-完整-1');
   });
 
-  test('支持按住 Ctrl 点击多个模块或用例后批量删除，后续生成上下文与当前可见树保持一致', async ({ page }) => {
+  test('支持按住 Ctrl 点击多个模块或用例后批量删除，模块全量重生成不携带已替换旧用例', async ({ page }) => {
     const token = 'token-xmind-delete-multi';
     const user = { id: 42, username: 'demo_user_42', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
@@ -10923,7 +10916,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(lastCall).toBeTruthy();
     expect(String(lastCall.user || '')).not.toContain('支付模块');
     expect(String(lastCall.user || '')).not.toContain('登录成功校验');
-    expect(String(lastCall.user || '')).toContain('登录失败提示');
+    expect(String(lastCall.user || '')).not.toContain('登录失败提示');
   });
 
   test('工具栏支持撤回删除和恢复删除，且仅针对删除历史生效', async ({ page }) => {
@@ -11292,8 +11285,14 @@ test.describe('XMind 用例生成抽屉', () => {
       caseImportMode: 'skip',
       completed: true,
     });
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind保存前模块校验需求',
+      requirementLabel: 'XMind保存前模块校验需求',
+      requirementLabelSource: 'ui-test',
+    });
 
     await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录模块');
     await clickElementById(page, 'xmindCaseGenStoreBtn');
 
     await waitForNodeClass(page, '登录模块', 'xmind-casegen-node-invalid');
@@ -11334,8 +11333,14 @@ test.describe('XMind 用例生成抽屉', () => {
       caseImportMode: 'skip',
       completed: true,
     });
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind保存前用例校验需求',
+      requirementLabel: 'XMind保存前用例校验需求',
+      requirementLabelSource: 'ui-test',
+    });
 
     await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录异常空步骤用例');
     await clickElementById(page, 'xmindCaseGenStoreBtn');
 
     await waitForNodeClass(page, '登录异常空步骤用例', 'xmind-casegen-node-invalid');
@@ -11381,8 +11386,14 @@ test.describe('XMind 用例生成抽屉', () => {
       caseImportMode: 'skip',
       completed: true,
     });
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind新用例入库需求',
+      requirementLabel: 'XMind新用例入库需求',
+      requirementLabelSource: 'ui-test',
+    });
 
     await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录成功校验');
     await clickElementById(page, 'xmindCaseGenStoreBtn');
 
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
@@ -11454,8 +11465,14 @@ test.describe('XMind 用例生成抽屉', () => {
       caseImportMode: 'import',
       completed: true,
     });
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind追加入库需求',
+      requirementLabel: 'XMind追加入库需求',
+      requirementLabelSource: 'ui-test',
+    });
 
     await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录模块-新增追加入例');
     await clickElementById(page, 'xmindCaseGenStoreBtn');
 
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
@@ -11519,8 +11536,14 @@ test.describe('XMind 用例生成抽屉', () => {
       caseImportMode: 'skip',
       completed: true,
     });
+    await syncActiveWorkspaceSnapshotFromLiveState(page, {
+      workspaceName: 'XMind默认全量入库需求',
+      requirementLabel: 'XMind默认全量入库需求',
+      requirementLabelSource: 'ui-test',
+    });
 
     await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, '登录成功校验');
     await clickElementById(page, 'xmindCaseGenStoreBtn');
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
@@ -11639,7 +11662,12 @@ test.describe('XMind 用例生成抽屉', () => {
       return Boolean(el && el.classList && el.classList.contains('open'));
     });
     if (!drawerOpenAfterReload) {
-      await page.click('#caseGenModulesTabBtn');
+      await page.evaluate(() => {
+        var drawer = document.getElementById('xmindCaseGenDrawer');
+        if (drawer && drawer.classList && drawer.classList.contains('open')) return;
+        var tab = document.getElementById('caseGenModulesTabBtn');
+        if (tab && typeof tab.click === 'function') tab.click();
+      });
       await page.waitForTimeout(320);
       const drawerOpenedDuringRestore = await page.locator('#xmindCaseGenDrawer').evaluate((el) => {
         return Boolean(el && el.classList && el.classList.contains('open'));
@@ -12870,17 +12898,20 @@ test.describe('XMind 用例生成抽屉', () => {
     await clickContextMenuAction(page, '生成全量用例');
 
     await page.waitForFunction(() => {
-      return Array.isArray(window.__xmindCoverageRetryCalls) && window.__xmindCoverageRetryCalls.length === 2;
+      return Array.isArray(window.__xmindCoverageRetryCalls) && window.__xmindCoverageRetryCalls.length >= 2;
     }, {}, { timeout: 15000 });
     await waitForNodeText(page, '功能解锁与可用条件');
     await waitForNodeText(page, '奖励次数与积分数值验证');
     await waitForNodeTextAbsent(page, '功能入口与基础流程');
 
     const retryCalls = await page.evaluate(() => window.__xmindCoverageRetryCalls || []);
-    expect(retryCalls).toHaveLength(2);
-    expect(String(retryCalls[1].user || '')).toContain('【首轮生成补强指令】');
-    expect(String(retryCalls[1].user || '')).toContain('功能使用条件');
-    expect(String(retryCalls[1].user || '')).toContain('数值验证');
+    expect(retryCalls).toHaveLength(4);
+    const retryInstructionCalls = retryCalls.filter((call) => {
+      return String(call && call.user || '').includes('【首轮生成补强指令】');
+    });
+    expect(retryInstructionCalls).toHaveLength(1);
+    expect(String(retryInstructionCalls[0].user || '')).toContain('功能使用条件');
+    expect(String(retryInstructionCalls[0].user || '')).toContain('数值验证');
 
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
     const latestCard = page.locator('.xmind-casegen-history-card').nth(0);

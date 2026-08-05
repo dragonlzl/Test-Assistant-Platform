@@ -1,0 +1,187 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic "用例助手" [ref=e5]: TA
+      - navigation "主功能导航" [ref=e6]:
+        - button "AI 功能" [ref=e7] [cursor=pointer]:
+          - generic [ref=e8]: AI
+        - button "用例相关" [ref=e10] [cursor=pointer]:
+          - generic [ref=e11]: TC
+        - button "管理" [ref=e13] [cursor=pointer]:
+          - generic [ref=e14]: AD
+        - button "设置" [ref=e16] [cursor=pointer]:
+          - generic [ref=e17]: ST
+      - button "收起二级导航" [expanded] [ref=e19] [cursor=pointer]: <
+    - generic [ref=e20]:
+      - strong [ref=e22]: 用例相关
+      - generic [ref=e23]:
+        - generic [ref=e24]: 当前用户
+        - strong [ref=e25]: admin
+        - generic [ref=e26]: 管理员
+        - button "用户菜单" [ref=e27] [cursor=pointer]: 个人
+        - generic:
+          - button "登出"
+      - generic [ref=e29]:
+        - button "用例相关" [ref=e30] [cursor=pointer]
+        - button "用例库" [ref=e31] [cursor=pointer]
+      - navigation [ref=e32]:
+        - button "AI 功能" [ref=e33] [cursor=pointer]
+        - generic [ref=e35]:
+          - button "用例相关" [ref=e36] [cursor=pointer]
+          - generic [ref=e37]:
+            - button "用例执行" [ref=e38] [cursor=pointer]
+            - button "用例库" [ref=e39] [cursor=pointer]
+            - button "用例归档" [ref=e40] [cursor=pointer]
+            - button "执行总览" [ref=e41] [cursor=pointer]
+        - button "管理" [ref=e42] [cursor=pointer]
+        - button "设置" [ref=e43] [cursor=pointer]
+      - button "回到顶部" [ref=e44] [cursor=pointer]
+      - button "跳到底部" [ref=e45] [cursor=pointer]
+      - generic [ref=e46]:
+        - generic [ref=e47]:
+          - button "xmind用例生成进度" [ref=e48] [cursor=pointer]
+          - button "个人备忘" [ref=e50] [cursor=pointer]
+        - generic [ref=e53]:
+          - generic [ref=e54]:
+            - generic [ref=e55]:
+              - generic [ref=e56]: xmind用例生成进度
+              - button "收起" [expanded] [ref=e57] [cursor=pointer]
+            - generic [ref=e58]: 点击打开对应 XMind 生成页签
+          - paragraph [ref=e60]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=e61]:
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - generic [ref=e65]: 用例库导航
+        - button "收起" [expanded] [ref=e66] [cursor=pointer]
+      - generic [ref=e67]:
+        - paragraph [ref=e68]: 用例库相关入口汇总于此，点击卡片快速打开。
+        - generic [ref=e69]:
+          - button "编写用例" [ref=e70] [cursor=pointer]
+          - button "导入用例" [ref=e76] [cursor=pointer]
+          - button "查看&编辑" [ref=e82] [cursor=pointer]
+          - button "易漏用例" [ref=e88] [cursor=pointer]
+          - button "选择用例执行" [ref=e93] [cursor=pointer]
+          - button "用例改动历史" [ref=e98] [cursor=pointer]
+    - main [ref=e104]:
+      - generic [ref=e105]:
+        - heading "用例库" [level=2] [ref=e106]
+        - generic [ref=e108]:
+          - paragraph [ref=e109]: 提示：请使用顶部导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=e110]
+          - generic [ref=e111]:
+            - heading "用例编辑视图" [level=3] [ref=e112]
+            - generic [ref=e113]:
+              - generic [ref=e114]:
+                - generic [ref=e115]:
+                  - generic [ref=e116]: 项目
+                  - generic [ref=e117]: "--"
+                - generic [ref=e118]:
+                  - generic [ref=e119]: 版本
+                  - generic [ref=e120]: "--"
+                - generic [ref=e121]:
+                  - generic [ref=e122]: 用例名
+                  - generic [ref=e123]: "--"
+              - generic [ref=e124]:
+                - generic [ref=e125]:
+                  - button "清空搜索" [ref=e126] [cursor=pointer]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=e128]
+                  - button "AI 用例生成" [ref=e129]
+                  - button "XMind结构展示" [disabled] [ref=e130]
+                - generic [ref=e131]:
+                  - textbox "批量新增数量" [ref=e132]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=e133] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=e134]
+                  - button "转到执行" [ref=e135] [cursor=pointer]
+              - paragraph [ref=e136]
+              - generic [ref=e138]:
+                - checkbox "全选/全不选当前页" [ref=e139]
+                - generic [ref=e140]: 全选当前页
+      - option "请选择项目" [selected]
+      - option "autotest-1772268446008"
+      - option "opslog-missing-1768292538839"
+      - option "opslog-exec-1768292538751"
+      - option "opslog-proj-1768292538582"
+      - option "opslog-missing-1768292273386"
+      - option "opslog-exec-1768292273288"
+      - option "opslog-proj-1768292273101"
+      - option "autotest-exec-overview-1767926180210"
+      - option "测试999"
+      - option "元气骑士前传"
+      - option "元气骑士"
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择项目" [selected]
+      - option "autotest-1772268446008"
+      - option "opslog-missing-1768292538839"
+      - option "opslog-exec-1768292538751"
+      - option "opslog-proj-1768292538582"
+      - option "opslog-missing-1768292273386"
+      - option "opslog-exec-1768292273288"
+      - option "opslog-proj-1768292273101"
+      - option "autotest-exec-overview-1767926180210"
+      - option "测试999"
+      - option "元气骑士前传"
+      - option "元气骑士"
+      - option "请选择项目" [selected]
+      - option "autotest-1772268446008"
+      - option "opslog-missing-1768292538839"
+      - option "opslog-exec-1768292538751"
+      - option "opslog-proj-1768292538582"
+      - option "opslog-missing-1768292273386"
+      - option "opslog-exec-1768292273288"
+      - option "opslog-proj-1768292273101"
+      - option "autotest-exec-overview-1767926180210"
+      - option "测试999"
+      - option "元气骑士前传"
+      - option "元气骑士"
+      - option "请选择项目" [selected]
+      - option "autotest-1772268446008"
+      - option "opslog-missing-1768292538839"
+      - option "opslog-exec-1768292538751"
+      - option "opslog-proj-1768292538582"
+      - option "opslog-missing-1768292273386"
+      - option "opslog-exec-1768292273288"
+      - option "opslog-proj-1768292273101"
+      - option "autotest-exec-overview-1767926180210"
+      - option "测试999"
+      - option "元气骑士前传"
+      - option "元气骑士"
+      - option "请选择项目" [selected]
+      - option "autotest-1772268446008"
+      - option "opslog-missing-1768292538839"
+      - option "opslog-exec-1768292538751"
+      - option "opslog-proj-1768292538582"
+      - option "opslog-missing-1768292273386"
+      - option "opslog-exec-1768292273288"
+      - option "opslog-proj-1768292273101"
+      - option "autotest-exec-overview-1767926180210"
+      - option "测试999"
+      - option "元气骑士前传"
+      - option "元气骑士"
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "autotest-1772268446008"
+      - option "opslog-missing-1768292538839"
+      - option "opslog-exec-1768292538751"
+      - option "opslog-proj-1768292538582"
+      - option "opslog-missing-1768292273386"
+      - option "opslog-exec-1768292273288"
+      - option "opslog-proj-1768292273101"
+      - option "autotest-exec-overview-1767926180210"
+      - option "测试999"
+      - option "元气骑士前传"
+      - option "元气骑士"
+      - option "请选择项目" [selected]
+      - option "autotest-1772268446008"
+      - option "opslog-missing-1768292538839"
+      - option "opslog-exec-1768292538751"
+      - option "opslog-proj-1768292538582"
+      - option "opslog-missing-1768292273386"
+      - option "opslog-exec-1768292273288"
+      - option "opslog-proj-1768292273101"
+      - option "autotest-exec-overview-1767926180210"
+      - option "测试999"
+      - option "元气骑士前传"
+      - option "元气骑士"

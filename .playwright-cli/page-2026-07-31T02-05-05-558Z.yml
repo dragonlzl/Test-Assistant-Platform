@@ -1,0 +1,151 @@
+- generic [ref=f15e2]:
+  - complementary:
+    - generic:
+      - generic "用例助手": TA
+      - navigation "主功能导航":
+        - button "AI 功能":
+          - generic: AI
+        - button "用例相关":
+          - generic: TC
+        - button "管理":
+          - generic: AD
+        - button "设置":
+          - generic: ST
+      - button "收起二级导航" [expanded]: <
+    - generic:
+      - generic:
+        - strong: 用例相关
+      - generic:
+        - generic: 当前用户
+        - strong: e2e
+        - generic: 管理员
+        - button "用户菜单": 个人
+        - generic:
+          - button "登出"
+      - generic:
+        - generic:
+          - button "用例相关"
+          - button "用例执行"
+          - button "执行分配"
+      - navigation:
+        - generic:
+          - button "AI 功能 需先配置模型/指派":
+            - generic: AI 功能
+            - generic: 需先配置模型/指派
+        - generic:
+          - button "用例相关"
+          - generic:
+            - button "用例执行"
+            - button "用例库"
+            - button "用例归档"
+            - button "执行总览"
+        - generic:
+          - button "管理"
+        - generic:
+          - button "设置"
+      - button "回到顶部"
+      - button "跳到底部"
+      - generic:
+        - generic:
+          - button "xmind用例生成进度"
+          - button "个人备忘"
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic: xmind用例生成进度
+                  - button "收起" [expanded]
+                - generic: 点击打开对应 XMind 生成页签
+              - generic:
+                - paragraph: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f15e3]:
+    - generic [ref=f15e4]:
+      - generic:
+        - generic:
+          - generic: 功能导航
+          - button "收起" [expanded]
+        - generic:
+          - paragraph: 用例执行相关入口汇总于此，点击卡片快速打开。
+          - generic:
+            - button "用例导入"
+            - button "选择用例执行"
+            - button "执行分配"
+            - button "归档操作&进度预览"
+      - generic [ref=f15e7]:
+        - generic [ref=f15e8]:
+          - generic [ref=f15e9]: 专注区：
+          - generic [ref=f15e10]: 同步展示【执行分配】中的专注区用例。
+        - generic [ref=f15e11]: 暂无专注用例
+    - main [ref=f15e13]:
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=f15e14]:
+        - heading "执行视图" [level=2] [ref=f15e15]
+        - generic [ref=f15e16]: 暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录
+      - option "请选择版本" [selected]
+      - generic [ref=f15e21]:
+        - generic [ref=f15e22]:
+          - heading "用例执行说明" [level=3] [ref=f15e23]
+          - button "关闭" [ref=f15e24] [cursor=pointer]: x
+        - generic [ref=f15e26]:
+          - generic [ref=f15e27]:
+            - heading "页面功能简介" [level=4] [ref=f15e28]
+            - paragraph [ref=f15e29]: 执行用例的主要界面，可导入用例、分配执行人、维护执行结果并归档。
+          - generic [ref=f15e30]:
+            - heading "操作流程" [level=4] [ref=f15e31]
+            - list [ref=f15e32]:
+              - listitem [ref=f15e33]:
+                - text: "*执行开始方式（任选其一）："
+                - list [ref=f15e34]:
+                  - listitem [ref=f15e35]:
+                    - text: 方式一：点击顶部导航 【用例导入】。
+                    - list [ref=f15e36]:
+                      - listitem [ref=f15e37]: Step1 拖拽用例到导入区，或点击导入区选择用例。
+                      - listitem [ref=f15e38]: Step2 选择项目、版本后点击 【确认入库】。
+                      - listitem [ref=f15e39]: Step3 用例会出现在当前页面，可直接执行。
+                  - listitem [ref=f15e40]:
+                    - text: 方式二：点击顶部导航 【选择用例执行】。
+                    - list [ref=f15e41]:
+                      - listitem [ref=f15e42]: Step1 在当前页打开选择用例执行抽屉，勾选用例。
+                      - listitem [ref=f15e43]: Step2 点击 【转到执行】 或右上角 【批量转到执行】，直接加入当前执行列表。
+              - listitem [ref=f15e44]:
+                - text: 用例展示与切换：
+                - list [ref=f15e45]:
+                  - listitem [ref=f15e46]: 方式一：工具栏（搜索框所在栏）点击 【上一份】/【下一份】。
+                  - listitem [ref=f15e47]: 方式二：点击顶部导航 【执行分配】，在项目分组/版本盒子中点击用例切换。
+              - listitem [ref=f15e48]:
+                - text: "*专注区："
+                - list [ref=f15e49]:
+                  - listitem [ref=f15e50]: 进入 【执行分配】，拖拽用例到专注区。
+                  - listitem [ref=f15e51]: 专注用例会同步到执行页工具栏的专注区，便于快速切换。
+                  - listitem [ref=f15e52]: 点击执行页专注区空白区域可快速打开执行分配。
+          - generic [ref=f15e53]:
+            - heading "必要说明" [level=4] [ref=f15e54]
+            - list [ref=f15e55]:
+              - listitem [ref=f15e56]: "*【归档】：归档当前执行集并写入数据库，可在“用例归档”查看。"
+              - listitem [ref=f15e57]: 【解散归档】：解除归档状态并回到版本盒子；不解散会一直保留在版本盒子中。
+              - listitem [ref=f15e58]: 【用例变更】：检测到用例库变更时可打开差异视图并确认同步。
+              - listitem [ref=f15e59]: 复用用例未展开时，如存在未执行子项，“实际结果”按钮会显示数字红点提示。
+              - listitem [ref=f15e60]: 顶部导航 【跳转用例库】 可进入用例库进行编辑或导入。
+              - listitem [ref=f15e61]: 其他按钮（上一份/下一份、确认入库、转到执行等）用于切换与入库操作。
+          - generic [ref=f15e62]:
+            - heading "用例导入模板" [level=4] [ref=f15e63]
+            - generic [ref=f15e64]:
+              - paragraph [ref=f15e65]: 可在【用例库】的【用例导入】页面，下载用例模板，也可以在此处下载模板。
+              - generic [ref=f15e66]:
+                - button "Excel导入模板" [ref=f15e67] [cursor=pointer]
+                - button "XMind导入模板" [ref=f15e68] [cursor=pointer]
+          - generic [ref=f15e69]:
+            - heading "XMind 用例结构" [level=4] [ref=f15e70]
+            - generic [ref=f15e71]:
+              - paragraph [ref=f15e72]: 点击下方按钮查看 XMind 用例结构要求，确保层级完整便于系统解析。
+              - button "? 查看 XMind 用例结构" [ref=f15e73] [cursor=pointer]:
+                - generic [ref=f15e74]: "?"
+                - generic [ref=f15e75]: 查看 XMind 用例结构
+          - generic [ref=f15e76]:
+            - heading "提示" [level=3] [ref=f15e77]
+            - list [ref=f15e78]:
+              - listitem [ref=f15e79]:
+                - strong [ref=f15e80]: 进入设置的“其他设置”页可以关闭每次进入的提示。
+                - text: 如不需要自动弹出，可取消勾选对应页面。

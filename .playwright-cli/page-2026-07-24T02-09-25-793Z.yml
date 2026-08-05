@@ -1,0 +1,12 @@
+- generic [ref=f10e2]:
+  - heading "登录" [level=2] [ref=f10e3]
+  - generic [ref=f10e4]:
+    - generic [ref=f10e5]: 账号
+    - textbox "账号" [ref=f10e6]:
+      - /placeholder: 请输入账号
+    - generic [ref=f10e7]: 密码
+    - textbox "密码" [ref=f10e8]:
+      - /placeholder: 请输入密码
+    - paragraph [ref=f10e9]
+    - button "登录" [ref=f10e10] [cursor=pointer]
+    - button "修改密码" [ref=f10e11] [cursor=pointer]

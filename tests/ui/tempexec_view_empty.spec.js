@@ -44,13 +44,16 @@ test.describe('执行视图空态与样式', () => {
       host.style.padding = '12px';
       document.body.appendChild(host);
 
+      var row = document.createElement('div');
+      row.className = 'temp-req-row';
       var btn = document.createElement('button');
       btn.className = 'temp-req-item';
       btn.textContent = '示例用例';
       var remove = document.createElement('span');
       remove.className = 'remove';
-      btn.appendChild(remove);
-      host.appendChild(btn);
+      row.appendChild(btn);
+      row.appendChild(remove);
+      host.appendChild(row);
 
       var style = window.getComputedStyle(remove);
       var btnRect = btn.getBoundingClientRect();
@@ -58,12 +61,14 @@ test.describe('执行视图空态与样式', () => {
       return {
         top: style.top,
         right: style.right,
+        sibling: remove.parentElement === row && remove.previousElementSibling === btn,
         inside: removeRect.right <= btnRect.right && removeRect.top >= btnRect.top && removeRect.left >= btnRect.left
       };
     });
 
     expect(positions.top).toBe('8px');
     expect(positions.right).toBe('8px');
+    expect(positions.sibling).toBeTruthy();
     expect(positions.inside).toBeTruthy();
   });
 });

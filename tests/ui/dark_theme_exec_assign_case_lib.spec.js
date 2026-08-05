@@ -17,9 +17,29 @@ async function waitAppReady(page, timeoutMs) {
 }
 
 async function switchToTab(page, tabName) {
+  const targetPage = tabName === 'tempexec'
+    ? '/case-exec.html'
+    : (tabName === 'case-library' ? '/case-library.html' : '');
+  const navigation = targetPage
+    ? page.waitForURL((url) => url.pathname.endsWith(targetPage), { timeout: 30000 })
+    : Promise.resolve();
   await page.evaluate((name) => {
     if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(name);
-  }, tabName);
+  }, tabName).catch((error) => {
+    if (!error || !/Execution context was destroyed/i.test(error.message || '')) throw error;
+  });
+  await navigation;
+  await page.waitForFunction((name) => {
+    var app = window.app;
+    if (!app || app._inited !== true || app.authReady !== true || !app.state) return false;
+    if (app.state.activeTab !== name) return false;
+    if (name === 'tempexec') {
+      return Boolean(app.tempExecApi && typeof app.tempExecApi.loadTempExecState === 'function');
+    }
+    if (name === 'case-library') return app.caseLibraryBound === true;
+    return typeof app.switchTab === 'function';
+  }, tabName, { timeout: 30000 });
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark', null, { timeout: 30000 });
 }
 
 function createTempExecApiHandler(serverState) {
@@ -212,7 +232,7 @@ test.describe('暗色主题 UI 对比增强', () => {
     await page.click('#openTempExecAssignDrawerBtn');
     await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
 
-    const removeBtn = page.locator('#tempVersionGrid .temp-project-version-body .temp-req-item .remove').first();
+    const removeBtn = page.locator('#tempVersionGrid .temp-project-version-body [data-temp-remove]').first();
     await expect(removeBtn).toBeVisible();
     const bgColor = await removeBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(bgColor).not.toBe('rgb(255, 255, 255)');

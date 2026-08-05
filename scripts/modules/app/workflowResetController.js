@@ -1,11 +1,15 @@
 (function(factory) {
-  var api = factory(typeof window !== 'undefined' ? window : null);
+  var defaultRoot = typeof window !== 'undefined' ? window : null;
+  var cloneJson = typeof module !== 'undefined' && module.exports
+    ? require('../../core/jsonCloneCore.js').cloneJson
+    : defaultRoot.app.jsonCloneCore.cloneJson;
+  var api = factory(defaultRoot, cloneJson);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (typeof window !== 'undefined') {
     window.app = window.app || {};
     window.app.workflowResetController = api;
   }
-})(function(defaultRoot) {
+})(function(defaultRoot, cloneJson) {
   function create(options) {
     var opts = options && typeof options === 'object' ? options : {};
     var window = opts.root || defaultRoot || { app: {} };
@@ -36,15 +40,6 @@
     var triggerUpdateFlowStatus = typeof opts.triggerUpdateFlowStatus === 'function' ? opts.triggerUpdateFlowStatus : function() {};
     var requestPersistWorkflowStateNow = typeof opts.requestPersistWorkflowStateNow === 'function'
       ? opts.requestPersistWorkflowStateNow : function() {};
-
-    function cloneJson(value, fallback) {
-      if (value === undefined || value === null) return fallback;
-      try {
-        return JSON.parse(JSON.stringify(value));
-      } catch (err) {
-        return fallback;
-      }
-    }
 
     function createEmptyRequirementMediaState() {
       return {
@@ -408,4 +403,3 @@
     create: create,
   };
 });
-

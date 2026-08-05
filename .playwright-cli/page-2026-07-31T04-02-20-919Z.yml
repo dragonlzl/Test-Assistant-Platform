@@ -1,0 +1,128 @@
+- generic [ref=e2]:
+  - complementary [ref=e3]:
+    - generic [ref=e4]:
+      - generic "用例助手" [ref=e5]: TA
+      - navigation "主功能导航" [ref=e6]:
+        - button "AI 功能" [ref=e7] [cursor=pointer]:
+          - generic [ref=e8]: AI
+        - button "用例相关" [ref=e10] [cursor=pointer]:
+          - generic [ref=e11]: TC
+        - button "管理" [ref=e13] [cursor=pointer]:
+          - generic [ref=e14]: AD
+        - button "设置" [ref=e16] [cursor=pointer]:
+          - generic [ref=e17]: ST
+      - button "收起二级导航" [expanded] [ref=e19] [cursor=pointer]: <
+    - generic [ref=e20]:
+      - strong [ref=e22]: AI 功能
+      - generic [ref=e23]:
+        - generic [ref=e24]: 当前用户
+        - strong [ref=e25]: admin
+        - generic [ref=e26]: 管理员
+        - button "用户菜单" [ref=e27] [cursor=pointer]: 个人
+        - generic:
+          - button "登出"
+      - generic [ref=e29]:
+        - button "AI 功能" [ref=e30] [cursor=pointer]
+        - button "一键执行" [ref=e31] [cursor=pointer]
+      - navigation [ref=e32]:
+        - generic [ref=e33]:
+          - button "AI 功能" [ref=e34] [cursor=pointer]
+          - generic [ref=e36]:
+            - button "一键执行" [ref=e37] [cursor=pointer]
+            - button "功能流程" [ref=e39] [cursor=pointer]
+            - button "用例生成" [ref=e41] [cursor=pointer]
+            - button "功能指派" [ref=e42] [cursor=pointer]
+            - button "模型管理" [ref=e43] [cursor=pointer]
+        - button "用例相关" [ref=e44] [cursor=pointer]
+        - button "管理" [ref=e45] [cursor=pointer]
+        - button "设置" [ref=e46] [cursor=pointer]
+      - button "回到顶部" [ref=e47] [cursor=pointer]
+      - button "跳到底部" [ref=e48] [cursor=pointer]
+      - generic [ref=e49]:
+        - generic [ref=e50]:
+          - button "xmind用例生成进度" [ref=e51] [cursor=pointer]
+          - button "个人备忘" [ref=e53] [cursor=pointer]
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e58]:
+              - generic [ref=e59]: xmind用例生成进度
+              - button "收起" [expanded] [ref=e60] [cursor=pointer]
+            - generic [ref=e61]: 点击打开对应 XMind 生成页签
+          - paragraph [ref=e63]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=e64]:
+    - generic [ref=e65]:
+      - generic [ref=e66]: 一键执行步骤
+      - generic [ref=e67]:
+        - generic [ref=e68] [cursor=pointer]:
+          - generic [ref=e69]: "1"
+          - generic [ref=e70]: 导入
+          - generic [ref=e71]: ▶
+        - generic [ref=e73] [cursor=pointer]:
+          - generic [ref=e74]: "2"
+          - generic [ref=e75]: 评审
+          - generic [ref=e76]: ▶
+        - generic [ref=e78] [cursor=pointer]:
+          - generic [ref=e79]: "3"
+          - generic [ref=e80]: 清洗
+          - generic [ref=e81]: ▶
+        - generic [ref=e83] [cursor=pointer]:
+          - generic [ref=e84]: "4"
+          - generic [ref=e85]: 对比完整性
+          - generic [ref=e86]: ▶
+        - generic [ref=e88] [cursor=pointer]:
+          - generic [ref=e89]: "5"
+          - generic [ref=e90]: 拆分
+          - generic [ref=e91]: ▶
+        - generic [ref=e93] [cursor=pointer]:
+          - generic [ref=e94]: "6"
+          - generic [ref=e95]: 用例导入
+          - generic [ref=e96]: ▶
+        - generic [ref=e98] [cursor=pointer]:
+          - generic [ref=e99]: "7"
+          - generic [ref=e100]: 覆盖对比
+          - generic [ref=e101]: ▶
+    - main [ref=e102]:
+      - generic [ref=e103]:
+        - heading "导入数据" [level=2] [ref=e104]
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - paragraph [ref=e108]: 将原始需求文档拖入或点击选择，等同于“导入需求文档”的操作。
+            - generic [ref=e109]:
+              - generic [ref=e110]:
+                - strong [ref=e111]: 原始需求
+                - generic [ref=e112]: 拖拽或点击选择
+              - generic [ref=e113]: 导入后内容会同步到左侧“导入需求”模块
+            - generic [ref=e114]: 未导入需求
+            - paragraph [ref=e116]: 图片上下文：0 张（当前仅文本）。一键执行后续步骤模型能力：评审模型：GPT5.5公司（标签：vision、reasoning、chat，可识别图片）；清洗模型：GPT5.5公司（标签：vision、reasoning、chat，可识别图片）。 当前不含图片，后续步骤将仅基于文本。
+            - button "清除原始需求" [disabled] [ref=e118]
+          - generic [ref=e119]:
+            - paragraph [ref=e120]: 导入 XMind/文本用例后可直接用于覆盖对比。
+            - generic [ref=e121]:
+              - generic [ref=e122]:
+                - strong [ref=e123]: 测试用例
+                - generic [ref=e124]: 拖拽或点击选择
+              - generic [ref=e125]: 导入结果同步到“测试用例导入”模块
+            - generic [ref=e126]: 未导入文件
+            - button "从用例库中选择" [ref=e129] [cursor=pointer]
+      - generic [ref=e130]:
+        - heading "自动执行工作流" [level=2] [ref=e131]
+        - generic [ref=e132]:
+          - paragraph [ref=e133]: 自动按顺序执行：导入需求 → 需求评审 → 需求清洗 → 对比完整性 → 测试模块拆分 → 测试用例覆盖对比。执行前请确保已导入需求与测试用例，并在“功能指派”中配置所有模型。
+          - generic [ref=e134]:
+            - checkbox "需要人工确认需求澄清后再继续自动流程" [ref=e135]
+            - generic [ref=e136]: 需要人工确认需求澄清后再继续自动流程
+          - generic [ref=e137]:
+            - button "一键执行" [ref=e138] [cursor=pointer]
+            - button "中断全部执行" [ref=e139] [cursor=pointer]
+          - paragraph [ref=e140]
+      - generic [ref=e141]:
+        - heading "清洗后需求覆盖率" [level=2] [ref=e142]
+        - generic [ref=e143]:
+          - paragraph [ref=e144]: 展示“对比完整性”步骤返回的覆盖率；低于 100% 表示清洗结果缺失，需要重新清洗并修正。
+          - button "覆盖缺失视图" [disabled] [ref=e146]
+          - paragraph [ref=e147]: 覆盖率：--
+      - generic [ref=e148]:
+        - heading "用例缺失测试点" [level=2] [ref=e149]
+        - generic [ref=e150]:
+          - paragraph [ref=e151]: 同步显示“测试用例覆盖对比”后的缺失模块详情，与功能流程中的“缺失模块视图”一致，点击右侧抽屉查看并处理。
+          - button "前往勾选缺失模块生成缺失用例" [disabled] [ref=e153]

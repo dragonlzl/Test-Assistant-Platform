@@ -18,6 +18,13 @@
       : function() { return ''; };
     var storage = opts.storage || (typeof localStorage !== 'undefined' ? localStorage : null);
     var now = typeof opts.now === 'function' ? opts.now : Date.now;
+    var badgeStorageKey = opts.badgeStorageKey ? String(opts.badgeStorageKey) : BADGE_STORAGE_KEY;
+    var appendStorageKey = opts.appendStorageKey ? String(opts.appendStorageKey) : APPEND_STORAGE_KEY;
+    var badgeStateKey = opts.badgeStateKey ? String(opts.badgeStateKey) : 'aiGenBadge';
+    var appendStateKey = opts.appendStateKey ? String(opts.appendStateKey) : 'aiGenAppend';
+    var badgeTokenKeys = Array.isArray(opts.badgeTokenKeys) && opts.badgeTokenKeys.length
+      ? opts.badgeTokenKeys.map(function(key) { return String(key || ''); }).filter(Boolean)
+      : ['result_token', 'ai_read_token', 'nav_read_token', 'edit_read_token'];
 
     function read(storageKey) {
       if (!storage || typeof storage.getItem !== 'function') return null;
@@ -73,11 +80,11 @@
     }
 
     function ensureBadgeState() {
-      return ensureUserStore('aiGenBadge', BADGE_STORAGE_KEY);
+      return ensureUserStore(badgeStateKey, badgeStorageKey);
     }
 
     function ensureAppendState() {
-      return ensureUserStore('aiGenAppend', APPEND_STORAGE_KEY);
+      return ensureUserStore(appendStateKey, appendStorageKey);
     }
 
     function getAppendRecord(fileId, shouldCreate) {
@@ -89,7 +96,7 @@
         record = { token: '', appended: {}, updated_at: now() };
         store.files[key] = record;
         store.updated_at = now();
-        write(APPEND_STORAGE_KEY, store);
+        write(appendStorageKey, store);
       }
       if (record && (!record.appended || typeof record.appended !== 'object')) record.appended = {};
       return record;
@@ -105,7 +112,7 @@
         record = { token: nextToken, appended: {}, updated_at: now() };
         store.files[key] = record;
         store.updated_at = now();
-        write(APPEND_STORAGE_KEY, store);
+        write(appendStorageKey, store);
         return record;
       }
       if (!record.appended || typeof record.appended !== 'object') record.appended = {};
@@ -119,7 +126,7 @@
       if (!store.files || !store.files[key]) return;
       delete store.files[key];
       store.updated_at = now();
-      write(APPEND_STORAGE_KEY, store);
+      write(appendStorageKey, store);
     }
 
     function getAppendMap(fileId, token) {
@@ -139,12 +146,12 @@
       });
       record.updated_at = now();
       store.updated_at = now();
-      write(APPEND_STORAGE_KEY, store);
+      write(appendStorageKey, store);
     }
 
     function normalizeBadgeRecord(record) {
       var target = record && typeof record === 'object' ? record : {};
-      ['result_token', 'ai_read_token', 'nav_read_token', 'edit_read_token'].forEach(function(key) {
+      badgeTokenKeys.forEach(function(key) {
         if (typeof target[key] !== 'string') target[key] = target[key] ? String(target[key]) : '';
       });
       return target;
@@ -165,9 +172,9 @@
       var record = getBadgeRecord(fileId, shouldCreate);
       if (record || shouldCreate) return record;
       var userId = getCurrentUserId();
-      var persisted = read(BADGE_STORAGE_KEY);
+      var persisted = read(badgeStorageKey);
       if (persisted && (String(persisted.user_id || '') === String(userId || '') || !userId)) {
-        state.aiGenBadge = persisted;
+        state[badgeStateKey] = persisted;
         return getBadgeRecord(fileId, shouldCreate);
       }
       return null;
@@ -177,14 +184,14 @@
       var store = ensureBadgeState();
       var record = getBadgeRecord(fileId, true);
       if (!record) return null;
-      ['result_token', 'ai_read_token', 'nav_read_token', 'edit_read_token'].forEach(function(key) {
+      badgeTokenKeys.forEach(function(key) {
         if (updates && Object.prototype.hasOwnProperty.call(updates, key)) {
           record[key] = updates[key] ? String(updates[key]) : '';
         }
       });
       record.updated_at = now();
       store.updated_at = record.updated_at;
-      write(BADGE_STORAGE_KEY, store);
+      write(badgeStorageKey, store);
       return record;
     }
 
@@ -195,48 +202,77 @@
       if (!store.files || !store.files[key]) return;
       delete store.files[key];
       store.updated_at = now();
-      write(BADGE_STORAGE_KEY, store);
+      write(badgeStorageKey, store);
     }
 
-    function hasNavBadge() {
+    function hasUnreadBadges(readTokenKey, predicate) {
+      var tokenKey = String(readTokenKey || '');
+      if (!tokenKey) return false;
       var store = ensureBadgeState();
       return Object.keys(store.files || {}).some(function(key) {
         var record = store.files[key];
+        if (typeof predicate === 'function' && predicate(record, key) !== true) return false;
         return Boolean(record && record.result_token
-          && String(record.nav_read_token || '') !== String(record.result_token || ''));
+          && String(record[tokenKey] || '') !== String(record.result_token || ''));
       });
     }
 
-    function markNavBadgesRead() {
+    function markAllBadgesRead(readTokenKey) {
+      var tokenKey = String(readTokenKey || '');
+      if (!tokenKey) return false;
       var store = ensureBadgeState();
       var changed = false;
       Object.keys(store.files || {}).forEach(function(key) {
         var record = store.files[key];
         if (!record || !record.result_token) return;
         var token = String(record.result_token || '');
-        if (token && String(record.nav_read_token || '') !== token) {
-          record.nav_read_token = token;
+        if (token && String(record[tokenKey] || '') !== token) {
+          record[tokenKey] = token;
           record.updated_at = now();
           changed = true;
         }
       });
       if (changed) {
         store.updated_at = now();
-        write(BADGE_STORAGE_KEY, store);
+        write(badgeStorageKey, store);
       }
       return changed;
     }
 
-    function markEditBadgeRead(fileId) {
+    function markBadgeRead(fileId, readTokenKey) {
+      var tokenKey = String(readTokenKey || '');
+      if (!tokenKey) return false;
       var record = getBadgeRecord(fileId, false);
       var token = record && record.result_token ? String(record.result_token) : '';
-      if (token) updateBadgeRecord(fileId, { edit_read_token: token });
+      if (!token) return false;
+      var updates = {};
+      updates[tokenKey] = token;
+      updateBadgeRecord(fileId, updates);
+      return true;
+    }
+
+    function shouldShowBadge(fileId, readTokenKey) {
+      var tokenKey = String(readTokenKey || '');
+      if (!tokenKey) return false;
+      var record = getBadgeRecord(fileId, false);
+      return Boolean(record && record.result_token
+        && String(record[tokenKey] || '') !== String(record.result_token || ''));
+    }
+
+    function hasNavBadge() {
+      return hasUnreadBadges('nav_read_token');
+    }
+
+    function markNavBadgesRead() {
+      return markAllBadgesRead('nav_read_token');
+    }
+
+    function markEditBadgeRead(fileId) {
+      return markBadgeRead(fileId, 'edit_read_token');
     }
 
     function shouldShowEditBadge(fileId) {
-      var record = getBadgeRecord(fileId, false);
-      return Boolean(record && record.result_token
-        && String(record.edit_read_token || '') !== String(record.result_token || ''));
+      return shouldShowBadge(fileId, 'edit_read_token');
     }
 
     return {
@@ -251,6 +287,10 @@
       getBadgeRecordWithFallback: getBadgeRecordWithFallback,
       updateBadgeRecord: updateBadgeRecord,
       clearBadgeRecord: clearBadgeRecord,
+      hasUnreadBadges: hasUnreadBadges,
+      markAllBadgesRead: markAllBadgesRead,
+      markBadgeRead: markBadgeRead,
+      shouldShowBadge: shouldShowBadge,
       hasNavBadge: hasNavBadge,
       markNavBadgesRead: markNavBadgesRead,
       markEditBadgeRead: markEditBadgeRead,

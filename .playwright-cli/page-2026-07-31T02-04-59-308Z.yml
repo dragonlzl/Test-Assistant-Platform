@@ -1,0 +1,315 @@
+- generic [ref=f13e2]:
+  - complementary:
+    - generic:
+      - generic "用例助手": TA
+      - navigation "主功能导航":
+        - button "AI 功能":
+          - generic: AI
+        - button "用例相关":
+          - generic: TC
+        - button "管理":
+          - generic: AD
+        - button "设置":
+          - generic: ST
+      - button "收起二级导航" [expanded]: <
+    - generic:
+      - generic:
+        - strong: AI 功能
+      - generic:
+        - generic: 当前用户
+        - strong: e2e
+        - generic: 管理员
+        - button "用户菜单": 个人
+        - generic:
+          - button "登出"
+      - generic:
+        - generic:
+          - button "AI 功能"
+          - button "功能指派未配置模型"
+      - navigation:
+        - generic:
+          - button "AI 功能 需先配置模型/指派":
+            - generic: AI 功能
+            - generic: 需先配置模型/指派
+          - generic:
+            - button "一键执行"
+            - button "功能流程"
+            - button "用例生成"
+            - button "功能指派 未配置模型":
+              - text: 功能指派
+              - generic: 未配置模型
+            - button "模型管理 未配置模型":
+              - text: 模型管理
+              - generic: 未配置模型
+        - generic:
+          - button "用例相关"
+        - generic:
+          - button "管理"
+        - generic:
+          - button "设置"
+      - button "回到顶部"
+      - button "跳到底部"
+      - generic:
+        - generic:
+          - button "xmind用例生成进度"
+          - button "个人备忘"
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic: xmind用例生成进度
+                  - button "收起" [expanded]
+                - generic: 点击打开对应 XMind 生成页签
+              - generic:
+                - paragraph: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f13e3]:
+    - generic:
+      - generic: 一键执行步骤
+      - generic:
+        - generic:
+          - generic: "1"
+          - generic: 导入
+          - generic: ▶
+        - generic:
+          - generic: "2"
+          - generic: 评审
+          - generic: ▶
+        - generic:
+          - generic: "3"
+          - generic: 清洗
+          - generic: ▶
+        - generic:
+          - generic: "4"
+          - generic: 对比完整性
+          - generic: ▶
+        - generic:
+          - generic: "5"
+          - generic: 拆分
+          - generic: ▶
+        - generic:
+          - generic: "6"
+          - generic: 用例导入
+          - generic: ▶
+        - generic:
+          - generic: "7"
+          - generic: 覆盖对比
+          - generic: ▶
+    - main [ref=f13e4]:
+      - generic [ref=f13e5]:
+        - heading "功能指派" [level=2] [ref=f13e6]
+        - generic [ref=f13e7]:
+          - paragraph [ref=f13e8]: 先在“模型管理”中创建模型，再为每个功能指派具体模型。
+          - generic [ref=f13e9]:
+            - strong [ref=f13e10]: 注意事项
+            - paragraph [ref=f13e11]: 提示词内的 JSON 数据结构需要严格遵循，改动提示词时，请不要影响到 JSON 的数据结构要求！！！
+          - generic [ref=f13e12]:
+            - button "设为默认提示词" [ref=f13e13] [cursor=pointer]
+            - button "导出默认提示词" [ref=f13e14] [cursor=pointer]
+            - button "导入默认提示词" [ref=f13e15] [cursor=pointer]
+          - paragraph [ref=f13e16]
+          - generic [ref=f13e17]:
+            - strong [ref=f13e18]: 全局指派
+            - generic [ref=f13e19]:
+              - generic [ref=f13e20]: 统一模型
+              - combobox "统一模型" [ref=f13e21]:
+                - option "暂无可用模型" [selected]
+              - button "确认" [ref=f13e22] [cursor=pointer]
+            - paragraph [ref=f13e23]: 选择模型后点击“确认”，将当前页面全部功能统一指派并立即保存为该模型。
+            - paragraph [ref=f13e24]
+          - generic [ref=f13e25]:
+            - strong [ref=f13e26]: 清洗功能
+            - generic [ref=f13e27]:
+              - generic [ref=f13e28]: 使用模型
+              - combobox "使用模型" [ref=f13e29]:
+                - option "暂无可用模型" [selected]
+            - generic [ref=f13e30]:
+              - generic [ref=f13e31]: 提示词
+              - textbox "提示词" [ref=f13e32]:
+                - /placeholder: 为空则使用默认清洗提示词
+                - text: "你是资深需求分析师，请清洗并重写下面的原始需求，重新整理前，要充分理解需求，理解设计意图，然后整理成结构化、可读性强的条目，保持原意，保留关键信息与约束条件，输出JSON数组：[{\"功能\": 具体功能名称,\"类别\": 核心改动的类别,\"功能描述\": {\"重新整理内容\": 具体重新整理的功能原文内容,\"功能目标\": [如有则为功能的目标],\"规则\": [功能的具体规则],\"约束\": [如有则为功能的限制和约束],\"流程\": [功能触发的具体流程]},\"原始需求描述\": [原始需求的所有相关描述]}]"
+            - generic [ref=f13e33]:
+              - generic [ref=f13e34]: Temperature
+              - spinbutton "Temperature" [ref=f13e35]: "0.2"
+              - paragraph [ref=f13e36]: 0~1，默认 0.2
+            - button "测试连通性" [ref=f13e38] [cursor=pointer]
+            - paragraph [ref=f13e39]
+          - generic [ref=f13e40]:
+            - strong [ref=f13e41]: 需求评审功能
+            - generic [ref=f13e42]:
+              - generic [ref=f13e43]: 使用模型
+              - combobox "使用模型" [ref=f13e44]:
+                - option "暂无可用模型" [selected]
+            - generic [ref=f13e45]:
+              - generic [ref=f13e46]: 提示词
+              - textbox "提示词" [ref=f13e47]:
+                - /placeholder: 为空则使用默认评审提示词
+                - text: "你是资深游戏项目的需求分析师，精通理解分析需求，从游戏设计角度和玩家体验角度多维度分析需求存在的问题，请先对原始需求中存在的问题进行归类（类别仅可为：需求矛盾、需求模糊、需求不全、边界不明确、分支预期不足、多余需求、无效需求），然后输出 JSON 数组：[{\"类别\": 分类, \"不明确的需求点\": 描述, \"不明确原因\": 原因说明, \"可能存在的分支/边界情况\": 分支说明}]。若无不明确点返回空数组，不要输出其它文本。"
+            - generic [ref=f13e48]:
+              - generic [ref=f13e49]: Temperature
+              - spinbutton "Temperature" [ref=f13e50]: "0.2"
+              - paragraph [ref=f13e51]: 0~1，默认 0.2
+            - button "测试连通性" [ref=f13e53] [cursor=pointer]
+            - paragraph [ref=f13e54]
+        - generic [ref=f13e55]:
+          - strong [ref=f13e56]: 对比完整性功能
+          - generic [ref=f13e57]:
+            - generic [ref=f13e58]: 使用模型
+            - combobox "使用模型" [ref=f13e59]:
+              - option "暂无可用模型" [selected]
+          - generic [ref=f13e60]:
+            - generic [ref=f13e61]: 提示词
+            - textbox "提示词" [ref=f13e62]:
+              - /placeholder: 为空则使用默认对比提示词
+              - text: "你是需求覆盖率审查专家，请对比“原始需求”和“清洗后的需求”，判断清洗后的内容是否完整覆盖原需求。输出 JSON：{coverage: 百分比(0-100), missing: [未覆盖要点数组]}，如完全覆盖则 missing 为空数组。"
+          - generic [ref=f13e63]:
+            - generic [ref=f13e64]: Temperature
+            - spinbutton "Temperature" [ref=f13e65]: "0.2"
+            - paragraph [ref=f13e66]: 0~1，默认 0.2
+          - button "测试连通性" [ref=f13e68] [cursor=pointer]
+          - paragraph [ref=f13e69]
+        - generic [ref=f13e70]:
+          - strong [ref=f13e71]: 测试模块拆分功能
+          - generic [ref=f13e72]:
+            - generic [ref=f13e73]: 使用模型
+            - combobox "使用模型" [ref=f13e74]:
+              - option "暂无可用模型" [selected]
+          - generic [ref=f13e75]:
+            - generic [ref=f13e76]: 提示词
+            - textbox "提示词" [ref=f13e77]:
+              - /placeholder: 为空则使用默认拆分提示词
+              - text: "你是元气骑士项目的资深测试设计专家，请将输入的需求拆分为测试模块/功能点，每个模块包含名称、测点要点、测试场景、耦合模块，输出结构化清单，确保覆盖核心业务与主要模块的交叉。仅输出 JSON，每个模块的字段为：{模块名: [{测试场景:[具体测试场景]}，{测点要点:[具体测试要点]}，{耦合模块:[具体的耦合模块]}，{特殊测试点:[具体的特殊测试点]}]}。"
+          - generic [ref=f13e78]:
+            - generic [ref=f13e79]: Temperature
+            - spinbutton "Temperature" [ref=f13e80]: "0.2"
+            - paragraph [ref=f13e81]: 0~1，默认 0.2
+          - button "测试连通性" [ref=f13e83] [cursor=pointer]
+          - paragraph [ref=f13e84]
+        - generic [ref=f13e85]:
+          - strong [ref=f13e86]: XMind 覆盖对比功能
+          - generic [ref=f13e87]:
+            - generic [ref=f13e88]: 使用模型
+            - combobox "使用模型" [ref=f13e89]:
+              - option "暂无可用模型" [selected]
+          - generic [ref=f13e90]:
+            - generic [ref=f13e91]: 提示词
+            - textbox "提示词" [ref=f13e92]:
+              - /placeholder: 为空则使用默认覆盖对比提示词
+              - text: "你是测试审核专家，请仔细地对“测试模块拆分结果”和“XMind 测试用例”进行充分理解后，再进行对比，输出“XMind 测试用例”中缺少的模块测试点，以及“XMind 测试用例”中多出的测试点，输出 JSON：{coverage: 百分比(0-100), missing: [{模块名: [缺失的模块测试点，包括但不限于常规测试点、通用测试点、异常测试点、特殊测试点]}], extra: [测试用例中多出的点]}，missing/extra 为空数组表示无缺失或额外多出，严格按照上述结构进行输出。"
+          - generic [ref=f13e93]:
+            - generic [ref=f13e94]: Temperature
+            - spinbutton "Temperature" [ref=f13e95]: "0.2"
+            - paragraph [ref=f13e96]: 0~1，默认 0.2
+          - button "测试连通性" [ref=f13e98] [cursor=pointer]
+          - paragraph [ref=f13e99]
+        - generic [ref=f13e100]:
+          - strong [ref=f13e101]: 用例生成功能
+          - generic [ref=f13e102]:
+            - generic [ref=f13e103]: 使用模型
+            - combobox "使用模型" [ref=f13e104]:
+              - option "暂无可用模型" [selected]
+          - generic [ref=f13e105]:
+            - generic [ref=f13e106]: 提示词
+            - textbox "提示词" [ref=f13e107]:
+              - /placeholder: 为空则使用默认用例生成提示词
+              - text: "你是资深游戏测试工程师，善于用例设计。请你针对单个测试模块生成 JSON 用例列表，需严格遵循以下要求，生成高质量用例： 1、每条用例字段：{module, title, priority（仅从P0、P1、P2中选择）, preconditions, steps, expected}。 2、优先生成需求主流程的核心用例，再生成其他操作分支的用例。 3、生成时需要结合模块的测试场景/测试要点/耦合模块。 4、生成的用例需要具备可读性，语句要清晰明确简洁。 5、其中用例标题title，需保持言简意赅，不能过于详细。 6、前提条件preconditions、操作步骤steps，预期结果expected，均需保持言简意赅。 7、前提条件preconditions，如果有多条，则需要以1、2、3的形式分步展示。 8、操作步骤steps，如果有多条，需要以1、2、3的形式分步展示。 【用例编写风格与人工特征参考：AI_CASE_WRITING_STYLE_GUIDE.md】 在保证覆盖质量、字段完整、语义不重复的前提下，生成结果要贴近人工从 XMind/表格整理检查点的写法，并根据需求类型补充人工高频漏点： 1、module 使用短业务分类，可保留项目编号习惯，不要写成长标题。 2、title 写短检查点，优先 4-12 个字，不要批量写成“验证XXX功能是否正常”，不要把步骤或预期塞进标题。 3、priority 只能填写 P0、P1、P2；P0 最高，核心链路/登录/支付/严重阻断/版本主功能用 P0，默认多数用例用 P1，边界/低频/兼容/展示细节可用 P2。 4、preconditions 写当前测试状态，保持短句；多条时可用中文序号分点，不写背景解释。 5、steps 优先单行动作，常用“进入、点击、查看、观察、检查、选择、装备、领取、购买、重复、重登”等测试动作，不要扩写成教学流程。 6、expected 写直接可观察结果，常用“正常、正确、显示、展示、提示、可、不可、不会、到账、扣除、刷新、一致”等结果词。 7、保留项目业务词和测试人员口吻，例如平A、红武、词条、专精、保底、回流、pvp、ui、重铸、羁绊；允许轻微人工差异和重复标题。 8、优先补人工常见漏点：旧入口/旧逻辑兼容、真实入口矩阵、跨模式/跨场景兼容、快速连点/多指/重复进入等异常操作、断网/后台/重启/重登恢复、云存档/本地缓存/跨局/跨日状态一致性。 9、涉及资源或奖励时，覆盖领取、购买、兑换、分解、返还、扣费、到账、次数减少、余额刷新、货币上限、已拥有/未拥有/全部拥有、取消不生效、失败不扣费、成功后刷新。 10、涉及配置或随机时，覆盖空配置、缺字段、非法编号、异常品质、候选池不足、概率0/100、全档位映射、相邻档位切换、按兜底策略处理。 11、涉及联机或多人时，覆盖主机/从机、自己/队友、第三人称观察、同步显示、归属隔离、多人弹窗或候选结果是否一致。 12、涉及 UI、演示或资源时，覆盖多语言、字体切换、特殊分辨率、长文本超框、音画同步、资源缺失兜底、关闭返回层级和多次切换稳定性。 13、不要为追求风格牺牲质量：字段必须完整，步骤和预期必须可执行/可观察，涉及数值、配置、奖励、付费、登录、状态变化时要写清关键校验点。"
+          - generic [ref=f13e108]:
+            - generic [ref=f13e109]: Temperature
+            - spinbutton "Temperature" [ref=f13e110]: "0.2"
+            - paragraph [ref=f13e111]: 0~1，默认 0.2
+          - button "测试连通性" [ref=f13e113] [cursor=pointer]
+          - paragraph [ref=f13e114]
+        - generic [ref=f13e115]:
+          - strong [ref=f13e116]: XMind 用例生成功能
+          - generic [ref=f13e117]:
+            - generic [ref=f13e118]: 使用模型
+            - combobox "使用模型" [ref=f13e119]:
+              - option "暂无可用模型" [selected]
+          - generic [ref=f13e120]:
+            - generic [ref=f13e121]: 提示词
+            - textbox "提示词" [ref=f13e122]:
+              - /placeholder: 为空则使用默认 XMind 用例生成提示词
+              - text: "你是资深测试设计专家，负责 XMind 用例生成页面的结构化结果输出。你必须严格遵循以下规则： 1、只输出合法 JSON，不要输出任何解释、备注、Markdown 或代码块围栏。 2、输出结构固定为：{modules:[{module,key_scenarios,test_points,coupled_modules,cases}]}。 3、每个模块字段要求：module 为模块名；key_scenarios/test_points/coupled_modules 均为数组；cases 可为空数组或省略。 4、每条用例字段固定为：{module,title,priority,preconditions,steps,expected}，priority 仅允许 P0、P1、P2。 5、用例标题 title 必须简洁明了，只表达测试意图，不要写成长句，不要把步骤或预期塞进标题。 6、steps 必须是数组，数组中每一项都必须自带中文序号前缀，格式严格为“1、xxx”“2、xxx”。 7、不得重复输出已有模块，也不得重复输出与已有用例语义重复的用例；模块命名要稳定、清晰、避免同义重复。 8、是否允许新增模块、是否给新模块生成用例、是否给已有模块生成用例，必须严格遵守传入的 operation_contract。 9、当 operation_contract 指定只补模块时，不要为模块生成 cases；当没有可补充内容时返回 {\"modules\":[]}。 【用例编写风格与人工特征参考：AI_CASE_WRITING_STYLE_GUIDE.md】 在保证覆盖质量、字段完整、语义不重复的前提下，生成结果要贴近人工从 XMind/表格整理检查点的写法，并根据需求类型补充人工高频漏点： 1、module 使用短业务分类，可保留项目编号习惯，不要写成长标题。 2、title 写短检查点，优先 4-12 个字，不要批量写成“验证XXX功能是否正常”，不要把步骤或预期塞进标题。 3、priority 只能填写 P0、P1、P2；P0 最高，核心链路/登录/支付/严重阻断/版本主功能用 P0，默认多数用例用 P1，边界/低频/兼容/展示细节可用 P2。 4、preconditions 写当前测试状态，保持短句；多条时可用中文序号分点，不写背景解释。 5、steps 优先单行动作，常用“进入、点击、查看、观察、检查、选择、装备、领取、购买、重复、重登”等测试动作，不要扩写成教学流程。 6、expected 写直接可观察结果，常用“正常、正确、显示、展示、提示、可、不可、不会、到账、扣除、刷新、一致”等结果词。 7、保留项目业务词和测试人员口吻，例如平A、红武、词条、专精、保底、回流、pvp、ui、重铸、羁绊；允许轻微人工差异和重复标题。 8、优先补人工常见漏点：旧入口/旧逻辑兼容、真实入口矩阵、跨模式/跨场景兼容、快速连点/多指/重复进入等异常操作、断网/后台/重启/重登恢复、云存档/本地缓存/跨局/跨日状态一致性。 9、涉及资源或奖励时，覆盖领取、购买、兑换、分解、返还、扣费、到账、次数减少、余额刷新、货币上限、已拥有/未拥有/全部拥有、取消不生效、失败不扣费、成功后刷新。 10、涉及配置或随机时，覆盖空配置、缺字段、非法编号、异常品质、候选池不足、概率0/100、全档位映射、相邻档位切换、按兜底策略处理。 11、涉及联机或多人时，覆盖主机/从机、自己/队友、第三人称观察、同步显示、归属隔离、多人弹窗或候选结果是否一致。 12、涉及 UI、演示或资源时，覆盖多语言、字体切换、特殊分辨率、长文本超框、音画同步、资源缺失兜底、关闭返回层级和多次切换稳定性。 13、不要为追求风格牺牲质量：字段必须完整，步骤和预期必须可执行/可观察，涉及数值、配置、奖励、付费、登录、状态变化时要写清关键校验点。"
+          - generic [ref=f13e123]:
+            - generic [ref=f13e124]: Temperature
+            - spinbutton "Temperature" [ref=f13e125]: "0.2"
+            - paragraph [ref=f13e126]: 0~1，默认 0.2
+          - button "测试连通性" [ref=f13e128] [cursor=pointer]
+          - paragraph [ref=f13e129]: 尚未指派 XMind 用例生成模型
+        - generic [ref=f13e130]:
+          - strong [ref=f13e131]: 用例相似对比
+          - generic [ref=f13e132]:
+            - generic [ref=f13e133]: 使用模型
+            - combobox "使用模型" [ref=f13e134]:
+              - option "暂无可用模型" [selected]
+          - generic [ref=f13e135]:
+            - generic [ref=f13e136]: 提示词
+            - textbox "提示词" [ref=f13e137]:
+              - /placeholder: 为空则使用默认相似度对比提示词
+              - text: "你是测试用例去重专家，请比较“生成用例候选”与“已导入用例”。保留在导入用例中不存在或不高度相似的候选，用例结构保持与输入一致，输出 JSON 用例列表，每条用例字段：{module, title, priority（仅从P0、P1、P2中选择）, preconditions, steps, expected}，steps 为数组。"
+          - generic [ref=f13e138]:
+            - generic [ref=f13e139]: Temperature
+            - spinbutton "Temperature" [ref=f13e140]: "0.2"
+            - paragraph [ref=f13e141]: 0~1，默认 0.2
+          - button "测试连通性" [ref=f13e143] [cursor=pointer]
+          - paragraph [ref=f13e144]
+        - generic [ref=f13e145]:
+          - strong [ref=f13e146]: 易漏用例推荐
+          - generic [ref=f13e147]:
+            - generic [ref=f13e148]: 使用模型
+            - combobox "使用模型" [ref=f13e149]:
+              - option "暂无可用模型" [selected]
+          - generic [ref=f13e150]:
+            - generic [ref=f13e151]: 提示词
+            - textbox "提示词" [ref=f13e152]:
+              - /placeholder: 为空则使用默认易漏用例推荐提示词
+              - text: "你是测试用例关联推荐专家。请根据“当前用例信息”从“候选易漏用例字典”（id -> 用例字段，包含 match_level=高/中/低）中筛选适合当前用例执行/查看的关联用例，并按关联度从高到低排序。严格输出 JSON：{ids: [\"1\",\"2\"]}，若无适合用例输出 {ids: []}，不要输出任何其他文本。"
+          - generic [ref=f13e153]:
+            - generic [ref=f13e154]: Temperature
+            - spinbutton "Temperature" [ref=f13e155]: "0.2"
+            - paragraph [ref=f13e156]: 0~1，默认 0.2
+          - button "测试连通性" [ref=f13e158] [cursor=pointer]
+          - paragraph [ref=f13e159]
+        - generic [ref=f13e160]:
+          - strong [ref=f13e161]: 用例库页面生成用例
+          - generic [ref=f13e162]:
+            - generic [ref=f13e163]: 使用模型
+            - combobox "使用模型" [ref=f13e164]:
+              - option "暂无可用模型" [selected]
+          - generic [ref=f13e165]:
+            - generic [ref=f13e166]: 提示词
+            - textbox "提示词" [ref=f13e167]:
+              - /placeholder: 为空则使用默认用例库生成提示词
+              - text: "你是资深测试用例设计专家，请基于输入 JSON 中的 requirement_text、module_list、existing_cases、coverage_threshold 生成补充用例。要求：1) 分析需求覆盖模块，若需求包含的模块多于 module_list，先在 missing_modules 中补齐缺失模块；若 module_list 多于需求模块可忽略多出模块。2) 对 module_list 中每个模块评估 existing_cases 在当前需求下的覆盖率 coverage(0-100)，覆盖率>=coverage_threshold 的模块可不生成用例。3) 对覆盖率低于阈值的模块生成用例，并与 existing_cases 做语义去重，测试点相似的用例不要输出。4) 缺失模块 coverage 必然为 0，必须生成用例。严格输出 JSON：{missing_modules:[{module,coverage,cases:[{module,title,priority,precondition,steps,expected,remark}]}], existing_modules:[{module,coverage,cases:[{module,title,priority,precondition,steps,expected,remark}]}]}。priority 仅允许 P0/P1/P2，steps 为字符串(可换行)，其他字段为空用空字符串，仅输出 JSON。 【用例编写风格与人工特征参考：AI_CASE_WRITING_STYLE_GUIDE.md】 在保证覆盖质量、字段完整、语义不重复的前提下，生成结果要贴近人工从 XMind/表格整理检查点的写法，并根据需求类型补充人工高频漏点： 1、module 使用短业务分类，可保留项目编号习惯，不要写成长标题。 2、title 写短检查点，优先 4-12 个字，不要批量写成“验证XXX功能是否正常”，不要把步骤或预期塞进标题。 3、priority 只能填写 P0、P1、P2；P0 最高，核心链路/登录/支付/严重阻断/版本主功能用 P0，默认多数用例用 P1，边界/低频/兼容/展示细节可用 P2。 4、preconditions 写当前测试状态，保持短句；多条时可用中文序号分点，不写背景解释。 5、steps 优先单行动作，常用“进入、点击、查看、观察、检查、选择、装备、领取、购买、重复、重登”等测试动作，不要扩写成教学流程。 6、expected 写直接可观察结果，常用“正常、正确、显示、展示、提示、可、不可、不会、到账、扣除、刷新、一致”等结果词。 7、保留项目业务词和测试人员口吻，例如平A、红武、词条、专精、保底、回流、pvp、ui、重铸、羁绊；允许轻微人工差异和重复标题。 8、优先补人工常见漏点：旧入口/旧逻辑兼容、真实入口矩阵、跨模式/跨场景兼容、快速连点/多指/重复进入等异常操作、断网/后台/重启/重登恢复、云存档/本地缓存/跨局/跨日状态一致性。 9、涉及资源或奖励时，覆盖领取、购买、兑换、分解、返还、扣费、到账、次数减少、余额刷新、货币上限、已拥有/未拥有/全部拥有、取消不生效、失败不扣费、成功后刷新。 10、涉及配置或随机时，覆盖空配置、缺字段、非法编号、异常品质、候选池不足、概率0/100、全档位映射、相邻档位切换、按兜底策略处理。 11、涉及联机或多人时，覆盖主机/从机、自己/队友、第三人称观察、同步显示、归属隔离、多人弹窗或候选结果是否一致。 12、涉及 UI、演示或资源时，覆盖多语言、字体切换、特殊分辨率、长文本超框、音画同步、资源缺失兜底、关闭返回层级和多次切换稳定性。 13、不要为追求风格牺牲质量：字段必须完整，步骤和预期必须可执行/可观察，涉及数值、配置、奖励、付费、登录、状态变化时要写清关键校验点。"
+          - generic [ref=f13e168]:
+            - generic [ref=f13e169]: Temperature
+            - spinbutton "Temperature" [ref=f13e170]: "0.2"
+            - paragraph [ref=f13e171]: 0~1，默认 0.2
+          - button "测试连通性" [ref=f13e173] [cursor=pointer]
+          - paragraph [ref=f13e174]
+        - button "保存指派" [ref=f13e176] [cursor=pointer]
+      - generic [ref=f13e179]:
+        - generic [ref=f13e180]:
+          - heading "功能指派说明" [level=3] [ref=f13e181]
+          - button "关闭" [ref=f13e182] [cursor=pointer]: x
+        - generic [ref=f13e184]:
+          - generic [ref=f13e185]:
+            - heading "页面功能简介" [level=4] [ref=f13e186]
+            - paragraph [ref=f13e187]: 为各功能流程指派使用模型，统一输出风格与质量。
+          - generic [ref=f13e188]:
+            - heading "操作流程" [level=4] [ref=f13e189]
+            - list [ref=f13e190]:
+              - listitem [ref=f13e191]: 在每个功能卡片选择对应模型，必要时调整提示词与温度。
+              - listitem [ref=f13e192]: 确认全部指派后点击 【保存指派】。
+              - listitem [ref=f13e193]: 需要验证模型时可先点击对应的 【测试连通性】。
+          - generic [ref=f13e194]:
+            - heading "必要说明" [level=4] [ref=f13e195]
+            - list [ref=f13e196]:
+              - listitem [ref=f13e197]: 【保存指派】：保存当前指派，后续流程将使用对应模型。
+              - listitem [ref=f13e198]: 【测试连通性】：验证模型配置可用性，避免执行时报错。
+          - generic [ref=f13e199]:
+            - heading "提示" [level=3] [ref=f13e200]
+            - list [ref=f13e201]:
+              - listitem [ref=f13e202]:
+                - strong [ref=f13e203]: 进入设置的“其他设置”页可以关闭每次进入的提示。
+                - text: 如不需要自动弹出，可取消勾选对应页面。

@@ -52,6 +52,9 @@
         if (!Number.isFinite(limit) || limit <= 0) limit = 2000;
         return text.length > limit ? (text.slice(0, limit).trim() + '…') : text;
       };
+    var normalizeModelModulesOutputDetailed = typeof opts.normalizeModelModulesOutputDetailed === 'function'
+      ? opts.normalizeModelModulesOutputDetailed
+      : function() { return { list: [], diagnostics: {} }; };
 
     function createExistingCasesCompletionPolicy() {
       return {
@@ -411,6 +414,48 @@
       };
     }
 
+    function resolveModuleTaskResult(input) {
+      var source = input && typeof input === 'object' ? input : {};
+      var normalizedOutput = normalizeModelModulesOutputDetailed(source.resultRaw || '');
+      var filtered = filterModulesByContract(
+        normalizedOutput.list,
+        source.contract || {},
+        source.visibleContext || {}
+      );
+      var moduleEntry = source.moduleEntry || null;
+      var moduleTitle = normalizeModuleTitle(
+        moduleEntry && moduleEntry.title ? moduleEntry.title : source.moduleTitle
+      );
+      var targetKey = normalizeModuleKey(moduleTitle);
+      var targetOutput = filtered.list.find(function(item) {
+        return normalizeModuleKey(item && item.module) === targetKey;
+      }) || {
+        module: moduleTitle,
+        key_scenarios: [],
+        test_points: [],
+        coupled_modules: [],
+        cases: [],
+      };
+      var visibleCases = moduleEntry ? getVisibleCasesForModuleEntry(moduleEntry).map(function(row) {
+        return normalizeCaseItem(row && row.item, moduleEntry.title);
+      }).filter(Boolean) : [];
+      var merged = source.actionId === moduleActions.APPEND
+        ? mergeCasesWithoutDuplicates(source.currentAiCases, targetOutput.cases, visibleCases)
+        : null;
+      return {
+        normalizedOutput: normalizedOutput,
+        filtered: filtered,
+        targetOutput: targetOutput,
+        visibleCases: visibleCases,
+        nextList: merged ? merged.merged : targetOutput.cases.slice(),
+        appended: merged ? merged.appended : [],
+        mergeDiagnostics: merged ? merged.diagnostics : {
+          duplicateAgainstExisting: 0,
+          duplicateWithinAdded: 0,
+        },
+      };
+    }
+
     function getDiagnosticsMetric(diag, key) {
       var value = diag && Number(diag[key]);
       if (!Number.isFinite(value) || value < 0) return 0;
@@ -636,8 +681,10 @@
       getImportedBaselineCompletionPolicy: getImportedBaselineCompletionPolicy,
       filterModulesByContract: filterModulesByContract,
       mergeCasesWithoutDuplicates: mergeCasesWithoutDuplicates,
+      resolveModuleTaskResult: resolveModuleTaskResult,
       getDiagnosticsMetric: getDiagnosticsMetric,
       buildGenerationErrorInfo: buildGenerationErrorInfo,
+      getFriendlyRootEmptyModulesText: getFriendlyRootEmptyModulesText,
       buildRootNoChangeInfo: buildRootNoChangeInfo,
       buildModuleNoChangeInfo: buildModuleNoChangeInfo,
     };

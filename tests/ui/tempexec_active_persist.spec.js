@@ -1,5 +1,23 @@
 const { test, expect } = require('@playwright/test');
 
+async function waitAppInited(page, timeoutMs) {
+  const timeout = Number(timeoutMs) || 30000;
+  await page.waitForFunction(
+    () => window.app && window.app._inited === true && typeof window.app.switchTab === 'function',
+    null,
+    { timeout }
+  );
+}
+
+async function switchToTempExecPage(page, timeoutMs) {
+  const timeout = Number(timeoutMs) || 30000;
+  await page.evaluate(() => {
+    if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('tempexec');
+  });
+  await page.waitForURL(/\/case-exec\.html(?:[?#]|$)/, { timeout });
+  await waitAppInited(page, timeout);
+}
+
 test.describe('执行视图选中用例持久化', () => {
   test.beforeEach(async ({ page }) => {
     page.__promptAnswers = [];
@@ -37,9 +55,7 @@ test.describe('执行视图选中用例持久化', () => {
   });
 
   test('刷新后保持上次选中的用例', async ({ page }) => {
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('tempexec');
-    });
+    await switchToTempExecPage(page, 30000);
     const now = Date.now();
     await page.evaluate((stamp) => {
       const files = [
@@ -87,10 +103,8 @@ test.describe('执行视图选中用例持久化', () => {
       window.app.state.tempExecPreserveScrollOnce = false;
     }, now);
     await page.reload();
-    await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('tempexec');
-    });
+    await waitAppInited(page, 20000);
+    await switchToTempExecPage(page, 30000);
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
     await expect(navButtons).toHaveCount(2, { timeout: 5000 });
     const activeMatch = await page.$eval('#tempExecNav .temp-req-item.active .name-text', (el) => (el && el.textContent) || '');

@@ -129,10 +129,16 @@ function verifyUnavailableStorageFallback() {
 }
 
 function verifyRequestPayloadOwnership() {
-  var source = fs.readFileSync(path.join(projectRoot, 'scripts/modules/xmindCasegen.js'), 'utf8');
-  assert.match(source, /function buildManagedTaskRequestEnvelope\(/);
-  assert.strictEqual((source.match(/return buildManagedTaskRequestEnvelope\(/g) || []).length, 4);
-  assert.strictEqual((source.match(/prompt: String\(taskInput && taskInput\.prompt/g) || []).length, 1);
+  var parentSource = fs.readFileSync(path.join(projectRoot, 'scripts/modules/xmindCasegen.js'), 'utf8');
+  var ownerSource = fs.readFileSync(path.join(
+    projectRoot,
+    'scripts/modules/xmindCasegen/xmindCasegenTaskRequestController.js'
+  ), 'utf8');
+  assert.match(ownerSource, /function buildManagedTaskRequestEnvelope\(/);
+  assert.strictEqual((ownerSource.match(/return buildManagedTaskRequestEnvelope\(/g) || []).length, 4);
+  assert.strictEqual((ownerSource.match(/prompt: String\(taskInput && taskInput\.prompt/g) || []).length, 1);
+  assert.doesNotMatch(parentSource, /function buildManagedTaskRequestEnvelope\(/);
+  assert.match(parentSource, /taskRequestControllerFactory\.create\(\{/);
 }
 
 verifyTaskLifecyclePersistence();

@@ -33,6 +33,13 @@ async function switchToTab(page, tabName) {
     }
     return false;
   }, tabName);
+  if (tabName === 'tempexec') {
+    await page.waitForFunction(
+      () => window.app && window.app.tempExecApi && typeof window.app.tempExecApi.renderTempExecNav === 'function',
+      null,
+      { timeout: 30000 }
+    );
+  }
 }
 
 test.describe('执行视图专注区同步', () => {
@@ -136,6 +143,7 @@ test.describe('执行视图专注区同步', () => {
 
     const navBtn = page.locator('#tempExecNav button[data-temp-file]').first();
     const focusZone = page.locator('#tempFocusBlock [data-temp-focus-zone]');
+    await expect(navBtn).toHaveCount(1);
     await navBtn.dragTo(focusZone);
 
     await expect(page.locator('#tempFocusBlock button[data-temp-file]')).toHaveCount(1);

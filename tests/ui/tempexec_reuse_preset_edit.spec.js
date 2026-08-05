@@ -112,6 +112,7 @@ test.describe('复用预设子项编辑与删除确认', () => {
     await page.click('[data-temp-reuse-panel="reuse-preset-edit"][data-index="0"]');
     const panel = page.locator('[data-temp-reuse-panel-container="reuse-preset-edit"][data-index="0"]');
     await expect(panel).toBeVisible();
+    await expect(panel.locator('.reuse-input')).toHaveCount(3);
     const values = await panel.locator('.reuse-input').evaluateAll((list) => list.map((el) => el.value));
     expect(values.filter((val) => val === '子项A-新')).toHaveLength(2);
     expect(values).toContain('子项B');

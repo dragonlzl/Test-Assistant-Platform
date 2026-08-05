@@ -158,6 +158,132 @@
           });
         })
         .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirDataModel.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirDataModel
+              && typeof window.app.mindElixirDataModel.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirSessionStore.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirSessionStore
+              && typeof window.app.mindElixirSessionStore.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirThemeOwner.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirThemeOwner
+              && typeof window.app.mindElixirThemeOwner.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirUiBridge.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirUiBridge
+              && typeof window.app.mindElixirUiBridge.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirViewportController.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirViewportController
+              && typeof window.app.mindElixirViewportController.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirSearchController.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirSearchController
+              && typeof window.app.mindElixirSearchController.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirSelectionModel.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirSelectionModel
+              && typeof window.app.mindElixirSelectionModel.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirSelectionController.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirSelectionController
+              && typeof window.app.mindElixirSelectionController.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirDragController.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirDragController
+              && typeof window.app.mindElixirDragController.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirInputSelectionController.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirInputSelectionController
+              && typeof window.app.mindElixirInputSelectionController.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirEditInputController.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirEditInputController
+              && typeof window.app.mindElixirEditInputController.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirEditActionPolicy.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirEditActionPolicy
+              && typeof window.app.mindElixirEditActionPolicy.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirHistoryModel.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirHistoryModel
+              && typeof window.app.mindElixirHistoryModel.create === 'function'
+            );
+          });
+        })
+        .then(function() {
+          return loadLocalScriptOnce('./scripts/core/mindElixirClipboardController.js', function() {
+            return Boolean(
+              window.app
+              && window.app.mindElixirClipboardController
+              && typeof window.app.mindElixirClipboardController.create === 'function'
+            );
+          });
+        })
+        .then(function() {
           return loadLocalScriptOnce('./scripts/core/mindElixirCore.js', function() {
             return Boolean(window.app && window.app.mindElixirCore && typeof window.app.mindElixirCore.init === 'function');
           });
@@ -239,4 +365,3 @@
     create: create,
   };
 });
-

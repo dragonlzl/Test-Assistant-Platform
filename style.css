@@ -1242,7 +1242,7 @@ body {
 .temp-project-version-body .temp-req-row.archived .temp-req-item {
   cursor: default;
 }
-.temp-project-version-body .temp-req-row.archived .temp-req-item .remove {
+.temp-project-version-body .temp-req-row.archived > .remove {
   display: none;
 }
 .temp-project-version-body .temp-archived-mask {
@@ -1278,9 +1278,9 @@ body {
   padding: 1px 6px;
   font-size: 11px;
 }
-.temp-project-version-body .temp-req-item .remove {
-  top: 6px;
-  right: 8px;
+.temp-project-version-body .temp-req-row > .remove {
+  width: 22px;
+  height: 22px;
 }
 @media (max-width: 960px) {
   .temp-project-versions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1447,6 +1447,7 @@ body {
       align-items: center;
       gap: 6px;
       width: 100%;
+      position: relative;
       cursor: grab;
       user-select: none;
     }
@@ -1584,12 +1585,14 @@ body {
       border-color: #e9d5ff;
       background: #f3e8ff;
     }
-    .temp-req-item .remove {
+    .temp-req-row > .remove {
       position: absolute;
       top: 8px;
       right: 8px;
-      width: 18px;
-      height: 18px;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      flex: 0 0 auto;
       border-radius: 50%;
       background: #fff;
       border: 1px solid rgba(0,0,0,0.08);
@@ -1599,9 +1602,9 @@ body {
       justify-content: center;
       color: var(--text);
       font-weight: 700;
-      z-index: 3;
+      cursor: pointer;
     }
-    .temp-req-item .remove:hover {
+    .temp-req-row > .remove:hover {
       background: rgba(0,0,0,0.18);
     }
     @keyframes temp-req-marquee {
@@ -2393,6 +2396,11 @@ body {
   overflow: hidden;
 }
 /* Preload nav visibility to avoid flashing the default flow on page switch. */
+html[data-preload-nav="1"] body {
+  pointer-events: none;
+  cursor: progress;
+}
+
 html[data-preload-nav="1"][data-init-tab="tempexec"] #flowNav,
 html[data-preload-nav="1"][data-init-tab="exec-overview"] #flowNav,
 html[data-preload-nav="1"][data-init-tab="project-admin"] #flowNav,
@@ -15273,13 +15281,13 @@ button.exec-overview-file-chip,
 :root[data-theme="dark"] .temp-req-item.active {
   background: rgba(125,180,255,0.16);
 }
-:root[data-theme="dark"] .temp-req-item .remove {
+:root[data-theme="dark"] .temp-req-row > .remove {
   background: rgba(255,255,255,0.12);
   border-color: rgba(148,163,184,0.35);
   color: var(--text);
   box-shadow: 0 2px 6px rgba(0,0,0,0.35);
 }
-:root[data-theme="dark"] .temp-req-item .remove:hover {
+:root[data-theme="dark"] .temp-req-row > .remove:hover {
   background: rgba(125,180,255,0.2);
 }
 :root[data-theme="dark"] .temp-req-row .tag {

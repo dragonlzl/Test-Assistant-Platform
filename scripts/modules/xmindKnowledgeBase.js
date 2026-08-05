@@ -57,14 +57,7 @@
       );
     }
 
-    function cloneJson(value, fallback) {
-      if (value === undefined || value === null) return fallback;
-      try {
-        return JSON.parse(JSON.stringify(value));
-      } catch (err) {
-        return fallback;
-      }
-    }
+    var cloneJson = window.app.jsonCloneCore.cloneJson;
 
     function normalizeBaseUrl(value) {
       var text = value === null || value === undefined ? '' : String(value || '').trim();

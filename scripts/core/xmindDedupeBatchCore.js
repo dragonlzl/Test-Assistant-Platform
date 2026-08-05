@@ -1,5 +1,6 @@
 (function() {
   window.app = window.app || {};
+  var cloneJson = window.app.jsonCloneCore.cloneJson;
 
   var DEFAULT_MAX_CASES_PER_BATCH = 60;
   var DEFAULT_MAX_CONCURRENT_BATCHES = 5;
@@ -9,15 +10,6 @@
     steps: 280,
     expected: 200,
   };
-
-  function cloneJson(value, fallback) {
-    if (value === undefined || value === null) return fallback;
-    try {
-      return JSON.parse(JSON.stringify(value));
-    } catch (err) {
-      return fallback;
-    }
-  }
 
   function normalizeText(value) {
     return value === null || value === undefined ? '' : String(value || '').trim();

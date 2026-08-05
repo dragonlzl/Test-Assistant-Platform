@@ -21,7 +21,7 @@
     return [
       source.module,
       source.title,
-      source.precondition,
+      source.precondition || source.preconditions,
       source.steps,
       source.expected,
     ].map(defaultNormalizeText).join('::').toLowerCase();
@@ -114,7 +114,7 @@
           module: normalizeText(source.module || ''),
           title: normalizeText(source.title || ''),
           priority: normalizePriority(source.priority || '') || '',
-          precondition: normalizeText(source.precondition || ''),
+          precondition: normalizeText(source.precondition || source.preconditions || ''),
           steps: normalizeText(source.steps || ''),
           expected: normalizeText(source.expected || ''),
           remark: normalizeText(source.remark || ''),
@@ -208,7 +208,10 @@
         missing.forEach(function(entry) { pushModule(entry, 'missing'); });
         existing.forEach(function(entry) { pushModule(entry, 'existing'); });
       }
-      return { modules: modules };
+      var result = { modules: modules };
+      if (data.ai_dedupe && typeof data.ai_dedupe === 'object') result.ai_dedupe = data.ai_dedupe;
+      if (Array.isArray(data.removed_cases)) result.removed_cases = data.removed_cases;
+      return result;
     }
 
     function applyAppendMap(modules, appendedMap) {
@@ -256,12 +259,17 @@
       return { generatedCount: generatedCount, dedupeCount: removedCount };
     }
 
-    function formatCompleteStatus(aiState) {
+    function formatResultStats(aiState) {
       var source = aiState && typeof aiState === 'object' ? aiState : {};
       var generatedCount = normalizeCount(source.resultGeneratedCount);
       var dedupeCount = normalizeCount(source.resultDedupeCount);
-      var text = '生成 ' + (generatedCount === null ? 0 : generatedCount)
+      return '生成 ' + (generatedCount === null ? 0 : generatedCount)
         + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条';
+    }
+
+    function formatCompleteStatus(aiState) {
+      var source = aiState && typeof aiState === 'object' ? aiState : {};
+      var text = formatResultStats(source);
       if (!source.modules || !source.modules.length) return '生成完成：' + text + '，未返回可追加用例';
       return '生成完成：' + text;
     }
@@ -312,6 +320,7 @@
       countModuleCases: countModuleCases,
       normalizeCount: normalizeCount,
       buildResultStats: buildResultStats,
+      formatResultStats: formatResultStats,
       formatCompleteStatus: formatCompleteStatus,
       countSelectableCases: countSelectableCases,
       buildSelection: buildSelection,

@@ -73,7 +73,15 @@ test.describe('临时执行搜索功能', () => {
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
     await expect(navButtons).toHaveCount(1, { timeout: 5000 });
     await expect(navButtons.first()).toBeVisible();
-    await navButtons.first().click({ force: true });
+    const targetFileId = await navButtons.first().getAttribute('data-temp-file');
+    expect(targetFileId).toBeTruthy();
+    await navButtons.first().click();
+    await page.waitForFunction((fileId) => {
+      return Boolean(
+        window.app && window.app.state
+        && String(window.app.state.tempExecActiveId || '') === String(fileId || '')
+      );
+    }, targetFileId);
     await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
     const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });

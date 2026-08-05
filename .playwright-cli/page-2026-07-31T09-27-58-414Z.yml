@@ -1,0 +1,251 @@
+- generic [ref=f12e2]:
+  - complementary [ref=f12e3]:
+    - generic [ref=f12e4]:
+      - generic "用例助手" [ref=f12e5]: TA
+      - navigation "主功能导航" [ref=f12e6]:
+        - button "AI 功能" [ref=f12e7] [cursor=pointer]:
+          - generic [ref=f12e8]: AI
+        - button "用例相关" [ref=f12e10] [cursor=pointer]:
+          - generic [ref=f12e11]: TC
+        - button "管理" [ref=f12e13] [cursor=pointer]:
+          - generic [ref=f12e14]: AD
+        - button "设置" [ref=f12e16] [cursor=pointer]:
+          - generic [ref=f12e17]: ST
+      - button "收起二级导航" [expanded] [ref=f12e19] [cursor=pointer]: <
+    - generic [ref=f12e20]:
+      - strong [ref=f12e22]: 设置
+      - generic [ref=f12e23]:
+        - generic [ref=f12e24]: 当前用户
+        - strong [ref=f12e25]: e2e
+        - generic [ref=f12e26]: 管理员
+        - button "用户菜单" [ref=f12e27] [cursor=pointer]: 个人
+        - generic:
+          - button "登出"
+      - generic [ref=f12e29]:
+        - button "设置" [ref=f12e30] [cursor=pointer]
+        - button "通用设置" [ref=f12e31] [cursor=pointer]
+      - navigation [ref=f12e32]:
+        - button "AI 功能 需先配置模型/指派" [ref=f12e33] [cursor=pointer]:
+          - generic [ref=f12e34]: AI 功能
+          - generic:
+            - generic:
+              - generic: "2"
+              - generic: 评审
+              - generic: ▶
+          - generic [ref=f12e35]: 需先配置模型/指派
+        - button "用例相关" [ref=f12e36] [cursor=pointer]
+        - button "管理" [ref=f12e37] [cursor=pointer]
+        - generic [ref=f12e38]:
+          - button "设置" [ref=f12e39] [cursor=pointer]
+          - button "通用设置" [ref=f12e41] [cursor=pointer]
+      - button "回到顶部" [ref=f12e42] [cursor=pointer]
+      - button "跳到底部" [ref=f12e43] [cursor=pointer]
+      - generic [ref=f12e44]:
+        - generic [ref=f12e45]:
+          - button "xmind用例生成进度" [ref=f12e46] [cursor=pointer]
+          - button "个人备忘" [ref=f12e48] [cursor=pointer]
+        - generic [ref=f12e51]:
+          - generic [ref=f12e52]:
+            - generic [ref=f12e53]:
+              - generic [ref=f12e54]: xmind用例生成进度
+              - button "收起" [expanded] [ref=f12e55] [cursor=pointer]
+            - generic [ref=f12e56]: 点击打开对应 XMind 生成页签
+          - paragraph [ref=f12e58]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f12e59]:
+    - generic [ref=f12e61]:
+      - generic [ref=f12e62]: 设置导航
+      - paragraph [ref=f12e63]: 设置项入口汇总于此，点击卡片快速定位。
+      - generic [ref=f12e64]:
+        - button "飞书通知配置" [ref=f12e65] [cursor=pointer]
+        - button "执行视图列显示" [ref=f12e70] [cursor=pointer]
+        - button "通用设置" [ref=f12e75] [cursor=pointer]
+    - main [ref=f12e84]:
+      - generic [ref=f12e85]:
+        - heading "飞书通知配置" [level=2] [ref=f12e86]
+        - generic [ref=f12e87]:
+          - paragraph [ref=f12e88]: 仅“一键执行”流程会触发通知：覆盖率不足 100% 会推送失败提醒，完整执行成功会推送成功提醒。
+          - generic [ref=f12e89]:
+            - generic [ref=f12e90]: 飞书机器人
+            - generic [ref=f12e91]:
+              - generic [ref=f12e92]: Webhook：
+              - textbox "https://open.feishu.cn/open-apis/bot/v2/hook/xxxx" [ref=f12e93]
+            - generic [ref=f12e94]:
+              - generic [ref=f12e95]: "@角色ID："
+              - textbox "到“飞书开放平台→企业管理→成员管理”复制成员 open_id（推荐）或 user_id" [ref=f12e96]
+          - generic [ref=f12e97]:
+            - button "保存配置" [ref=f12e98] [cursor=pointer]
+            - button "发送测试通知" [ref=f12e99] [cursor=pointer]
+          - paragraph [ref=f12e100]
+          - paragraph [ref=f12e101]: 请确保浏览器可访问该地址，建议使用群机器人以便团队及时获知执行状态。
+      - generic [ref=f12e102]:
+        - heading "执行视图列显示" [level=2] [ref=f12e103]
+        - generic [ref=f12e104]:
+          - paragraph [ref=f12e105]: 控制“用例执行”视图的表头展示，仅影响显示，不会修改用例数据。用例标题/实际结果/备注/缺陷链接为必选。
+          - generic [ref=f12e106]:
+            - generic [ref=f12e107]:
+              - checkbox "选择框（必选）" [checked] [disabled] [ref=f12e108]
+              - text: 选择框（必选）
+            - generic [ref=f12e109]:
+              - checkbox "编号" [checked] [ref=f12e110]
+              - text: 编号
+            - generic [ref=f12e111]:
+              - checkbox "模块" [checked] [ref=f12e112]
+              - text: 模块
+            - generic [ref=f12e113]:
+              - checkbox "优先级" [checked] [ref=f12e114]
+              - text: 优先级
+            - generic [ref=f12e115]:
+              - checkbox "前提条件" [checked] [ref=f12e116]
+              - text: 前提条件
+            - generic [ref=f12e117]:
+              - checkbox "操作步骤" [checked] [ref=f12e118]
+              - text: 操作步骤
+            - generic [ref=f12e119]:
+              - checkbox "预期结果" [checked] [ref=f12e120]
+              - text: 预期结果
+            - generic [ref=f12e121]: 用例标题（必选）
+            - generic [ref=f12e122]: 实际结果（必选）
+            - generic [ref=f12e123]: 备注（必选）
+            - generic [ref=f12e124]: 缺陷链接（必选）
+          - paragraph [ref=f12e125]
+      - generic [ref=f12e126]:
+        - heading "通用设置" [level=2] [ref=f12e127]
+        - generic [ref=f12e128]:
+          - generic [ref=f12e129]:
+            - generic [ref=f12e130]:
+              - strong [ref=f12e131]: 全局分页设置
+              - paragraph [ref=f12e132]: 设置列表类视图每页展示条数（用例执行 / 用例归档 / 执行总览等），范围 5-200 条，默认为 20。
+            - spinbutton "请输入条数" [ref=f12e134]: "20"
+          - button "保存分页设置" [ref=f12e136] [cursor=pointer]
+          - paragraph [ref=f12e137]
+          - generic [ref=f12e139]:
+            - generic [ref=f12e140]:
+              - strong [ref=f12e141]: 用例视图字号
+              - paragraph [ref=f12e142]: 设置用例执行/用例库编辑视图字号，范围 11-16，默认为 13。
+            - spinbutton "请输入字号" [ref=f12e144]: "13"
+          - button "保存字号" [ref=f12e146] [cursor=pointer]
+          - paragraph [ref=f12e147]
+          - generic [ref=f12e149]:
+            - generic [ref=f12e150]:
+              - strong [ref=f12e151]: Case Assistant 项目路径
+              - paragraph [ref=f12e152]: 用于 Electron 环境下调用 case-assistant:request。仅支持绝对目录路径；为空或格式非法时将自动跳过该调用。
+            - textbox "如：E:/workspace/project 或 /Users/name/project" [ref=f12e154]
+          - button "保存项目路径" [ref=f12e156] [cursor=pointer]
+          - paragraph [ref=f12e157]
+          - generic [ref=f12e159]:
+            - generic [ref=f12e160]:
+              - strong [ref=f12e161]: 共享知识库地址
+              - paragraph [ref=f12e162]: "可选配置。保存后，XMind 用例生成会在每次生成前执行规则检索、AI 精筛，并把最终结果作为知识库上下文注入。示例：`http://192.168.50.10:8003/sk/`。"
+            - textbox "如：http://192.168.50.10:8003/sk/" [ref=f12e164]
+          - generic [ref=f12e165]:
+            - button "保存知识库地址" [ref=f12e166] [cursor=pointer]
+            - button "校验地址" [ref=f12e167] [cursor=pointer]
+          - paragraph [ref=f12e168]
+          - generic [ref=f12e170]:
+            - generic [ref=f12e171]:
+              - strong [ref=f12e172]: 知识库/XMind 上限设置
+              - paragraph [ref=f12e173]: 用于放宽 AI 目录检索、知识库上下文注入和 XMind 多模态请求体的本地上限。默认值已提高；若模型提示上下文或请求过大，可继续在这里调高。
+            - generic [ref=f12e174]:
+              - generic [ref=f12e175]:
+                - generic [ref=f12e176]: 目录送模上限（字符）
+                - spinbutton "目录送模上限（字符）" [ref=f12e177]: "120000"
+              - generic [ref=f12e178]:
+                - generic [ref=f12e179]: 知识库注入上限（字符）
+                - spinbutton "知识库注入上限（字符）" [ref=f12e180]: "24000"
+              - generic [ref=f12e181]:
+                - generic [ref=f12e182]: XMind 请求体上限（字符）
+                - spinbutton "XMind 请求体上限（字符）" [ref=f12e183]: "4000000"
+          - button "保存知识库上限" [ref=f12e185] [cursor=pointer]
+          - paragraph [ref=f12e186]
+          - generic [ref=f12e188]:
+            - generic [ref=f12e189]:
+              - strong [ref=f12e190]: 用例库生成用例覆盖度阈值
+              - paragraph [ref=f12e191]: 设置用例库 AI 生成用例的覆盖度阈值，范围 50-100，默认 90。
+            - spinbutton "请输入阈值" [ref=f12e193]: "90"
+          - button "保存阈值" [ref=f12e195] [cursor=pointer]
+          - paragraph [ref=f12e196]
+          - generic [ref=f12e198]:
+            - generic [ref=f12e199]:
+              - strong [ref=f12e200]: 页面主题
+              - paragraph [ref=f12e201]: 选择页面配色主题，保存后生效并同步到账号。
+            - combobox [ref=f12e203]:
+              - option "白色主题" [selected]
+              - option "黑色主题"
+          - button "保存主题" [ref=f12e205] [cursor=pointer]
+          - paragraph [ref=f12e206]
+          - generic [ref=f12e208]:
+            - generic [ref=f12e209]:
+              - strong [ref=f12e210]: 易漏用例提醒区域
+              - paragraph [ref=f12e211]: 选择易漏用例提醒区域展示位置，可选上方或下方。
+            - combobox [ref=f12e213]:
+              - option "上方" [selected]
+              - option "下方"
+          - button "保存展示位置" [ref=f12e215] [cursor=pointer]
+          - paragraph [ref=f12e216]
+          - generic [ref=f12e218]:
+            - generic [ref=f12e219]:
+              - strong [ref=f12e220]: 易漏用例命中设定
+              - paragraph [ref=f12e221]: 选择提醒区的第一优先级命中条件，至少勾选一个。
+            - generic [ref=f12e222]:
+              - generic [ref=f12e223]:
+                - checkbox "类型" [checked] [ref=f12e224]
+                - text: 类型
+              - generic [ref=f12e225]:
+                - checkbox "模块" [checked] [ref=f12e226]
+                - text: 模块
+          - button "保存命中设定" [ref=f12e228] [cursor=pointer]
+          - paragraph [ref=f12e229]
+          - generic [ref=f12e231]:
+            - generic [ref=f12e232]:
+              - strong [ref=f12e233]: 易漏用例推荐（大模型）
+              - paragraph [ref=f12e234]: 开启后可在提醒区点击 AI 推荐生成关联易漏用例。
+            - combobox [ref=f12e236]:
+              - option "关闭" [selected]
+              - option "开启"
+          - button "保存开关" [ref=f12e238] [cursor=pointer]
+          - paragraph [ref=f12e239]
+          - heading "页面说明自动弹出" [level=3] [ref=f12e241]
+          - paragraph [ref=f12e242]: 进入主要功能页面时自动弹出页面说明，可按页面独立关闭。
+          - generic [ref=f12e243]:
+            - generic [ref=f12e244]:
+              - checkbox "全部" [checked] [ref=f12e245]
+              - text: 全部
+            - generic [ref=f12e246]:
+              - checkbox "一键执行" [checked] [ref=f12e247]
+              - text: 一键执行
+            - generic [ref=f12e248]:
+              - checkbox "功能流程" [checked] [ref=f12e249]
+              - text: 功能流程
+            - generic [ref=f12e250]:
+              - checkbox "用例生成" [checked] [ref=f12e251]
+              - text: 用例生成
+            - generic [ref=f12e252]:
+              - checkbox "功能指派" [checked] [ref=f12e253]
+              - text: 功能指派
+            - generic [ref=f12e254]:
+              - checkbox "模型管理" [checked] [ref=f12e255]
+              - text: 模型管理
+            - generic [ref=f12e256]:
+              - checkbox "用例执行" [checked] [ref=f12e257]
+              - text: 用例执行
+            - generic [ref=f12e258]:
+              - checkbox "用例库" [checked] [ref=f12e259]
+              - text: 用例库
+            - generic [ref=f12e260]:
+              - checkbox "用例归档" [checked] [ref=f12e261]
+              - text: 用例归档
+            - generic [ref=f12e262]:
+              - checkbox "执行总览" [checked] [ref=f12e263]
+              - text: 执行总览
+          - paragraph [ref=f12e264]
+          - heading "导航栏智能收起" [level=3] [ref=f12e266]
+          - paragraph [ref=f12e267]: 勾选后向下滚动会自动收起顶部导航；滚动到顶部继续向上滚动可自动展开。
+          - generic [ref=f12e269]:
+            - checkbox "启用导航栏智能收起" [ref=f12e270]
+            - text: 启用导航栏智能收起
+          - paragraph [ref=f12e271]
+          - generic [ref=f12e274]:
+            - strong [ref=f12e275]: 项目排序
+            - paragraph [ref=f12e276]: 拖拽项目卡片调整展示顺序；点击卡片可设置默认项目（影响各页面项目卡片/下拉框的顺序与默认选中）。
+          - paragraph [ref=f12e278]: 暂无可排序项目
+          - paragraph [ref=f12e279]: 请求失败，状态码 404

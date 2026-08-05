@@ -1,0 +1,170 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e3]:
+    - generic [ref=f3e4]:
+      - generic "用例助手" [ref=f3e5]: TA
+      - navigation "主功能导航" [ref=f3e6]:
+        - button "AI 功能" [ref=f3e7] [cursor=pointer]:
+          - generic [ref=f3e8]: AI
+        - button "用例相关" [ref=f3e10] [cursor=pointer]:
+          - generic [ref=f3e11]: TC
+        - button "管理" [ref=f3e13] [cursor=pointer]:
+          - generic [ref=f3e14]: AD
+        - button "设置" [ref=f3e16] [cursor=pointer]:
+          - generic [ref=f3e17]: ST
+      - button "收起二级导航" [expanded] [ref=f3e19] [cursor=pointer]: <
+    - generic [ref=f3e20]:
+      - strong [ref=f3e22]: 用例相关
+      - generic [ref=f3e23]:
+        - generic [ref=f3e24]: 当前用户
+        - strong [ref=f3e25]: e2e
+        - generic [ref=f3e26]: 管理员
+        - button "用户菜单" [ref=f3e27] [cursor=pointer]: 个人
+        - generic:
+          - button "登出"
+      - generic [ref=f3e29]:
+        - button "用例相关" [ref=f3e30] [cursor=pointer]
+        - button "用例执行" [ref=f3e31] [cursor=pointer]
+        - button "执行分配" [ref=f3e32] [cursor=pointer]
+      - navigation [ref=f3e33]:
+        - button "AI 功能 需先配置模型/指派" [ref=f3e34] [cursor=pointer]:
+          - generic [ref=f3e35]: AI 功能
+          - generic [ref=f3e36]: 需先配置模型/指派
+        - generic [ref=f3e37]:
+          - button "用例相关" [ref=f3e38] [cursor=pointer]
+          - generic [ref=f3e39]:
+            - button "用例执行" [ref=f3e40] [cursor=pointer]
+            - button "用例库" [ref=f3e41] [cursor=pointer]
+            - button "用例归档" [ref=f3e42] [cursor=pointer]
+            - button "执行总览" [ref=f3e43] [cursor=pointer]
+        - button "管理" [ref=f3e44] [cursor=pointer]
+        - button "设置" [ref=f3e45] [cursor=pointer]
+      - button "回到顶部" [ref=f3e46] [cursor=pointer]
+      - button "跳到底部" [ref=f3e47] [cursor=pointer]
+      - generic [ref=f3e48]:
+        - generic [ref=f3e49]:
+          - button "xmind用例生成进度" [ref=f3e50] [cursor=pointer]
+          - button "个人备忘" [ref=f3e52] [cursor=pointer]
+        - generic [ref=f3e55]:
+          - generic [ref=f3e56]:
+            - generic [ref=f3e57]:
+              - generic [ref=f3e58]: xmind用例生成进度
+              - button "收起" [expanded] [ref=f3e59] [cursor=pointer]
+            - generic [ref=f3e60]: 点击打开对应 XMind 生成页签
+          - paragraph [ref=f3e62]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f3e63]:
+    - generic [ref=f3e64]:
+      - generic [ref=f3e65]:
+        - generic [ref=f3e66]:
+          - generic [ref=f3e67]: 功能导航
+          - button "收起" [expanded] [ref=f3e68] [cursor=pointer]
+        - generic [ref=f3e69]:
+          - paragraph [ref=f3e70]: 用例执行相关入口汇总于此，点击卡片快速打开。
+          - generic [ref=f3e71]:
+            - button "用例导入" [ref=f3e72] [cursor=pointer]
+            - button "选择用例执行" [ref=f3e78] [cursor=pointer]
+            - button "执行分配" [ref=f3e84] [cursor=pointer]
+            - button "归档操作&进度预览" [ref=f3e90] [cursor=pointer]
+      - generic [ref=f3e98]:
+        - generic [ref=f3e99]:
+          - generic [ref=f3e100]:
+            - text: 当前文件：
+            - strong [ref=f3e101]: persistB.json
+          - generic [ref=f3e102]:
+            - generic [ref=f3e103] [cursor=pointer]: 已执行 0
+            - generic [ref=f3e104] [cursor=pointer]: 未执行 1
+            - generic [ref=f3e105] [cursor=pointer]: 通过 0
+            - generic [ref=f3e106] [cursor=pointer]: 失败 0
+            - generic [ref=f3e107] [cursor=pointer]: 阻塞 0
+            - generic [ref=f3e108] [cursor=pointer]: 不适用 0
+          - generic [ref=f3e109]:
+            - textbox "搜索用例关键字" [ref=f3e111]
+            - generic [ref=f3e112]:
+              - button "AI 用例生成" [ref=f3e114]
+              - button "XMind结构展示" [ref=f3e116] [cursor=pointer]
+              - button "用例变更" [disabled] [ref=f3e118]
+              - group "切换用例" [ref=f3e119]:
+                - generic [ref=f3e120]: 用例切换：
+                - button "上一份" [ref=f3e121] [cursor=pointer]
+                - button "下一份" [ref=f3e122] [cursor=pointer]
+            - generic [ref=f3e123]:
+              - button "导出XMind" [ref=f3e124] [cursor=pointer]
+              - button "导出XMind（无结果）" [ref=f3e125] [cursor=pointer]
+        - generic [ref=f3e126]:
+          - generic [ref=f3e127]:
+            - generic [ref=f3e128]: 专注区：
+            - generic [ref=f3e129]: 同步展示【执行分配】中的专注区用例。
+          - generic [ref=f3e130]: 暂无专注用例
+    - main [ref=f3e132]:
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=f3e133]:
+        - heading "执行视图" [level=2] [ref=f3e134]
+        - generic [ref=f3e136]:
+          - generic [ref=f3e138]:
+            - generic [ref=f3e139] [cursor=pointer]:
+              - checkbox "用例复用" [ref=f3e140]
+              - generic [ref=f3e141]: 用例复用
+            - generic [ref=f3e142]: 开启后可为用例记录多条执行项
+          - generic [ref=f3e143]:
+            - generic [ref=f3e144]: 显示 1-1 / 1 条，每页 20 条
+            - generic [ref=f3e145]:
+              - button "上一页" [disabled] [ref=f3e146]
+              - generic [ref=f3e147]: 第 1 / 1 页
+              - button "下一页" [disabled] [ref=f3e148]
+              - generic [ref=f3e149]:
+                - text: 跳至
+                - spinbutton "跳至 页" [ref=f3e150]: "1"
+                - text: 页
+          - table [ref=f3e151]:
+            - rowgroup [ref=f3e165]:
+              - row [ref=f3e166]:
+                - columnheader [ref=f3e167]:
+                  - checkbox [ref=f3e168]
+                - columnheader "编号" [ref=f3e169]
+                - columnheader "模块" [ref=f3e170]
+                - columnheader "用例标题" [ref=f3e171]
+                - columnheader "优先级" [ref=f3e172]
+                - columnheader "前提条件" [ref=f3e173]
+                - columnheader "操作步骤" [ref=f3e174]
+                - columnheader "预期结果" [ref=f3e175]
+                - columnheader "实际结果" [ref=f3e176]
+                - columnheader "备注" [ref=f3e177]
+                - columnheader "缺陷链接" [ref=f3e178]
+                - columnheader "增删" [ref=f3e179]
+            - rowgroup [ref=f3e180]:
+              - row [ref=f3e181]:
+                - cell [ref=f3e182]:
+                  - checkbox [ref=f3e183]
+                - cell "1" [ref=f3e184]
+                - cell "B" [ref=f3e185]
+                - cell "用例B" [ref=f3e186]
+                - cell "P1" [ref=f3e188]
+                - cell "点击此处编辑" [ref=f3e190]
+                - cell "1" [ref=f3e192]
+                - cell "ok" [ref=f3e194]
+                - cell "未执行" [ref=f3e196]:
+                  - combobox [ref=f3e197]:
+                    - option "未执行" [selected]
+                    - option "通过"
+                    - option "失败"
+                    - option "阻塞"
+                    - option "不适用"
+                - cell [ref=f3e198]:
+                  - button "备注" [ref=f3e199] [cursor=pointer]
+                - cell [ref=f3e200]:
+                  - button "缺陷链接" [ref=f3e201] [cursor=pointer]
+                - cell [ref=f3e202]:
+                  - generic [ref=f3e203]:
+                    - button "−" [ref=f3e204] [cursor=pointer]
+                    - button "＋" [ref=f3e205] [cursor=pointer]
+          - generic [ref=f3e206]:
+            - generic [ref=f3e207]: 显示 1-1 / 1 条，每页 20 条
+            - generic [ref=f3e208]:
+              - button "上一页" [disabled] [ref=f3e209]
+              - generic [ref=f3e210]: 第 1 / 1 页
+              - button "下一页" [disabled] [ref=f3e211]
+              - generic [ref=f3e212]:
+                - text: 跳至
+                - spinbutton "跳至 页" [ref=f3e213]: "1"
+                - text: 页
+      - option "请选择版本" [selected]

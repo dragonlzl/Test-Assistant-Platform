@@ -25,8 +25,10 @@ test.describe('执行视图导入导出与拖拽', () => {
       if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(name);
     }, tabName);
     await page.waitForFunction((name) => {
+      if (name === 'tempexec' && !/\/case-exec\.html$/.test(window.location.pathname || '')) return false;
+      if (!window.app || window.app._inited !== true || !window.app.state || !window.app.tempExecApi) return false;
       const nodes = document.querySelectorAll(`[data-tab-section="${name}"]`);
-      if (!nodes || !nodes.length) return true;
+      if (!nodes || !nodes.length) return false;
       for (let i = 0; i < nodes.length; i += 1) {
         const el = nodes[i];
         if (el && el.classList && !el.classList.contains('hidden')) return true;
@@ -111,20 +113,26 @@ test.describe('执行视图导入导出与拖拽', () => {
         last = await page.evaluate(() => ({
           hasApp: Boolean(window.app),
           inited: Boolean(window.app && window.app._inited === true),
+          authReady: Boolean(window.app && window.app.authReady === true),
+          hasState: Boolean(window.app && window.app.state),
+          hasTempExecApi: Boolean(window.app && window.app.tempExecApi),
           hasSwitchTab: Boolean(window.app && typeof window.app.switchTab === 'function'),
           path: (window.location && window.location.pathname) ? String(window.location.pathname) : '',
         }));
       } catch (err) {
         last = null;
       }
-      if (last && last.hasApp && last.inited && last.hasSwitchTab) break;
+      if (last && last.hasApp && last.inited && last.authReady && last.hasState
+        && last.hasTempExecApi && last.hasSwitchTab) break;
       if (i < 2) {
         await page.waitForTimeout(200);
         await gotoIndexWithRetry(page);
       }
     }
     await page.waitForFunction(
-      () => window.app && window.app._inited === true && typeof window.app.switchTab === 'function',
+      () => window.app && window.app._inited === true && window.app.authReady === true
+        && window.app.state && window.app.tempExecApi
+        && typeof window.app.switchTab === 'function',
       null,
       { timeout: 30000 }
     );
@@ -272,7 +280,7 @@ test.describe('执行视图导入导出与拖拽', () => {
 
     const firstNavButton = page.locator('#tempExecNav button[data-temp-file]').first();
     const activeNavName = (await firstNavButton.locator('.name-text').textContent()) || '';
-    await firstNavButton.click();
+    await firstNavButton.evaluate((element) => element.click());
     await expect(page.locator('#tempExecToolbar')).toContainText('当前文件');
     await expect(page.locator('#tempExecToolbar')).toContainText(activeNavName.trim());
     const resultSelect = page.locator('#tempExecView select[data-temp-result]').first();

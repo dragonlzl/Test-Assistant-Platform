@@ -53,6 +53,18 @@ test.describe('操作记录-活跃度视图', () => {
     ];
     let opsCalls = 0;
 
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem('tap-ops-activity-view-v1', JSON.stringify({
+          userIds: [],
+          timeRange: 'all',
+          behaviors: [],
+          behaviorAll: true,
+          hasSelection: false,
+        }));
+      } catch (_) {}
+    });
+
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
       const pathName = url.pathname;

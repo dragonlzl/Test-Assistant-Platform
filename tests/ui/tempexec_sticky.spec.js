@@ -1,5 +1,23 @@
 const { test, expect } = require('@playwright/test');
 
+async function switchToTempExecPage(page) {
+  const navigation = page.waitForURL((url) => url.pathname.endsWith('/case-exec.html'), { timeout: 20000 });
+  await page.evaluate(() => {
+    if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab('tempexec');
+  }).catch((error) => {
+    if (!error || !/Execution context was destroyed/i.test(error.message || '')) throw error;
+  });
+  await navigation;
+  await page.waitForFunction(() => {
+    var app = window.app;
+    return Boolean(
+      app && app._inited === true && app.authReady === true && app.state
+      && app.state.activeTab === 'tempexec'
+      && app.tempExecApi && typeof app.tempExecApi.renderTempExecView === 'function'
+    );
+  }, null, { timeout: 20000 });
+}
+
 test.describe('执行视图粘顶布局', () => {
   test.beforeEach(async ({ page }) => {
     page.__promptAnswers = [];
@@ -38,11 +56,6 @@ test.describe('执行视图粘顶布局', () => {
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && window.app._inited === true);
     await page.evaluate(() => {
-      document.documentElement.style.overflowY = 'auto';
-      document.documentElement.style.overflowX = 'hidden';
-      document.body.style.overflow = 'visible';
-    });
-    await page.evaluate(() => {
       ['usecase-card-collapse-v1', 'usecase-temp-exec-v1', 'tempexec-focus-v1', 'tempexec-page-size'].forEach((key) => {
         window.localStorage.removeItem(key);
       });
@@ -50,8 +63,12 @@ test.describe('执行视图粘顶布局', () => {
   });
 
   test('功能导航与当前文件工具条保持粘顶', async ({ page }) => {
-    await page.click('[data-group="cases"]');
-    await page.click('[data-tab-btn="tempexec"]');
+    await switchToTempExecPage(page);
+    await page.evaluate(() => {
+      document.documentElement.style.overflowY = 'auto';
+      document.documentElement.style.overflowX = 'hidden';
+      document.body.style.overflow = 'visible';
+    });
     await page.evaluate(() => {
       window.app.state.requirementLabel = '粘顶导航需求';
       window.app.state.requirementLabelSource = 'ui-test';
