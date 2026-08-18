@@ -17,9 +17,9 @@ test.describe('用例库跨页跳转', () => {
     });
   });
 
-  test('AI 工作流页点击“用例库”应跳转并渲染', async ({ page }) => {
+  test('XMind 用例生成页点击“用例库”应跳转并渲染', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/ai-workflow.html?tab=auto');
+    await page.goto(base + '/ai-workflow.html?tab=casesgen');
     await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
 
     await page.click('[data-group="cases"]');

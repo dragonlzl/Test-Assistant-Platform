@@ -20,14 +20,14 @@ test.describe('顶部导航预加载', () => {
   test('用例库页加载时不显示默认流程导航', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-library.html?tab=case-archive', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#flowNav')).toHaveCount(0);
     await expect(page.locator('#caseArchiveHead')).toBeVisible();
   });
 
   test('执行总览加载时展示对应顶部导航', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html?tab=exec-overview', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#flowNav')).toHaveCount(0);
     await expect(page.locator('#execOverviewHead')).toBeVisible();
   });
 });

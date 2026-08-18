@@ -1974,7 +1974,7 @@
         if (!list || !list.length) return;
         workflowOptions.push({
           value: 'workflow:' + (entry.id || entry.name || ('wf-' + idx)),
-          label: stringifyCaseField(entry.name) || '功能流程导入用例',
+          label: stringifyCaseField(entry.name) || '已导入用例',
         });
       });
       var hasWorkflowCases = workflowOptions.length > 0;
@@ -3205,7 +3205,7 @@
         clearExplicitDbStorePayload(st);
       }
       if (caseGenDbStoreDrawerTitle) {
-        caseGenDbStoreDrawerTitle.textContent = (mode === 'append') ? '旧用例追加入库' : '新用例入库';
+        caseGenDbStoreDrawerTitle.textContent = (mode === 'append') ? '追加入库' : '新用例入库';
       }
       if (caseGenDbStoreStatus) setStatus(caseGenDbStoreStatus, '', '');
       if (caseGenDbStoreVersionSelect) {
@@ -5004,7 +5004,7 @@
         return file && Array.isArray(file.cases) && file.cases.length;
       });
       if (!hasWorkflowCases && !execCandidates.length) {
-        setStatus(caseGenStatus, '请先在“功能流程”或“用例执行”导入用例后再追加', 'warn');
+        setStatus(caseGenStatus, '请先导入已有用例后再追加', 'warn');
         return;
       }
       var targetValue = appendTargetSelect ? appendTargetSelect.value : '';
@@ -5083,12 +5083,12 @@
         return;
       }
       if (targetValue.indexOf('workflow:') !== 0) {
-        setStatus(caseGenStatus, '当前仅支持追加到功能流程已导入的用例', 'warn');
+        setStatus(caseGenStatus, '当前仅支持追加到已导入的用例', 'warn');
         return;
       }
       var targetWorkflow = workflowTargets.find(function(item) { return item.value === targetValue; });
       if (!targetWorkflow) {
-        setStatus(caseGenStatus, '未找到匹配的功能流程用例，请重新选择', 'warn');
+        setStatus(caseGenStatus, '未找到匹配的已导入用例，请重新选择', 'warn');
         renderAppendTargetOptions();
         return;
       }
@@ -5103,7 +5103,7 @@
         return;
       }
 
-      var targetWorkflowName = stringifyCaseField(targetWorkflow.entry && targetWorkflow.entry.name) || '功能流程导入用例';
+      var targetWorkflowName = stringifyCaseField(targetWorkflow.entry && targetWorkflow.entry.name) || '已导入用例';
       var confirmParts = ['将向【' + targetWorkflowName + '】追加 ' + additionInfoWorkflow.additions.length + ' 条新用例'];
       if (additionInfoWorkflow.moduleCount) confirmParts.push('涉及 ' + additionInfoWorkflow.moduleCount + ' 个模块');
       if (additionInfoWorkflow.duplicateCount) confirmParts.push('其余 ' + additionInfoWorkflow.duplicateCount + ' 条因标题重复将跳过');

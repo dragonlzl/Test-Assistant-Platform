@@ -1556,8 +1556,6 @@ async function openXmindCaseGenDrawer(page) {
     });
   }
   if (!drawerOpen) {
-    await page.click('#caseGenModulesTabBtn');
-    await expect(page.locator('#casegenModulesPanel')).toHaveClass(/is-active/);
     await page.click('#xmindCaseGenOpenBtn');
   }
   await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
@@ -2861,7 +2859,6 @@ test.describe('XMind 用例生成抽屉', () => {
     await gotoCasesgenWorkflow(page);
     await waitXmindModelAssigned(page, mockInfo.modelId);
 
-    await page.click('#caseGenModulesTabBtn');
     await page.click('#xmindCaseGenOpenBtn');
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(0);
@@ -2883,7 +2880,6 @@ test.describe('XMind 用例生成抽屉', () => {
     await gotoCasesgenWorkflow(page);
     await waitXmindModelAssigned(page, mockInfo.modelId);
 
-    await page.click('#caseGenModulesTabBtn');
     await page.click('#xmindCaseGenOpenBtn');
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
 
@@ -2971,460 +2967,6 @@ test.describe('XMind 用例生成抽屉', () => {
     await page.locator('#caseGenProgressList [data-casegen-workspace]').first().dispatchEvent('click');
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('侧栏摘要-A');
-  });
-
-  test('用例生成页会拆分旧流程模块区与 XMind 模块区，切换 XMind 页签不会覆盖旧流程模块', async ({ page }) => {
-    const token = 'xmind-module-mirror-tabs-token';
-    const user = { id: 80221, username: 'xmind-module-mirror-tabs' };
-    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
-
-    await gotoCasesgenWorkflow(page);
-    await waitXmindModelAssigned(page, mockInfo.modelId);
-    await openXmindCaseGenDrawer(page);
-
-    await createXmindWorkspaceByManualPrep(page, '模块镜像-A', '这是模块镜像 A 的需求描述', {
-      useExistingWorkspace: true,
-      completePrep: true,
-    });
-    await createXmindWorkspaceByManualPrep(page, '模块镜像-B', '这是模块镜像 B 的需求描述', {
-      completePrep: true,
-    });
-
-    const workspaceIds = await page.evaluate(() => {
-      var state = window.app && window.app.state ? window.app.state : null;
-      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
-      return host && Array.isArray(host.workspaceOrder) ? host.workspaceOrder.slice() : [];
-    });
-    expect(workspaceIds).toHaveLength(2);
-
-    await page.evaluate(() => {
-      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
-      if (api && typeof api.close === 'function') api.close();
-    });
-    await waitXmindDrawerClosedStable(page);
-
-    await page.evaluate(({ ids }) => {
-      var state = window.app && window.app.state ? window.app.state : null;
-      if (!state || !state.xmindCaseGen || !state.xmindCaseGen.workspaces) return;
-      var host = state.xmindCaseGen;
-      function buildCases(moduleTitle, caseTitle) {
-        return JSON.stringify([{
-          module: moduleTitle,
-          title: caseTitle,
-          priority: 'P1',
-          preconditions: moduleTitle + '前置条件',
-          steps: ['1、进入' + moduleTitle, '2、执行' + caseTitle],
-          expected: caseTitle + '执行成功',
-        }], null, 2);
-      }
-      function applyWorkspace(record, moduleId, moduleTitle, caseTitle) {
-        if (!record || !record.snapshot || !record.snapshot.shared) return;
-        record.snapshot.shared.caseGenModules = [{
-          id: moduleId,
-          title: moduleTitle,
-          module: moduleTitle,
-          key_scenarios: [moduleTitle + '主场景'],
-          test_points: [moduleTitle + '关键校验'],
-          coupled_modules: [],
-        }];
-        record.snapshot.shared.caseGenResults = {};
-        record.snapshot.shared.caseGenResults[moduleId] = buildCases(moduleTitle, caseTitle);
-        record.snapshot.shared.caseSelections = {};
-        record.snapshot.shared.caseGenSuggestions = {};
-        record.snapshot.shared.caseGenModuleStatus = {};
-        record.snapshot.shared.caseGenProgress = {};
-        record.snapshot.shared.caseGenTiming = {};
-        record.snapshot.shared.caseGenProgressNotice = {};
-      }
-      applyWorkspace(host.workspaces[ids[0]], 'mirror-mod-a', '镜像模块-A', '镜像用例-A');
-      applyWorkspace(host.workspaces[ids[1]], 'mirror-mod-b', '镜像模块-B', '镜像用例-B');
-      host.activeWorkspaceId = String(ids[1] || '');
-      state.requirementLabel = '旧流程需求-A';
-      state.requirementLabelSource = 'import';
-      state.lastRawImportName = '旧流程需求A.docx';
-      state.importedCases = [{
-        id: 'legacy-import-1',
-        name: '旧流程用例导入-A.json',
-        text: buildCases('旧流程模块-1', '旧流程用例-1'),
-        list: [{
-          module: '旧流程模块-1',
-          title: '旧流程用例-1',
-          priority: 'P1',
-          preconditions: '旧流程前置条件',
-          steps: ['1、进入旧流程页面', '2、执行旧流程操作'],
-          expected: '旧流程结果正确',
-        }],
-      }];
-      state.requirementMedia = {
-        docxImages: [],
-        pastedImages: [],
-        lastDocxImageCount: 0,
-        updatedAt: Date.now(),
-      };
-      state.caseGenLegacy = {
-        requirementLabel: '旧流程需求-A',
-        requirementLabelSource: 'import',
-        lastRawImportName: '旧流程需求A.docx',
-        rawText: '这里是旧流程需求原文',
-        caseText: buildCases('旧流程模块-1', '旧流程用例-1'),
-        importedCases: JSON.parse(JSON.stringify(state.importedCases || [])),
-        requirementMedia: JSON.parse(JSON.stringify(state.requirementMedia || {})),
-        modules: [{
-          id: 'legacy-mod-1',
-          title: '旧流程模块-1',
-          module: '旧流程模块-1',
-          key_scenarios: ['旧流程主场景'],
-          test_points: ['旧流程关键校验'],
-          coupled_modules: [],
-        }],
-        source: '旧流程拆分结果',
-        results: {
-          'legacy-mod-1': buildCases('旧流程模块-1', '旧流程用例-1'),
-        },
-        selections: {},
-        suggestions: {},
-        moduleStatus: {},
-        progress: {},
-        timing: {},
-        progressNotice: {},
-      };
-      state.caseGenModules = JSON.parse(JSON.stringify(host.workspaces[ids[1]].snapshot.shared.caseGenModules || []));
-      state.caseGenResults = JSON.parse(JSON.stringify(host.workspaces[ids[1]].snapshot.shared.caseGenResults || {}));
-      state.caseSelections = {};
-      state.caseGenSuggestions = {};
-      state.caseGenModuleStatus = {};
-      state.caseGenProgress = {};
-      state.caseGenTiming = {};
-      state.caseGenProgressNotice = {};
-      var rawTextEl = document.getElementById('rawText');
-      var fileNameEl = document.getElementById('fileName');
-      var caseTextEl = document.getElementById('caseText');
-      if (rawTextEl) rawTextEl.value = '这里是旧流程需求原文';
-      if (fileNameEl) fileNameEl.textContent = '旧流程需求A.docx';
-      if (caseTextEl) caseTextEl.value = buildCases('旧流程模块-1', '旧流程用例-1');
-      if (window.app && window.app.casesCoreApi) {
-        if (typeof window.app.casesCoreApi.renderImportedCaseList === 'function') {
-          window.app.casesCoreApi.renderImportedCaseList();
-        }
-        if (typeof window.app.casesCoreApi.syncCaseTextWithImports === 'function') {
-          window.app.casesCoreApi.syncCaseTextWithImports();
-        }
-      }
-    }, { ids: workspaceIds });
-
-    await clickElementById(page, 'caseGenLegacyModulesTabBtn');
-    await expect(page.locator('#casegenLegacyModulesPanel')).toHaveClass(/is-active/);
-    await expect(page.locator('#casesGenerationContainer')).toContainText('旧流程模块-1');
-    await expect(page.locator('#casesGenerationContainer')).toContainText('旧流程用例-1');
-    await expect(page.locator('#casesGenerationContainer')).not.toContainText('镜像模块-B');
-    await expect(page.locator('#caseFileList')).toContainText('旧流程用例导入-A.json');
-
-    await clickElementById(page, 'caseGenModulesTabBtn');
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace]')).toHaveCount(2);
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace]').first()).toContainText('模块镜像-A');
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace].active')).toContainText('模块镜像-B');
-    const mirrorActiveStyle = await page.evaluate(() => {
-      var active = document.querySelector('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace].active');
-      var inactive = document.querySelector('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace]:not(.active)');
-      if (!active || !inactive || typeof window.getComputedStyle !== 'function') return null;
-      var activeStyle = window.getComputedStyle(active);
-      var inactiveStyle = window.getComputedStyle(inactive);
-      return {
-        ariaCurrent: active.getAttribute('aria-current') || '',
-        activeBorderColor: String(activeStyle.borderColor || ''),
-        inactiveBorderColor: String(inactiveStyle.borderColor || ''),
-        activeBoxShadow: String(activeStyle.boxShadow || ''),
-        inactiveBoxShadow: String(inactiveStyle.boxShadow || ''),
-      };
-    });
-    expect(mirrorActiveStyle).toBeTruthy();
-    expect(mirrorActiveStyle.ariaCurrent).toBe('page');
-    expect(mirrorActiveStyle.activeBorderColor).not.toBe(mirrorActiveStyle.inactiveBorderColor);
-    expect(mirrorActiveStyle.activeBoxShadow).not.toBe(mirrorActiveStyle.inactiveBoxShadow);
-    await expect(page.locator('#caseGenXmindModulesContainer')).toContainText('镜像模块-B');
-    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
-
-    await page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace]').first().click();
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace].active')).toContainText('模块镜像-A');
-    await expect(page.locator('#caseGenXmindModulesContainer')).toContainText('镜像模块-A');
-    await expect(page.locator('#caseGenXmindModulesContainer')).not.toContainText('镜像模块-B');
-    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
-    await page.locator('#caseGenXmindModulesContainer [data-xmind-mirror-view]').first().click();
-    await expect(page.locator('#caseGenViewDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#caseGenViewDrawerTitle')).toContainText('用例视图 - 镜像模块-A');
-    await expect(page.locator('#caseGenViewDrawerBody')).toContainText('镜像用例-A');
-    await expect(page.locator('#caseGenViewDrawerBody')).toContainText('1、进入镜像模块-A');
-    await expect(page.locator('#caseGenViewDrawerBody')).not.toContainText('1、进入镜像模块-A / 2、执行镜像用例-A');
-    await page.click('#closeCaseGenViewDrawerBtn');
-    await expect(page.locator('#caseGenViewDrawer')).not.toHaveClass(/open/);
-
-    await page.locator('#caseGenXmindModulesContainer [data-open-xmind-workspace]').first().click();
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('模块镜像-A');
-    await waitForNodeText(page, '镜像模块-A');
-    await waitForNodeText(page, '镜像用例-A');
-    await expect(page.locator('#xmindCaseGenMindContainer')).not.toContainText('镜像模块-B');
-    await page.click('#closeXmindCaseGenDrawerBtn');
-    await waitXmindDrawerClosedStable(page);
-
-    await page.click('#xmindCaseGenOpenBtn');
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('模块镜像-A');
-    await waitForNodeText(page, '镜像模块-A');
-    await waitForNodeText(page, '镜像用例-A');
-    await page.click('#closeXmindCaseGenDrawerBtn');
-    await waitXmindDrawerClosedStable(page);
-    await page.waitForFunction(() => {
-      var state = window.app && window.app.state ? window.app.state : null;
-      return Boolean(
-        state
-        && state.lastRawImportName === '旧流程需求A.docx'
-        && state.requirementLabel === '旧流程需求-A'
-        && Array.isArray(state.importedCases)
-        && state.importedCases.length === 1
-      );
-    }, null, { timeout: 10000 });
-    await expect(page.locator('#caseFileList')).toContainText('旧流程用例导入-A.json');
-    const restoredLegacyContext = await page.evaluate(() => {
-      var state = window.app && window.app.state ? window.app.state : null;
-      var rawTextEl = document.getElementById('rawText');
-      var caseTextEl = document.getElementById('caseText');
-      return {
-        requirementLabel: state ? String(state.requirementLabel || '') : '',
-        lastRawImportName: state ? String(state.lastRawImportName || '') : '',
-        importedCount: state && Array.isArray(state.importedCases) ? state.importedCases.length : 0,
-        rawText: rawTextEl ? String(rawTextEl.value || '') : '',
-        caseText: caseTextEl ? String(caseTextEl.value || '') : '',
-      };
-    });
-    expect(restoredLegacyContext.requirementLabel).toBe('旧流程需求-A');
-    expect(restoredLegacyContext.lastRawImportName).toBe('旧流程需求A.docx');
-    expect(restoredLegacyContext.importedCount).toBe(1);
-    expect(restoredLegacyContext.rawText).toContain('旧流程需求原文');
-    expect(restoredLegacyContext.caseText).toContain('旧流程用例-1');
-
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') {
-        window.app.switchTab('auto');
-      }
-    });
-    await page.waitForFunction(() => {
-      return window.app && window.app.state && window.app.state.activeTab === 'auto';
-    }, null, { timeout: 10000 });
-    await expect(page.locator('section[data-section-id="auto-import"]')).toBeVisible();
-    const contextAfterLeavingCasesgen = await page.evaluate(() => {
-      var state = window.app && window.app.state ? window.app.state : null;
-      var rawTextEl = document.getElementById('rawText');
-      var caseTextEl = document.getElementById('caseText');
-      return {
-        requirementLabel: state ? String(state.requirementLabel || '') : '',
-        lastRawImportName: state ? String(state.lastRawImportName || '') : '',
-        importedCount: state && Array.isArray(state.importedCases) ? state.importedCases.length : 0,
-        rawText: rawTextEl ? String(rawTextEl.value || '') : '',
-        caseText: caseTextEl ? String(caseTextEl.value || '') : '',
-      };
-    });
-    expect(contextAfterLeavingCasesgen.requirementLabel).toBe('旧流程需求-A');
-    expect(contextAfterLeavingCasesgen.lastRawImportName).toBe('旧流程需求A.docx');
-    expect(contextAfterLeavingCasesgen.importedCount).toBe(1);
-    expect(contextAfterLeavingCasesgen.rawText).toContain('旧流程需求原文');
-    expect(contextAfterLeavingCasesgen.caseText).toContain('旧流程用例-1');
-
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') {
-        window.app.switchTab('casesgen');
-      }
-    });
-    await page.waitForFunction(() => {
-      return window.app && window.app.state && window.app.state.activeTab === 'casesgen';
-    }, null, { timeout: 10000 });
-    await page.waitForFunction(() => {
-      var state = window.app && window.app.state ? window.app.state : null;
-      return Boolean(
-        state
-        && state.lastRawImportName === '旧流程需求A.docx'
-        && state.requirementLabel === '旧流程需求-A'
-        && Array.isArray(state.importedCases)
-        && state.importedCases.length === 1
-      );
-    }, null, { timeout: 10000 });
-    await expect(page.locator('section[data-section-id="casesgen"]')).toBeVisible();
-    await expect(page.locator('#caseFileList')).toContainText('旧流程用例导入-A.json');
-  });
-
-  test('旧流程用例生成进行中时，打开或重开 XMind 不会清掉运行态', async ({ page }) => {
-    const token = 'xmind-legacy-running-guard-token';
-    const user = { id: 80224, username: 'xmind-legacy-running-guard' };
-    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
-
-    await gotoCasesgenWorkflow(page);
-    await waitXmindModelAssigned(page, mockInfo.modelId);
-    await openXmindCaseGenDrawer(page);
-
-    await createXmindWorkspaceByManualPrep(page, '运行态隔离-XMind', '这是用于验证旧流程运行态隔离的 XMind 需求', {
-      useExistingWorkspace: true,
-      completePrep: true,
-    });
-
-    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
-    await waitXmindDrawerClosedStable(page);
-
-    await page.evaluate(() => {
-      var state = window.app && window.app.state ? window.app.state : null;
-      if (!state || !state.xmindCaseGen || !state.xmindCaseGen.workspaces) return;
-      var host = state.xmindCaseGen;
-      var workspaceId = String(host.activeWorkspaceId || (host.workspaceOrder && host.workspaceOrder[0]) || '');
-      var record = workspaceId ? host.workspaces[workspaceId] : null;
-      function buildCases(moduleTitle, caseTitle) {
-        return JSON.stringify([{
-          module: moduleTitle,
-          title: caseTitle,
-          priority: 'P1',
-          preconditions: moduleTitle + '前置条件',
-          steps: ['1、进入' + moduleTitle, '2、执行' + caseTitle],
-          expected: caseTitle + '执行成功',
-        }], null, 2);
-      }
-      if (record && record.snapshot && record.snapshot.shared) {
-        record.snapshot.shared.caseGenModules = [{
-          id: 'xmind-running-guard-mod',
-          title: 'XMind镜像模块',
-          module: 'XMind镜像模块',
-          key_scenarios: ['XMind镜像主场景'],
-          test_points: ['XMind镜像关键校验'],
-          coupled_modules: [],
-        }];
-        record.snapshot.shared.caseGenResults = {
-          'xmind-running-guard-mod': buildCases('XMind镜像模块', 'XMind镜像用例'),
-        };
-        record.snapshot.shared.caseSelections = {};
-        record.snapshot.shared.caseGenSuggestions = {};
-        record.snapshot.shared.caseGenModuleStatus = {
-          'xmind-running-guard-mod': { text: '已生成 1 条用例', type: 'ok' },
-        };
-        record.snapshot.shared.caseGenProgress = {};
-        record.snapshot.shared.caseGenTiming = {};
-        record.snapshot.shared.caseGenProgressNotice = {};
-        record.snapshot.shared.caseGenSource = 'xmind-running-guard';
-      }
-      host.mirrorWorkspaceId = workspaceId;
-      state.caseGenLegacy = {
-        requirementLabel: '旧流程运行态需求',
-        requirementLabelSource: 'import',
-        lastRawImportName: 'legacy-running.docx',
-        rawText: '旧流程运行态需求正文',
-        caseText: '',
-        importedCases: [],
-        requirementMedia: {
-          docxImages: [],
-          pastedImages: [],
-          lastDocxImageCount: 0,
-          updatedAt: Date.now(),
-        },
-        modules: [{
-          id: 'legacy-running-mod',
-          title: '旧流程运行中模块',
-          module: '旧流程运行中模块',
-          key_scenarios: ['旧流程主场景'],
-          test_points: ['旧流程关键校验'],
-          coupled_modules: [],
-        }],
-        source: 'legacy-running-source',
-        results: {},
-        selections: {},
-        suggestions: {},
-        moduleStatus: {
-          'legacy-running-mod': { text: '正在生成【旧流程运行中模块】的测试用例...', type: '' },
-        },
-        progress: {},
-        timing: {},
-        progressNotice: {},
-        running: ['legacy-running-mod'],
-      };
-      state.caseGenModules = JSON.parse(JSON.stringify(state.caseGenLegacy.modules || []));
-      state.caseGenSource = 'legacy-running-source';
-      state.caseGenResults = {};
-      state.caseSelections = {};
-      state.caseGenSuggestions = {};
-      state.caseGenModuleStatus = {
-        'legacy-running-mod': { text: '正在生成【旧流程运行中模块】的测试用例...', type: '' },
-      };
-      state.caseGenProgress = {};
-      state.caseGenTiming = {};
-      state.caseGenProgressNotice = {};
-      state.caseGenSettings = state.caseGenSettings && typeof state.caseGenSettings === 'object'
-        ? state.caseGenSettings
-        : {};
-      state.caseGenSettings.activeTab = 'legacy-modules';
-      if (window.app && typeof window.app.setCaseModuleRunning === 'function') {
-        window.app.setCaseModuleRunning('legacy-running-mod', true);
-      } else {
-        state.caseGenRunning = new Set(['legacy-running-mod']);
-      }
-      if (window.app && window.app.casesGenApi) {
-        if (typeof window.app.casesGenApi.syncLegacyCaseGenState === 'function') {
-          window.app.casesGenApi.syncLegacyCaseGenState({ persist: false, force: true });
-        }
-        if (typeof window.app.casesGenApi.renderCaseGeneration === 'function') {
-          window.app.casesGenApi.renderCaseGeneration();
-        }
-      }
-    });
-
-    async function expectLegacyRunning(expectedActiveView) {
-      await clickElementById(page, 'caseGenLegacyModulesTabBtn');
-      await expect(page.locator('#casegenLegacyModulesPanel')).toHaveClass(/is-active/);
-      await expect(page.locator('[data-generate="legacy-running-mod"]')).toBeDisabled();
-      await expect(page.locator('[data-generate="legacy-running-mod"]')).toHaveText('生成中...');
-      const runningState = await page.evaluate(() => {
-        var state = window.app && window.app.state ? window.app.state : null;
-        var running = state && state.caseGenRunning instanceof Set ? Array.from(state.caseGenRunning) : [];
-        var legacy = state && state.caseGenLegacy && Array.isArray(state.caseGenLegacy.running)
-          ? state.caseGenLegacy.running.slice()
-          : [];
-        var activeView = state && state.caseGenSettings ? String(state.caseGenSettings.activeTab || '') : '';
-        return {
-          running: running,
-          legacy: legacy,
-          activeView: activeView,
-        };
-      });
-      expect(runningState.running).toContain('legacy-running-mod');
-      expect(runningState.legacy).toContain('legacy-running-mod');
-      expect(runningState.activeView).toBe(expectedActiveView || 'legacy-modules');
-    }
-
-    await expectLegacyRunning('legacy-modules');
-
-    await clickElementById(page, 'xmindCaseGenOpenBtn');
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('运行态隔离-XMind');
-    await waitForNodeText(page, 'XMind镜像模块');
-    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
-    await waitXmindDrawerClosedStable(page);
-    await expectLegacyRunning('legacy-modules');
-
-    await clickElementById(page, 'caseGenModulesTabBtn');
-    await expect(page.locator('#casegenModulesPanel')).toHaveClass(/is-active/);
-    await expect(page.locator('#caseGenXmindModulesContainer')).toContainText('XMind镜像模块');
-    await page.locator('#caseGenXmindModulesContainer [data-open-xmind-workspace]').first().click();
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('运行态隔离-XMind');
-    await waitForNodeText(page, 'XMind镜像模块');
-    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
-    await waitXmindDrawerClosedStable(page);
-    await expectLegacyRunning('legacy-modules');
-
-    await clickElementById(page, 'caseGenModulesTabBtn');
-    const progressCard = page.locator('#caseGenProgressList [data-casegen-workspace]').first();
-    await expect(progressCard).toContainText('运行态隔离-XMind');
-    await progressCard.click();
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('运行态隔离-XMind');
-    await waitForNodeText(page, 'XMind镜像模块');
-    await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
-    await waitXmindDrawerClosedStable(page);
-    await expectLegacyRunning('legacy-modules');
   });
 
   test('通过 XMind 页签切换或重开 workspace 时，测试用例导入状态会跟随当前 workspace 同步', async ({ page }) => {
@@ -3562,319 +3104,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#caseStatus')).toContainText('已导入 1 份');
   });
 
-  test('XMind 页签重置或删除后，模块区镜像页签会同步更新标题、状态和存在性', async ({ page }) => {
-    const token = 'xmind-module-mirror-sync-token';
-    const user = { id: 80222, username: 'xmind-module-mirror-sync' };
-    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
-
-    await gotoCasesgenWorkflow(page);
-    await waitXmindModelAssigned(page, mockInfo.modelId);
-    await openXmindCaseGenDrawer(page);
-
-    await createXmindWorkspaceByManualPrep(page, '同步页签-A', '这是同步页签 A 的需求描述', {
-      useExistingWorkspace: true,
-      completePrep: true,
-    });
-    await createXmindWorkspaceByManualPrep(page, '同步页签-B', '这是同步页签 B 的需求描述', {
-      completePrep: true,
-    });
-
-    const workspaceIds = await page.evaluate(() => {
-      var state = window.app && window.app.state ? window.app.state : null;
-      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
-      return host && Array.isArray(host.workspaceOrder) ? host.workspaceOrder.slice() : [];
-    });
-    expect(workspaceIds).toHaveLength(2);
-
-    await page.evaluate(() => {
-      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
-      if (!api || typeof api.close !== 'function') return;
-      api.close();
-    });
-    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
-
-    await page.click('#caseGenModulesTabBtn');
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace]')).toHaveCount(2);
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs')).toContainText('同步页签-A');
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs')).toContainText('同步页签-B');
-
-    await openXmindCaseGenDrawer(page);
-    await page.evaluate(() => {
-      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
-      if (!api || typeof api.resetAllState !== 'function') return false;
-      return api.resetAllState({
-        reason: 'test-mirror-sync-reset',
-        reopenPrepDialog: false,
-        toastText: '',
-      });
-    });
-    await page.evaluate(() => {
-      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
-      if (!api || typeof api.close !== 'function') return;
-      api.close();
-    });
-    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
-
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace]')).toHaveCount(2);
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs')).not.toContainText('同步页签-B');
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace].active')).toContainText('生成2');
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace].active')).toContainText('待准备');
-
-    await openXmindCaseGenDrawer(page);
-    await page.evaluate((workspaceId) => {
-      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
-      if (!workspaceId || !api || typeof api.closeWorkspace !== 'function') return false;
-      return api.closeWorkspace(String(workspaceId || ''), { skipConfirm: true });
-    }, workspaceIds[0]);
-    await page.evaluate(() => {
-      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
-      if (!api || typeof api.close !== 'function') return;
-      api.close();
-    });
-    await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
-
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace]')).toHaveCount(1);
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs')).not.toContainText('同步页签-A');
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs')).toContainText('生成2');
-  });
-
-  test('关闭抽屉后切换镜像页签只更新镜像选择，重新打开或走进度入口时不会串写其他 workspace 数据', async ({ page }) => {
-    const token = 'xmind-mirror-selection-isolation-token';
-    const user = { id: 80223, username: 'xmind-mirror-selection-isolation' };
-    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
-
-    await gotoCasesgenWorkflow(page);
-    await waitXmindModelAssigned(page, mockInfo.modelId);
-    await openXmindCaseGenDrawer(page);
-
-    await createXmindWorkspaceByManualPrep(page, '镜像隔离-A', '这是镜像隔离 A 的需求描述', {
-      useExistingWorkspace: true,
-      completePrep: true,
-    });
-    await createXmindWorkspaceByManualPrep(page, '镜像隔离-B', '这是镜像隔离 B 的需求描述', {
-      completePrep: true,
-    });
-
-    const workspaceIds = await page.evaluate(() => {
-      var state = window.app && window.app.state ? window.app.state : null;
-      var host = state && state.xmindCaseGen ? state.xmindCaseGen : null;
-      return host && Array.isArray(host.workspaceOrder) ? host.workspaceOrder.slice() : [];
-    });
-    expect(workspaceIds).toHaveLength(2);
-
-    await page.evaluate(({ ids }) => {
-      var app = window.app || {};
-      var state = app.state;
-      if (!state || !state.xmindCaseGen || !state.xmindCaseGen.workspaces) return false;
-      var host = state.xmindCaseGen;
-
-      function clone(value, fallback) {
-        try {
-          return JSON.parse(JSON.stringify(value));
-        } catch (_) {
-          return fallback;
-        }
-      }
-
-      function buildCases(moduleTitle, caseTitle) {
-        return JSON.stringify([{
-          module: moduleTitle,
-          title: caseTitle,
-          priority: 'P1',
-          preconditions: moduleTitle + '前置条件',
-          steps: ['1、进入' + moduleTitle, '2、执行' + caseTitle],
-          expected: caseTitle + '执行成功',
-        }], null, 2);
-      }
-
-      function applyWorkspace(record, workspaceTitle, moduleId, moduleTitle, caseTitle) {
-        if (!record) return;
-        record.name = workspaceTitle;
-        record.snapshot = record.snapshot && typeof record.snapshot === 'object' ? record.snapshot : {};
-        record.snapshot.shared = record.snapshot.shared && typeof record.snapshot.shared === 'object'
-          ? record.snapshot.shared
-          : {};
-        record.snapshot.xmind = record.snapshot.xmind && typeof record.snapshot.xmind === 'object'
-          ? record.snapshot.xmind
-          : {};
-        record.snapshot.shared.requirementLabel = workspaceTitle;
-        record.snapshot.shared.requirementLabelSource = 'workspace';
-        record.snapshot.shared.caseGenModules = [{
-          id: moduleId,
-          title: moduleTitle,
-          module: moduleTitle,
-          key_scenarios: [moduleTitle + '主场景'],
-          test_points: [moduleTitle + '关键校验'],
-          coupled_modules: [],
-        }];
-        record.snapshot.shared.caseGenResults = {};
-        record.snapshot.shared.caseGenResults[moduleId] = buildCases(moduleTitle, caseTitle);
-        record.snapshot.shared.caseSelections = {};
-        record.snapshot.shared.caseGenSuggestions = {};
-        record.snapshot.shared.caseGenModuleStatus = {};
-        record.snapshot.shared.caseGenProgress = {};
-        record.snapshot.shared.caseGenTiming = {};
-        record.snapshot.shared.caseGenProgressNotice = {};
-        record.snapshot.xmind.prep = record.snapshot.xmind.prep && typeof record.snapshot.xmind.prep === 'object'
-          ? record.snapshot.xmind.prep
-          : {};
-        record.snapshot.xmind.prep.requirementMode = 'manual';
-        record.snapshot.xmind.prep.manualRequirementLabel = workspaceTitle;
-        record.snapshot.xmind.prep.completed = true;
-      }
-
-      function applyLiveFromRecord(record) {
-        if (!record || !record.snapshot) return;
-        var shared = record.snapshot.shared && typeof record.snapshot.shared === 'object'
-          ? record.snapshot.shared
-          : {};
-        var xmind = record.snapshot.xmind && typeof record.snapshot.xmind === 'object'
-          ? record.snapshot.xmind
-          : {};
-        state.requirementLabel = String(shared.requirementLabel || '');
-        state.requirementLabelSource = String(shared.requirementLabelSource || '');
-        state.lastRawImportName = String(shared.lastRawImportName || '');
-        state.importedCases = clone(shared.importedCases, []);
-        state.caseGenModules = clone(shared.caseGenModules, []);
-        state.caseGenSource = String(shared.caseGenSource || '');
-        state.caseGenResults = clone(shared.caseGenResults, {});
-        state.caseSelections = clone(shared.caseSelections, {});
-        state.caseGenSuggestions = clone(shared.caseGenSuggestions, {});
-        state.caseGenModuleStatus = clone(shared.caseGenModuleStatus, {});
-        state.caseGenProgress = clone(shared.caseGenProgress, {});
-        state.caseGenTiming = clone(shared.caseGenTiming, {});
-        state.caseGenProgressNotice = clone(shared.caseGenProgressNotice, {});
-        state.caseGenSettings = clone(shared.caseGenSettings, state.caseGenSettings || {});
-        state.requirementMedia = clone(shared.requirementMedia, state.requirementMedia || {});
-        Object.keys(xmind).forEach(function(key) {
-          if (key === 'activeWorkspaceId' || key === 'mirrorWorkspaceId' || key === 'workspaceOrder' || key === 'workspaces' || key === 'nextWorkspaceSeq' || key === 'openButtonDotVisible') {
-            return;
-          }
-          state.xmindCaseGen[key] = clone(xmind[key], xmind[key]);
-        });
-      }
-
-      applyWorkspace(host.workspaces[ids[0]], '镜像隔离-A', 'mirror-guard-mod-a', '镜像模块-A', '镜像用例-A');
-      applyWorkspace(host.workspaces[ids[1]], '镜像隔离-B', 'mirror-guard-mod-b', '镜像模块-B', '镜像用例-B');
-      host.activeWorkspaceId = String(ids[0] || '');
-      host.mirrorWorkspaceId = String(ids[0] || '');
-      applyLiveFromRecord(host.workspaces[ids[0]]);
-      if (app.persistWorkflowStateNow && typeof app.persistWorkflowStateNow === 'function') {
-        app.persistWorkflowStateNow();
-      }
-      return true;
-    }, { ids: workspaceIds });
-
-    await page.evaluate(() => {
-      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
-      if (api && typeof api.close === 'function') api.close();
-    });
-    await waitXmindDrawerClosedStable(page);
-
-    await clickElementById(page, 'caseGenModulesTabBtn');
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace].active')).toContainText('镜像隔离-A');
-
-    await page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace]').nth(1).click();
-    await expect(page.locator('#caseGenWorkspaceMirrorTabs [data-casegen-module-workspace].active')).toContainText('镜像隔离-B');
-    await expect(page.locator('#caseGenXmindModulesContainer')).toContainText('镜像模块-B');
-    await expect(page.locator('#caseGenXmindModulesContainer')).not.toContainText('镜像模块-A');
-
-    const selectionState = await page.evaluate(() => {
-      var host = window.app && window.app.state ? window.app.state.xmindCaseGen : null;
-      return host ? {
-        activeWorkspaceId: String(host.activeWorkspaceId || ''),
-        mirrorWorkspaceId: String(host.mirrorWorkspaceId || ''),
-      } : null;
-    });
-    expect(selectionState.activeWorkspaceId).toBe(workspaceIds[0]);
-    expect(selectionState.mirrorWorkspaceId).toBe(workspaceIds[1]);
-
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.persistWorkflowStateNow === 'function') {
-        window.app.persistWorkflowStateNow();
-      }
-    });
-
-    const snapshotSummary = await page.evaluate(({ ids }) => {
-      var host = window.app && window.app.state ? window.app.state.xmindCaseGen : null;
-      if (!host || !host.workspaces) return null;
-
-      function parseTitles(rawValue) {
-        try {
-          var list = JSON.parse(String(rawValue || '[]'));
-          return Array.isArray(list) ? list.map(function(item) { return String(item && item.title ? item.title : ''); }).filter(Boolean) : [];
-        } catch (_) {
-          return [];
-        }
-      }
-
-      function pick(id) {
-        var record = host.workspaces[id];
-        var shared = record && record.snapshot && record.snapshot.shared ? record.snapshot.shared : {};
-        return {
-          title: String(record && record.name ? record.name : ''),
-          modules: Array.isArray(shared.caseGenModules)
-            ? shared.caseGenModules.map(function(item) { return String(item && (item.title || item.module || '') || ''); }).filter(Boolean)
-            : [],
-          cases: Object.keys(shared.caseGenResults || {}).reduce(function(result, moduleId) {
-            return result.concat(parseTitles(shared.caseGenResults[moduleId]));
-          }, []),
-        };
-      }
-
-      return {
-        first: pick(ids[0]),
-        second: pick(ids[1]),
-      };
-    }, { ids: workspaceIds });
-    expect(snapshotSummary.first).toEqual({
-      title: '镜像隔离-A',
-      modules: ['镜像模块-A'],
-      cases: ['镜像用例-A'],
-    });
-    expect(snapshotSummary.second).toEqual({
-      title: '镜像隔离-B',
-      modules: ['镜像模块-B'],
-      cases: ['镜像用例-B'],
-    });
-
-    await page.click('#xmindCaseGenOpenBtn');
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('镜像隔离-B');
-    await waitForNodeText(page, '镜像模块-B');
-    await waitForNodeText(page, '镜像用例-B');
-    await waitForNodeTextAbsent(page, '镜像模块-A');
-
-    await page.evaluate(() => {
-      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
-      if (api && typeof api.close === 'function') api.close();
-    });
-    await waitXmindDrawerClosedStable(page);
-
-    const progressCards = page.locator('#caseGenProgressList [data-casegen-workspace]');
-    await expect(progressCards).toHaveCount(2);
-    await progressCards.first().click();
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('镜像隔离-A');
-    await waitForNodeText(page, '镜像模块-A');
-    await waitForNodeText(page, '镜像用例-A');
-    await waitForNodeTextAbsent(page, '镜像模块-B');
-
-    await page.evaluate(() => {
-      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
-      if (api && typeof api.close === 'function') api.close();
-    });
-    await waitXmindDrawerClosedStable(page);
-
-    await progressCards.nth(1).click();
-    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('镜像隔离-B');
-    await waitForNodeText(page, '镜像模块-B');
-    await waitForNodeText(page, '镜像用例-B');
-    await waitForNodeTextAbsent(page, '镜像模块-A');
-  });
-
-  test('新建页签后若直接关闭前置准备，仍保留新页签的空白初始态，不会继承上一个页签名称', async ({ page }) => {
+ test('新建页签后若直接关闭前置准备，仍保留新页签的空白初始态，不会继承上一个页签名称', async ({ page }) => {
     const token = 'xmind-tabs-blank-create-token';
     const user = { id: 8023, username: 'tabs-blank-create' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
@@ -4410,7 +3640,6 @@ test.describe('XMind 用例生成抽屉', () => {
       return Boolean(drawer && drawer.classList && drawer.classList.contains('open'));
     });
     if (!drawerOpen) {
-      await page.click('#caseGenModulesTabBtn');
       await page.click('#xmindCaseGenOpenBtn');
     }
 
@@ -4432,7 +3661,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(String(hostState.activeWorkspaceId || '')).toBe(String(hostState.workspaceOrder[1] || ''));
   });
 
-  test('触发一次超大工作流缓存自动清理后，重新完成前置准备再刷新页面不会卡死', async ({ page }) => {
+  test('触发一次超大生成快照自动清理后，重新完成前置准备再刷新页面不会卡死', async ({ page }) => {
     const token = 'xmind-oversize-recovery-refresh-token';
     const user = { id: 8123, username: 'xmind-oversize-recovery' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
@@ -4494,7 +3723,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(/error/i.test(String(restoreState.debugPhase || ''))).toBe(false);
   });
 
-  test('触发一次超大工作流缓存自动清理后，重新导入需求并完成前置准备再刷新页面不会卡死', async ({ page }) => {
+  test('触发一次超大生成快照自动清理后，重新导入需求并完成前置准备再刷新页面不会卡死', async ({ page }) => {
     const token = 'xmind-oversize-recovery-doc-refresh-token';
     const user = { id: 8124, username: 'xmind-oversize-recovery-doc' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
@@ -4572,7 +3801,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(restoreState.requirementMode).toBe('document');
   });
 
-  test('超大工作流缓存被清理时，旧的 XMind 任务缓存不会复活已删除的旧页签', async ({ page }) => {
+  test('超大生成快照被清理时，旧的 XMind 任务缓存不会复活已删除的旧页签', async ({ page }) => {
     const token = 'xmind-oversize-stale-task-token';
     const user = { id: 8125, username: 'xmind-oversize-stale-task' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
@@ -5216,6 +4445,32 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(afterMap.some((item) => item.id === String(targetBefore.id || '')), JSON.stringify(afterState)).toBe(false);
   });
 
+  test('前置准备 step1 点击需求导入框可选择并读取文件', async ({ page }) => {
+    const token = 'token-xmind-prep-document-picker';
+    const user = { id: 113, username: 'demo_user_113', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+
+    const chooserPromise = page.waitForEvent('filechooser');
+    await page.click('#xmindCaseGenPrepRequirementDropzone');
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+      name: 'xmind-picker-requirement.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('需求正文：点击导入区域后应打开文件选择器并读取内容。', 'utf8'),
+    });
+
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('xmind-picker-requirement.txt');
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('已导入');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+    await expect.poll(async () => page.locator('#rawText').inputValue()).toContain('点击导入区域后应打开文件选择器');
+  });
+
   test('前置准备 step1 的需求文档模式复用拖拽上传样式，并在导入后允许下一步', async ({ page }) => {
     const token = 'token-xmind-prep-document-zone';
     const user = { id: 11, username: 'demo_user_11', role: 'user', level: 'member' };
@@ -5329,7 +4584,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
   });
 
-  test('前置准备 step2 的已有用例导入复用拖拽上传样式，并在导入后允许下一步', async ({ page }) => {
+  test('前置准备 step2 的已有用例导入保留上传样式，并支持点击选择文件', async ({ page }) => {
     const token = 'token-xmind-prep-cases-zone';
     const user = { id: 12, username: 'demo_user_12', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
@@ -5384,39 +4639,20 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-action="select-cases-library"]')).toBeVisible();
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
 
-    await page.evaluate((payload) => {
-      var zone = document.getElementById('xmindCaseGenPrepCasesDropzone');
-      if (!zone || typeof DataTransfer === 'undefined' || typeof File === 'undefined') return;
-      var dt = new DataTransfer();
-      dt.items.add(new File([payload.text], payload.name, { type: 'application/json' }));
-      function dispatch(type) {
-        var evt = null;
-        if (typeof Event === 'function') {
-          evt = new Event(type, { bubbles: true, cancelable: true });
-        } else if (document && document.createEvent) {
-          evt = document.createEvent('Event');
-          evt.initEvent(type, true, true);
-        }
-        if (!evt) return;
-        try {
-          Object.defineProperty(evt, 'dataTransfer', { value: dt });
-        } catch (_) {
-          evt.dataTransfer = dt;
-        }
-        zone.dispatchEvent(evt);
-      }
-      dispatch('dragover');
-      dispatch('drop');
-    }, {
+    const casesChooserPromise = page.waitForEvent('filechooser');
+    await page.click('#xmindCaseGenPrepCasesDropzone');
+    const casesChooser = await casesChooserPromise;
+    await casesChooser.setFiles({
       name: 'xmind-step2-cases.json',
-      text: JSON.stringify([{
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify([{
         module: '登录模块',
         title: '登录成功校验',
         priority: 'P1',
         preconditions: '账号已存在',
         steps: ['1、进入登录页', '2、输入账号密码并提交'],
         expected: '登录成功',
-      }]),
+      }]), 'utf8'),
     });
 
     await page.waitForFunction(() => {
@@ -5428,7 +4664,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
   });
 
-  test('XMind 入口与页签并排显示，后台完成后按钮显示小红点，点开后消失', async ({ page }) => {
+  test('XMind 入口独立居中显示，后台完成后按钮显示小红点，点开后消失', async ({ page }) => {
     const token = 'token-xmind-open-entry-dot';
     const user = { id: 14, username: 'demo_user_14', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
@@ -5437,23 +4673,37 @@ test.describe('XMind 用例生成抽屉', () => {
     await waitXmindModelAssigned(page, mockInfo.modelId);
     await installXmindModelStub(page, 260);
 
-    const tabbarInfo = await page.evaluate(() => {
-      var tabbar = document.querySelector('.casegen-tabbar');
-      var children = tabbar ? Array.prototype.map.call(tabbar.children || [], function(node) {
-        return node && node.id ? String(node.id) : '';
-      }).filter(Boolean) : [];
+    const entryInfo = await page.evaluate(() => {
+      var entry = document.querySelector('[data-section-id="casesgen"]');
+      var content = entry ? entry.querySelector('.xmind-casegen-entry-content') : null;
       var btn = document.getElementById('xmindCaseGenOpenBtn');
+      var title = content ? content.querySelector('h2') : null;
+      var contentStyle = content ? window.getComputedStyle(content) : null;
+      var buttonStyle = btn ? window.getComputedStyle(btn) : null;
+      var titleRect = title ? title.getBoundingClientRect() : null;
+      var buttonRect = btn ? btn.getBoundingClientRect() : null;
       return {
-        childIds: children,
         className: btn ? String(btn.className || '') : '',
-        insideTabbar: Boolean(tabbar && btn && tabbar.contains(btn)),
-        insideLegacyActions: Boolean(btn && btn.closest && btn.closest('.casegen-tabbar-actions')),
+        hasLegacyTabClass: Boolean(btn && btn.classList && btn.classList.contains('casegen-tab')),
+        insideEntry: Boolean(content && btn && content.contains(btn)),
+        mirrorCount: document.querySelectorAll('#caseGenWorkspaceMirrorSection, #caseGenWorkspaceMirrorTabs, #caseGenXmindModulesContainer').length,
+        flexDirection: contentStyle ? contentStyle.flexDirection : '',
+        alignItems: contentStyle ? contentStyle.alignItems : '',
+        borderRadius: buttonStyle ? buttonStyle.borderRadius : '',
+        centerDelta: titleRect && buttonRect
+          ? Math.abs((titleRect.left + titleRect.width / 2) - (buttonRect.left + buttonRect.width / 2))
+          : 999,
       };
     });
-    expect(tabbarInfo.insideTabbar).toBeTruthy();
-    expect(tabbarInfo.insideLegacyActions).toBeFalsy();
-    expect(tabbarInfo.className).toContain('casegen-tab');
-    expect(tabbarInfo.className).toContain('casegen-tab-launcher');
+    expect(entryInfo.insideEntry).toBeTruthy();
+    expect(entryInfo.mirrorCount).toBe(0);
+    expect(entryInfo.flexDirection).toBe('column');
+    expect(entryInfo.alignItems).toBe('center');
+    expect(entryInfo.borderRadius).toBe('6px');
+    expect(entryInfo.centerDelta).toBeLessThan(2);
+    expect(entryInfo.className).toContain('xmind-casegen-entry-button');
+    expect(entryInfo.className).toContain('casegen-tab-launcher');
+    expect(entryInfo.hasLegacyTabClass).toBeFalsy();
 
     await seedDocumentRequirement(page, {
       text: '需求：后台完成后，XMind 入口按钮需要出现未读提示。',
@@ -6318,7 +5568,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(textBlocks.join('\n')).not.toContain('第一次生成，附带图片上下文');
   });
 
-  test('重置前置准备后重新导入需求，不应再被旧工作流数据触发二次确认导入', async ({ page }) => {
+  test('重置前置准备后重新导入需求不会再次触发确认', async ({ page }) => {
     const token = 'token-xmind-prep-reset-no-second-import-confirm';
     const user = { id: 104, username: 'demo_user_104', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
@@ -6332,11 +5582,6 @@ test.describe('XMind 用例生成抽屉', () => {
           window.__xmindPrepResetConfirmPayloads.push(payload || null);
           return Promise.resolve({ ok: true });
         };
-      }
-      var cleanedTextEl = document.getElementById('cleanedText');
-      if (cleanedTextEl) {
-        cleanedTextEl.value = '历史清洗结果：这里模拟页面中仍残留其他工作流数据。';
-        cleanedTextEl.dispatchEvent(new Event('input', { bubbles: true }));
       }
     });
 
@@ -6383,11 +5628,6 @@ test.describe('XMind 用例生成抽屉', () => {
           window.__xmindPrepResetConfirmPayloads.push(payload || null);
           return Promise.resolve({ ok: true });
         };
-      }
-      var cleanedTextEl = document.getElementById('cleanedText');
-      if (cleanedTextEl) {
-        cleanedTextEl.value = '历史清洗结果：用于模拟 reset 前页面仍有共享工作流数据。';
-        cleanedTextEl.dispatchEvent(new Event('input', { bubbles: true }));
       }
     });
 
@@ -6449,11 +5689,6 @@ test.describe('XMind 用例生成抽屉', () => {
           window.__xmindPrepResetConfirmPayloads.push(payload || null);
           return Promise.resolve({ ok: true });
         };
-      }
-      var splitResultEl = document.getElementById('splitResult');
-      if (splitResultEl) {
-        splitResultEl.value = '历史模块拆分结果：用于模拟 reset 前页面仍有共享工作流数据。';
-        splitResultEl.dispatchEvent(new Event('input', { bubbles: true }));
       }
     });
 
@@ -8107,21 +7342,6 @@ test.describe('XMind 用例生成抽屉', () => {
     });
     await clickElementById(page, 'closeXmindCaseGenDrawerBtn');
     await waitXmindDrawerClosedStable(page);
-    await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
-      modules: 2,
-      cases: 2,
-    });
-    await expect(page.locator('#caseGenXmindModulesContainer')).toContainText('登录成功校验');
-    await expect(page.locator('#caseGenXmindModulesContainer')).not.toContainText('登录成功冗余校验');
-    await expect(page.locator('#caseGenXmindModulesContainer')).not.toContainText('登录失败冗余校验');
-    await clickElementById(page, 'caseGenSettingsTabBtn');
-    await expect(page.locator('#casegenSettingsPanel')).toHaveClass(/is-active/);
-    await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
-      modules: 2,
-      cases: 2,
-    });
-    await clickElementById(page, 'caseGenModulesTabBtn');
-    await expect(page.locator('#casegenModulesPanel')).toHaveClass(/is-active/);
     await expect.poll(async () => await readActiveXmindWorkspaceProgress(page)).toMatchObject({
       modules: 2,
       cases: 2,
@@ -11389,7 +10609,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#caseGenDbStoreDrawerTitle')).toContainText('新用例入库');
   });
 
-  test('基线来自用例库选择时，工具栏保存入库会进入旧用例追加入库抽屉并预选目标用例', async ({ page }) => {
+  test('基线来自用例库选择时，工具栏保存入库会进入追加入库抽屉并预选目标用例', async ({ page }) => {
     const token = 'token-xmind-store-append';
     const user = { id: 47, username: 'demo_user_47', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
@@ -11459,7 +10679,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await clickElementById(page, 'xmindCaseGenStoreBtn');
 
     await expect(page.locator('#caseGenDbStoreDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#caseGenDbStoreDrawerTitle')).toContainText('旧用例追加入库');
+    await expect(page.locator('#caseGenDbStoreDrawerTitle')).toContainText('追加入库');
     await expect.poll(async () => {
       return await page.$eval('#caseGenDbStoreProjectSelect', (el) => String(el.value || ''));
     }).toBe('1');
@@ -11639,7 +10859,6 @@ test.describe('XMind 用例生成抽屉', () => {
       return Boolean(el && el.classList && el.classList.contains('open'));
     });
     if (!drawerOpenAfterReload) {
-      await page.click('#caseGenModulesTabBtn');
       await page.waitForTimeout(320);
       const drawerOpenedDuringRestore = await page.locator('#xmindCaseGenDrawer').evaluate((el) => {
         return Boolean(el && el.classList && el.classList.contains('open'));
@@ -12289,7 +11508,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
   });
 
-  test('两个 XMind 页签后台生成全量用例时，即使关闭抽屉并切回旧流程视图，也会各自保留独立结果', async ({ page }) => {
+  test('两个 XMind 页签后台生成全量用例时，即使关闭抽屉也会各自保留独立结果', async ({ page }) => {
     const token = 'token-xmind-background-two-workspaces-complete';
     const user = { id: 308, username: 'demo_user_background_two_workspaces_complete', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
@@ -12487,7 +11706,6 @@ test.describe('XMind 用例生成抽屉', () => {
       if (api && typeof api.close === 'function') api.close();
     });
     await waitXmindDrawerClosedStable(page);
-    await clickElementById(page, 'caseGenLegacyModulesTabBtn');
     const progressCardsBeforeComplete = page.locator('#caseGenProgressList [data-casegen-workspace]');
     await expect(progressCardsBeforeComplete).toHaveCount(2);
     var progressWorkspaceIdBeforeComplete = await progressCardsBeforeComplete.first().getAttribute('data-casegen-workspace');

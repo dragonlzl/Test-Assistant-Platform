@@ -239,7 +239,7 @@ test.describe('执行总览页（DB 接口接入）', () => {
     await page.click('[data-group-menu="cases"] [data-tab-btn="exec-overview"]');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('exec-overview'); });
 
-    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#flowNav')).toHaveCount(0);
     await expect(page.locator('#execOverviewHead')).toBeVisible();
     await expect(page.locator('section[data-tab-section="exec-overview"]')).toBeVisible();
     await expect(page.locator('#execOverviewNavProjects .nav-entry-card')).toHaveCount(2);

@@ -213,7 +213,7 @@ test.describe('主题设置', () => {
 
     await page.waitForSelector('#tempExecPageSizeInput');
     await page.waitForSelector('#themeSelect');
-    await page.waitForSelector('#pageGuideSelectAll');
+    await page.waitForSelector('input[data-temp-exec-col="module"]');
     await page.waitForSelector('.project-sort-card .name');
 
     const styles = await page.evaluate(() => {
@@ -230,7 +230,7 @@ test.describe('主题设置', () => {
       return {
         pageSize: pickStyle('#tempExecPageSizeInput'),
         themeSelect: pickStyle('#themeSelect'),
-        checkbox: pickStyle('#pageGuideSelectAll'),
+        checkbox: pickStyle('input[data-temp-exec-col="module"]'),
         projectName: pickStyle('.project-sort-card .name'),
       };
     });

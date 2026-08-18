@@ -53,7 +53,7 @@ async function waitForSettingsSectionTop(page, target) {
 }
 
 test.describe('设置页顶部导航', () => {
-  test('设置导航替换流程导航并支持定位', async ({ page }) => {
+  test('设置导航只展示保留设置并支持定位', async ({ page }) => {
     await setupRoutes(page);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(base + '/index.html');
@@ -61,13 +61,11 @@ test.describe('设置页顶部导航', () => {
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
 
-    await expect(page.locator('#flowNav')).toHaveClass(/hidden/);
+    await expect(page.locator('#flowNav')).toHaveCount(0);
     await expect(page.locator('#settingsHead')).toBeVisible();
+    await expect(page.locator('#settingsNavFeishuBtn')).toHaveCount(0);
 
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.click('#settingsNavFeishuBtn');
-    await waitForSettingsSectionTop(page, 'feishu');
-
     await page.click('#settingsNavColumnsBtn');
     await waitForSettingsSectionTop(page, 'tempexec-columns');
 

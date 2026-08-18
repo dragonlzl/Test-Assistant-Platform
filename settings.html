@@ -78,7 +78,11 @@
         query[key] = value;
       });
     }
-    var urlTab = query.tab ? String(query.tab || '') : '';
+    function normalizeTab(tab) {
+      var name = tab ? String(tab || '') : '';
+      return name === 'auto' || name === 'clean' || name === 'xmind-casegen' ? 'casesgen' : name;
+    }
+    var urlTab = normalizeTab(query.tab);
     var path = window && window.location ? window.location.pathname || '' : '';
     var file = '';
     if (path) {
@@ -95,7 +99,7 @@
     else if (file == 'index.html' || !file) page = 'index';
     if (!page) page = 'index';
     var allowMap = {
-      'ai-workflow': ['auto', 'clean', 'casesgen'],
+      'ai-workflow': ['casesgen'],
       'ai-tools': ['assign', 'models'],
       'case-exec': ['tempexec', 'exec-overview'],
       'case-library': ['case-library', 'case-archive'],
@@ -103,13 +107,13 @@
       settings: ['settings']
     };
     var defaultMap = {
-      'ai-workflow': 'auto',
+      'ai-workflow': 'casesgen',
       'ai-tools': 'assign',
       'case-exec': 'tempexec',
       'case-library': 'case-library',
       admin: 'project-admin',
       settings: 'settings',
-      index: 'auto'
+      index: 'casesgen'
     };
     function isAllowed(tab) {
       if (!tab) return false;
@@ -123,7 +127,7 @@
       var saved = '';
       try {
         if (typeof sessionStorage != 'undefined') {
-          saved = sessionStorage.getItem('usecase-active-tab') || '';
+          saved = normalizeTab(sessionStorage.getItem('usecase-active-tab') || '');
         }
       } catch (err) {
         saved = '';
@@ -151,7 +155,7 @@
         if (valid && isAllowed(saved)) candidate = saved;
       }
     }
-    if (!candidate) candidate = defaultMap[page] || 'auto';
+    if (!candidate) candidate = defaultMap[page] || 'casesgen';
     root.setAttribute('data-preload-nav', '1');
     root.setAttribute('data-init-tab', candidate);
   } catch (err) {
@@ -175,55 +179,14 @@
 </div>
 <div class="sidebar-header">
 <h1>用例助手</h1>
-<div class="sidebar-header-actions">
-<button class="help-pill" id="pageGuideTrigger" type="button">
-<span class="icon">?</span>
-<span>页面说明</span>
-</button>
-<button class="guide-pill" id="flowGuideTrigger" type="button">
-<span class="icon">G</span>
-<span>功能引导</span>
-</button>
-</div>
-</div>
-<div class="path-panel" id="currentPath">
-  <div class="path-title">
-    <span class="path-title-label">页面路径</span>
-  </div>
-  <div class="path-items" id="currentPathText"></div>
 </div>
 <nav class="tabs vertical">
 <div class="tab-group">
 <button class="tab-group-btn" data-group="ai">
   <span class="tab-group-label">AI 功能</span>
-  <span class="ai-flow-compact hidden" id="autoFlowCompact" aria-hidden="true">
-    <span class="step active no-reason" data-target="import"><span class="badge">1</span><span class="step-label">导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="review"><span class="badge">2</span><span class="step-label">评审</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="clean"><span class="badge">3</span><span class="step-label">清洗</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="compare"><span class="badge">4</span><span class="step-label">对比完整性</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="split"><span class="badge">5</span><span class="step-label">拆分</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="cases-upload"><span class="badge">6</span><span class="step-label">用例导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="cases"><span class="badge">7</span><span class="step-label">覆盖对比</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-  </span>
 </button>
 <div class="tab-submenu hidden" data-group-menu="ai">
-<button class="active ai-flow-submenu-btn" data-tab-btn="auto">
-  <span class="ai-flow-substep no-reason" data-flow-slot="auto">
-    <span class="badge">1</span>
-    <span class="step-label">导入</span>
-    <span class="step-status" data-status="pending" aria-hidden="true"></span>
-  </span>
-  <span class="tab-submenu-label">一键执行</span>
-</button>
-<button class="ai-flow-submenu-btn" data-tab-btn="clean">
-  <span class="ai-flow-substep no-reason" data-flow-slot="clean">
-    <span class="badge">1</span>
-    <span class="step-label">导入</span>
-    <span class="step-status" data-status="pending" aria-hidden="true"></span>
-  </span>
-  <span class="tab-submenu-label">功能流程</span>
-</button>
-<button data-tab-btn="casesgen">用例生成</button>
+<button data-tab-btn="casesgen">XMind 用例生成</button>
 <button data-tab-btn="assign">功能指派</button>
 <button data-tab-btn="models">模型管理</button>
 </div>
@@ -252,8 +215,6 @@
 </div>
 </div>
 </nav>
-<button class="scroll-top-btn" type="button" id="scrollTopBtn">回到顶部</button>
-<button class="scroll-top-btn" type="button" id="scrollBottomBtn">跳到底部</button>
 <div class="sidebar-tabs" id="sidebarTabs">
 <div class="sidebar-tab-bar" id="sidebarTabBar">
 <button class="sidebar-tab is-active" type="button" id="sidebarTabCasegen" data-sidebar-tab="casegen">
@@ -299,25 +260,6 @@ xmind用例生成进度
 </div>
 </aside>
 <div class="content-shell">
-  <div class="flow" id="flowNav">
-    <div class="flow-title">一键执行步骤</div>
-    <div class="flow-steps">
-      <div class="step active" data-target="import"><span class="badge">1</span><span class="step-label">导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="review"><span class="badge">2</span><span class="step-label">评审</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="clean"><span class="badge">3</span><span class="step-label">清洗</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="compare"><span class="badge">4</span><span class="step-label">对比完整性</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="split"><span class="badge">5</span><span class="step-label">拆分</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="cases-upload"><span class="badge">6</span><span class="step-label">用例导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="cases"><span class="badge">7</span><span class="step-label">覆盖对比</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-    </div>
-  </div>
-
 	
 	
   
@@ -328,19 +270,6 @@ xmind用例生成进度
       <div class="flow-title">设置导航</div>
       <p class="hint" style="margin:0 0 6px;">设置项入口汇总于此，点击卡片快速定位。</p>
       <div class="nav-entry-grid settings-nav-grid">
-        <button class="nav-entry-card nav-entry-import" id="settingsNavFeishuBtn" type="button" data-settings-target="feishu">
-          <span class="nav-entry-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-              <path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-4 3v-3H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path>
-              <path d="M8 9h8"></path>
-              <path d="M8 12h5"></path>
-            </svg>
-          </span>
-          <span class="nav-entry-text">
-            <span class="nav-entry-title">飞书通知配置</span>
-            <span class="nav-entry-desc">配置机器人与提醒对象</span>
-          </span>
-        </button>
         <button class="nav-entry-card nav-entry-view" id="settingsNavColumnsBtn" type="button" data-settings-target="tempexec-columns">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
@@ -372,7 +301,7 @@ xmind用例生成进度
           </span>
           <span class="nav-entry-text">
             <span class="nav-entry-title">通用设置</span>
-            <span class="nav-entry-desc">主题/分页/页面说明等</span>
+            <span class="nav-entry-desc">主题/分页/项目排序等</span>
           </span>
         </button>
       </div>
@@ -421,29 +350,6 @@ xmind用例生成进度
 
 
 
-<section class="card hidden" data-tab-section="settings" data-settings-section="feishu" id="settingsFeishuSection">
-<h2>飞书通知配置</h2>
-<div class="card-body">
-<p class="hint">仅“一键执行”流程会触发通知：覆盖率不足 100% 会推送失败提醒，完整执行成功会推送成功提醒。</p>
-<div class="row column">
-<label>飞书机器人</label>
-<div class="row" style="align-items:center; gap:8px; max-width:520px;">
-<span style="min-width:80px; color:var(--muted);">Webhook：</span>
-<input id="feishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxxx"/>
-</div>
-<div class="row" style="align-items:center; gap:8px; max-width:520px; margin-top:10px;">
-<span style="min-width:80px; color:var(--muted);">@角色ID：</span>
-<input id="feishuNotifyUser" placeholder="到“飞书开放平台→企业管理→成员管理”复制成员 open_id（推荐）或 user_id"/>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveFeishuWebhook">保存配置</button>
-<button class="secondary" id="testFeishuWebhook">发送测试通知</button>
-</div>
-<p class="status" id="feishuWebhookStatus"></p>
-<p class="hint">请确保浏览器可访问该地址，建议使用群机器人以便团队及时获知执行状态。</p>
-</div>
-</section>
 <section class="card hidden" data-tab-section="settings" data-settings-section="tempexec-columns" id="settingsTempExecSection">
 <h2>执行视图列显示</h2>
 <div class="card-body">
@@ -639,23 +545,6 @@ xmind用例生成进度
 <p class="status" id="missingReminderAiStatus"></p>
 
 <div class="settings-divider"></div>
-<h3>页面说明自动弹出</h3>
-<p class="hint">进入主要功能页面时自动弹出页面说明，可按页面独立关闭。</p>
-<form class="settings-grid" id="pageGuideSettingsGrid">
-  <label><input type="checkbox" id="pageGuideSelectAll" data-page-guide-all="1"/> 全部</label>
-  <label><input type="checkbox" data-page-guide="auto"/> 一键执行</label>
-  <label><input type="checkbox" data-page-guide="clean"/> 功能流程</label>
-  <label><input type="checkbox" data-page-guide="casesgen"/> 用例生成</label>
-  <label><input type="checkbox" data-page-guide="assign"/> 功能指派</label>
-  <label><input type="checkbox" data-page-guide="models"/> 模型管理</label>
-  <label><input type="checkbox" data-page-guide="tempexec"/> 用例执行</label>
-  <label><input type="checkbox" data-page-guide="case-library"/> 用例库</label>
-  <label><input type="checkbox" data-page-guide="case-archive"/> 用例归档</label>
-  <label><input type="checkbox" data-page-guide="exec-overview"/> 执行总览</label>
-</form>
-<p class="status" id="pageGuideSettingsStatus"></p>
-
-<div class="settings-divider"></div>
 <h3>导航栏智能收起</h3>
 <p class="hint">勾选后向下滚动会自动收起顶部导航；滚动到顶部继续向上滚动可自动展开。</p>
 <form class="settings-grid" id="smartTopNavSettingsGrid">
@@ -692,7 +581,7 @@ xmind用例生成进度
       <button class="link-toggle" data-drawer-close="caseLibraryImportSelectDrawer">收起</button>
     </div>
     <div class="drawer-body">
-      <p class="hint">选择项目与版本后查询，用例将导入“一键执行/功能流程”的测试用例中。</p>
+      <p class="hint">选择项目与版本后查询，并将所选用例导入当前操作。</p>
       <div class="case-library-drawer-toolbar">
         <div class="case-library-filters">
           <label class="case-library-label" for="caseLibraryImportSelectProjectSelect">项目</label>
@@ -807,28 +696,6 @@ xmind用例生成进度
 	
 
   
-  <div class="drawer hidden" id="flowGuideDrawer">
-    <div class="drawer-mask" data-drawer-close="flowGuideDrawer"></div>
-    <div class="drawer-panel">
-      <div class="drawer-header">
-        <h3 id="flowGuideDrawerTitle">功能引导</h3>
-        <button class="link-toggle" id="closeFlowGuideDrawerBtn" data-drawer-close="flowGuideDrawer">收起</button>
-      </div>
-      <div class="drawer-body" id="flowGuideDrawerBody"></div>
-    </div>
-  </div>
-  <div class="drawer hidden" id="pageGuideDrawer">
-    <div class="drawer-mask" data-drawer-close="pageGuideDrawer"></div>
-    <div class="drawer-panel">
-      <div class="drawer-header">
-        <h3 id="pageGuideDrawerTitle">页面说明</h3>
-        <button class="link-toggle" id="closePageGuideDrawerBtn" data-drawer-close="pageGuideDrawer">收起</button>
-      </div>
-      <div class="drawer-body" id="pageGuideDrawerBody">
-        <p class="hint" style="margin:0;">暂无页面说明</p>
-      </div>
-    </div>
-  </div>
   <div class="drawer hidden" id="xmindStructureDrawer">
     <div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
     <div class="drawer-panel drawer-panel-wide">
@@ -847,21 +714,14 @@ xmind用例生成进度
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>
 <script src="./scripts/core/appRuntime.js" defer></script>
-<script src="./scripts/core/splitCore.js" defer></script>
-<script src="./scripts/core/cleanCore.js" defer></script>
-<script src="./scripts/core/compareCore.js" defer></script>
-<script src="./scripts/core/reviewCore.js" defer></script>
+<script src="./scripts/core/retainedGenerationRuntime.js" defer></script>
 <script src="./scripts/core/casesCore.js" defer></script>
-<script src="./scripts/core/autoCore.js" defer></script>
 <script src="./scripts/core/xmindCore.js" defer></script>
 <script src="./scripts/core/xlsxCore.js" defer></script>
 <script src="./scripts/core/tempexecDefaults.js" defer></script>
 <script src="./scripts/core/tempexecCore.js" defer></script>
 <script src="./scripts/core/casesGenCore.js" defer></script>
-<script src="./scripts/core/debugCore.js" defer></script>
 <script src="./scripts/core/requirementCore.js" defer></script>
-<script src="./scripts/core/flowCore.js" defer></script>
-<script src="./scripts/handlers/cleanHandlers.js" defer></script>
 <script src="./scripts/base/state.js" defer></script>
 <script src="./scripts/base/utils.js" defer></script>
 <script src="./scripts/base/drawer.js" defer></script>
@@ -874,21 +734,11 @@ xmind用例生成进度
 <script src="./scripts/modules/models.js" defer></script>
 <script src="./scripts/handlers/assignHandlers.js" defer></script>
 <script src="./scripts/modules/assign.js" defer></script>
-<script src="./scripts/modules/review.js" defer></script>
-<script src="./scripts/modules/clean.js" defer></script>
-<script src="./scripts/modules/compare.js" defer></script>
-<script src="./scripts/modules/split.js" defer></script>
-<script src="./scripts/handlers/splitHandlers.js" defer></script>
-<script src="./scripts/modules/upload.js" defer></script>
-<script src="./scripts/handlers/casegenHandlers.js" defer></script>
-<script src="./scripts/core/casegenCore.js" defer></script>
 <script src="./scripts/modules/casegenProgress.js" defer></script>
 <script src="./scripts/modules/memoPad.js" defer></script>
 <script src="./scripts/modules/xmindKnowledgeBase.js" defer></script>
 <script src="./scripts/modules/casePageAiGenPrep.js" defer></script>
 <script src="./scripts/handlers/layoutHandlers.js" defer></script>
-<script src="./scripts/modules/auto.js" defer></script>
-<script src="./scripts/modules/casesgen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
 <script src="./scripts/modules/caseLibrary.js" defer></script>
 <script src="./scripts/modules/caseArchive.js" defer></script>
@@ -896,8 +746,6 @@ xmind用例生成进度
 <script src="./scripts/modules/opsLog.js" defer></script>
 <script src="./scripts/modules/admin.js" defer></script>
 <script src="./scripts/modules/authGuard.js" defer></script>
-<script src="./scripts/modules/flowGuide.js" defer></script>
-<script src="./scripts/modules/pageGuide.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
 <script>

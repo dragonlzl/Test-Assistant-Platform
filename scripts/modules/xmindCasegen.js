@@ -2559,7 +2559,7 @@
     function syncOpenButtonState() {
       if (!openBtn || !openBtn.classList) return;
       var drawerOpen = isDrawerOpen();
-      openBtn.classList.add('casegen-tab', 'casegen-tab-launcher');
+      openBtn.classList.add('casegen-tab-launcher');
       openBtn.classList.toggle('is-active', drawerOpen);
       openBtn.classList.toggle('has-notice-dot', hasOpenButtonCompletionNotice());
       if (openBtn.setAttribute) {
@@ -18136,7 +18136,7 @@
       });
       if (!confirmed) return false;
       if (typeof casesGenApi.openCaseGenDbStoreAppendDrawerWithItems !== 'function') {
-        notifyFloatingStatus('旧用例追加入库能力未就绪，请刷新后重试', 'err', 5000);
+        notifyFloatingStatus('追加入库能力未就绪，请刷新后重试', 'err', 5000);
         return false;
       }
       casesGenApi.openCaseGenDbStoreAppendDrawerWithItems(validation.items, {
@@ -18689,7 +18689,7 @@
         return;
       }
       // 关闭 XMind 抽屉后，页面主体仍停留在 XMind 镜像视图。
-      // 旧流程数据只在用户切回旧视图时再按需恢复，避免收起瞬间触发大范围旧流程重渲染。
+      // 兼容数据只在内部视图需要时恢复，避免收起瞬间触发大范围重渲染。
       finalizeLegacyWorkflowRestore();
       syncOpenButtonState();
       if (drawerEl && drawerEl.classList) {

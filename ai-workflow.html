@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>用例助手 - AI 工作流</title>
+<title>用例助手 - XMind 用例生成</title>
 <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml"/>
 <script>
 (function() {
@@ -78,7 +78,11 @@
         query[key] = value;
       });
     }
-    var urlTab = query.tab ? String(query.tab || '') : '';
+    function normalizeTab(tab) {
+      var name = tab ? String(tab || '') : '';
+      return name === 'auto' || name === 'clean' || name === 'xmind-casegen' ? 'casesgen' : name;
+    }
+    var urlTab = normalizeTab(query.tab);
     var path = window && window.location ? window.location.pathname || '' : '';
     var file = '';
     if (path) {
@@ -95,7 +99,7 @@
     else if (file == 'index.html' || !file) page = 'index';
     if (!page) page = 'index';
     var allowMap = {
-      'ai-workflow': ['auto', 'clean', 'casesgen'],
+      'ai-workflow': ['casesgen'],
       'ai-tools': ['assign', 'models'],
       'case-exec': ['tempexec', 'exec-overview'],
       'case-library': ['case-library', 'case-archive'],
@@ -103,13 +107,13 @@
       settings: ['settings']
     };
     var defaultMap = {
-      'ai-workflow': 'auto',
+      'ai-workflow': 'casesgen',
       'ai-tools': 'assign',
       'case-exec': 'tempexec',
       'case-library': 'case-library',
       admin: 'project-admin',
       settings: 'settings',
-      index: 'auto'
+      index: 'casesgen'
     };
     function isAllowed(tab) {
       if (!tab) return false;
@@ -123,7 +127,7 @@
       var saved = '';
       try {
         if (typeof sessionStorage != 'undefined') {
-          saved = sessionStorage.getItem('usecase-active-tab') || '';
+          saved = normalizeTab(sessionStorage.getItem('usecase-active-tab') || '');
         }
       } catch (err) {
         saved = '';
@@ -151,7 +155,7 @@
         if (valid && isAllowed(saved)) candidate = saved;
       }
     }
-    if (!candidate) candidate = defaultMap[page] || 'auto';
+    if (!candidate) candidate = defaultMap[page] || 'casesgen';
     root.setAttribute('data-preload-nav', '1');
     root.setAttribute('data-init-tab', candidate);
   } catch (err) {
@@ -176,55 +180,14 @@
 </div>
 <div class="sidebar-header">
 <h1>用例助手</h1>
-<div class="sidebar-header-actions">
-<button class="help-pill" id="pageGuideTrigger" type="button">
-<span class="icon">?</span>
-<span>页面说明</span>
-</button>
-<button class="guide-pill" id="flowGuideTrigger" type="button">
-<span class="icon">G</span>
-<span>功能引导</span>
-</button>
-</div>
-</div>
-<div class="path-panel" id="currentPath">
-  <div class="path-title">
-    <span class="path-title-label">页面路径</span>
-  </div>
-  <div class="path-items" id="currentPathText"></div>
 </div>
 <nav class="tabs vertical">
 <div class="tab-group">
 <button class="tab-group-btn" data-group="ai">
   <span class="tab-group-label">AI 功能</span>
-  <span class="ai-flow-compact hidden" id="autoFlowCompact" aria-hidden="true">
-    <span class="step active no-reason" data-target="import"><span class="badge">1</span><span class="step-label">导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="review"><span class="badge">2</span><span class="step-label">评审</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="clean"><span class="badge">3</span><span class="step-label">清洗</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="compare"><span class="badge">4</span><span class="step-label">对比完整性</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="split"><span class="badge">5</span><span class="step-label">拆分</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="cases-upload"><span class="badge">6</span><span class="step-label">用例导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-    <span class="step no-reason" data-target="cases"><span class="badge">7</span><span class="step-label">覆盖对比</span><span class="step-status" data-status="pending" aria-hidden="true"></span></span>
-  </span>
 </button>
 <div class="tab-submenu hidden" data-group-menu="ai">
-<button class="active ai-flow-submenu-btn" data-tab-btn="auto">
-  <span class="ai-flow-substep no-reason" data-flow-slot="auto">
-    <span class="badge">1</span>
-    <span class="step-label">导入</span>
-    <span class="step-status" data-status="pending" aria-hidden="true"></span>
-  </span>
-  <span class="tab-submenu-label">一键执行</span>
-</button>
-<button class="ai-flow-submenu-btn" data-tab-btn="clean">
-  <span class="ai-flow-substep no-reason" data-flow-slot="clean">
-    <span class="badge">1</span>
-    <span class="step-label">导入</span>
-    <span class="step-status" data-status="pending" aria-hidden="true"></span>
-  </span>
-  <span class="tab-submenu-label">功能流程</span>
-</button>
-<button data-tab-btn="casesgen">用例生成</button>
+<button data-tab-btn="casesgen">XMind 用例生成</button>
 <button data-tab-btn="assign">功能指派</button>
 <button data-tab-btn="models">模型管理</button>
 </div>
@@ -253,8 +216,6 @@
 </div>
 </div>
 </nav>
-<button class="scroll-top-btn" type="button" id="scrollTopBtn">回到顶部</button>
-<button class="scroll-top-btn" type="button" id="scrollBottomBtn">跳到底部</button>
 <div class="sidebar-tabs" id="sidebarTabs">
 <div class="sidebar-tab-bar" id="sidebarTabBar">
 <button class="sidebar-tab is-active" type="button" id="sidebarTabCasegen" data-sidebar-tab="casegen">
@@ -300,722 +261,13 @@ xmind用例生成进度
 </div>
 </aside>
 <div class="content-shell">
-  <div class="flow" id="flowNav">
-    <div class="flow-title">一键执行步骤</div>
-    <div class="flow-steps">
-      <div class="step active" data-target="import"><span class="badge">1</span><span class="step-label">导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="review"><span class="badge">2</span><span class="step-label">评审</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="clean"><span class="badge">3</span><span class="step-label">清洗</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="compare"><span class="badge">4</span><span class="step-label">对比完整性</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="split"><span class="badge">5</span><span class="step-label">拆分</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="cases-upload"><span class="badge">6</span><span class="step-label">用例导入</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-      <div class="progress-line"></div>
-      <div class="step" data-target="cases"><span class="badge">7</span><span class="step-label">覆盖对比</span><span class="step-status" data-status="pending" aria-hidden="true"></span></div>
-    </div>
-  </div>
-
-	
-	
-  
-  
-  
-  
-		
-<main>
-<section class="card hidden" data-section-id="help" data-tab-section="help">
-<div class="help-header">
-<h2>页面说明</h2>
-</div>
-<div class="card-body">
-<div class="notice-card">
-<h3>使用前须知</h3>
-<ul>
-<li><strong>XMind 用例结构要求已并入“用例执行/用例库”的页面说明，请先阅读格式要求，这是用例执行的基础！</strong></li>
-<li>请先在<a data-jump="models" href="#">“模型管理”</a>中添加 <strong>DeepSeek-R1</strong>，并将 <code>Max Tokens</code> 设为 <strong>16,000</strong>。</li>
-<li>在<a data-jump="assign" href="#">“功能指派”</a>页将所有功能统一指派为上述模型，保持行为一致。</li>
-<li>如需自动通知，请前往<a data-jump="settings" href="#">“通用设置”</a>填写飞书 Webhook，建议使用群机器人同步执行结果。</li>
-</ul>
-</div>
-<div class="notice-card highlight">
-<h3>新增亮点（用例执行 & 总览）</h3>
-<ul>
-<li>“执行分配”支持<strong>版本分组</strong>：新建版本后可拖拽需求盒子入版本，右上角“×”可移出，版本卡内需求盒子原样展示。</li>
-<li>总览视图全新分区：<strong>版本区</strong>按版本→需求分组、两列布局；<strong>需求区</strong>展示未分配版本的需求，四列布局，用例按执行进度升序自动排序。</li>
-<li>执行视图可自定义列显示：在“设置”→“执行视图列显示”中勾选表头，标题/实际结果/备注/缺陷/选择列为必选，其余可自由隐藏。</li>
-<li>总览卡片可点击跳转执行视图；专注用例在总览中以渐变标识高亮。</li>
-<li>执行分配标题右侧的“用例执行情况总览”按钮一键进入总览，信息分区更清晰。</li>
-</ul>
-</div>
-<p class="hint">按照下列步骤依次完成需求清洗、缺口补全与用例生成，过程中可随时回到“功能流程”查看各卡片详情。</p>
-<ul class="help-steps">
-<li>在“导入”卡片上传原始需求与 XMind/文本测试用例，系统会自动在相关卡片同步内容。</li>
-<li>执行“需求评审”识别模糊点，可选地填写澄清结果后进入“需求清洗”。</li>
-<li>完成清洗后查看“清洗结果视图”与原文高亮，确认结构化字段及定位按钮是否准确。</li>
-<li>运行“对比完整性”→“测试模块拆分”→“XMind 覆盖对比”，根据覆盖率决定补全或重洗。</li>
-<li>当覆盖率达标后，进入“用例生成/用例补全”卡片，为拆分模块批量生成高质量测试用例。</li>
-<li>若需要省时，可在“一键执行”页直接串联上述流程，并使用补全/重新清洗按钮修复缺口。</li>
-</ul>
-<div class="help-grid">
-<article class="help-card">
-<h3>导入区</h3>
-<p>左列导入原始需求（支持 doc/docx/txt/md），右列导入多个 XMind 或文本用例。导入后的内容会同步到功能流程中的对应区域。</p>
-</article>
-<article class="help-card">
-<h3>需求评审</h3>
-<p>点击“分析需求模糊点”即可输出模型评审 JSON，必要时手工补写澄清结果，在一键执行模式下会强制确认后继续。</p>
-</article>
-<article class="help-card">
-<h3>需求清洗</h3>
-<p>运行后得到结构化 JSON，并通过“清洗结果视图”查看表格 + 原文高亮。可以开启“需求位置”开关或“一键全亮”快速定位。</p>
-</article>
-<article class="help-card">
-<h3>对比完整性</h3>
-<p>将原文与清洗结果交叉校验，输出覆盖率与缺失项。覆盖率不足时，可在卡片底部勾选缺失内容并触发“补全/重新清洗”。</p>
-</article>
-<article class="help-card">
-<h3>测试模块拆分 &amp; 覆盖对比</h3>
-<p>拆分卡片会解析模型返回的模块结构，支持展开列表查看。覆盖对比卡片用于比较拆分结果与 XMind 用例，生成缺失/冗余列表。</p>
-</article>
-<article class="help-card">
-<h3>用例生成</h3>
-<p>选择模块后即可批量生成 JSON 用例；也可导入模块用例文件（会弹出“需求标识”抽屉确认归属）；若覆盖对比仍有缺失，可使用补全按钮按选定缺失点补写。</p>
-</article>
-<article class="help-card">
-<h3>用例执行</h3>
-<p>用例导入用于入库；执行分配用于项目/版本分组与专注区整理；执行视图用于录入结果并实时保存。可在“用例执行情况总览”中查看彩色进度条。</p>
-</article>
-<article class="help-card">
-<h3>一键执行</h3>
-<p>在“自动执行工作流”卡片配置启动选项，一次性跑通评审→清洗→对比→拆分→覆盖的链路。失败时卡片会提示需要补齐的步骤。</p>
-</article>
-<article class="help-card">
-<h3>功能指派 &amp; 模型管理</h3>
-<p>在指派页配置每个功能使用的提示词与模型，并可设定默认提示词；模型管理页用于录入不同供应商的接口地址、密钥与超时。</p>
-</article>
-<article class="help-card">
-<h3>通用设置 / 通知</h3>
-<p>在“通用设置”里填写飞书 Webhook 或其它偏好。一键执行流程完成或失败都会自动推送通知，方便团队成员第一时间了解结果。</p>
-</article>
-</div>
-</div>
+  <main>
+<section class="card xmind-casegen-entry" data-section-id="casesgen" data-tab-section="casesgen">
+  <header class="xmind-casegen-entry-content">
+    <h2>XMind 用例生成</h2>
+    <button class="xmind-casegen-entry-button casegen-tab-launcher" id="xmindCaseGenOpenBtn" type="button" aria-controls="xmindCaseGenDrawer" aria-expanded="false">打开 XMind 用例生成</button>
+  </header>
 </section>
-<section class="card hidden" data-section-id="auto-import" data-tab-section="auto">
-<h2>导入数据</h2>
-<div class="card-body">
-<div class="layout">
-<div class="pane">
-<p class="hint">将原始需求文档拖入或点击选择，等同于“导入需求文档”的操作。</p>
-<label class="zone" id="autoRawDropZone">
-<input accept=".doc,.docx,.txt,.md" hidden="" id="autoRawFile" type="file"/>
-<div class="zone-line">
-<strong>原始需求</strong>
-<span>拖拽或点击选择</span>
-</div>
-<div class="status">导入后内容会同步到左侧“导入需求”模块</div>
-</label>
-<div class="file-list" id="autoRawFileList">
-<span class="hint" data-auto-raw-placeholder="">未导入需求</span>
-</div>
-<div class="actions">
-<button class="secondary" disabled="" id="autoRawClear">清除原始需求</button>
-</div>
-</div>
-<div class="pane">
-<p class="hint">导入 XMind/文本用例后可直接用于覆盖对比。</p>
-<label class="zone" id="autoCaseDropZone">
-<input accept=".xmind,.txt,.md,.json" hidden="" id="autoCaseFile" multiple="" type="file"/>
-<div class="zone-line">
-<strong>测试用例</strong>
-<span>拖拽或点击选择</span>
-</div>
-<div class="status">导入结果同步到“测试用例导入”模块</div>
-</label>
-<div class="file-list" id="autoCaseFileList">
-<span class="hint" data-auto-case-placeholder="">未导入文件</span>
-</div>
-<div class="actions case-library-import-actions">
-  <button class="secondary case-library-import-btn" id="autoCaseLibrarySelectBtn" type="button">从用例库中选择</button>
-</div>
-</div>
-</div>
-</div>
-</section>
-<section class="card hidden" data-section-id="auto-run" data-tab-section="auto">
-<h2>自动执行工作流</h2>
-<div class="card-body">
-<p class="hint">自动按顺序执行：导入需求 → 需求评审 → 需求清洗 → 对比完整性 → 测试模块拆分 → 测试用例覆盖对比。执行前请确保已导入需求与测试用例，并在“功能指派”中配置所有模型。</p>
-<label style="display:flex;align-items:center;gap:8px;margin:8px 0;">
-<input id="autoNeedClarify" type="checkbox"/>
-<span>需要人工确认需求澄清后再继续自动流程</span>
-</label>
-<div class="actions">
-<button id="runAutoWorkflow">一键执行</button>
-<button class="secondary" id="stopAutoWorkflow" type="button">中断全部执行</button>
-</div>
-<p class="status" id="autoWorkflowStatus"></p>
-</div>
-</section>
-<section class="card hidden" data-section-id="auto-clarify" data-tab-section="auto">
-<h2>需求澄清（人工确认）</h2>
-<div class="card-body">
-<p class="hint">当勾选“需要人工确认”后，一键执行流程会在需求评审后暂停，请打开右侧抽屉补充并填写每条澄清结果，再点“确认澄清”继续。</p>
-<div class="actions">
-<button class="secondary" disabled="" id="autoClarifyToggleBtn">前往展开视图并确认澄清</button>
-</div>
-<p class="status" id="autoClarifyStatus"></p>
-</div>
-</section>
-<section class="card hidden" data-section-id="auto-compare" data-tab-section="auto">
-<h2>清洗后需求覆盖率</h2>
-<div class="card-body">
-<p class="hint">展示“对比完整性”步骤返回的覆盖率；低于 100% 表示清洗结果缺失，需要重新清洗并修正。</p>
-<div class="actions" style="margin-bottom:8px;">
-<button class="secondary" disabled="" id="autoCompareToggleBtn">覆盖缺失视图</button>
-</div>
-<p class="status" id="autoCompareStatusSummary">尚未执行</p>
-</div>
-</section>
-<section class="card hidden" data-section-id="auto-cases-missing" data-tab-section="auto">
-<h2>用例缺失测试点</h2>
-<div class="card-body">
-<p class="hint">同步显示“测试用例覆盖对比”后的缺失模块详情，与功能流程中的“缺失模块视图”一致，点击右侧抽屉查看并处理。</p>
-<div class="actions" style="margin-bottom:8px;">
-<button class="secondary" disabled="" id="autoMissingToggle">前往勾选缺失模块生成缺失用例</button>
-</div>
-</div>
-</section>
-<div class="drawer" id="autoClarifyDrawer" data-tab-section="auto">
-  <div class="drawer-mask" data-drawer-close="autoClarifyDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="autoClarifyDrawerTitle">需求澄清视图</h3>
-      <button class="link-toggle" id="closeAutoClarifyDrawerBtn" data-drawer-close="autoClarifyDrawer">收起</button>
-    </div>
-    <div class="drawer-body" id="autoClarifyDrawerBody">
-      <div class="review-view hidden" id="autoClarifyContainer"></div>
-      <div class="actions" style="margin-top:12px; justify-content:flex-end;">
-        <button class="pill primary" disabled="" id="autoClarifyConfirm">确认澄清</button>
-      </div>
-    </div>
-  </div>
-</div>
-<div class="drawer" id="autoCompareDrawer" data-tab-section="auto">
-  <div class="drawer-mask" data-drawer-close="autoCompareDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="autoCompareDrawerTitle">覆盖缺失视图</h3>
-      <button class="link-toggle" id="closeAutoCompareDrawerBtn" data-drawer-close="autoCompareDrawer">收起</button>
-    </div>
-    <div class="drawer-body" id="autoCompareDrawerBody">
-      <p class="status" id="autoCompareStatus">尚未执行</p>
-      <div class="review-view hidden" id="autoCompareMissing"></div>
-      <div class="auto-compare-suggestion">
-        <p class="hint">可输入对缺失项的补充说明（选填）。</p>
-        <textarea class="small-textarea" id="autoCompareSuggestion" placeholder="如需说明额外上下文，可在此输入"></textarea>
-      </div>
-      <div class="actions">
-        <button class="secondary" disabled="" id="autoFillCleanBtn">补全清洗并继续</button>
-        <button class="secondary" disabled="" id="autoRecleanBtn">重新清洗并继续</button>
-        <button class="secondary" disabled="" id="autoIgnoreCoverageBtn">忽略覆盖率继续</button>
-        <button class="secondary" disabled="" id="autoJumpCleanView">查看高亮差异</button>
-      </div>
-      <p class="status" id="autoRecleanStatus"></p>
-    </div>
-  </div>
-</div>
-<div class="drawer" id="autoMissingDrawer" data-tab-section="auto">
-  <div class="drawer-mask" data-drawer-close="autoMissingDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="autoMissingDrawerTitle">缺失模块视图</h3>
-      <button class="link-toggle" id="closeAutoMissingDrawerBtn" data-drawer-close="autoMissingDrawer">收起</button>
-    </div>
-    <div class="drawer-body" id="autoMissingDrawerBody">
-      <p class="status" id="autoMissingStatus"></p>
-      <div class="missing-view hidden" id="autoMissingView"></div>
-      <div class="actions" style="margin-top:12px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
-        <button class="secondary" disabled="" id="autoMissingCopy">复制缺失模块JSON</button>
-        <button class="pill primary" disabled="" id="autoMissingSmartFill">智能生成填充</button>
-        <button class="secondary" disabled="" id="autoMissingGoUsecase">生成用例</button>
-      </div>
-    </div>
-  </div>
-</div>
-<section class="card" data-section-id="import" data-tab-section="clean">
-<h2>导入需求文档</h2>
-<div class="card-body">
-<div class="layout">
-<div class="pane">
-<p class="hint">点击选择或拖拽文件，解析后的原始需求文档会展示在右侧文本框，可手工修改后再进行清洗。</p>
-<label class="zone" id="dropZone">
-<input accept=".doc,.docx,.txt,.md" hidden="" id="fileInput" type="file"/>
-<div class="zone-line">
-<strong>点击选择</strong>
-<span>或拖拽文件到此处</span>
-</div>
-<div class="hint" id="fileName" style="margin-top:6px;">未选择文件</div>
-</label>
-<p class="status" id="parseStatus"></p>
-</div>
-<div class="pane">
-<textarea id="rawText" placeholder="原始需求将出现在这里，也可以直接粘贴/输入..." style="min-height: 360px;"></textarea>
-<div class="actions">
-<button class="secondary" id="saveRawDebug">保存调试TXT</button>
-<button class="secondary" id="importRawDebug">导入调试TXT</button>
-<input accept=".txt" hidden="" id="rawDebugFile" type="file"/>
-</div>
-</div>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="review" data-tab-section="clean">
-<h2>需求评审</h2>
-<div class="card-body">
-<div class="layout">
-<div class="pane">
-<p class="hint">基于原始需求快速识别不明确项与潜在分支，便于评审时沟通澄清。仅在已导入需求后可执行。</p>
-<div class="actions">
-<button class="secondary" disabled="" id="runReview">需求分析</button>
-</div>
-<p class="status" id="reviewStatus"></p>
-<p class="hint timing">模型用时：<strong><span id="reviewTiming">--</span> 秒</strong></p>
-</div>
-<div class="pane">
-<textarea class="split-area" id="reviewResult" placeholder="评审结果 JSON 将展示于此，必要时可手动补充说明" readonly=""></textarea>
-<div class="actions" style="margin-top:8px;">
-<button class="secondary" id="copyReviewResult">复制评审JSON</button>
-<button class="secondary" id="exportReviewResult">导出评审JSON</button>
-<button class="secondary" id="importReviewResult">导入评审JSON</button>
-<input accept=".json,.txt" hidden="" id="reviewImportFile" type="file"/>
-</div>
-</div>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="review-view" data-tab-section="clean">
-<h2>需求澄清点视图</h2>
-<div class="card-body">
-<p class="hint">汇总所有评审中发现的不明确点，可逐条补充澄清结果并同步回评审 JSON。</p>
-<div class="actions">
-<button class="secondary" disabled="" id="toggleReviewView">前往视图确认澄清</button>
-</div>
-<p class="status" id="clarifyStatus"></p>
-</div>
-</section>
-<section class="card" data-section-id="clean" data-tab-section="clean">
-<h2>需求清洗</h2>
-<div class="card-body">
-<div class="layout">
-<div class="pane">
-<p class="hint">执行清洗后，可复制或保存结果，方便进一步审查。</p>
-<div class="actions">
-<button id="runClean">开始清洗</button>
-<button class="secondary" id="copyCleaned">复制清洗结果</button>
-</div>
-<p class="status" id="cleanStatus"></p>
-<p class="hint timing">模型用时：<strong><span id="cleanTiming">--</span> 秒</strong></p>
-</div>
-<div class="pane">
-<textarea id="cleanedText" placeholder="清洗后的需求将出现在这里..." readonly="" style="min-height: 360px;"></textarea>
-<div class="actions">
-<button class="secondary" id="saveCleanDebug">保存调试TXT</button>
-<button class="secondary" id="importCleanDebug">导入调试TXT</button>
-<input accept=".txt" hidden="" id="cleanDebugFile" type="file"/>
-</div>
-</div>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="clean-view" data-tab-section="clean">
-<h2>清洗结果视图</h2>
-<div class="card-body">
-<p class="hint">列表展示清洗条目，可点击定位相关原始需求段落，快速核对清洗准确性。</p>
-<div class="actions">
-<button class="secondary" id="toggleCleanViewBtn">展开视图</button>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="compare" data-tab-section="clean">
-<h2>对比完整性</h2>
-<div class="card-body">
-<div class="layout">
-<div class="pane">
-<p class="hint">使用指派的对比模型检查清洗结果是否覆盖原始需求。</p>
-<div class="actions">
-<button class="secondary" id="compareBtn">开始对比</button>
-</div>
-<p class="status" id="compareStatus"></p>
-<p aria-live="polite" class="hint hidden compare-case-assistant-status" id="compareCaseAssistantStatus">代码补全状态：接口未被调用</p>
-<p class="hint timing">模型用时：<strong><span id="compareTiming">--</span> 秒</strong></p>
-</div>
-<div class="pane">
-<p class="hint">结果 JSON 字段：<code>coverage</code>=覆盖率，<code>missing</code>=未覆盖模块列表。</p>
-<textarea class="small-textarea" id="compareResult" placeholder="覆盖率和未覆盖要点将展示于此" readonly="" style="min-height: 220px;"></textarea>
-<div class="actions" style="margin-top:8px;">
-<button class="secondary" id="exportCompareResult">导出调试JSON</button>
-<button class="secondary" id="importCompareResult">导入调试JSON</button>
-<input accept=".json,.txt" hidden="" id="compareImportFile" type="file"/>
-</div>
-</div>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="split" data-tab-section="clean">
-<h2>测试模块拆分</h2>
-<div class="card-body">
-<div class="layout">
-<div class="pane">
-<p class="hint">将清洗结果进一步拆分为具体测试模块，用于测试设计。请让模型输出 JSON 数组，字段：module、key_scenarios、test_points、coupled_modules。</p>
-<div class="actions">
-<button class="secondary" id="splitBtn">开始拆分</button>
-</div>
-<p class="status" id="splitStatus"></p>
-<p class="hint timing">模型用时：<strong><span id="splitTiming">--</span> 秒</strong></p>
-</div>
-<div class="pane">
-<textarea class="split-area" id="splitResult" placeholder="拆分的测试模块将展示于此" readonly=""></textarea>
-<div class="actions" style="margin-top:8px;">
-<button class="secondary" id="goUsecaseGen">生成用例</button>
-<button class="secondary" id="saveSplitDebug">保存调试TXT</button>
-<button class="secondary" id="importSplitDebug">导入调试TXT</button>
-<input accept=".txt" hidden="" id="splitDebugFile" type="file"/>
-</div>
-</div>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="split-view" data-tab-section="clean">
-<h2>拆分视图</h2>
-<div class="card-body">
-<p class="hint">按模块查看拆分结构，便于核对场景与要点。</p>
-<div class="actions">
-<button class="secondary" disabled="" id="toggleSplitView">展开拆分视图</button>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="cases-upload" data-tab-section="clean">
-<h2>测试用例导入（XMind）</h2>
-<div class="card-body">
-<div class="layout">
-<div class="pane">
-<p class="hint">可导入单份或多份 XMind/JSON/txt 测试用例，解析后可在右侧查看并用于覆盖对比。</p>
-<label class="zone" id="caseDropZone">
-<input accept=".xmind,.txt,.md,.json" hidden="" id="caseFileInput" multiple="" type="file"/>
-<div class="zone-line">
-<strong>点击选择</strong>
-<span>或拖拽测试用例到此处</span>
-</div>
-<div class="file-list" id="caseFileList">
-<span class="hint" data-placeholder="">未导入文件</span>
-</div>
-</label>
-<div class="actions case-library-import-actions">
-  <button class="secondary case-library-import-btn" id="caseLibraryImportSelectBtn" type="button">从用例库中选择</button>
-</div>
-<p class="status" id="caseStatus"></p>
-</div>
-<div class="pane">
-<textarea class="split-area" id="caseText" placeholder="解析后的测试用例文本，可手动编辑..."></textarea>
-<div class="actions" style="margin-top:8px;">
-<button class="secondary" id="saveCaseDebug">保存调试TXT</button>
-<button class="secondary" id="importCaseDebug">导入调试TXT</button>
-<input accept=".txt" hidden="" id="caseDebugFile" type="file"/>
-</div>
-</div>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="cases-view" data-tab-section="clean">
-<h2>测试用例视图</h2>
-<div class="card-body">
-<p class="hint">基于当前 XMind/文本内容渲染列表视图，可快速查看模块、用例标题、优先级等字段。</p>
-<div class="actions">
-<button class="secondary" id="caseViewBtn">打开用例视图</button>
-<span class="hint" id="caseViewHint" style="margin:0;">请先上传或输入 XMind 测试用例</span>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="cases" data-tab-section="clean">
-<h2>测试用例覆盖对比</h2>
-<div class="card-body">
-<div class="layout">
-<div class="pane">
-<p class="hint">使用专用模型，对比“测试模块拆分”与“测试用例”之间的覆盖情况，识别缺失或冗余点。</p>
-<div class="actions">
-<button class="secondary" id="casesCompareBtn">执行覆盖对比</button>
-</div>
-<p class="status" id="casesCoverageStatus"></p>
-<div class="module-progress" id="casesModuleProgress"></div>
-<p class="hint timing">模型用时：<strong><span id="casesTiming">--</span> 秒</strong></p>
-</div>
-<div class="pane">
-<p class="hint">结果 JSON 字段：<code>coverage</code>=覆盖率，<code>missing</code>=缺失模块列表（结构与“测试模块拆分”一致），<code>extra</code>=用例中多余的点。</p>
-<textarea class="split-area" id="casesCompareResult" placeholder="覆盖率与缺少/多余点将在此展示" readonly=""></textarea>
-<div class="actions" style="margin-top:8px;">
-<button class="secondary" id="exportCasesCoverage">导出对比结果</button>
-<button class="secondary" id="importCasesCoverage">导入对比结果</button>
-<input accept=".txt,.json" hidden="" id="importCasesCoverageFile" type="file"/>
-</div>
-</div>
-</div>
-</div>
-</section>
-<section class="card" data-section-id="missing-view" data-tab-section="clean">
-<h2>缺失模块视图</h2>
-<div class="card-body">
-<p class="hint">运行“测试用例覆盖对比”后，可在此查看缺失模块详情，并复制 <code>missing</code> 字段 JSON。</p>
-<div class="actions" style="margin-bottom:8px;">
-<button class="secondary" disabled="" id="missingViewBtn">前往勾选缺失模块生成缺失用例</button>
-</div>
-<p class="status" id="missingViewStatus"></p>
-</div>
-</section>
-<div class="drawer" id="reviewViewDrawer" data-tab-section="clean">
-  <div class="drawer-mask" data-drawer-close="reviewViewDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="reviewViewDrawerTitle">需求澄清点视图</h3>
-      <button class="link-toggle" id="closeReviewViewDrawerBtn" data-drawer-close="reviewViewDrawer">收起</button>
-    </div>
-    <div class="drawer-body" id="reviewViewDrawerBody">
-      <div class="review-view hidden" id="reviewViewContainer"></div>
-      <div class="actions" style="margin-top:12px; justify-content:flex-end;">
-        <button class="pill primary" disabled id="confirmClarifications">确认澄清</button>
-      </div>
-    </div>
-  </div>
-</div>
-<div class="drawer" id="cleanViewDrawer" data-tab-section="clean">
-  <div class="drawer-mask" data-drawer-close="cleanViewDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="cleanViewDrawerTitle">清洗结果视图</h3>
-      <button class="link-toggle" id="closeCleanViewDrawerBtn" data-drawer-close="cleanViewDrawer">收起</button>
-    </div>
-    <div class="drawer-body" id="cleanViewDrawerBody">
-      <div class="clean-view-header">
-        <p class="hint">列表展示清洗条目，可点击定位相关原始需求段落，快速核对清洗准确性。</p>
-        <div class="clean-view-actions">
-          <button class="secondary" disabled id="cleanHighlightAllBtn">全部高亮</button>
-        </div>
-      </div>
-      <div class="review-view visible" id="cleanViewContainer">
-        <p class="hint" style="padding:12px;">暂无清洗数据，请先完成需求清洗</p>
-      </div>
-      <div class="clean-raw-panel">
-        <div class="clean-raw-header">
-          <p class="hint">原始需求全文将在下方展示，点击上方条目或选择文字后反向定位。</p>
-          <div class="clean-view-actions">
-            <button class="secondary" id="toggleCleanRawViewBtn">收起原文</button>
-            <button class="secondary" disabled id="cleanRawLocateBtn">反向定位到条目</button>
-          </div>
-        </div>
-        <div class="review-view visible clean-raw-view" id="cleanRawView">
-          <p class="hint" style="padding:12px;">暂无原始需求，请先导入或填写</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-<div class="drawer" id="splitViewDrawer" data-tab-section="clean">
-  <div class="drawer-mask" data-drawer-close="splitViewDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="splitViewDrawerTitle">拆分视图</h3>
-      <button class="link-toggle" id="closeSplitViewDrawerBtn" data-drawer-close="splitViewDrawer">收起</button>
-    </div>
-    <div class="drawer-body" id="splitViewDrawerBody">
-      <div class="review-view hidden" id="splitViewContainer"></div>
-    </div>
-  </div>
-</div>
-<div class="drawer" id="caseViewDrawer" data-tab-section="clean">
-  <div class="drawer-mask" data-drawer-close="caseViewDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="caseViewDrawerTitle">测试用例视图</h3>
-      <button class="link-toggle" id="closeCaseViewDrawerBtn" data-drawer-close="caseViewDrawer">收起</button>
-    </div>
-    <div class="drawer-body" id="caseViewDrawerBody">
-      <div class="caseview hidden" id="caseViewContainer"></div>
-    </div>
-  </div>
-</div>
-<div class="drawer" id="missingViewDrawer" data-tab-section="clean">
-  <div class="drawer-mask" data-drawer-close="missingViewDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="missingViewDrawerTitle">缺失模块视图</h3>
-      <button class="link-toggle" id="closeMissingViewDrawerBtn" data-drawer-close="missingViewDrawer">收起</button>
-    </div>
-    <div class="drawer-body" id="missingViewDrawerBody">
-      <div class="missing-view hidden" id="missingViewContainer"></div>
-      <div class="actions" style="margin-top:12px; justify-content:flex-end; gap:8px;">
-        <button class="secondary" disabled id="copyMissingBtn">复制缺失模块JSON</button>
-        <button class="pill primary" disabled id="missingSmartFillBtn">智能生成填充</button>
-        <button class="secondary" id="casesGoUsecaseGen">生成用例</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<section class="card hidden" data-section-id="casesgen" data-tab-section="casesgen">
-<h2>用例生成</h2>
-  <div class="card-body">
-  <p class="hint">根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。</p>
-  <div class="casegen-zones">
-    <div class="casegen-tabbar" role="tablist" aria-label="用例生成功能页签">
-      <button class="casegen-tab is-active" id="caseGenSettingsTabBtn" type="button" data-casegen-view-tab="settings" aria-selected="true" aria-controls="casegenSettingsPanel">用例生成设置</button>
-      <button class="casegen-tab" id="caseGenLegacyModulesTabBtn" type="button" data-casegen-view-tab="legacy-modules" aria-selected="false" aria-controls="casegenLegacyModulesPanel">一键执行生成模块</button>
-      <button class="casegen-tab" id="caseGenModulesTabBtn" type="button" data-casegen-view-tab="xmind-modules" aria-selected="false" aria-controls="casegenModulesPanel">xmind生成模块</button>
-      <button class="casegen-tab casegen-tab-launcher" id="xmindCaseGenOpenBtn" type="button" aria-controls="xmindCaseGenDrawer" aria-expanded="false">XMind用例生成</button>
-    </div>
-
-    <div class="casegen-tabpanel is-active" id="casegenSettingsPanel" data-casegen-view-panel="settings" role="tabpanel" aria-labelledby="caseGenSettingsTabBtn">
-      <div class="casegen-settings-grid">
-        <div class="casegen-zone" data-casegen-zone="general">
-          <div class="casegen-zone-head">
-            <div class="casegen-zone-title">生成操作区</div>
-            <div class="hint" style="margin:0;">点击按钮后会先打开右侧抽屉填写额外要求并确认要求，再执行生成</div>
-          </div>
-          <div class="casegen-action-list">
-            <div class="casegen-action-item">
-              <button class="secondary" id="caseGenAllGenerateBtn">全模块直接生成</button>
-              <p class="hint casegen-action-desc">先在右侧抽屉选择边界/移动端/特殊场景要求，再对当前未运行模块执行完整生成；若已有结果，会继续给出覆盖确认。</p>
-            </div>
-            <div class="casegen-action-item">
-              <button class="secondary" id="caseGenAllTopupBtn">全模块补全生成</button>
-              <p class="hint casegen-action-desc">先确认本轮要求，再仅对已有生成结果的模块补充新增用例，不覆盖原有结果。</p>
-            </div>
-            <div class="casegen-action-item">
-              <button class="secondary" id="caseGenSuggestionGenerateBtn">仅补全用例</button>
-              <p class="hint casegen-action-desc">先确认本轮要求，再只执行填写了“生成建议”的模块，适合定向补充和局部重跑。</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="casegen-zone casegen-store-zone" data-casegen-zone="store">
-          <div class="casegen-zone-head">
-            <div class="casegen-zone-title">入库操作区</div>
-            <div class="hint" style="margin:0;">先勾选全模块用例，再切换入库方式</div>
-          </div>
-          <div class="actions casegen-zone-actions casegen-store-actions">
-            <div class="casegen-store-section">
-              <div class="casegen-store-section-head">
-                <div class="casegen-store-section-title">第一步：全模块勾选</div>
-                <span class="casegen-store-badge">必做</span>
-              </div>
-              <div class="casegen-store-row">
-                <button class="pill accent" id="caseGenAllViewBtn" type="button">全模块用例视图</button>
-                <span class="hint" style="margin:0;" id="caseGenStoreActionHint">先进入【全模块用例视图】勾选要入库的用例</span>
-              </div>
-            </div>
-            <div class="casegen-store-section">
-              <div class="casegen-store-section-head">
-                <div class="casegen-store-section-title">第二步：选择入库方式</div>
-                <span class="hint" style="margin:0;">切换后只展示对应操作区</span>
-              </div>
-              <div class="casegen-store-mode-switch" role="tablist" aria-label="入库方式切换">
-                <button class="casegen-store-mode-btn is-active" id="caseGenStoreModeNewBtn" type="button" data-casegen-store-mode="new" aria-selected="true" aria-controls="caseGenStoreModeNewPanel">新用例入库</button>
-                <button class="casegen-store-mode-btn" id="caseGenStoreModeAppendBtn" type="button" data-casegen-store-mode="append" aria-selected="false" aria-controls="caseGenStoreModeAppendPanel">追加到已有旧用例</button>
-              </div>
-              <div class="casegen-store-panels">
-                <div class="casegen-store-panel is-active" id="caseGenStoreModeNewPanel" data-casegen-store-panel="new" role="tabpanel" aria-labelledby="caseGenStoreModeNewBtn">
-                  <div class="casegen-store-row">
-                    <span class="hint" style="margin:0;">新用例入库后</span>
-                    <select id="caseGenStoreActionSelect" class="casegen-store-action-select">
-                      <option value="">请选择</option>
-                      <option value="store">直接入库</option>
-                      <option value="store_to_exec">入库并转到执行</option>
-                    </select>
-                  </div>
-                  <div class="casegen-store-row">
-                    <button class="pill primary" disabled id="caseGenStoreNewBtn">新用例入库</button>
-                    <span class="hint" style="margin:0;">将当前勾选用例作为新的用例文件入库</span>
-                  </div>
-                </div>
-                <div class="casegen-store-panel" id="caseGenStoreModeAppendPanel" data-casegen-store-panel="append" role="tabpanel" aria-labelledby="caseGenStoreModeAppendBtn">
-                  <div class="casegen-store-row">
-                    <button class="pill secondary" disabled id="caseGenStoreAppendBtn">旧用例追加入库</button>
-                    <span class="hint" style="margin:0;">将当前勾选用例追加到已有旧用例文件</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="casegen-zone" data-casegen-zone="other">
-          <div class="casegen-zone-head">
-            <div class="casegen-zone-title">其他操作区</div>
-            <div class="hint" style="margin:0;">导出与回到上游模块</div>
-          </div>
-          <div class="casegen-action-list">
-            <div class="casegen-action-item compact">
-              <button class="secondary" id="exportCaseGen">导出全部用例TXT</button>
-            </div>
-            <div class="casegen-action-item compact">
-              <button class="secondary" id="exportCaseGenXmind">导出全部勾选用例XMind</button>
-            </div>
-            <div class="casegen-action-item compact">
-              <button class="secondary" id="toSplitFromCaseGen">前往测试模块拆分</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <p class="status" id="caseGenStatus"></p>
-    </div>
-
-    <div class="casegen-tabpanel" id="casegenLegacyModulesPanel" data-casegen-view-panel="legacy-modules" role="tabpanel" aria-labelledby="caseGenLegacyModulesTabBtn">
-      <div class="casegen-zone casegen-modules-zone" data-casegen-zone="modules">
-        <div class="casegen-zone-head">
-          <div class="casegen-zone-title">一键执行模块区</div>
-          <div class="hint" style="margin:0;">仅展示旧流程生成的模块与用例，按模块生成/勾选/导出用例</div>
-        </div>
-        <div class="usecase-modules" id="casesGenerationContainer"></div>
-        <p class="hint timing">模型用时：<strong><span id="caseGenTiming">--</span> 秒</strong></p>
-      </div>
-    </div>
-
-    <div class="casegen-tabpanel" id="casegenModulesPanel" data-casegen-view-panel="xmind-modules" role="tabpanel" aria-labelledby="caseGenModulesTabBtn">
-      <div class="casegen-zone casegen-modules-zone" data-casegen-zone="xmind-modules">
-        <div class="casegen-zone-head">
-          <div class="casegen-zone-title">XMind 模块区</div>
-          <div class="hint" style="margin:0;">仅镜像展示 XMind 页签中的模块与用例结果，生成操作请在 XMind 用例生成页执行</div>
-        </div>
-        <div class="casegen-xmind-workspace-strip hidden" id="caseGenWorkspaceMirrorSection" aria-hidden="true">
-          <div class="casegen-xmind-workspace-strip-head">
-            <div class="casegen-xmind-workspace-strip-title">XMind生成页签</div>
-            <div class="hint" style="margin:0;">点击页签后，这里只展示对应 XMind 页签的数据，不再覆盖旧流程模块区</div>
-          </div>
-          <div class="xmind-casegen-tab-list casegen-xmind-workspace-list" id="caseGenWorkspaceMirrorTabs" role="tablist" aria-label="模块区XMind生成页签"></div>
-        </div>
-        <div class="usecase-modules casegen-xmind-modules" id="caseGenXmindModulesContainer"></div>
-      </div>
-    </div>
-  </div>
-  </div>
-  </section>
-<div class="drawer" id="caseGenViewDrawer" data-tab-section="casesgen">
-  <div class="drawer-mask" data-drawer-close="caseGenViewDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="caseGenViewDrawerTitle">用例视图</h3>
-      <div class="drawer-actions">
-        <button class="secondary hidden" id="caseGenAllSelectBtn" data-case-select-all-modules="1" type="button">全选所有模块用例</button>
-        <button class="link-toggle" id="closeCaseGenViewDrawerBtn" data-drawer-close="caseGenViewDrawer">收起</button>
-      </div>
-    </div>
-    <div class="drawer-body" id="caseGenViewDrawerBody">
-      <p class="hint" style="margin:0;">请选择模块查看用例</p>
-    </div>
-  </div>
-</div>
 <div class="drawer" id="xmindCaseGenDrawer" data-tab-section="casesgen">
   <div class="drawer-mask" data-drawer-close="xmindCaseGenDrawer"></div>
   <div class="drawer-panel drawer-panel-wide drawer-panel-xmind">
@@ -1075,7 +327,7 @@ xmind用例生成进度
       <button class="link-toggle" id="closeCaseGenDbStoreDrawerBtn" data-drawer-close="caseGenDbStoreDrawer">收起</button>
     </div>
     <div class="drawer-body" id="caseGenDbStoreDrawerBody">
-      <p class="hint" style="margin:0 0 10px;">选择项目与版本后写入用例库；“旧用例追加入库”需额外选择目标用例。</p>
+      <p class="hint" style="margin:0 0 10px;">选择项目与版本后写入用例库；追加入库需额外选择目标用例。</p>
       <div class="case-library-filters" style="margin-bottom:8px;" id="caseGenDbStoreEntryNameRow">
         <span class="case-library-label">用例名</span>
         <input id="caseGenDbStoreEntryNameInput" maxlength="80" placeholder="请输入确认入库的用例名" style="min-width:240px; flex:1;" />
@@ -1104,409 +356,6 @@ xmind用例生成进度
     </div>
   </div>
 </div>
-<div class="drawer" id="caseGenRequirementDrawer" data-tab-section="casesgen">
-  <div class="drawer-mask" data-drawer-close="caseGenRequirementDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="caseGenRequirementDrawerTitle">填写需求标识</h3>
-      <button class="link-toggle" id="closeCaseGenRequirementDrawerBtn" data-drawer-close="caseGenRequirementDrawer">收起</button>
-    </div>
-    <div class="drawer-body">
-      <p class="hint" id="caseGenRequirementDrawerHint" style="margin:0 0 10px;"></p>
-      <div class="row column" style="margin:0;">
-        <label class="inline">需求标识
-          <input id="caseGenRequirementDrawerInput" maxlength="20" placeholder="例如：登录改造 / 订单导出"/>
-        </label>
-      </div>
-      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
-        <button class="pill primary" id="caseGenRequirementDrawerConfirmBtn" type="button">确认</button>
-        <button class="ghost-btn" id="caseGenRequirementDrawerCancelBtn" type="button">取消</button>
-      </div>
-      <p class="status" id="caseGenRequirementDrawerStatus"></p>
-    </div>
-  </div>
-</div>
-<div class="drawer" id="caseGenModuleGenerateDrawer" data-tab-section="casesgen">
-  <div class="drawer-mask" data-drawer-close="caseGenModuleGenerateDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="caseGenModuleGenerateDrawerTitle">模块生成方式确认</h3>
-      <button class="link-toggle" id="closeCaseGenModuleGenerateDrawerBtn" data-drawer-close="caseGenModuleGenerateDrawer">收起</button>
-    </div>
-    <div class="drawer-body">
-      <p class="hint" id="caseGenModuleGenerateDrawerHint" style="margin:0 0 10px;"></p>
-      <div class="casegen-module-drawer-card">
-        <div class="casegen-module-drawer-head">
-          <span class="casegen-module-drawer-label">当前生成模块</span>
-          <strong id="caseGenModuleGenerateDrawerModuleTitle">-</strong>
-        </div>
-        <div class="casegen-module-drawer-grid">
-          <div class="casegen-module-drawer-item">
-            <span class="casegen-module-drawer-item-title">测试场景</span>
-            <p id="caseGenModuleGenerateDrawerScenarios">-</p>
-          </div>
-          <div class="casegen-module-drawer-item">
-            <span class="casegen-module-drawer-item-title">测试要点</span>
-            <p id="caseGenModuleGenerateDrawerPoints">-</p>
-          </div>
-          <div class="casegen-module-drawer-item">
-            <span class="casegen-module-drawer-item-title">耦合模块</span>
-            <p id="caseGenModuleGenerateDrawerCoupled">-</p>
-          </div>
-        </div>
-      </div>
-      <div class="casegen-tabbar casegen-module-drawer-tabbar" role="tablist" aria-label="模块生成方式页签">
-        <button class="casegen-tab is-active" id="caseGenModuleGenerateGlobalTabBtn" type="button" data-casegen-module-tab="global" aria-selected="true" aria-controls="caseGenModuleGenerateGlobalPanel">全局配置优先</button>
-        <button class="casegen-tab" id="caseGenModuleGenerateLocalTabBtn" type="button" data-casegen-module-tab="local" aria-selected="false" aria-controls="caseGenModuleGenerateLocalPanel">独立配置优先</button>
-        <button class="casegen-tab" id="caseGenModuleGenerateTopupTabBtn" type="button" data-casegen-module-tab="topup" aria-selected="false" aria-controls="caseGenModuleGenerateTopupPanel">补全生成</button>
-      </div>
-      <div class="casegen-tabpanel casegen-module-drawer-panel is-active" id="caseGenModuleGenerateGlobalPanel" data-casegen-module-panel="global" role="tabpanel" aria-labelledby="caseGenModuleGenerateGlobalTabBtn">
-        <div class="casegen-module-drawer-card">
-          <div class="casegen-module-drawer-head">
-            <span class="casegen-module-drawer-label">当前全局生成配置</span>
-          </div>
-          <p class="hint casegen-module-drawer-summary" id="caseGenModuleGenerateDrawerGlobalSummary">当前全局生成配置将按共享设置执行，可切换到全局页签查看或调整。</p>
-        </div>
-        <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
-          <button class="pill primary" id="caseGenModuleGenerateGlobalConfirmBtn" type="button">确认并生成</button>
-          <button class="ghost-btn" data-drawer-close="caseGenModuleGenerateDrawer" type="button">取消</button>
-        </div>
-      </div>
-      <div class="casegen-tabpanel casegen-module-drawer-panel" id="caseGenModuleGenerateLocalPanel" data-casegen-module-panel="local" role="tabpanel" aria-labelledby="caseGenModuleGenerateLocalTabBtn">
-        <div class="casegen-generate-drawer-field">
-          <label class="casegen-generate-drawer-field-title" for="caseGenModuleLocalRequirement">额外要求填写</label>
-          <textarea id="caseGenModuleLocalRequirement" placeholder="非必填，如果没有特殊要求就走正常生成，"></textarea>
-          <p class="hint casegen-generate-drawer-field-hint">仅当前模块本次生成生效，不写入全局，也不会被其他模块复用。</p>
-        </div>
-        <div class="casegen-option-list">
-          <label class="casegen-option" for="caseGenModuleLocalNeedFunctionCondition">
-            <input id="caseGenModuleLocalNeedFunctionCondition" type="checkbox"/>
-            <span class="casegen-option-body">
-              <span class="casegen-option-copy">
-                <span class="casegen-option-title">是否需要考虑功能使用条件</span>
-                <span class="hint">补足解锁条件、可用条件、身份门槛、前置任务和时间限制。</span>
-              </span>
-              <span class="casegen-option-switch" aria-hidden="true">
-                <span class="casegen-option-state casegen-option-state-on">开</span>
-                <span class="casegen-option-state casegen-option-state-off">关</span>
-                <span class="casegen-option-knob"></span>
-              </span>
-            </span>
-          </label>
-          <label class="casegen-option" for="caseGenModuleLocalNeedNumericValidation">
-            <input id="caseGenModuleLocalNeedNumericValidation" type="checkbox"/>
-            <span class="casegen-option-body">
-              <span class="casegen-option-copy">
-                <span class="casegen-option-title">是否需要做数值验证</span>
-                <span class="hint">覆盖数值范围、阈值变化、累计扣减和结算正确性。</span>
-              </span>
-              <span class="casegen-option-switch" aria-hidden="true">
-                <span class="casegen-option-state casegen-option-state-on">开</span>
-                <span class="casegen-option-state casegen-option-state-off">关</span>
-                <span class="casegen-option-knob"></span>
-              </span>
-            </span>
-          </label>
-          <label class="casegen-option" for="caseGenModuleLocalNeedBoundary">
-            <input id="caseGenModuleLocalNeedBoundary" type="checkbox"/>
-            <span class="casegen-option-body">
-              <span class="casegen-option-copy">
-                <span class="casegen-option-title">是否需要考虑边界</span>
-                <span class="hint">覆盖上下限、临界状态、空值与异常边界。</span>
-              </span>
-              <span class="casegen-option-switch" aria-hidden="true">
-                <span class="casegen-option-state casegen-option-state-on">开</span>
-                <span class="casegen-option-state casegen-option-state-off">关</span>
-                <span class="casegen-option-knob"></span>
-              </span>
-            </span>
-          </label>
-          <label class="casegen-option" for="caseGenModuleLocalNeedMobile">
-            <input id="caseGenModuleLocalNeedMobile" type="checkbox"/>
-            <span class="casegen-option-body">
-              <span class="casegen-option-copy">
-                <span class="casegen-option-title">是否需要考虑移动设备操作</span>
-                <span class="hint">补充点击、长按、滑动、横竖屏等手机交互场景。</span>
-              </span>
-              <span class="casegen-option-switch" aria-hidden="true">
-                <span class="casegen-option-state casegen-option-state-on">开</span>
-                <span class="casegen-option-state casegen-option-state-off">关</span>
-                <span class="casegen-option-knob"></span>
-              </span>
-            </span>
-          </label>
-          <label class="casegen-option" for="caseGenModuleLocalNeedSpecial">
-            <input id="caseGenModuleLocalNeedSpecial" type="checkbox"/>
-            <span class="casegen-option-body">
-              <span class="casegen-option-copy">
-                <span class="casegen-option-title">是否需要考虑特殊场景</span>
-                <span class="hint">可继续勾选下方特殊场景明细。</span>
-              </span>
-              <span class="casegen-option-switch" aria-hidden="true">
-                <span class="casegen-option-state casegen-option-state-on">开</span>
-                <span class="casegen-option-state casegen-option-state-off">关</span>
-                <span class="casegen-option-knob"></span>
-              </span>
-            </span>
-          </label>
-          <div class="casegen-suboptions" id="caseGenModuleLocalSpecialOptions">
-            <div class="casegen-suboptions-title">选择要考虑的特殊场景</div>
-            <div class="casegen-suboptions-grid">
-              <label class="casegen-suboption" for="caseGenModuleLocalSpecialRepeatOperation">
-                <input id="caseGenModuleLocalSpecialRepeatOperation" type="checkbox"/>
-                <span class="casegen-suboption-body">
-                  <span class="casegen-suboption-title">重复操作</span>
-                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                    <span class="casegen-option-state casegen-option-state-on">开</span>
-                    <span class="casegen-option-state casegen-option-state-off">关</span>
-                    <span class="casegen-option-knob"></span>
-                  </span>
-                </span>
-              </label>
-              <label class="casegen-suboption" for="caseGenModuleLocalSpecialMultiTouch">
-                <input id="caseGenModuleLocalSpecialMultiTouch" type="checkbox"/>
-                <span class="casegen-suboption-body">
-                  <span class="casegen-suboption-title">多点触控</span>
-                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                    <span class="casegen-option-state casegen-option-state-on">开</span>
-                    <span class="casegen-option-state casegen-option-state-off">关</span>
-                    <span class="casegen-option-knob"></span>
-                  </span>
-                </span>
-              </label>
-              <label class="casegen-suboption" for="caseGenModuleLocalSpecialRepeatExecution">
-                <input id="caseGenModuleLocalSpecialRepeatExecution" type="checkbox"/>
-                <span class="casegen-suboption-body">
-                  <span class="casegen-suboption-title">重复执行</span>
-                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                    <span class="casegen-option-state casegen-option-state-on">开</span>
-                    <span class="casegen-option-state casegen-option-state-off">关</span>
-                    <span class="casegen-option-knob"></span>
-                  </span>
-                </span>
-              </label>
-              <label class="casegen-suboption" for="caseGenModuleLocalSpecialWeakNetwork">
-                <input id="caseGenModuleLocalSpecialWeakNetwork" type="checkbox"/>
-                <span class="casegen-suboption-body">
-                  <span class="casegen-suboption-title">弱网</span>
-                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                    <span class="casegen-option-state casegen-option-state-on">开</span>
-                    <span class="casegen-option-state casegen-option-state-off">关</span>
-                    <span class="casegen-option-knob"></span>
-                  </span>
-                </span>
-              </label>
-              <label class="casegen-suboption" for="caseGenModuleLocalSpecialInterruptResume">
-                <input id="caseGenModuleLocalSpecialInterruptResume" type="checkbox"/>
-                <span class="casegen-suboption-body">
-                  <span class="casegen-suboption-title">中断恢复</span>
-                  <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                    <span class="casegen-option-state casegen-option-state-on">开</span>
-                    <span class="casegen-option-state casegen-option-state-off">关</span>
-                    <span class="casegen-option-knob"></span>
-                  </span>
-                </span>
-              </label>
-            </div>
-          </div>
-        </div>
-        <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
-          <button class="pill primary" id="caseGenModuleGenerateLocalConfirmBtn" type="button">确认并生成</button>
-          <button class="ghost-btn" data-drawer-close="caseGenModuleGenerateDrawer" type="button">取消</button>
-        </div>
-      </div>
-      <div class="casegen-tabpanel casegen-module-drawer-panel" id="caseGenModuleGenerateTopupPanel" data-casegen-module-panel="topup" role="tabpanel" aria-labelledby="caseGenModuleGenerateTopupTabBtn">
-        <div class="casegen-generate-drawer-field">
-          <label class="casegen-generate-drawer-field-title" for="caseGenModuleTopupSuggestion">生成建议</label>
-          <textarea id="caseGenModuleTopupSuggestion" placeholder="可输入补充说明/限制条件..."></textarea>
-          <p class="hint casegen-generate-drawer-field-hint" id="caseGenModuleTopupHint">补全生成只使用当前模块的生成建议和已有用例，不继承全局或独立配置勾选。</p>
-        </div>
-        <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px; flex-wrap:wrap;">
-          <button class="pill primary" id="caseGenModuleGenerateTopupConfirmBtn" type="button">确认并生成</button>
-          <button class="ghost-btn" data-drawer-close="caseGenModuleGenerateDrawer" type="button">取消</button>
-        </div>
-      </div>
-      <p class="status" id="caseGenModuleGenerateDrawerStatus"></p>
-    </div>
-  </div>
-</div>
-<div class="drawer" id="caseGenActionDrawer" data-tab-section="casesgen">
-  <div class="drawer-mask" data-drawer-close="caseGenActionDrawer"></div>
-  <div class="drawer-panel">
-    <div class="drawer-header">
-      <h3 id="caseGenActionDrawerTitle">生成前确认</h3>
-      <button class="link-toggle" id="closeCaseGenActionDrawerBtn" data-drawer-close="caseGenActionDrawer">收起</button>
-    </div>
-    <div class="drawer-body">
-      <p class="hint" id="caseGenActionDrawerHint" style="margin:0 0 10px;"></p>
-      <div class="casegen-generate-drawer-field">
-        <label class="casegen-generate-drawer-field-title" for="caseGenCustomRequirement">额外要求填写</label>
-        <textarea id="caseGenCustomRequirement" placeholder="非必填，如果没有特殊要求就走正常生成，"></textarea>
-        <p class="hint casegen-generate-drawer-field-hint">默认留空；如需补充本轮生成约束，请在这里填写。</p>
-      </div>
-      <div class="casegen-option-list">
-        <label class="casegen-option" for="caseGenNeedFunctionCondition">
-          <input id="caseGenNeedFunctionCondition" type="checkbox"/>
-          <span class="casegen-option-body">
-            <span class="casegen-option-copy">
-              <span class="casegen-option-title">是否需要考虑功能使用条件</span>
-              <span class="hint">补足解锁条件、可用条件、身份门槛、前置任务和时间限制。</span>
-            </span>
-            <span class="casegen-option-switch" aria-hidden="true">
-              <span class="casegen-option-state casegen-option-state-on">开</span>
-              <span class="casegen-option-state casegen-option-state-off">关</span>
-              <span class="casegen-option-knob"></span>
-            </span>
-          </span>
-        </label>
-        <label class="casegen-option" for="caseGenNeedNumericValidation">
-          <input id="caseGenNeedNumericValidation" type="checkbox"/>
-          <span class="casegen-option-body">
-            <span class="casegen-option-copy">
-              <span class="casegen-option-title">是否需要做数值验证</span>
-              <span class="hint">覆盖数值范围、阈值变化、累计扣减和结算正确性。</span>
-            </span>
-            <span class="casegen-option-switch" aria-hidden="true">
-              <span class="casegen-option-state casegen-option-state-on">开</span>
-              <span class="casegen-option-state casegen-option-state-off">关</span>
-              <span class="casegen-option-knob"></span>
-            </span>
-          </span>
-        </label>
-        <label class="casegen-option" for="caseGenNeedBoundary">
-          <input id="caseGenNeedBoundary" type="checkbox"/>
-          <span class="casegen-option-body">
-            <span class="casegen-option-copy">
-              <span class="casegen-option-title">是否需要考虑边界</span>
-              <span class="hint">覆盖上下限、临界状态、空值与异常边界。</span>
-            </span>
-            <span class="casegen-option-switch" aria-hidden="true">
-              <span class="casegen-option-state casegen-option-state-on">开</span>
-              <span class="casegen-option-state casegen-option-state-off">关</span>
-              <span class="casegen-option-knob"></span>
-            </span>
-          </span>
-        </label>
-        <label class="casegen-option" for="caseGenNeedMobile">
-          <input id="caseGenNeedMobile" type="checkbox"/>
-          <span class="casegen-option-body">
-            <span class="casegen-option-copy">
-              <span class="casegen-option-title">是否需要考虑移动设备操作</span>
-              <span class="hint">补充点击、长按、滑动、横竖屏等手机交互场景。</span>
-            </span>
-            <span class="casegen-option-switch" aria-hidden="true">
-              <span class="casegen-option-state casegen-option-state-on">开</span>
-              <span class="casegen-option-state casegen-option-state-off">关</span>
-              <span class="casegen-option-knob"></span>
-            </span>
-          </span>
-        </label>
-        <label class="casegen-option" for="caseGenNeedSpecial">
-          <input id="caseGenNeedSpecial" type="checkbox"/>
-          <span class="casegen-option-body">
-            <span class="casegen-option-copy">
-              <span class="casegen-option-title">是否需要考虑特殊场景</span>
-              <span class="hint">可继续勾选下方特殊场景明细。</span>
-            </span>
-            <span class="casegen-option-switch" aria-hidden="true">
-              <span class="casegen-option-state casegen-option-state-on">开</span>
-              <span class="casegen-option-state casegen-option-state-off">关</span>
-              <span class="casegen-option-knob"></span>
-            </span>
-          </span>
-        </label>
-        <div class="casegen-suboptions" id="caseGenSpecialOptions">
-          <div class="casegen-suboptions-title">选择要考虑的特殊场景</div>
-          <div class="casegen-suboptions-grid">
-            <label class="casegen-suboption" for="caseGenSpecialRepeatOperation">
-              <input id="caseGenSpecialRepeatOperation" type="checkbox"/>
-              <span class="casegen-suboption-body">
-                <span class="casegen-suboption-title">重复操作</span>
-                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                  <span class="casegen-option-state casegen-option-state-on">开</span>
-                  <span class="casegen-option-state casegen-option-state-off">关</span>
-                  <span class="casegen-option-knob"></span>
-                </span>
-              </span>
-            </label>
-            <label class="casegen-suboption" for="caseGenSpecialMultiTouch">
-              <input id="caseGenSpecialMultiTouch" type="checkbox"/>
-              <span class="casegen-suboption-body">
-                <span class="casegen-suboption-title">多点触控</span>
-                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                  <span class="casegen-option-state casegen-option-state-on">开</span>
-                  <span class="casegen-option-state casegen-option-state-off">关</span>
-                  <span class="casegen-option-knob"></span>
-                </span>
-              </span>
-            </label>
-            <label class="casegen-suboption" for="caseGenSpecialRepeatExecution">
-              <input id="caseGenSpecialRepeatExecution" type="checkbox"/>
-              <span class="casegen-suboption-body">
-                <span class="casegen-suboption-title">重复执行</span>
-                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                  <span class="casegen-option-state casegen-option-state-on">开</span>
-                  <span class="casegen-option-state casegen-option-state-off">关</span>
-                  <span class="casegen-option-knob"></span>
-                </span>
-              </span>
-            </label>
-            <label class="casegen-suboption" for="caseGenSpecialWeakNetwork">
-              <input id="caseGenSpecialWeakNetwork" type="checkbox"/>
-              <span class="casegen-suboption-body">
-                <span class="casegen-suboption-title">弱网</span>
-                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                  <span class="casegen-option-state casegen-option-state-on">开</span>
-                  <span class="casegen-option-state casegen-option-state-off">关</span>
-                  <span class="casegen-option-knob"></span>
-                </span>
-              </span>
-            </label>
-            <label class="casegen-suboption" for="caseGenSpecialInterruptResume">
-              <input id="caseGenSpecialInterruptResume" type="checkbox"/>
-              <span class="casegen-suboption-body">
-                <span class="casegen-suboption-title">中断恢复</span>
-                <span class="casegen-option-switch casegen-option-switch-compact" aria-hidden="true">
-                  <span class="casegen-option-state casegen-option-state-on">开</span>
-                  <span class="casegen-option-state casegen-option-state-off">关</span>
-                  <span class="casegen-option-knob"></span>
-                </span>
-              </span>
-            </label>
-          </div>
-        </div>
-      </div>
-      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
-        <button class="pill primary" id="caseGenActionDrawerConfirmBtn" type="button">确认并执行</button>
-        <button class="ghost-btn" id="caseGenActionDrawerCancelBtn" data-drawer-close="caseGenActionDrawer" type="button">取消</button>
-      </div>
-      <p class="status" id="caseGenActionDrawerStatus"></p>
-    </div>
-  </div>
-</div>
-
-
-
-	
-	
-
-
-
-
-
-
-
-
-
-
-
-	  
-
-	
-
-
-
-
 <div class="drawer" id="caseLibraryImportDiffDrawer" data-tab-section="case-library">
   <div class="drawer-mask" data-drawer-close="caseLibraryImportDiffDrawer"></div>
   <div class="drawer-panel">
@@ -1555,7 +404,7 @@ xmind用例生成进度
       <button class="link-toggle" data-drawer-close="caseLibraryImportSelectDrawer">收起</button>
     </div>
     <div class="drawer-body">
-      <p class="hint">选择项目与版本后查询，用例将导入“一键执行/功能流程”的测试用例中。</p>
+      <p class="hint">选择项目与版本后查询，并将所选用例导入当前操作。</p>
       <div class="case-library-drawer-toolbar">
         <div class="case-library-filters">
           <label class="case-library-label" for="caseLibraryImportSelectProjectSelect">项目</label>
@@ -1670,28 +519,6 @@ xmind用例生成进度
 	
 
   
-  <div class="drawer hidden" id="flowGuideDrawer">
-    <div class="drawer-mask" data-drawer-close="flowGuideDrawer"></div>
-    <div class="drawer-panel">
-      <div class="drawer-header">
-        <h3 id="flowGuideDrawerTitle">功能引导</h3>
-        <button class="link-toggle" id="closeFlowGuideDrawerBtn" data-drawer-close="flowGuideDrawer">收起</button>
-      </div>
-      <div class="drawer-body" id="flowGuideDrawerBody"></div>
-    </div>
-  </div>
-  <div class="drawer hidden" id="pageGuideDrawer">
-    <div class="drawer-mask" data-drawer-close="pageGuideDrawer"></div>
-    <div class="drawer-panel">
-      <div class="drawer-header">
-        <h3 id="pageGuideDrawerTitle">页面说明</h3>
-        <button class="link-toggle" id="closePageGuideDrawerBtn" data-drawer-close="pageGuideDrawer">收起</button>
-      </div>
-      <div class="drawer-body" id="pageGuideDrawerBody">
-        <p class="hint" style="margin:0;">暂无页面说明</p>
-      </div>
-    </div>
-  </div>
   <div class="drawer hidden" id="xmindStructureDrawer">
     <div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
     <div class="drawer-panel drawer-panel-wide">
@@ -1711,12 +538,9 @@ xmind用例生成进度
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>
 <script src="./scripts/core/appRuntime.js" defer></script>
-<script src="./scripts/core/splitCore.js" defer></script>
-<script src="./scripts/core/cleanCore.js" defer></script>
-<script src="./scripts/core/compareCore.js" defer></script>
-<script src="./scripts/core/reviewCore.js" defer></script>
+<script src="./scripts/core/retainedGenerationRuntime.js" defer></script>
+<script src="./scripts/core/xmindImportCore.js" defer></script>
 <script src="./scripts/core/casesCore.js" defer></script>
-<script src="./scripts/core/autoCore.js" defer></script>
 <script src="./scripts/core/xmindCore.js" defer></script>
 <script src="./scripts/core/xmindRequestSchedulerCore.js" defer></script>
 <script src="./scripts/core/xmindWorkspaceRecoveryCore.js" defer></script>
@@ -1733,10 +557,7 @@ xmind用例生成进度
 <script src="./scripts/core/tempexecDefaults.js" defer></script>
 <script src="./scripts/core/tempexecCore.js" defer></script>
 <script src="./scripts/core/casesGenCore.js" defer></script>
-<script src="./scripts/core/debugCore.js" defer></script>
 <script src="./scripts/core/requirementCore.js" defer></script>
-<script src="./scripts/core/flowCore.js" defer></script>
-<script src="./scripts/handlers/cleanHandlers.js" defer></script>
 <script src="./scripts/base/state.js" defer></script>
 <script src="./scripts/base/utils.js" defer></script>
 <script src="./scripts/base/drawer.js" defer></script>
@@ -1749,21 +570,11 @@ xmind用例生成进度
 <script src="./scripts/modules/models.js" defer></script>
 <script src="./scripts/handlers/assignHandlers.js" defer></script>
 <script src="./scripts/modules/assign.js" defer></script>
-<script src="./scripts/modules/review.js" defer></script>
-<script src="./scripts/modules/clean.js" defer></script>
-<script src="./scripts/modules/compare.js" defer></script>
-<script src="./scripts/modules/split.js" defer></script>
-<script src="./scripts/handlers/splitHandlers.js" defer></script>
-<script src="./scripts/modules/upload.js" defer></script>
-<script src="./scripts/handlers/casegenHandlers.js" defer></script>
-<script src="./scripts/core/casegenCore.js" defer></script>
 <script src="./scripts/modules/casegenProgress.js" defer></script>
 <script src="./scripts/modules/memoPad.js" defer></script>
 <script src="./scripts/modules/xmindKnowledgeBase.js" defer></script>
 <script src="./scripts/modules/casePageAiGenPrep.js" defer></script>
 <script src="./scripts/handlers/layoutHandlers.js" defer></script>
-<script src="./scripts/modules/auto.js" defer></script>
-<script src="./scripts/modules/casesgen.js" defer></script>
 <script src="./scripts/modules/xmindCasegen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
 <script src="./scripts/modules/caseLibrary.js" defer></script>
@@ -1772,8 +583,6 @@ xmind用例生成进度
 <script src="./scripts/modules/opsLog.js" defer></script>
 <script src="./scripts/modules/admin.js" defer></script>
 <script src="./scripts/modules/authGuard.js" defer></script>
-<script src="./scripts/modules/flowGuide.js" defer></script>
-<script src="./scripts/modules/pageGuide.js" defer></script>
 <script src="./scripts/modules/app.js" defer></script>
 <script src="./scripts/modules/bootstrap.js" defer></script>
 <script>

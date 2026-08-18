@@ -52,8 +52,7 @@
 
   function unlockBodyScroll(body, root) {
     var otherOpen = document.querySelector && document.querySelector(
-      '.drawer.open:not(.guide-fake-assign):not(.guide-fake-missing):not(.guide-fake-drawer),' +
-      ' .drawer.closing:not(.guide-fake-assign):not(.guide-fake-missing):not(.guide-fake-drawer)'
+      '.drawer.open, .drawer.closing'
     );
     if (otherOpen) return;
     if (root && root.classList) root.classList.remove('drawer-open');

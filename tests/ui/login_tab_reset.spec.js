@@ -54,8 +54,10 @@ test.describe('登录后页签默认与刷新保持', () => {
     await waitForAppReady();
 
     const defaultTab = await page.evaluate(() => (window.app && window.app.state ? window.app.state.activeTab : ''));
-    expect(defaultTab).toBe('auto');
+    expect(defaultTab).toBe('casesgen');
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await page.waitForURL(/case-exec\.html\?tab=tempexec/, { timeout: 20000 });
+    await waitForAppReady();
     await expect.poll(() => page.evaluate(() => (window.app && window.app.state ? window.app.state.activeTab : ''))).toBe('tempexec');
 
     await page.reload();
@@ -83,14 +85,15 @@ test.describe('登录后页签默认与刷新保持', () => {
     await page.fill('#loginPassword', 'any');
     await page.click('#loginSubmit');
 
-    await page.waitForURL(/index\.html/, { timeout: 20000 });
+    await page.waitForURL(/ai-workflow\.html\?tab=casesgen/, { timeout: 20000 });
     await page.waitForFunction(() => window.app && window.app.switchTab && window.app.state, null, { timeout: 20000 });
     const afterLoginTab = await page.evaluate(() => (window.app && window.app.state ? window.app.state.activeTab : ''));
-    expect(afterLoginTab).toBe('auto');
+    expect(afterLoginTab).toBe('casesgen');
     expect(afterLoginTab).not.toBe('tempexec');
 
     // 关键回归：重新登录后，首次切页再刷新也应保持（不能“要第二次刷新才正常”）。
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
+    await page.waitForURL(/case-exec\.html\?tab=tempexec/, { timeout: 20000 });
     await expect.poll(() => page.evaluate(() => (window.app && window.app.state ? window.app.state.activeTab : ''))).toBe('tempexec');
     await page.reload();
     await page.waitForFunction(() => window.app && window.app.switchTab && window.app.state, null, { timeout: 20000 });

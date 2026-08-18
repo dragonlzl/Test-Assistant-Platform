@@ -7,12 +7,6 @@
     var setStatus = ctx.setStatus || function noopSetStatus() {};
     var downloadText = ctx.downloadText || function noopDownload() {};
     var dom = ctx.dom || {};
-    var cleanPromptEl = dom.cleanPromptEl || document.getElementById('cleanPrompt');
-    var reviewPromptEl = dom.reviewPromptEl || document.getElementById('reviewPrompt');
-    var comparePromptEl = dom.comparePromptEl || document.getElementById('comparePrompt');
-    var splitPromptEl = dom.splitPromptEl || document.getElementById('splitPrompt');
-    var casesPromptEl = dom.casesPromptEl || document.getElementById('casesPrompt');
-    var caseGenPromptEl = dom.caseGenPromptEl || document.getElementById('caseGenPrompt');
     var xmindCaseGenPromptEl = dom.xmindCaseGenPromptEl || document.getElementById('xmindCaseGenPrompt');
     var caseFilterPromptEl = dom.caseFilterPromptEl || document.getElementById('caseFilterPrompt');
     var missingReminderPromptEl = dom.missingReminderPromptEl || document.getElementById('missingReminderPrompt');
@@ -47,12 +41,6 @@
 
     function buildCurrentPromptSnapshot() {
       return {
-        system: capturePromptValue(cleanPromptEl, assignments.cleanPrompt, defaultPrompts.system),
-        review: capturePromptValue(reviewPromptEl, assignments.reviewPrompt, defaultPrompts.review),
-        compare: capturePromptValue(comparePromptEl, assignments.comparePrompt, defaultPrompts.compare),
-        split: capturePromptValue(splitPromptEl, assignments.splitPrompt, defaultPrompts.split),
-        cases: capturePromptValue(casesPromptEl, assignments.casesPrompt, defaultPrompts.cases),
-        casegen: capturePromptValue(caseGenPromptEl, assignments.caseGenPrompt, defaultPrompts.casegen),
         xmindcasegen: capturePromptValue(xmindCaseGenPromptEl, assignments.xmindCaseGenPrompt, defaultPrompts.xmindcasegen),
         casefilter: capturePromptValue(caseFilterPromptEl, assignments.caseFilterPrompt, defaultPrompts.casefilter),
         missingreminder: capturePromptValue(missingReminderPromptEl, assignments.missingReminderPrompt, defaultPrompts.missingreminder),
@@ -71,7 +59,7 @@
     function applyDefaultPromptsOverride(source, persist, updateInputs) {
       if (!source || typeof source !== 'object') return false;
       var changed = false;
-      ['system', 'review', 'compare', 'split', 'cases', 'casegen', 'xmindcasegen', 'casefilter', 'missingreminder', 'caselibrarygen'].forEach(function(key) {
+      ['xmindcasegen', 'casefilter', 'missingreminder', 'caselibrarygen'].forEach(function(key) {
         if (typeof source[key] === 'string' && source[key].trim()) {
           defaultPrompts[key] = source[key];
           changed = true;
@@ -79,12 +67,6 @@
       });
       if (changed && persist) {
         persistDefaultPrompts({
-          system: defaultPrompts.system,
-          review: defaultPrompts.review,
-          compare: defaultPrompts.compare,
-          split: defaultPrompts.split,
-          cases: defaultPrompts.cases,
-          casegen: defaultPrompts.casegen,
           xmindcasegen: defaultPrompts.xmindcasegen,
           casefilter: defaultPrompts.casefilter,
           missingreminder: defaultPrompts.missingreminder,
@@ -92,22 +74,10 @@
         });
       }
       if (changed && updateInputs) {
-        assignments.cleanPrompt = defaultPrompts.system;
-        assignments.reviewPrompt = defaultPrompts.review;
-        assignments.comparePrompt = defaultPrompts.compare;
-        assignments.splitPrompt = defaultPrompts.split;
-        assignments.casesPrompt = defaultPrompts.cases;
-        assignments.caseGenPrompt = defaultPrompts.casegen;
         assignments.xmindCaseGenPrompt = defaultPrompts.xmindcasegen;
         assignments.caseFilterPrompt = defaultPrompts.casefilter;
         assignments.missingReminderPrompt = defaultPrompts.missingreminder;
         assignments.caseLibraryGenPrompt = defaultPrompts.caselibrarygen;
-        setInputValue(cleanPromptEl, assignments.cleanPrompt);
-        setInputValue(reviewPromptEl, assignments.reviewPrompt);
-        setInputValue(comparePromptEl, assignments.comparePrompt);
-        setInputValue(splitPromptEl, assignments.splitPrompt);
-        setInputValue(casesPromptEl, assignments.casesPrompt);
-        setInputValue(caseGenPromptEl, assignments.caseGenPrompt);
         if (xmindCaseGenPromptEl) setInputValue(xmindCaseGenPromptEl, assignments.xmindCaseGenPrompt);
         if (caseFilterPromptEl) setInputValue(caseFilterPromptEl, assignments.caseFilterPrompt);
         if (missingReminderPromptEl) setInputValue(missingReminderPromptEl, assignments.missingReminderPrompt);
@@ -138,12 +108,6 @@
 
     function exportDefaultPrompts() {
       var payload = JSON.stringify({
-        system: defaultPrompts.system,
-        review: defaultPrompts.review,
-        compare: defaultPrompts.compare,
-        split: defaultPrompts.split,
-        cases: defaultPrompts.cases,
-        casegen: defaultPrompts.casegen,
         xmindcasegen: defaultPrompts.xmindcasegen,
         casefilter: defaultPrompts.casefilter,
         missingreminder: defaultPrompts.missingreminder,

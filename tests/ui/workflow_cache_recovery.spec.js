@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
-test.describe('启动缓存恢复', () => {
-  test('异常过大的本地流程缓存不会阻塞页面启动', async ({ page }) => {
+test.describe('XMind 启动快照恢复', () => {
+  test('异常过大的本地生成快照不会阻塞页面启动', async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
       if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
@@ -29,7 +29,7 @@ test.describe('启动缓存恢复', () => {
     await expect.poll(async () => {
       return await page.evaluate(() => {
         return {
-          workflow: localStorage.getItem('usecase-workflow-state-v1'),
+          snapshot: localStorage.getItem('usecase-workflow-state-v1'),
           tasks: localStorage.getItem('tap-xmind-casegen-tasks'),
           user: window.app && window.app.state && window.app.state.currentUser
             ? window.app.state.currentUser.username
@@ -37,13 +37,13 @@ test.describe('启动缓存恢复', () => {
         };
       });
     }).toEqual({
-      workflow: null,
+      snapshot: null,
       tasks: null,
       user: 'e2e',
     });
   });
 
-  test('主流程缓存超限时，大量残留的 XMind 任务会被整仓清理，不会在启动时逐条清理卡死', async ({ page }) => {
+  test('生成快照超限时会一次清理残留 XMind 任务', async ({ page }) => {
     const tasks = [];
     let idx = 0;
     let rawLength = 0;
@@ -133,7 +133,7 @@ test.describe('启动缓存恢复', () => {
     await expect.poll(async () => {
       return await page.evaluate(() => {
         return {
-          workflow: localStorage.getItem('usecase-workflow-state-v1'),
+          snapshot: localStorage.getItem('usecase-workflow-state-v1'),
           tasks: localStorage.getItem('tap-xmind-casegen-tasks'),
           taskEventCount: Number(window.__pwXmindTaskEventCount || 0),
           user: window.app && window.app.state && window.app.state.currentUser
@@ -142,7 +142,7 @@ test.describe('启动缓存恢复', () => {
         };
       });
     }).toEqual({
-      workflow: null,
+      snapshot: null,
       tasks: null,
       taskEventCount: 1,
       user: 'e2e',

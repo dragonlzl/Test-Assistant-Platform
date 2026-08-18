@@ -225,7 +225,7 @@
   }
 
   function getPageDefaultTab() {
-    var fallback = 'auto';
+    var fallback = 'casesgen';
     try {
       var cfg = window.app && window.app.config ? window.app.config : {};
       var pageDefaults = cfg && cfg.pageDefaultTabMap ? cfg.pageDefaultTabMap : {};
@@ -244,7 +244,8 @@
   }
 
   function resolveValidTab(name) {
-    if (typeof document === 'undefined') return name || 'auto';
+    if (name === 'auto' || name === 'clean' || name === 'xmind-casegen') name = 'casesgen';
+    if (typeof document === 'undefined') return name || 'casesgen';
     var target = name || '';
     if (target) {
       var exists = document.querySelector('[data-tab-section=\"' + target + '\"]');
@@ -257,7 +258,7 @@
     }
     var first = document.querySelector('[data-tab-section]');
     if (first && first.dataset && first.dataset.tabSection) return first.dataset.tabSection;
-    return target || defaultTab || 'auto';
+    return target || defaultTab || 'casesgen';
   }
 
   function redirectToLogin(options) {
@@ -317,11 +318,11 @@
         projectTabSection.classList.remove('role-hidden');
       }
     }
-    var currentTab = ensureStateInstance().activeTab || 'auto';
+    var currentTab = ensureStateInstance().activeTab || 'casesgen';
     var restrictedTabs = ['user-admin', 'ops-log'];
     if (!allowProjectTab) restrictedTabs.push('project-admin');
     if (role !== 'admin' && restrictedTabs.indexOf(currentTab) !== -1) {
-      currentTab = 'auto';
+      currentTab = 'casesgen';
     }
     var firstVisible = updateGroupVisibility();
     var currentBtn = document.querySelector('[data-tab-btn="' + currentTab + '"]');
@@ -331,7 +332,7 @@
       currentVisible = false;
     }
     if (!currentVisible) {
-      var fallback = firstVisible || 'auto';
+      var fallback = firstVisible || 'casesgen';
       switchToTab(fallback);
       return;
     }
@@ -460,7 +461,7 @@
     }
     var urlTab = getTabFromUrl();
     if (forceDefaultTab && !urlTab) {
-      // 显式登出后的下一次登录：无条件回到主页(auto)，避免任何残留页签影响。
+      // 显式登出后的下一次登录：无条件回到 XMind 用例生成，避免任何残留页签影响。
       try {
         var activeTabKey = getConfigValue('activeTabKey', 'usecase-active-tab');
         if (activeTabKey && typeof sessionStorage !== 'undefined') {
@@ -469,11 +470,11 @@
       } catch (err) {
         // ignore
       }
-      liveState.activeTab = 'auto';
+      liveState.activeTab = 'casesgen';
     } else {
       var savedTab = urlTab || getSavedActiveTab();
-      // 无保存页签时统一回到主页(auto)，避免重登落到旧默认(clean)。
-      liveState.activeTab = savedTab || 'auto';
+      // 无保存页签时统一回到 XMind 用例生成。
+      liveState.activeTab = savedTab || 'casesgen';
     }
     if (isE2ESkipAuth()) {
       liveState.currentUser = liveState.currentUser || {
@@ -494,7 +495,7 @@
     }
     updateUserDisplay();
     applyRoleVisibility(liveState.currentUser);
-    var tab = resolveValidTab(liveState.activeTab || 'auto');
+    var tab = resolveValidTab(liveState.activeTab || 'casesgen');
     liveState.activeTab = tab;
     switchToTab(tab);
     return;
@@ -539,7 +540,7 @@
       updateUserDisplay();
       applyRoleVisibility(user);
       // 刷新后重新应用当前页签以恢复可见状态
-      var tab = liveState.activeTab || 'auto';
+      var tab = liveState.activeTab || 'casesgen';
       liveState.activeTab = tab;
       switchToTab(tab);
     }).catch(function(err) {

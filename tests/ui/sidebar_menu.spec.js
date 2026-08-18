@@ -56,6 +56,8 @@ test.describe('侧边分级菜单', () => {
     });
     console.log('tab submenu state after click', debugState);
     await expect(submenu).toBeVisible();
+    await expect(submenu.locator('[data-tab-btn="auto"]')).toHaveCount(0);
+    await expect(submenu.locator('[data-tab-btn="clean"]')).toHaveCount(0);
 
     await submenu.locator('[data-tab-btn="casesgen"]').click();
     await expect(page.locator('[data-tab-section="casesgen"]').first()).toBeVisible();
@@ -95,10 +97,10 @@ test.describe('侧边分级菜单', () => {
 
   test('抽屉打开时侧边导航不可点击', async ({ page }) => {
     await page.click('.tab-group-btn[data-group="ai"]');
-    await page.click('[data-tab-btn="clean"]');
-    await page.waitForSelector('#toggleCleanViewBtn');
-    await page.click('#toggleCleanViewBtn');
-    const drawer = page.locator('#cleanViewDrawer');
+    await page.click('[data-tab-btn="casesgen"]');
+    await page.waitForSelector('#xmindCaseGenOpenBtn');
+    await page.click('#xmindCaseGenOpenBtn');
+    const drawer = page.locator('#xmindCaseGenDrawer');
     await expect(drawer).toHaveClass(/open/);
 
     const beforeState = await page.evaluate(() => ({
@@ -107,7 +109,7 @@ test.describe('侧边分级菜单', () => {
     }));
 
     const afterProgrammatic = await page.evaluate(() => {
-      var target = document.querySelector('[data-tab-btn="casesgen"]');
+      var target = document.querySelector('[data-tab-btn="tempexec"]');
       if (target && typeof target.click === 'function') target.click();
       return {
         active: window.app && window.app.state ? window.app.state.activeTab : '',

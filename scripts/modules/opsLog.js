@@ -614,8 +614,6 @@
     var k = String(key || '').trim();
     if (!k) return '';
     if (k === 'tempExecPageSize') return '全局分页设置';
-    if (k === 'feishuWebhook') return '飞书 Webhook';
-    if (k === 'feishuMention') return '@角色ID';
     if (k === 'missingCaseReminderPlacement') return '易漏用例提醒区域';
     if (k === 'missingCaseReminderMatchConfig') return '易漏用例命中设定';
     if (k === 'missingCaseReminderAiEnabled') return '易漏用例推荐（大模型）';
@@ -2807,9 +2805,7 @@
       if (k === 'settings') return '其他配置';
       if (k === 'models') return '模型管理';
       if (k === 'assign') return '功能指派';
-      if (k === 'casesgen') return '用例生成';
-      if (k === 'auto') return '一键执行';
-      if (k === 'clean') return '功能流程';
+      if (k === 'casesgen' || k === 'auto' || k === 'clean') return 'XMind 用例生成';
       if (k === 'login') return '系统平台';
       return k;
     }

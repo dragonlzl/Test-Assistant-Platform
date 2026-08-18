@@ -130,7 +130,7 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
       const grid = document.getElementById('opsLogTargetFilterGrid');
       return grid && grid.querySelectorAll('label').length > 0;
     });
-    await expect(page.locator('#flowNav')).toHaveClass(/hidden/);
+    await expect(page.locator('#flowNav')).toHaveCount(0);
     await expect(page.locator('.ops-log-table thead')).toContainText('操作页面');
     await expect(page.locator('.ops-log-table thead')).toContainText('变化');
 

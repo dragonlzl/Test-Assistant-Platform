@@ -144,7 +144,7 @@ test.describe('跨设备模型/指派/设置持久化', () => {
       return route.abort();
     });
     await page.route('**/api/**', apiHandler);
-    await page.goto(base + '/index.html');
+    await page.goto(base + (opts.path || '/index.html'));
     await page.waitForLoadState('domcontentloaded');
     // 等待核心全局对象就绪即可，避免依赖 bootstrap/initApp 时序造成测试波动。
     await waitForAppReady(page);
@@ -189,27 +189,22 @@ test.describe('跨设备模型/指派/设置持久化', () => {
 
     await pageA.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
     const selectIds = [
-      'cleanModelSelect',
-      'reviewModelSelect',
-      'compareModelSelect',
-      'splitModelSelect',
-      'casesModelSelect',
-      'caseGenModelSelect',
+      'xmindCaseGenModelSelect',
       'caseFilterModelSelect',
+      'missingReminderModelSelect',
+      'caseLibraryGenModelSelect',
     ];
     await Promise.all(selectIds.map((sel) => pageA.waitForSelector(`#${sel}`)));
-    await expect(pageA.locator('#cleanModelSelect')).toHaveValue(remoteModelId);
-    await expect(pageA.locator('#compareModelSelect')).toHaveValue(remoteModelId);
-    await pageA.fill('#cleanTemperature', '0.6');
-    await pageA.fill('#compareTemperature', '0.3');
+    await expect(pageA.locator('#xmindCaseGenModelSelect')).toHaveValue(remoteModelId);
+    await expect(pageA.locator('#caseLibraryGenModelSelect')).toHaveValue(remoteModelId);
+    await pageA.fill('#xmindCaseGenTemperature', '0.6');
+    await pageA.fill('#caseLibraryGenTemperature', '0.3');
     await pageA.click('#saveAssignments');
-    await expect(pageA.locator('#cleanAssignStatus')).toContainText('当前清洗模型');
+    await expect(pageA.locator('#xmindCaseGenAssignStatus')).toContainText('当前 XMind 用例生成模型');
     await expect.poll(() => serverState.features.length).toBe(1);
 
     await pageA.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
-    await pageA.fill('#feishuWebhook', 'https://example.com/hook');
-    await pageA.fill('#feishuNotifyUser', 'ou_123456');
-    await pageA.click('#saveFeishuWebhook');
+    await expect(pageA.locator('#feishuWebhook')).toHaveCount(0);
     const priorityCheckboxA = pageA.locator('input[data-temp-exec-col="priority"]');
     await priorityCheckboxA.uncheck();
     await pageA.fill('#tempExecPageSizeInput', '33');
@@ -222,17 +217,9 @@ test.describe('跨设备模型/指派/设置持久化', () => {
       const cols = serverState.settings.find((item) => item.key === 'tempExecColumns');
       return cols && cols.value_json ? cols.value_json.priority : null;
     }, { timeout: 10000 }).toBe(false);
-    await expect.poll(() => {
-      const webhook = serverState.settings.find((item) => item.key === 'feishuWebhook');
-      return webhook ? webhook.value_json : null;
-    }, { timeout: 10000 }).toBe('https://example.com/hook');
-    await expect.poll(() => {
-      const mention = serverState.settings.find((item) => item.key === 'feishuMention');
-      return mention ? mention.value_json : null;
-    }, { timeout: 10000 }).toBe('ou_123456');
-    expect(serverState.features[0].config_json.cleanId).toBe(remoteModelId);
-    expect(serverState.features[0].config_json.cleanTemperature).toBeCloseTo(0.6);
-    expect(serverState.features[0].config_json.compareTemperature).toBeCloseTo(0.3);
+    expect(serverState.features[0].config_json.xmindCaseGenId).toBe(remoteModelId);
+    expect(serverState.features[0].config_json.xmindCaseGenTemperature).toBeCloseTo(0.6);
+    expect(serverState.features[0].config_json.caseLibraryGenTemperature).toBeCloseTo(0.3);
 
     await contextA.close();
 
@@ -241,18 +228,54 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
     await expect(pageB.locator('#modelList')).toContainText('跨端模型A');
     await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
-    await expect(pageB.locator('#cleanModelSelect')).toHaveValue(remoteModelId);
-    await expect(pageB.locator('#compareModelSelect')).toHaveValue(remoteModelId);
-    await expect(pageB.locator('#cleanTemperature')).toHaveValue(/0\.6/);
-    await expect(pageB.locator('#compareTemperature')).toHaveValue(/0\.3/);
+    await expect(pageB.locator('#xmindCaseGenModelSelect')).toHaveValue(remoteModelId);
+    await expect(pageB.locator('#caseLibraryGenModelSelect')).toHaveValue(remoteModelId);
+    await expect(pageB.locator('#xmindCaseGenTemperature')).toHaveValue(/0\.6/);
+    await expect(pageB.locator('#caseLibraryGenTemperature')).toHaveValue(/0\.3/);
     await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
     await expect(pageB.locator('#tempExecPageSizeInput')).toHaveValue('33', { timeout: 20000 });
-    await expect(pageB.locator('#feishuWebhook')).toHaveValue('https://example.com/hook');
-    await expect(pageB.locator('#feishuNotifyUser')).toHaveValue('ou_123456');
+    await expect(pageB.locator('#feishuWebhook')).toHaveCount(0);
     const priorityCheckboxB = pageB.locator('input[data-temp-exec-col="priority"]');
     await expect(priorityCheckboxB).not.toBeChecked();
 
     await contextB.close();
+  });
+
+  test('旧设置可读取但不会展示或随保留设置重新写入', async ({ browser }) => {
+    const serverState = {
+      models: [],
+      features: [],
+      settings: [
+        { id: 1, scope: 'user', owner_id: user.id, key: 'feishuWebhook', value_json: 'https://legacy.example/hook' },
+        { id: 2, scope: 'user', owner_id: user.id, key: 'feishuMention', value_json: 'ou_legacy' },
+        { id: 3, scope: 'user', owner_id: user.id, key: 'pageGuideSwitches', value_json: { auto: false } },
+        { id: 4, scope: 'user', owner_id: user.id, key: 'tempExecPageSize', value_json: 28 },
+      ],
+    };
+    const apiHandler = createApiHandler(serverState);
+    const context = await browser.newContext();
+    const page = await setupPage(context, apiHandler);
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await expect(page.locator('#feishuWebhook')).toHaveCount(0);
+    await expect(page.locator('#pageGuideSelectAll')).toHaveCount(0);
+    await expect(page.locator('#tempExecPageSizeInput')).toHaveValue('28', { timeout: 20000 });
+
+    const deprecatedInState = await page.evaluate(() => {
+      var settings = window.app && window.app.state ? window.app.state.settings : {};
+      return ['feishuWebhook', 'feishuMention', 'pageGuideSwitches'].filter(function(key) {
+        return settings && Object.prototype.hasOwnProperty.call(settings, key);
+      });
+    });
+    expect(deprecatedInState).toEqual([]);
+
+    await page.fill('#tempExecPageSizeInput', '36');
+    await page.click('#saveTempExecPageSize');
+    await expect.poll(() => serverState.lastSettingsPayload || null, { timeout: 10000 }).not.toBeNull();
+    const savedKeys = (serverState.lastSettingsPayload.items || []).map((item) => item.key);
+    expect(savedKeys).toEqual(['tempExecPageSize']);
+
+    await context.close();
   });
 
   test('登录态忽略本地缓存并以最后保存为准（含未保存草稿回退）', async ({ browser }) => {
@@ -380,7 +403,7 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     const apiHandler = createApiHandler(serverState);
 
     const contextA = await browser.newContext();
-    const pageA = await setupPage(contextA, apiHandler);
+    const pageA = await setupPage(contextA, apiHandler, { path: '/case-exec.html?tab=tempexec' });
     pageA.on('dialog', (dialog) => dialog.accept());
     await pageA.waitForSelector('#importTempExecConfigFile', { state: 'attached' });
 
@@ -418,8 +441,7 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await contextA.close();
 
     const contextB = await browser.newContext();
-    const pageB = await setupPage(contextB, apiHandler);
-    await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    const pageB = await setupPage(contextB, apiHandler, { path: '/settings.html?tab=settings' });
     await expect(pageB.locator('#tempExecPageSizeInput')).toHaveValue('44', { timeout: 20000 });
 
     await contextB.close();

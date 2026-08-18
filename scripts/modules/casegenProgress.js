@@ -16,9 +16,11 @@
 
     var caseGenProgressPanel = dom.caseGenProgressPanel;
     var caseGenProgressList = dom.caseGenProgressList;
+    var caseGenProgressToggle = dom.caseGenProgressToggle;
     var caseGenProgressTabDot = dom.caseGenProgressTabDot;
     var sidebarTabCasegen = dom.sidebarTabCasegen;
     var persistWorkflowState = ctx.persistWorkflowState || function() {};
+    var persistSettings = ctx.persistSettings || function() {};
     var caseGenProgressBoardHtml = '';
     function requestLayoutSync() {
       try {
@@ -75,6 +77,43 @@
 
     function getXmindCasegenApi() {
       return window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+    }
+
+    function ensureSettings() {
+      if (!state.settings || typeof state.settings !== 'object') {
+        state.settings = {};
+      }
+      return state.settings;
+    }
+
+    function getStoredProgressCollapsed() {
+      return ensureSettings().caseGenProgressCollapsed === true;
+    }
+
+    function setCaseGenProgressCollapsed(collapsed, shouldPersist) {
+      if (!caseGenProgressPanel || !caseGenProgressToggle) return;
+      caseGenProgressPanel.classList.toggle('is-collapsed', collapsed === true);
+      caseGenProgressToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      caseGenProgressToggle.textContent = collapsed ? '展开' : '收起';
+      requestLayoutSync();
+      if (shouldPersist === false) return;
+      ensureSettings().caseGenProgressCollapsed = collapsed === true;
+      persistSettings(['caseGenProgressCollapsed']);
+    }
+
+    function openXmindWorkspace(workspaceId) {
+      var api = getXmindCasegenApi();
+      try {
+        if (api && typeof api.openWorkspace === 'function') {
+          return api.openWorkspace(workspaceId || '') === true;
+        }
+        if (api && typeof api.open === 'function') {
+          return api.open() === true;
+        }
+      } catch (err) {
+        // ignore
+      }
+      return false;
     }
 
     function hasXmindCompletionNotice() {
@@ -334,6 +373,29 @@
       });
     }
 
+    if (caseGenProgressList && caseGenProgressList.addEventListener) {
+      caseGenProgressList.addEventListener('click', function(e) {
+        var item = e.target && e.target.closest ? e.target.closest('[data-casegen-workspace]') : null;
+        if (!item) return;
+        var workspaceId = item.dataset ? item.dataset.casegenWorkspace : '';
+        openXmindWorkspace(workspaceId || '');
+      });
+    }
+
+    if (caseGenProgressPanel && caseGenProgressToggle) {
+      setCaseGenProgressCollapsed(getStoredProgressCollapsed(), false);
+      caseGenProgressToggle.addEventListener('click', function(e) {
+        e.stopPropagation();
+        setCaseGenProgressCollapsed(!caseGenProgressPanel.classList.contains('is-collapsed'), true);
+      });
+      caseGenProgressPanel.addEventListener('click', function(e) {
+        var toggle = e.target && e.target.closest ? e.target.closest('#caseGenProgressToggle') : null;
+        var workspace = e.target && e.target.closest ? e.target.closest('[data-casegen-workspace]') : null;
+        if (toggle || workspace) return;
+        openXmindWorkspace('');
+      });
+    }
+
     function syncViewedIfActive() {
       if (!isCasegenTabActive()) return;
       var settingsTab = '';
@@ -351,6 +413,7 @@
     } else {
       try {
         window.addEventListener('app-settings-loaded', function() {
+          setCaseGenProgressCollapsed(getStoredProgressCollapsed(), false);
           syncViewedIfActive();
         });
       } catch (err) {

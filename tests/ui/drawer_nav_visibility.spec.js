@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-test.describe('抽屉遮罩不遮挡侧边栏/流程导航', () => {
+test.describe('执行页抽屉遮罩不遮挡侧边栏/执行导航', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -15,53 +15,6 @@ test.describe('抽屉遮罩不遮挡侧边栏/流程导航', () => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/index.html');
     await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
-  });
-
-  test('drawer keeps sidebar and flow nav visible with full mask', async ({ page }) => {
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('clean'); });
-    await page.click('#toggleCleanViewBtn');
-
-    const drawer = page.locator('#cleanViewDrawer');
-    await expect(drawer).toHaveClass(/open/);
-
-    const sidebar = page.locator('aside.sidebar');
-    await expect(sidebar).toBeVisible();
-
-    const flowNav = page.locator('#flowNav');
-    await expect(flowNav).toBeVisible();
-
-    const mask = page.locator('#cleanViewDrawer .drawer-mask');
-    await expect(mask).toBeVisible();
-    const box = await mask.boundingBox();
-    expect(box && box.width).toBeGreaterThan(1000);
-    expect(box && box.height).toBeGreaterThan(600);
-  });
-
-  test('drawer keeps nav visible after page has been scrolled (clean)', async ({ page }) => {
-    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('clean'); });
-    await page.waitForSelector('#toggleCleanViewBtn');
-    await page.evaluate(() => {
-      var filler = document.createElement('div');
-      filler.id = 'drawer-scroll-filler';
-      filler.style.height = '2000px';
-      filler.style.width = '1px';
-      filler.style.pointerEvents = 'none';
-      document.body.appendChild(filler);
-      var target = 1200;
-      window.scrollTo(0, target);
-      document.documentElement.scrollTop = target;
-      document.body.scrollTop = target;
-    });
-    await page.locator('#toggleCleanViewBtn').evaluate((btn) => btn.click());
-
-    const drawer = page.locator('#cleanViewDrawer');
-    await expect(drawer).toHaveClass(/open/);
-
-    const sidebar = page.locator('aside.sidebar');
-    await expect(sidebar).toBeVisible();
-
-    const flowNav = page.locator('#flowNav');
-    await expect(flowNav).toBeVisible();
   });
 
   test('tempexec drawer keeps sidebar and tempexec nav visible with full mask', async ({ page }) => {

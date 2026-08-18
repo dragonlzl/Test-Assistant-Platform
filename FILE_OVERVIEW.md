@@ -1,35 +1,36 @@
 # 文件概览
 
-记录当前目录下关键文件的用途，便于后续清理或核查。
+## 页面入口
 
-## 被入口引用的必需文件
-- `index.html`：主页面入口。
-- `login.html`：登录入口页面。
-- `ai-workflow.html`：AI 工作流页（导入/评审/清洗/对比/拆分/用例生成/自动流程）。
-- `ai-tools.html`：AI 工具页（功能指派/模型管理）。
-- `case-exec.html`：用例执行页（执行视图/执行总览）。
-- `case-library.html`：用例资产页（用例库/用例归档）。
-- `admin.html`：管理页（项目/人员/操作记录）。
-- `settings.html`：设置页（飞书/执行列/其他配置）。
-- `style.css`：页面样式。
-- `config/constants.js`：全局默认配置（提示词、键名、默认列/设置等），需在其他脚本前加载。
-- `scripts/vendor/jszip.min.js`：XMind/压缩依赖。
-- `scripts/base/state.js`：状态占位与初始化。
-- `scripts/base/utils.js`：通用工具（下载、状态提示等）。
-- `scripts/core/*.js`：拆分/清洗/对比/生成/执行等核心能力（`splitCore`、`cleanCore`、`compareCore`、`reviewCore`、`casesCore`、`autoCore`、`xmindCore`、`xmindRequestSchedulerCore`、`xmindGenerationPayloadCore`、`xmindGenerationTimingCore`、`xmindDedupeBatchCore`、`xmindRenderPolicyCore`、`tempexecCore`、`casesGenCore`、`debugCore`、`requirementCore`）；其中 `xmindRequestSchedulerCore` 维护按 XMind 页签隔离的真实模型请求队列与并发槽，`xmindRenderPolicyCore` 负责判断画布装饰与追加高亮是否需要响应 DOM 变化，其余规则优先保持纯函数，由 `app.js` 或对应功能模块通过依赖注入使用。
-- `scripts/handlers/*.js`：事件与布局交互（功能指派、拆分、清洗、用例生成、布局等）。
-- `scripts/modules/*.js`：模块入口与编排（`app.js` 主逻辑、`assign.js` 功能指派、`review.js` 评审、`clean.js` 清洗、`compare.js` 覆盖对比、`split.js` 拆分、`casesgen.js` 用例生成、`tempexec.js` 执行视图、`auto.js` 一键执行、`upload.js` 上传、`settings.js` 设置、`models.js` 模型管理、`casegenProgress.js` 进度面板、`bootstrap.js` 启动）。
-- `services/storage.js`、`services/modelClient.js`、`services/apiClient.js`：存储/模型/后端 API 请求封装。
-- `FEATURE_DEV_GUIDE.md`：新增功能开发必读规范，包含复用要求、测试/通知流程、记录与回报清单。
-- `FEATURE_LOG.md`：新增功能需求登记文档，记录功能描述/操作方式/效果/新增内容及后续变更。
-- `backend/`：FastAPI + SQLite 后端（`main.py` 挂载静态文件与 API、`models.py` 数据表、`routers/` 路由、`config.py` 配置、`db.py` 引擎/Session、`initial_data.py` 默认管理员初始化）。
-- `requirements.txt`：后端依赖（FastAPI/SQLAlchemy/uvicorn/passlib 等）。
+- `index.html`：轻量跳转壳，默认进入 XMind 用例生成。
+- `login.html`：登录入口。
+- `ai-workflow.html`：XMind 用例生成唯一独立页面。
+- `ai-tools.html`：功能指派和模型管理。
+- `case-exec.html`：用例执行和执行总览。
+- `case-library.html`：用例库和用例归档。
+- `admin.html`：项目、人员和操作记录管理。
+- `settings.html`：保留配置。
 
-## 未被入口引用（可选/备份/素材）
-- `default_prompts_2025-11-25-07-16-38.json`：默认提示词导出示例，可做参考或备份。
-- `AGENTS.md`：仓库使用/约定说明。
-- `REFACTOR_STEPS.md`：重构备忘。
-- `APP_REFACTOR_PLAN.md`：app.js 精简计划。
-- `package.json`：占位配置（无脚本）。
-- `scripts/legacy/wrap.js`、`scripts/legacy/inject.js`：历史/备用脚本，当前页面未加载。
-- `帮助例子.png`：示例图片资源。
+## 生成能力
+
+- `scripts/core/retainedGenerationRuntime.js`：装配 XMind、用例库/执行页内生成和易漏用例提醒任务管理器。
+- `scripts/core/casesGenCore.js`：XMind 兼容核心，保留设置、快照、模块提交和通用新建/追加入库能力。
+- `scripts/core/xmind*.js`：XMind 调度、恢复、生成负载、去重、覆盖、导出和渲染规则。
+- `scripts/modules/xmindCasegen.js`：XMind 页面交互、工作区状态和生成编排。
+- `scripts/modules/casePageAiGenPrep.js`：用例库和执行页内生成准备逻辑。
+- `scripts/modules/casegenProgress.js`：XMind 全局进度面板。
+- `scripts/modules/models.js`、`scripts/modules/assign.js`：模型管理和四类保留能力指派。
+
+## 其他必需文件
+
+- `config/constants.js`、`config/domConfig.js`：默认配置、路由和 DOM 配置。
+- `scripts/base/`：全局状态、工具和通用抽屉。
+- `scripts/core/casesCore.js`、`scripts/core/tempexecCore.js`：用例解析和执行核心。
+- `scripts/modules/app.js`、`scripts/core/appRuntime.js`：初始化、持久化和页面装配。
+- `services/`：模型、存储和后端 API 请求。
+- `backend/`：FastAPI、SQLite 数据和接口。
+- `tests/`：Node、UI 和 API 测试。
+
+## 已下线文件
+
+一键执行、功能流程、评审、清洗、对比、拆分、旧普通模块生成、调试、通知、页面说明和功能引导的专用 core、handler、module 与测试文件不再被入口引用，并已删除。

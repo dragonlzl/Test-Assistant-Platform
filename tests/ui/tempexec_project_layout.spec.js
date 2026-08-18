@@ -417,7 +417,7 @@ test.describe('用例执行-项目/版本分组布局', () => {
     });
     const assignDrawer = page.locator('#tempExecAssignDrawer');
     await expect(assignDrawer).not.toHaveClass(/open/);
-    await page.locator('#currentPathText .path-item', { hasText: '执行分配' }).click();
+    await page.click('#openTempExecAssignDrawerBtn');
     await expect(assignDrawer).toHaveClass(/open/);
 
     await page.waitForFunction(() => {
@@ -532,7 +532,7 @@ test.describe('用例执行-项目/版本分组布局', () => {
     });
     const assignDrawer = page.locator('#tempExecAssignDrawer');
     await expect(assignDrawer).not.toHaveClass(/open/);
-    await page.locator('#currentPathText .path-item', { hasText: '执行分配' }).click();
+    await page.click('#openTempExecAssignDrawerBtn');
     await expect(assignDrawer).toHaveClass(/open/);
 
     await page.waitForFunction(() => {

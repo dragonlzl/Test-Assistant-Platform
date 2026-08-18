@@ -24,19 +24,20 @@ test.describe('用例助手基础冒烟', () => {
   test('页面加载与导航存在', async ({ page }) => {
     await expect(page.getByRole('heading', { name: '用例助手' })).toBeVisible();
     await page.click('[data-group="ai"]');
-    await expect(page.locator('[data-tab-btn="auto"]')).toBeVisible();
+    await expect(page.locator('[data-tab-btn="auto"]')).toHaveCount(0);
+    await expect(page.locator('[data-tab-btn="clean"]')).toHaveCount(0);
     await expect(page.locator('[data-tab-btn="casesgen"]')).toBeVisible();
     await page.click('[data-group="cases"]');
     await expect(page.locator('[data-tab-btn="tempexec"]')).toBeVisible();
   });
 
-  test('切换功能工作流标签可见', async ({ page }) => {
-    const tab = page.locator('[data-tab-btn="clean"]');
+  test('切换 XMind 用例生成标签可见', async ({ page }) => {
+    const tab = page.locator('[data-tab-btn="casesgen"]');
     await page.click('[data-group="ai"]');
     await tab.click();
     await expect(tab).toHaveClass(/active/);
-    const cleanSection = page.locator('[data-tab-section="clean"]').first();
-    await expect(cleanSection).toBeVisible();
+    await expect(page.locator('[data-tab-section="casesgen"]').first()).toBeVisible();
+    await expect(page.locator('#xmindCaseGenOpenBtn')).toBeVisible();
   });
 
   test('切换用例执行入口可见', async ({ page }) => {
@@ -49,7 +50,7 @@ test.describe('用例助手基础冒烟', () => {
     await page.click('#tempExecImportDrawer .drawer-mask');
   });
 
-  test('所有页签与顶部步骤可点击', async ({ page }) => {
+  test('所有保留页签可点击', async ({ page }) => {
     const groups = ['ai', 'cases', 'settings'];
     for (const group of groups) {
       await page.click(`[data-group="${group}"]`);
@@ -64,9 +65,7 @@ test.describe('用例助手基础冒烟', () => {
         await page.click(`[data-tab-btn="${tabId}"]`);
       }
     }
-    const steps = await page.$$('#flowNav .step');
-    for (const step of steps) {
-      await step.click();
-    }
+    await expect(page.locator('[data-tab-btn="auto"]')).toHaveCount(0);
+    await expect(page.locator('[data-tab-btn="clean"]')).toHaveCount(0);
   });
 });

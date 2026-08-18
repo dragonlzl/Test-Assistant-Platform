@@ -729,7 +729,7 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await reloadWithRetry(page);
     await waitCaseLibraryReady(page, 30000);
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
-    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#flowNav')).toHaveCount(0);
     await expect(page.locator('#caseLibraryHead')).toBeVisible();
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await expect(page.locator('#caseLibraryEditFileName')).toContainText('case_library_import');

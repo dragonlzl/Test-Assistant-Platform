@@ -8,7 +8,6 @@
     var api = ctx.tempExecApi || {};
     var setStatus = core.setStatus || utils.setStatus || function() {};
     var switchTab = core.switchTab || function() {};
-    var setCurrentPathSub = core.setCurrentPathSub || function() {};
     var scrollElementIntoView = core.scrollElementIntoView || function() {};
     var downloadText = utils.downloadText || core.downloadText || function() {};
     var formatCompactTimestamp = core.formatCompactTimestamp || function() { return Date.now().toString(); };
@@ -1044,9 +1043,6 @@
       drawerId: 'tempExecImportDrawer',
       openButtons: ['openTempExecImportDrawerBtn'],
       closeButtons: ['closeTempExecImportDrawerBtn'],
-      onOpen: function() {
-        setCurrentPathSub('用例导入', 'tempexec');
-      },
       onClose: closeTemplateDropdown,
     });
     var tempExecAssignDrawer = window.app.drawer && window.app.drawer.createDrawer({
@@ -1054,7 +1050,6 @@
       openButtons: ['openTempExecAssignDrawerBtn'],
       closeButtons: ['closeTempExecAssignDrawerBtn'],
       onOpen: function() {
-        setCurrentPathSub('执行分配', 'tempexec');
         markTempExecAiGenAssignEntryBadgeRead();
         syncTempExecAiGenAssignEntryBadge();
         if (api && typeof api.renderTempVersionGrid === 'function') api.renderTempVersionGrid();
@@ -1064,9 +1059,6 @@
       drawerId: 'tempExecOverviewDrawer',
       openButtons: ['openTempExecOverviewNavBtn'],
       closeButtons: ['closeTempExecOverviewDrawerBtn'],
-      onOpen: function() {
-        setCurrentPathSub('归档操作&进度预览', 'tempexec');
-      },
     });
     var tempExecArchiveReasonContext = null;
     var tempExecArchiveReasonDrawer = window.app.drawer && window.app.drawer.createDrawer({
@@ -3234,7 +3226,6 @@
       if (!state || String(state.activeTab || '') !== 'tempexec') {
         switchTab('tempexec');
       }
-      setCurrentPathSub('执行视图', 'tempexec');
       updateTempExecToolbarOffset();
       if (tempExecOverviewDrawer) tempExecOverviewDrawer.close();
       if (tempExecImportDrawer) tempExecImportDrawer.close();
@@ -3282,7 +3273,6 @@
     }
     function showTempExecOverview() {
       switchTab('tempexec');
-      setCurrentPathSub('归档操作&进度预览', 'tempexec');
       updateTempExecToolbarOffset();
       if (tempExecImportDrawer) tempExecImportDrawer.close();
       if (tempExecAssignDrawer) tempExecAssignDrawer.close();

@@ -107,7 +107,7 @@ test.describe('项目管理列表与抽屉', () => {
     await manageBtn.click();
     await expect(page.locator('[data-group-menu="manage"]')).toBeVisible();
     await page.click('[data-group-menu="manage"] [data-tab-btn="project-admin"]');
-    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#flowNav')).toHaveCount(0);
     await expect(page.locator('#projectAdminHead')).toBeVisible();
 
     const rows = page.locator('#projectTableBody tr');

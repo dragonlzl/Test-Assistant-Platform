@@ -1,18 +1,22 @@
-# 重构进度板（已归档，当前以 APP_REFACTOR_PLAN.md 为准）
+# 重构状态
 
-- [x] 0. 建立进度板（本次完成）：整理重构目标与步骤，作为后续迭代的上下文。
-- [x] 1. 基础层梳理：在 `scripts/base/state.js` 补齐初始状态与读写接口；在 `scripts/base/utils.js` 收敛通用方法；新增 `services/modelClient.js`、`services/storage.js` 骨架并接入加载顺序。
-- [x] 2. 模块拆分：按功能迁移 `app.js` 逻辑到 `scripts/modules/`（models、assign、review、clean、compare、split、cases、casesgen、tempexec、auto），每块暴露 `init(ctx)`。（完成：设置/飞书通知/执行列显示/分页设置抽离至 `settings.js`；模型指派至 `assign.js`；评审/澄清至 `review.js`；清洗至 `clean.js`；覆盖对比与缺失视图交互至 `compare.js`；拆分按钮/视图切换+结果监听至 `split.js`/`splitHandlers.js`；需求/用例上传至 `upload.js`；通用布局/导航至 `layoutHandlers.js`；用例生成跳转/导出至 `casegenHandlers.js`，核心与进度至 `casegenCore.js`/`casegenProgress.js`；自动流程与工作流编排至 `auto.js`；执行视图交互在 `tempexec.js`；主编排留在 `app.js`。)
-- [x] 3. 启动与加载：使用 `bootstrap.js` 统一启动顺序，`index.html` 只负责按依赖顺序加载。（完成：`app.js` 暴露 `window.app.init` 且 `_inited` 防重复，`bootstrap.js` 负责 DOMContentLoaded 调用，`index.html` 仅加载脚本）
-- [x] 4. 文档与回归：更新 `FILE_OVERVIEW.md`/README 依赖关系，补充回归清单，运行 `node --check` 验证语法。（完成：更新文件概览与启动说明，语法检查通过，提醒每次任务后执行 `python3 notify_feishu.py`）
+旧版一键执行、功能流程和普通模块生成已按能力边界下线。当前生成能力由以下责任单元维护：
 
-> 规则：每完成一步，更新此表的状态；若拆分中间步骤需要拆解，再在对应行下追加小项；每次任务完成后执行 `python3 notify_feishu.py` 通知。
+- 保留运行时负责装配 XMind、用例库内生成、执行页内生成和易漏用例提醒的任务管理器。
+- XMind 模块负责多工作区、生成、恢复、去重、覆盖、导出和入库交互。
+- 共享生成核心暂时只作为 XMind 内部兼容依赖，保留设置、快照、模块提交和通用入库接口。
+- 主编排只负责初始化、依赖注入和页面模块装配。
 
-# 重构待办（参考方向）
+## 后续重构边界
 
-- 拆分功能模块：将临时执行/一键执行/用例生成等块各自独立成 `tempexec.js`、`auto.js`、`casesgen.js`，`app.js` 只做编排。
-- 样式分区：按功能拆分 `style.css`（如 `models.css`、`tempexec.css`、`workflow.css`），主样式保留基础布局和通用组件。
-- 工具层收敛：把状态提示、下载、节流/防抖、JSON 处理等公共函数收拢到 `utils.js` 并去重，避免再次出现重复定义。
-- 状态管理：在 `state.js` 提供唯一的全局状态读写/持久化接口，各功能模块通过接口访问，减少直接改全局对象。
-- 初始化流程：在 `index.html` 明确加载顺序并统一由 `bootstrap.js` 启动，确保模块 init 顺序一致；为模块增加空 DOM 判断和失败提示。
-- 最小化回归检查：保留 `node --check`，并考虑补充简单的 DOM mock 脚本/手动清单（拖拽导入、模型保存、执行视图导入/导出）便于每次重构后快速回归。
+- 不在功能下线任务中继续瘦身共享生成核心，避免重写 XMind 状态、恢复和入库链路。
+- 若要彻底删除共享生成核心，应另立任务，先抽离 XMind 设置、快照、提交和入库接口，再迁移调用者。
+- 新能力不得重新依赖废弃流程字段或恢复旧菜单、旧页面和旧脚本。
+- 修改持久化结构时必须兼容已有 XMind 工作区，读取旧字段时忽略废弃内容。
+
+## 必跑验证
+
+- ES2019 语法检查与相关 Node 核心测试。
+- XMind、用例库内生成和执行页内生成的定向 UI 回归。
+- 历史链接、菜单缺失、登录页签恢复和废弃配置忽略回归。
+- 使用测试数据库执行通用入库、追加和配置存储 API 回归。

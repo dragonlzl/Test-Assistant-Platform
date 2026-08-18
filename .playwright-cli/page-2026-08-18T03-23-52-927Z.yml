@@ -1,0 +1,62 @@
+- generic [ref=f2e2]:
+  - complementary:
+    - generic:
+      - generic: 当前用户
+      - strong: e2e
+      - generic: 管理员
+      - button "用户菜单": 个人
+      - generic:
+        - button "登出"
+    - generic:
+      - heading "用例助手" [level=1]
+    - generic:
+      - generic: 页面路径
+      - generic:
+        - button "AI 功能"
+        - button "XMind 用例生成"
+    - navigation:
+      - generic:
+        - button "AI 功能 需先配置模型/指派":
+          - generic: AI 功能
+          - generic: 需先配置模型/指派
+        - text: ◆ ◆ ◆
+      - generic:
+        - button "用例相关"
+        - text: ◆ ◆ ◆ ◆
+      - generic:
+        - button "管理"
+        - text: ◆ ◆ ◆
+      - generic:
+        - button "设置"
+        - text: ◆
+    - button "回到顶部"
+    - button "跳到底部"
+    - generic:
+      - generic:
+        - button "xmind用例生成进度"
+        - button "个人备忘"
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: xmind用例生成进度
+                - button "收起" [expanded]
+              - generic: 点击打开对应 XMind 生成页签
+            - generic:
+              - paragraph: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - main [ref=f2e46]:
+    - generic [ref=f2e48]:
+      - heading "XMind 用例生成" [level=2] [ref=f2e49]
+      - button "XMind用例生成" [expanded] [active] [ref=f2e50] [cursor=pointer]: 打开 XMind 用例生成
+    - generic [ref=f2e53]:
+      - generic [ref=f2e54]:
+        - heading "XMind 用例生成" [level=3] [ref=f2e55]
+        - button "收起" [ref=f2e56] [cursor=pointer]
+      - generic [ref=f2e58]:
+        - button "新建 XMind 生成页签" [ref=f2e60] [cursor=pointer]: 新建生成
+        - generic [ref=f2e64]:
+          - heading "暂无生成页签" [level=4] [ref=f2e65]
+          - paragraph [ref=f2e66]: 先点击上方“新建生成”，再在该页签中完成前置准备并开始生成。
+    - option "请选择项目" [selected]
+    - option "请选择版本" [selected]

@@ -1,41 +1,55 @@
 # Test Assistant Platform
 
 ## 简介
-静态前端工具，覆盖需求清洗、拆分、覆盖对比、用例生成与执行全流程。内置“AI一键需求&用例评审”串联评审→清洗→拆分→覆盖对比；执行侧支持版本分组、专注区、拖拽、配置快照导入导出、用例执行总览等，全部逻辑在浏览器本地运行。
+
+面向测试团队的用例生成、管理与执行平台。AI 能力保留 XMind 用例生成、用例库内生成、执行页内生成、用例筛选和易漏用例提醒；旧版一键执行、功能流程和普通模块生成已下线。
+
+## 页面与能力
+
+- `index.html`：轻量入口，保留查询参数并跳转到 XMind 用例生成页。
+- `ai-workflow.html`：XMind 用例生成唯一独立页面，支持多工作区、需求/已有用例导入、生成与恢复、去重、覆盖分析、导出、新建入库和追加入库。
+- `ai-tools.html`：模型管理与四类保留能力的模型指派。
+- `case-library.html`：用例库、归档，以及库内生成并追加。
+- `case-exec.html`：用例执行、执行总览，以及执行页内生成并追加。
+- `admin.html`：项目、人员和操作记录管理。
+- `settings.html`：执行列、生成阈值、知识库和其他保留配置。
 
 ## 目录结构
-- `index.html`：单页入口，按依赖顺序 defer 加载脚本；侧边页签支持刷新后保持上次停留的功能页。
-- `style.css`：全局样式。
-- `config/constants.js`：默认配置/键名/列显示等常量。
-- `scripts/`
-  - `vendor/`：第三方依赖（`jszip.min.js`）。
-  - `base/`：基础层（`state.js`、`utils.js`）。
-  - `core/`：纯核心逻辑（拆分/清洗/对比/生成/执行等 *Core.js）。
-  - `handlers/`：事件与布局交互（*Handlers.js）。
-  - `modules/`：模块入口与编排（`app.js`、`auto.js`、`tempexec.js` 等）。
-  - `legacy/`：历史保留脚本（`wrap.js`、`inject.js`）。
-- `services/`：模型请求与存储封装。
-- `tests/`：Playwright UI 用例与配置。
-- 资源/素材：`帮助例子.png`、`debug_*.txt`、`casegen_*.txt` 等。
+
+- `config/`：默认配置、路由和 DOM 配置。
+- `scripts/base/`：状态、工具和通用抽屉能力。
+- `scripts/core/retainedGenerationRuntime.js`：装配三类保留生成任务管理器和 XMind 上下文。
+- `scripts/core/casesGenCore.js`：XMind 暂时复用的设置、快照、模块提交和通用入库兼容核心，不提供独立页面入口。
+- `scripts/core/xmind*.js`：XMind 生成、恢复、调度、去重、覆盖和渲染规则。
+- `scripts/modules/`：页面模块与编排。
+- `services/`：模型、存储和后端 API 请求封装。
+- `backend/`：FastAPI 与 SQLite 后端。
+- `tests/`：Node、Playwright UI 和 API 回归。
 
 ## 开发与验证
-- 本地预览：`python3 -m http.server 8090` 后访问 `http://127.0.0.1:8090/index.html`。
-- 语法检查：`node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`。
-- UI 自动化：`npm run test:ui`（如遇拖拽类偶发失败，可使用 `npm run test:ui -- --workers=1` 单线程重跑）。核心覆盖：模型/指派提示、工作流导入、执行抽屉与总览、页签持久化等。
-- 权限申请：如需请求提权/联网等人工确认，发起请求前先运行 `python3 notify_feishu.py` 向群里提醒（需联网）。
-- 后端 API（FastAPI + SQLite）：`pip install -r requirements.txt` 后运行 `uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080`，访问 `http://127.0.0.1:8080/index.html`；页面加载后需使用后台账号登录（默认管理员 `admin` / `chillytest_admin`）。常用环境变量：`APP_DB_FILE`（默认 `app.db`）、`ADMIN_USER`、`ADMIN_PASS`。如需本地私密覆盖，可复制 `backend/config_local.example.py` 为 `backend/config_local.py`（已加入 `.gitignore`）。  
-- 登录 token 过期时间：编辑 `config/auth.json` 的 `token_ttl_minutes` 或 `token_ttl_days`（分钟优先），缺失/非法时默认 7 天；改完需重启后端，新登录才生效。
+
+- 静态预览：`python3 -m http.server 8080`，访问 `http://127.0.0.1:8080/index.html`。
+- 一键启动：macOS/Linux 使用 `./start.sh`，Windows 使用 `start.bat`。
+- 语法检查：`node --check scripts/base/state.js scripts/base/utils.js scripts/core/retainedGenerationRuntime.js scripts/modules/app.js scripts/modules/xmindCasegen.js scripts/modules/bootstrap.js`。
+- Node 回归：执行 `tests/node/` 中与 XMind、用例筛选和执行复用有关的测试。
+- UI 回归：`npm run test:ui`；定向运行可在命令后追加测试文件。
+- API 回归：使用测试数据库启动后端，再运行 `npm run test:api`。任何测试或造数都不得使用正式数据库。
+
+测试后端示例：
+
+```bash
+APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080
+```
+
+## 兼容策略
+
+- 历史 `auto`、`clean` 和 `xmind-casegen` 页签地址统一回退到 `casesgen`。
+- 旧设置和旧模型指派键可被读取，但不再展示，也不会在保存保留配置时重新写回。
+- 旧工作流快照中的废弃字段会被忽略；现有 XMind 工作区和任务恢复数据继续保留。
+- 后端用例新增、追加入库、执行集追加和配置存储接口保持兼容。
 
 ## 约定
-- JS 兼容 ES2019，禁用可选链/空值合并等新语法；函数/DOM ID 使用 lowerCamelCase。
-- HTML/CSS 2 空格缩进，语句以分号结尾。
-- 新增外部依赖需本地 vendoring，避免直接依赖 CDN/npm 运行时下载。
 
-## 工具脚本
-- 飞书通知：`notify_feishu.py` 发送群机器人消息。webhook 获取顺序为命令行参数 → 环境变量 `FEISHU_WEBHOOK` → 仓库根目录的 `feishu_config.json`。`feishu_config.json` 已加入 `.gitignore`，需自行创建并填入真实 webhook，例如：
-
-```json
-{
-  "webhook": "https://open.feishu.cn/open-apis/bot/v2/hook/REPLACE_WITH_YOUR_WEBHOOK"
-}
-```
+- JavaScript 兼容 ES2019，不使用可选链、空值合并或逻辑赋值。
+- HTML/CSS 使用 2 空格缩进，JavaScript 语句以分号结尾。
+- 外部运行时依赖必须本地 vendoring，不依赖 CDN。

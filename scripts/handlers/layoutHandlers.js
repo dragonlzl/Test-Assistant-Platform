@@ -3,18 +3,12 @@
     if (!ctx) return {};
     var dom = ctx.dom || {};
     var handlers = ctx.handlers || {};
-    var scrollToSection = ctx.scrollToSection || function() {};
     var switchTab = ctx.switchTab || function() {};
-    var toggleSplitView = handlers.toggleSplitView || function() {};
     var toggleImportedCaseView = handlers.toggleImportedCaseView || function() {};
     var scrollElementIntoView = handlers.scrollElementIntoView || function() {};
 
-    var flowNavSteps = dom.flowNavSteps || document.querySelectorAll('#flowNav .step');
-    var scrollTopBtn = dom.scrollTopBtn;
-    var scrollBottomBtn = dom.scrollBottomBtn;
     var tabButtons = dom.tabButtons || [];
     var jumpLinks = dom.jumpLinks || document.querySelectorAll('[data-jump]');
-    var toggleSplitViewBtn = dom.toggleSplitViewBtn;
     var caseViewBtn = dom.caseViewBtn;
     var xmindStructureToggle = dom.xmindStructureToggle;
     var xmindStructureCard = dom.xmindStructureCard;
@@ -27,7 +21,6 @@
     var smartScrollDown = 0;
     var smartScrollUp = 0;
     var smartScrollThreshold = 60;
-    var lastGuideActive = false;
     var state = ctx.state || {};
 
     function setCssVar(name, value) {
@@ -173,7 +166,6 @@
       if (shouldIgnoreSmartTopNavWheel(e)) return;
       var body = document.body;
       if (body && body.classList) {
-        if (body.classList.contains('guide-active')) return;
         if (body.classList.contains('drawer-open')) return;
       }
       if (e.ctrlKey) return;
@@ -208,27 +200,6 @@
       if (smartScrollUp >= smartScrollThreshold) {
         applyTopNavState(nav, false, { persist: true });
         resetSmartScroll();
-      }
-    }
-
-    function expandTopNavForGuide() {
-      topNavList.forEach(function(nav) {
-        if (!nav || !nav.classList) return;
-        if (nav.classList.contains('is-collapsed')) {
-          applyTopNavState(nav, false, { persist: true });
-        }
-      });
-    }
-
-    function checkGuideActive() {
-      var body = document.body;
-      var active = Boolean(body && body.classList && body.classList.contains('guide-active'));
-      if (active && !lastGuideActive) {
-        lastGuideActive = true;
-        expandTopNavForGuide();
-        setTimeout(expandTopNavForGuide, 120);
-      } else if (!active && lastGuideActive) {
-        lastGuideActive = false;
       }
     }
 
@@ -278,48 +249,9 @@
     if (typeof window !== 'undefined') {
       window.addEventListener('wheel', handleSmartTopNavWheel);
     }
-    if (document.body && typeof MutationObserver !== 'undefined') {
-      var guideObserver = new MutationObserver(function(mutations) {
-        var changed = false;
-        mutations.forEach(function(mutation) {
-          if (mutation && mutation.type === 'attributes' && mutation.attributeName === 'class') {
-            changed = true;
-          }
-        });
-        if (changed) checkGuideActive();
-      });
-      guideObserver.observe(document.body, { attributes: true });
-      checkGuideActive();
-    }
-
     document.querySelectorAll('section.card').forEach(function(card) {
       if (card.classList.contains('collapsed')) card.classList.remove('collapsed');
     });
-
-    if (flowNavSteps && typeof flowNavSteps.forEach === 'function') {
-      flowNavSteps.forEach(function(step) {
-        step.addEventListener('click', function() {
-          if (step.dataset && step.dataset.target) {
-            scrollToSection(step.dataset.target);
-          }
-        });
-      });
-    }
-
-    if (scrollTopBtn) {
-      scrollTopBtn.addEventListener('click', function() {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      });
-    }
-    if (scrollBottomBtn) {
-      scrollBottomBtn.addEventListener('click', function() {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      });
-    }
-
-    if (toggleSplitViewBtn) {
-      toggleSplitViewBtn.addEventListener('click', toggleSplitView);
-    }
 
     if (caseViewBtn) {
       caseViewBtn.addEventListener('click', toggleImportedCaseView);

@@ -1,47 +1,60 @@
-# UI 自动化测试（Playwright）
+# 自动化测试
 
-## 依赖安装
-- Node 14+、Python 3 可用。
-- 首次执行前安装依赖与浏览器：
-  - `npm install`
-  - `npm run test:ui:install`（安装 Playwright 浏览器与依赖）
+## 准备
 
-## 运行方式
-- XMind 页签请求调度回归（不启动浏览器）：
-  - `node tests/node/xmind_request_scheduler_core.test.js`
-- XMind 去重批次纯函数回归（不启动浏览器）：
-  - `node tests/node/xmind_dedupe_batch_core.test.js`
-- XMind 尾部慢请求动态阈值回归（不启动浏览器）：
-  - `node tests/node/xmind_generation_timing_core.test.js`
-- XMind 画布装饰与追加高亮调度策略回归（不启动浏览器）：
-  - `node tests/node/xmind_render_policy_core.test.js`
-- XMind 需求覆盖用例详情悬浮层回归（不启动浏览器）：
-  - `node tests/node/xmind_coverage_case_tooltip_core.test.js`
-- XMind 跨页面任务恢复守卫回归（不启动浏览器）：
-  - `node tests/node/xmind_task_resume_guard.test.js`
-- 复用预设获取/解锁方式规则回归（不启动浏览器）：
-  - `node tests/node/reuse_applicability_core.test.js`
-- 启动静态服务器并跑测试（配置已在 `tests/playwright.config.js` 内自动启动 `python3 -m http.server 8080`）：
-  - `npm run test:ui`
-- 若需可视化调试：
-  - `npm run test:ui:headed`
-- 可用环境变量 `PLAYWRIGHT_BASE_URL` 覆盖默认地址（默认 `http://localhost:8080`）。
-- 后端 API 测试（需先启动 FastAPI 服务，默认 `http://127.0.0.1:8080`）：
-  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/auth_change_password.spec.js`
-  - `npx playwright test --config tests/api/playwright.api.config.js tests/api/exec_reuse_applicability.spec.js`
-  - 可用环境变量：`API_BASE_URL`、`ADMIN_USER`、`ADMIN_PASS`。
-- 复用预设获取/解锁方式 UI 回归：
-  - `npm run test:ui -- tests/ui/tempexec_reuse_applicability.spec.js`
+- Node 14+、Python 3。
+- 首次运行：`npm install`，随后执行 `npm run test:ui:install` 安装浏览器。
+- UI 配置会自动启动静态服务器；可用 `PLAYWRIGHT_BASE_URL` 覆盖默认地址。
+- API 测试必须连接测试数据库，禁止使用正式数据库。
 
-## 覆盖范围
-- 冒烟用例：页面可加载、主导航可见、切换“功能工作流”“用例执行”标签后对应区域可见（`tests/ui/smoke.spec.js`）。
-- 工作流必跑：原始需求上传、导入导出默认状态、顶部步骤与用例执行拖拽占位、自动流程按钮状态等（`tests/ui/workflow.spec.js`）。
-- 文件/布局：校验评审/清洗/对比调试文件导入导出、各标签布局与按钮状态、流程步骤联动（`tests/ui/files_layout.spec.js`）。
-- 执行视图：临时执行用例导入导出、版本/需求盒子拖拽、专注区、进度总览与配置快照恢复（`tests/ui/tempexec_drag.spec.js`）。
-- API：管理员改密往返校验（`tests/api/auth_change_password.spec.js`，默认使用 admin/chillytest_admin，改为临时密码后再改回）。
+## Node 回归
 
-## 说明
-- 所有测试用 ES2019 兼容语法，位于 `tests/ui/`。如需扩展用例，保持选择器与业务文案同步。  
-- 测试中已阻断非本地请求，避免触发真实模型/外部接口（`page.route` 仅放行 localhost/127.0.0.1/file）。新增用例需保持此策略。  
-- 每次重构后先审视现有用例覆盖是否足够，不足则补充；满足则直接运行。  
-- 如本地已有服务器运行，配置会自动复用（`reuseExistingServer: true`）。  
+重点执行以下纯核心测试：
+
+```bash
+node tests/node/xmind_request_scheduler_core.test.js
+node tests/node/xmind_dedupe_batch_core.test.js
+node tests/node/xmind_workspace_recovery_core.test.js
+node tests/node/xmind_task_resume_guard.test.js
+node tests/node/xmind_generation_timing_core.test.js
+node tests/node/xmind_render_policy_core.test.js
+node tests/node/xmind_coverage_case_tooltip_core.test.js
+node tests/node/reuse_applicability_core.test.js
+```
+
+## UI 回归
+
+```bash
+npm run test:ui
+npm run test:ui -- tests/ui/html_split_pages.spec.js
+npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js --workers=1
+npm run test:ui -- tests/ui/case_library_ai_gen.spec.js --workers=1
+npm run test:ui -- tests/ui/tempexec_ai_gen.spec.js --workers=1
+```
+
+覆盖重点：
+
+- 默认入口、历史 `auto`/`clean` 地址回退和旧菜单缺失。
+- XMind 多工作区、需求/已有用例导入、生成、中断与刷新恢复、去重、覆盖、导出、新建入库和追加入库。
+- 用例库和执行页内生成与追加。
+- 四类保留模型指派、模型缺失/请求失败和废弃配置忽略。
+
+## API 回归
+
+先使用测试库启动后端：
+
+```bash
+APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080
+```
+
+再运行定向用例：
+
+```bash
+API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/settings_models.spec.js
+API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/xmind_casegen_no_new_endpoint.spec.js
+API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/case_library_xmind_writer_reuse_import.spec.js
+API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/exec_ai_append.spec.js
+API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/exec_reuse_applicability.spec.js
+```
+
+所有 UI 测试应阻断非本地请求，避免调用真实模型或外部服务。

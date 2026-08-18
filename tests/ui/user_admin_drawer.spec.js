@@ -100,7 +100,7 @@ test.describe('人员管理列表与抽屉', () => {
     await manageBtn.click();
     const userTabBtn = page.locator('[data-group-menu="manage"] [data-tab-btn="user-admin"]');
     await userTabBtn.click();
-    await expect(page.locator('#flowNav')).toBeHidden();
+    await expect(page.locator('#flowNav')).toHaveCount(0);
     await expect(page.locator('#userAdminHead')).toBeVisible();
     const userSection = page.locator('section[data-tab-section="user-admin"]');
     await expect(userSection).toBeVisible();

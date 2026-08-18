@@ -32,9 +32,6 @@
     var dom = ctx.dom || {};
     var modelTimeoutInput = dom.modelTimeoutInput || document.getElementById('modelTimeoutInput');
     var modelTimeoutStatus = dom.modelTimeoutStatus || document.getElementById('modelTimeoutStatus');
-    var feishuWebhookInput = dom.feishuWebhookInput || document.getElementById('feishuWebhook');
-    var feishuMentionInput = dom.feishuMentionInput || document.getElementById('feishuNotifyUser');
-    var feishuWebhookStatus = dom.feishuWebhookStatus || document.getElementById('feishuWebhookStatus');
     var caseAssistantProjectRootInput = dom.caseAssistantProjectRootInput || document.getElementById('caseAssistantProjectRootInput');
     var saveCaseAssistantProjectRootBtn = dom.saveCaseAssistantProjectRootBtn || document.getElementById('saveCaseAssistantProjectRoot');
     var caseAssistantProjectRootStatus = dom.caseAssistantProjectRootStatus || document.getElementById('caseAssistantProjectRootStatus');
@@ -55,8 +52,6 @@
     var tempExecColumnForm = dom.tempExecColumnForm || document.getElementById('tempExecColumnForm');
     var tempExecColumnStatus = dom.tempExecColumnStatus || document.getElementById('tempExecColumnStatus');
     var saveModelTimeoutBtn = dom.saveModelTimeoutBtn || document.getElementById('saveModelTimeout');
-    var saveFeishuWebhookBtn = dom.saveFeishuWebhookBtn || document.getElementById('saveFeishuWebhook');
-    var testFeishuWebhookBtn = dom.testFeishuWebhookBtn || document.getElementById('testFeishuWebhook');
     var saveTempExecColumnsBtn = dom.saveTempExecColumnsBtn || document.getElementById('saveTempExecColumns');
     var tempExecPageSizeInput = dom.tempExecPageSizeInput || document.getElementById('tempExecPageSizeInput');
     var saveTempExecPageSizeBtn = dom.saveTempExecPageSizeBtn || document.getElementById('saveTempExecPageSize');
@@ -69,9 +64,6 @@
     var caseLibraryGenCoverageStatus = dom.caseLibraryGenCoverageStatus || document.getElementById('caseLibraryGenCoverageStatus');
     var projectSortGrid = dom.projectSortGrid || document.getElementById('projectSortGrid');
     var projectSortStatus = dom.projectSortStatus || document.getElementById('projectSortStatus');
-    var pageGuideSettingsGrid = dom.pageGuideSettingsGrid || document.getElementById('pageGuideSettingsGrid');
-    var pageGuideSettingsStatus = dom.pageGuideSettingsStatus || document.getElementById('pageGuideSettingsStatus');
-    var pageGuideSelectAllInput = dom.pageGuideSelectAllInput || document.getElementById('pageGuideSelectAll');
     var smartTopNavToggle = dom.smartTopNavToggle || document.getElementById('smartTopNavToggle');
     var smartTopNavStatus = dom.smartTopNavStatus || document.getElementById('smartTopNavStatus');
     var themeSelect = dom.themeSelect || document.getElementById('themeSelect');
@@ -101,8 +93,6 @@
 
     var defaultSettings = config.defaultSettings || {};
     var defaultTempExecColumns = config.defaultTempExecColumns || {};
-    var defaultPageGuideSwitches = config.defaultPageGuideSwitches
-      || (defaultSettings && typeof defaultSettings.pageGuideSwitches === 'object' ? defaultSettings.pageGuideSwitches : {});
     var defaultTempExecPageSize = config.defaultTempExecPageSize || 20;
     var defaultTheme = defaultSettings && defaultSettings.theme ? String(defaultSettings.theme) : 'light';
     var defaultCaseViewFontSize = Number(config.defaultCaseViewFontSize)
@@ -144,6 +134,28 @@
     var minCaseViewFontSize = Number(config.minCaseViewFontSize) || 11;
     var maxCaseViewFontSize = Number(config.maxCaseViewFontSize) || 16;
     var settingsKey = config.settingsKey || 'usecase-settings-v1';
+    var retainedSettingKeys = {
+      timeoutSec: true,
+      caseAssistantProjectRoot: true,
+      knowledgeBaseBaseUrl: true,
+      knowledgeBaseCatalogCharLimit: true,
+      knowledgeBaseInjectedContextCharLimit: true,
+      xmindRequestPayloadLimit: true,
+      theme: true,
+      caseViewFontSize: true,
+      missingCaseReminderPlacement: true,
+      missingCaseReminderMatchConfig: true,
+      missingCaseReminderAiEnabled: true,
+      caseLibraryGenCoverageThreshold: true,
+      caseGenProgressCollapsed: true,
+      sidebarTabActive: true,
+      memoPad: true,
+      smartTopNavCollapse: true,
+      tempExecColumns: true,
+      tempExecPageSize: true,
+      projectOrder: true,
+      defaultProjectId: true,
+    };
     var minModelTimeoutSec = config.minModelTimeoutSec || 30;
     var maxModelTimeoutSec = config.maxModelTimeoutSec || 1800;
     var clampTempExecPageSize = typeof ctx.clampTempExecPageSize === 'function'
@@ -168,8 +180,6 @@
     var visibilityRefreshBound = false;
     var dirtyDrafts = {
       timeoutSec: false,
-      feishuWebhook: false,
-      feishuMention: false,
       caseAssistantProjectRoot: false,
       knowledgeBaseBaseUrl: false,
       knowledgeBaseLimitSettings: false,
@@ -250,23 +260,6 @@
       cols.ops = true;
       state.settings.tempExecColumns = cols;
       return cols;
-    }
-
-    function ensurePageGuideSwitches() {
-      if (!state.settings) state.settings = Object.assign({}, defaultSettings);
-      var base = defaultPageGuideSwitches && typeof defaultPageGuideSwitches === 'object'
-        ? defaultPageGuideSwitches
-        : {};
-      var current = state.settings.pageGuideSwitches && typeof state.settings.pageGuideSwitches === 'object'
-        ? state.settings.pageGuideSwitches
-        : {};
-      var merged = Object.assign({}, base);
-      Object.keys(current).forEach(function(key) {
-        var val = current[key];
-        if (typeof val === 'boolean') merged[key] = val;
-      });
-      state.settings.pageGuideSwitches = merged;
-      return merged;
     }
 
     function normalizeTheme(value) {
@@ -438,7 +431,7 @@
       }
       var merged = {};
       (list || []).forEach(function(item) {
-        if (!item || !item.key) return;
+        if (!item || !item.key || !retainedSettingKeys[item.key]) return;
         var isUser = item.scope === 'user';
         var isGlobal = item.scope === 'global';
         if (isGlobal && merged[item.key] === undefined) {
@@ -462,14 +455,6 @@
 
       // Known fields normalization
       state.settings.timeoutSec = clampTimeoutSeconds(state.settings.timeoutSec);
-      if (typeof state.settings.feishuWebhook === 'string') {
-        state.settings.feishuWebhook = state.settings.feishuWebhook.trim();
-      }
-      if (typeof state.settings.feishuMention === 'string') {
-        state.settings.feishuMention = state.settings.feishuMention.trim();
-      } else if (state.settings.feishuMention === null || state.settings.feishuMention === undefined) {
-        state.settings.feishuMention = '';
-      }
       if (state.settings.caseAssistantProjectRoot === undefined || state.settings.caseAssistantProjectRoot === null) {
         state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
       }
@@ -533,7 +518,6 @@
       } else {
         state.settings.smartTopNavCollapse = state.settings.smartTopNavCollapse === true;
       }
-      ensurePageGuideSwitches();
       ensureTempExecColumns();
       if (state.settings.theme === undefined || state.settings.theme === null || state.settings.theme === '') {
         try {
@@ -624,6 +608,7 @@
         ? keys.map(function(k) { return String(k); })
         : null;
       function shouldInclude(key) {
+        if (!retainedSettingKeys[key]) return false;
         if (!onlyKeys) return true;
         return onlyKeys.indexOf(key) !== -1;
       }
@@ -712,7 +697,7 @@
         }
         if (saved && typeof saved === 'object') {
           Object.keys(saved).forEach(function(key) {
-            if (!Object.prototype.hasOwnProperty.call(saved, key)) return;
+            if (!Object.prototype.hasOwnProperty.call(saved, key) || !retainedSettingKeys[key]) return;
             var val = saved[key];
             if (val === undefined) return;
             state.settings[key] = val;
@@ -722,16 +707,6 @@
 
       // Known fields normalization
       state.settings.timeoutSec = clampTimeoutSeconds(state.settings.timeoutSec);
-      if (typeof state.settings.feishuWebhook === 'string') {
-        state.settings.feishuWebhook = state.settings.feishuWebhook.trim();
-      } else if (state.settings.feishuWebhook === null || state.settings.feishuWebhook === undefined) {
-        state.settings.feishuWebhook = defaultSettings.feishuWebhook || '';
-      }
-      if (typeof state.settings.feishuMention === 'string') {
-        state.settings.feishuMention = state.settings.feishuMention.trim();
-      } else {
-        state.settings.feishuMention = '';
-      }
       if (state.settings.caseAssistantProjectRoot === undefined || state.settings.caseAssistantProjectRoot === null) {
         state.settings.caseAssistantProjectRoot = defaultCaseAssistantProjectRoot;
       }
@@ -780,7 +755,6 @@
       } else {
         state.settings.smartTopNavCollapse = state.settings.smartTopNavCollapse === true;
       }
-      ensurePageGuideSwitches();
       ensureTempExecColumns();
       try {
         if (typeof localStorage !== 'undefined') {
@@ -813,7 +787,11 @@
 
     function persistSettings(keys) {
       try {
-        localStorage.setItem(settingsKey, JSON.stringify(state.settings));
+        var localSettings = {};
+        collectSettingItems().forEach(function(item) {
+          localSettings[item.key] = item.value_json;
+        });
+        localStorage.setItem(settingsKey, JSON.stringify(localSettings));
       } catch (err) {
         console.warn('调用设置保存失败', err);
       }
@@ -835,33 +813,10 @@
       setStatus(tempExecColumnStatus, '', '');
     }
 
-    function renderPageGuideSettings() {
-      if (!pageGuideSettingsGrid) return;
-      var switches = ensurePageGuideSwitches();
-      var inputs = pageGuideSettingsGrid.querySelectorAll('input[data-page-guide]');
-      inputs.forEach(function(input) {
-        var key = input && input.dataset ? input.dataset.pageGuide : '';
-        if (!key) return;
-        input.checked = switches[key] !== false;
-      });
-      updatePageGuideSelectAllState();
-      setStatus(pageGuideSettingsStatus, '', '');
-    }
-
     function renderSettingsUI() {
       if (modelTimeoutInput) {
         if (!dirtyDrafts.timeoutSec) {
           modelTimeoutInput.value = state.settings.timeoutSec;
-        }
-      }
-      if (feishuWebhookInput) {
-        if (!dirtyDrafts.feishuWebhook) {
-          feishuWebhookInput.value = state.settings.feishuWebhook || '';
-        }
-      }
-      if (feishuMentionInput) {
-        if (!dirtyDrafts.feishuMention) {
-          feishuMentionInput.value = state.settings.feishuMention || '';
         }
       }
       if (caseAssistantProjectRootInput) {
@@ -946,7 +901,6 @@
         setStatus(smartTopNavStatus, '', '');
       }
       renderTempExecColumnSettings();
-      renderPageGuideSettings();
       renderProjectSortSetting();
     }
 
@@ -1249,82 +1203,6 @@
       setStatus(modelTimeoutStatus, '模型调用超时已更新为 ' + sec + ' 秒', 'ok');
     }
 
-    function applyFeishuInput() {
-      var webhook = feishuWebhookInput ? feishuWebhookInput.value.trim() : '';
-      var mention = feishuMentionInput ? feishuMentionInput.value.trim() : '';
-      state.settings.feishuWebhook = webhook;
-      state.settings.feishuMention = mention;
-      dirtyDrafts.feishuWebhook = false;
-      dirtyDrafts.feishuMention = false;
-      persistSettings(['feishuWebhook', 'feishuMention']);
-      return webhook;
-    }
-
-    function getFeishuWebhookUrl() {
-      return (state.settings && typeof state.settings.feishuWebhook === 'string' ? state.settings.feishuWebhook : '').trim();
-    }
-
-    function getFeishuMentionId() {
-      return (state.settings && typeof state.settings.feishuMention === 'string' ? state.settings.feishuMention : '').trim();
-    }
-
-    async function postFeishuMessage(text, options) {
-      var opts = options || {};
-      var allowOpaqueFallback = opts.allowOpaqueFallback !== false;
-      var url = getFeishuWebhookUrl();
-      if (!url) return { ok: false, reason: '未配置 Webhook' };
-      var mentionId = getFeishuMentionId();
-      var suffix = mentionId ? '\n<at user_id="' + mentionId + '">提醒</at>' : '';
-      var payload = JSON.stringify({ msg_type: 'text', content: { text: String(text || '') + suffix } });
-      async function sendJsonRequest() {
-        var res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-        });
-        if (!res.ok) {
-          var body = await res.text().catch(function() { return ''; });
-          throw new Error(body ? ('HTTP ' + res.status + '：' + body.slice(0, 120)) : ('HTTP ' + res.status));
-        }
-        await res.text().catch(function() { return ''; });
-      }
-      async function sendOpaqueRequest() {
-        await fetch(url, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: payload,
-        });
-      }
-      try {
-        await sendJsonRequest();
-        return { ok: true };
-      } catch (err) {
-        if (!allowOpaqueFallback) {
-          console.warn('飞书通知发送失败', err);
-          return { ok: false, reason: err && err.message ? err.message : '网络异常' };
-        }
-        console.warn('飞书通知发送失败，尝试以 no-cors 方式发送', err);
-        try {
-          await sendOpaqueRequest();
-          return { ok: true, opaque: true };
-        } catch (fallbackErr) {
-          console.warn('飞书通知 opaque 发送仍失败', fallbackErr);
-          return { ok: false, reason: fallbackErr && fallbackErr.message ? fallbackErr.message : '网络异常' };
-        }
-      }
-    }
-
-    function saveFeishuWebhookConfig() {
-      if (!feishuWebhookStatus) return;
-      var value = applyFeishuInput();
-      if (value) {
-        setStatus(feishuWebhookStatus, '飞书 Webhook 已保存，执行结果会自动通知', 'ok');
-      } else {
-        setStatus(feishuWebhookStatus, '已清除 Webhook，不再发送执行通知', 'ok');
-      }
-    }
-
     function saveCaseAssistantProjectRoot() {
       if (!caseAssistantProjectRootInput) return;
       var value = normalizeCaseAssistantProjectRoot(caseAssistantProjectRootInput.value);
@@ -1476,24 +1354,6 @@
             'err'
           );
         }
-      }
-    }
-
-    async function testFeishuWebhookConfig() {
-      if (!feishuWebhookStatus) return;
-      var value = applyFeishuInput();
-      if (!value) {
-        setStatus(feishuWebhookStatus, '请先填写飞书机器人 Webhook 地址', 'warn');
-        return;
-      }
-      setStatus(feishuWebhookStatus, '正在发送测试通知...', '');
-      var result = await postFeishuMessage('【测试】已成功接入用例助手飞书通知，请忽略本消息。', { allowOpaqueFallback: true });
-      if (result.ok && !result.opaque) {
-        setStatus(feishuWebhookStatus, '测试通知已发送，可在飞书群内查看', 'ok');
-      } else if (result.ok && result.opaque) {
-        setStatus(feishuWebhookStatus, '请求已发送（目标接口未返回 CORS 结果），请在飞书群确认是否收到', 'warn');
-      } else {
-        setStatus(feishuWebhookStatus, '发送失败：' + (result.reason || '未知错误'), 'err');
       }
     }
 
@@ -1789,64 +1649,6 @@
       }
     }
 
-    function handlePageGuideChange(e) {
-      var target = e && e.target;
-      if (!target) return;
-      if (target.dataset && target.dataset.pageGuideAll) {
-        setAllPageGuideSwitches(Boolean(target.checked));
-        return;
-      }
-      if (!target.dataset || !target.dataset.pageGuide) return;
-      var key = target.dataset.pageGuide;
-      var switches = ensurePageGuideSwitches();
-      switches[key] = Boolean(target.checked);
-      state.settings.pageGuideSwitches = switches;
-      persistSettings(['pageGuideSwitches']);
-      updatePageGuideSelectAllState();
-      setStatus(pageGuideSettingsStatus, '页面说明设置已保存', 'ok');
-    }
-
-    function setAllPageGuideSwitches(enabled) {
-      var switches = ensurePageGuideSwitches();
-      Object.keys(switches).forEach(function(key) {
-        switches[key] = Boolean(enabled);
-      });
-      state.settings.pageGuideSwitches = switches;
-      if (pageGuideSettingsGrid) {
-        var inputs = pageGuideSettingsGrid.querySelectorAll('input[data-page-guide]');
-        inputs.forEach(function(input) {
-          input.checked = Boolean(enabled);
-        });
-      }
-      if (pageGuideSelectAllInput) {
-        pageGuideSelectAllInput.checked = Boolean(enabled);
-        pageGuideSelectAllInput.indeterminate = false;
-      }
-      persistSettings(['pageGuideSwitches']);
-      setStatus(pageGuideSettingsStatus, enabled ? '已全部开启' : '已全部关闭', 'ok');
-    }
-
-    function updatePageGuideSelectAllState() {
-      if (!pageGuideSelectAllInput || !pageGuideSettingsGrid) return;
-      var inputs = pageGuideSettingsGrid.querySelectorAll('input[data-page-guide]');
-      var allChecked = true;
-      var anyChecked = false;
-      inputs.forEach(function(input) {
-        if (input.checked) {
-          anyChecked = true;
-        } else {
-          allChecked = false;
-        }
-      });
-      if (!inputs.length) {
-        pageGuideSelectAllInput.checked = false;
-        pageGuideSelectAllInput.indeterminate = false;
-        return;
-      }
-      pageGuideSelectAllInput.checked = allChecked;
-      pageGuideSelectAllInput.indeterminate = !allChecked && anyChecked;
-    }
-
     function handleSmartTopNavChange(e) {
       var target = e && e.target;
       if (!target) return;
@@ -1860,16 +1662,6 @@
       if (modelTimeoutInput) modelTimeoutInput.addEventListener('input', function() {
         dirtyDrafts.timeoutSec = true;
         setStatus(modelTimeoutStatus, '', '');
-      });
-      if (saveFeishuWebhookBtn) saveFeishuWebhookBtn.addEventListener('click', saveFeishuWebhookConfig);
-      if (testFeishuWebhookBtn) testFeishuWebhookBtn.addEventListener('click', testFeishuWebhookConfig);
-      if (feishuWebhookInput) feishuWebhookInput.addEventListener('input', function() {
-        dirtyDrafts.feishuWebhook = true;
-        setStatus(feishuWebhookStatus, '', '');
-      });
-      if (feishuMentionInput) feishuMentionInput.addEventListener('input', function() {
-        dirtyDrafts.feishuMention = true;
-        setStatus(feishuWebhookStatus, '', '');
       });
       if (saveCaseAssistantProjectRootBtn) saveCaseAssistantProjectRootBtn.addEventListener('click', saveCaseAssistantProjectRoot);
       if (caseAssistantProjectRootInput) caseAssistantProjectRootInput.addEventListener('input', function() {
@@ -1956,7 +1748,6 @@
           if (missingReminderAiStatus) setStatus(missingReminderAiStatus, '', '');
         });
       }
-      if (pageGuideSettingsGrid) pageGuideSettingsGrid.addEventListener('change', handlePageGuideChange);
       if (smartTopNavToggle) smartTopNavToggle.addEventListener('change', handleSmartTopNavChange);
       bindProjectSortEvents();
       if (settingsNavButtons && typeof settingsNavButtons.forEach === 'function') {
@@ -1982,15 +1773,10 @@
       renderSettingsUI: renderSettingsUI,
       renderTempExecColumnSettings: renderTempExecColumnSettings,
       saveTimeoutSetting: saveTimeoutSetting,
-      saveFeishuWebhookConfig: saveFeishuWebhookConfig,
       saveCaseAssistantProjectRoot: saveCaseAssistantProjectRoot,
       saveKnowledgeBaseBaseUrl: saveKnowledgeBaseBaseUrl,
       validateKnowledgeBaseBaseUrl: validateKnowledgeBaseBaseUrl,
-      testFeishuWebhookConfig: testFeishuWebhookConfig,
       saveTempExecColumnsSetting: saveTempExecColumnsSetting,
-      getFeishuWebhookUrl: getFeishuWebhookUrl,
-      getFeishuMentionId: getFeishuMentionId,
-      postFeishuMessage: postFeishuMessage,
       ensureTempExecColumns: ensureTempExecColumns,
       saveTempExecPageSize: saveTempExecPageSize,
     };

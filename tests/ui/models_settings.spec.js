@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-test.describe('模型管理与全局设置', () => {
+test.describe('模型管理与保留设置', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -101,10 +101,7 @@ test.describe('模型管理与全局设置', () => {
     await page.click('#saveModelTimeout');
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
-    await page.fill('#feishuWebhook', 'https://example.com/hook');
-    await page.fill('#feishuNotifyUser', 'ou_123456');
-    await page.click('#saveFeishuWebhook');
-    await expect(page.locator('#feishuWebhookStatus')).toContainText('已保存');
+    await expect(page.locator('#feishuWebhook')).toHaveCount(0);
 
     const moduleCheckbox = page.locator('input[data-temp-exec-col="module"]');
     await moduleCheckbox.uncheck();
@@ -146,38 +143,35 @@ test.describe('模型管理与全局设置', () => {
     await expect(tokenHint).toHaveClass(/hidden/);
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
-    await expect(page.locator('#cleanTemperature')).toHaveValue('0.2');
-    await expect(page.locator('#compareTemperature')).toHaveValue('0.2');
-    await page.fill('#cleanTemperature', '0.6');
-    await page.fill('#compareTemperature', '0.3');
+    await expect(page.locator('#xmindCaseGenTemperature')).toHaveValue('0.2');
+    await expect(page.locator('#caseLibraryGenTemperature')).toHaveValue('0.2');
+    await page.fill('#xmindCaseGenTemperature', '0.6');
+    await page.fill('#caseLibraryGenTemperature', '0.3');
     const modelId = await page.evaluate(() => {
       const models = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
-      return models[0]?.id || '';
+      return models[0] && models[0].id ? models[0].id : '';
     });
-    const selects = ['cleanModelSelect', 'reviewModelSelect', 'compareModelSelect', 'splitModelSelect', 'casesModelSelect', 'caseGenModelSelect'];
+    const selects = ['xmindCaseGenModelSelect', 'caseFilterModelSelect', 'missingReminderModelSelect', 'caseLibraryGenModelSelect'];
     for (const sel of selects) {
       await page.selectOption(`#${sel}`, modelId);
     }
     await page.click('#saveAssignments');
     await expect(assignTab.locator('.tab-notice')).toHaveCount(0);
     const assignment = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
-    expect(assignment.cleanTemperature).toBeCloseTo(0.6);
-    expect(assignment.compareTemperature).toBeCloseTo(0.3);
+    expect(assignment.xmindCaseGenTemperature).toBeCloseTo(0.6);
+    expect(assignment.caseLibraryGenTemperature).toBeCloseTo(0.3);
 
   });
 
-  test('功能指派页的用例生成默认提示词使用最新基础文案', async ({ page }) => {
+  test('功能指派页只展示保留能力并使用最新基础文案', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
-    const caseGenPrompt = page.locator('#caseGenPrompt');
     const xmindCaseGenPrompt = page.locator('#xmindCaseGenPrompt');
     const caseLibraryGenPrompt = page.locator('#caseLibraryGenPrompt');
-    await expect(caseGenPrompt).toHaveValue(/你是资深游戏测试工程师，善于用例设计。/);
-    await expect(caseGenPrompt).toHaveValue(/优先生成需求主流程的核心用例/);
-    await expect(caseGenPrompt).toHaveValue(/前提条件preconditions，如果有多条，则需要以1、2、3的形式分步展示。/);
-    await expect(caseGenPrompt).toHaveValue(/操作步骤steps，如果有多条，需要以1、2、3的形式分步展示。/);
-    await expect(caseGenPrompt).toHaveValue(/AI_CASE_WRITING_STYLE_GUIDE\.md/);
-    await expect(caseGenPrompt).toHaveValue(/title 写短检查点/);
-    await expect(caseGenPrompt).toHaveValue(/priority 只能填写 P0、P1、P2/);
+    await expect(page.locator('#cleanModelSelect')).toHaveCount(0);
+    await expect(page.locator('#reviewModelSelect')).toHaveCount(0);
+    await expect(page.locator('#compareModelSelect')).toHaveCount(0);
+    await expect(page.locator('#splitModelSelect')).toHaveCount(0);
+    await expect(page.locator('#caseGenModelSelect')).toHaveCount(0);
     await expect(xmindCaseGenPrompt).toHaveValue(/AI_CASE_WRITING_STYLE_GUIDE\.md/);
     await expect(xmindCaseGenPrompt).toHaveValue(/title 写短检查点/);
     await expect(caseLibraryGenPrompt).toHaveValue(/AI_CASE_WRITING_STYLE_GUIDE\.md/);
@@ -207,7 +201,7 @@ test.describe('模型管理与全局设置', () => {
     await expect(toast).toBeVisible();
     await expect(toast).toHaveCount(0, { timeout: 5000 });
 
-    await page.selectOption('#cleanModelSelect', modelId);
+    await page.selectOption('#xmindCaseGenModelSelect', modelId);
     await expect(page.locator('.temp-center-toast', { hasText: '指派已保存' })).toHaveCount(0);
 
     await page.locator('#saveAssignments').scrollIntoViewIfNeeded();
@@ -253,7 +247,7 @@ test.describe('模型管理与全局设置', () => {
       return models[0]?.id || '';
     });
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
-    const selectIds = ['cleanModelSelect', 'reviewModelSelect', 'compareModelSelect', 'splitModelSelect', 'casesModelSelect', 'caseGenModelSelect'];
+    const selectIds = ['xmindCaseGenModelSelect', 'caseFilterModelSelect', 'missingReminderModelSelect', 'caseLibraryGenModelSelect'];
     for (const sel of selectIds) {
       await page.selectOption(`#${sel}`, modelId);
     }
@@ -297,11 +291,11 @@ test.describe('模型管理与全局设置', () => {
     const targetModelId = modelIds[1];
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
-    await page.selectOption('#cleanModelSelect', targetModelId);
-    await expect(page.locator('#cleanModelSelect')).toHaveValue(targetModelId);
+    await page.selectOption('#xmindCaseGenModelSelect', targetModelId);
+    await expect(page.locator('#xmindCaseGenModelSelect')).toHaveValue(targetModelId);
 
     const assignment = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
-    expect(String(assignment.cleanId || '')).toBe(targetModelId);
+    expect(String(assignment.xmindCaseGenId || '')).toBe(targetModelId);
     await expect(page.locator('[data-tab-btn="assign"]').locator('.tab-notice')).toHaveCount(0);
 
     const storedModels = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]'));
@@ -330,7 +324,7 @@ test.describe('模型管理与全局设置', () => {
       if (window.app && window.app.switchTab) window.app.switchTab('assign');
     });
 
-    await expect(page.locator('#cleanModelSelect')).toHaveValue(targetModelId);
+    await expect(page.locator('#xmindCaseGenModelSelect')).toHaveValue(targetModelId);
     await expect(page.locator('[data-tab-btn="assign"]').locator('.tab-notice')).toHaveCount(0);
   });
 });

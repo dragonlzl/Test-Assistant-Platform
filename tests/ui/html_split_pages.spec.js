@@ -20,7 +20,7 @@ test.describe('多页面拆分入口', () => {
   test('各页面可加载并展示默认页签', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     const targets = [
-      { path: '/ai-workflow.html', selector: '[data-tab-section="auto"]' },
+      { path: '/ai-workflow.html', selector: '[data-tab-section="casesgen"]' },
       { path: '/ai-tools.html', selector: '[data-tab-section="assign"]' },
       { path: '/case-exec.html', selector: '[data-tab-section="tempexec"]' },
       { path: '/case-library.html', selector: '[data-tab-section="case-library"]' },
@@ -40,7 +40,7 @@ test.describe('多页面拆分入口', () => {
   test('跨页面签切换可自动跳转', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/ai-workflow.html');
-    await page.locator('[data-tab-section="auto"]').first().waitFor({ state: 'visible', timeout: 20000 });
+    await page.locator('[data-tab-section="casesgen"]').first().waitFor({ state: 'visible', timeout: 20000 });
     await page.waitForFunction(() => {
       return window.app && typeof window.app.switchTab === 'function';
     }, null, { timeout: 20000 });
@@ -89,25 +89,17 @@ test.describe('多页面拆分入口', () => {
       .toContainText('用例：【登录用例】已成功转到用例执行页内，请在当前【执行分配】页内查看选择。');
   });
 
-  test('页签切换支持前进后退', async ({ page }) => {
+  test('历史 AI 地址统一回退到 XMind 用例生成', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    await page.goto(base + '/ai-workflow.html');
-    await page.locator('[data-tab-section="auto"]').first().waitFor({ state: 'visible', timeout: 20000 });
-    await page.waitForFunction(() => {
-      return window.app && typeof window.app.switchTab === 'function';
-    }, null, { timeout: 20000 });
-    await page.evaluate(() => {
-      if (window.app && typeof window.app.switchTab === 'function') {
-        window.app.switchTab('clean');
-      }
-    });
-    await page.waitForURL('**/ai-workflow.html*tab=clean*', { timeout: 15000 });
-    await expect(page.locator('[data-tab-section="clean"]').first()).toBeVisible();
-    await page.goBack();
-    await page.waitForURL('**/ai-workflow.html*tab=auto*', { timeout: 15000 });
-    await expect(page.locator('[data-tab-section="auto"]').first()).toBeVisible();
-    await page.goForward();
-    await page.waitForURL('**/ai-workflow.html*tab=clean*', { timeout: 15000 });
-    await expect(page.locator('[data-tab-section="clean"]').first()).toBeVisible();
+    const legacyTabs = ['auto', 'clean', 'xmind-casegen'];
+
+    for (let i = 0; i < legacyTabs.length; i += 1) {
+      await page.goto(base + '/ai-workflow.html?tab=' + legacyTabs[i]);
+      await page.locator('[data-tab-section="casesgen"]').first().waitFor({ state: 'visible', timeout: 20000 });
+      await expect(page).toHaveURL(/ai-workflow\.html\?tab=casesgen/);
+      await expect(page.locator('[data-tab-btn="casesgen"]')).toHaveClass(/active/);
+      await expect(page.locator('[data-tab-btn="auto"]')).toHaveCount(0);
+      await expect(page.locator('[data-tab-btn="clean"]')).toHaveCount(0);
+    }
   });
 });

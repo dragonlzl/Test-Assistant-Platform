@@ -176,13 +176,13 @@ assert.strictEqual(core.areRestoreContextsCompatible(
   Object.assign({}, matchingTask.restoreContext, { caseGenResults: { moduleA: '[]' } })
 ), true);
 
-var indexHtml = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8');
 var workflowHtml = fs.readFileSync(path.join(projectRoot, 'ai-workflow.html'), 'utf8');
-['index.html', 'ai-workflow.html'].forEach(function(fileName) {
-  var html = fileName === 'index.html' ? indexHtml : workflowHtml;
-  var recoveryIndex = html.indexOf('./scripts/core/xmindWorkspaceRecoveryCore.js');
-  var casegenIndex = html.indexOf('./scripts/modules/xmindCasegen.js');
-  assert.ok(recoveryIndex >= 0 && recoveryIndex < casegenIndex, fileName + ' must load recovery core before XMind casegen');
-});
+var recoveryIndex = workflowHtml.indexOf('./scripts/core/xmindWorkspaceRecoveryCore.js');
+var casegenIndex = workflowHtml.indexOf('./scripts/modules/xmindCasegen.js');
+assert.ok(recoveryIndex >= 0 && recoveryIndex < casegenIndex, 'ai-workflow.html must load recovery core before XMind casegen');
+
+var indexHtml = fs.readFileSync(path.join(projectRoot, 'index.html'), 'utf8');
+assert.ok(indexHtml.indexOf("new URL('./ai-workflow.html'") >= 0, 'index.html must redirect to the XMind page');
+assert.ok(indexHtml.indexOf("target.searchParams.set('tab', 'casesgen')") >= 0, 'index.html must normalize the default tab to casesgen');
 
 console.log('xmind_workspace_recovery_core.test.js passed');

@@ -44,7 +44,7 @@ async function setupRoutes(page) {
 }
 
 test.describe('侧边栏一级菜单样式', () => {
-  test('个人按钮文案、一级菜单描边与滚动按钮描边（白色/黑色主题）', async ({ page }) => {
+  test('个人按钮文案与一级菜单描边（白色/黑色主题）', async ({ page }) => {
     await setupRoutes(page);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(base + '/index.html');
@@ -98,11 +98,6 @@ test.describe('侧边栏一级菜单样式', () => {
         }
         var rootStyle = getComputedStyle(document.documentElement);
         var navColor = rootStyle.getPropertyValue('--nav-main-color').trim();
-        var baseBorder = rootStyle.getPropertyValue('--border').trim();
-        var scrollButtons = Array.prototype.slice.call(document.querySelectorAll('.scroll-top-btn'));
-        var scrollColors = scrollButtons.map(function(item) {
-          return getComputedStyle(item).borderTopColor;
-        });
         return {
           theme: theme || 'light',
           fontFamily: getComputedStyle(btn).fontFamily,
@@ -112,8 +107,6 @@ test.describe('侧边栏一级菜单样式', () => {
           borderRgba: parseColor(getComputedStyle(btn).borderTopColor),
           borderWidth: getComputedStyle(btn).borderTopWidth,
           expectedColor: resolveColor(navColor),
-          expectedBaseBorder: resolveColor(baseBorder),
-          scrollBorderColors: scrollColors,
         };
       }
 
@@ -130,11 +123,6 @@ test.describe('侧边栏一级菜单样式', () => {
     expect(styleSnapshot.light.borderRgba.b).toBeGreaterThan(styleSnapshot.light.borderRgba.g);
     expect(styleSnapshot.light.borderRgba.b).toBeGreaterThan(styleSnapshot.light.borderRgba.r);
     expect(styleSnapshot.light.borderWidth).toBe('1px');
-    expect(styleSnapshot.light.scrollBorderColors.length).toBeGreaterThan(0);
-    styleSnapshot.light.scrollBorderColors.forEach((color) => {
-      expect(color).toBe(styleSnapshot.light.expectedBaseBorder);
-    });
-
     expect(styleSnapshot.dark.fontFamily).toContain('Noto Sans SC');
     expect(styleSnapshot.dark.fontSize).toBe('15px');
     expect(styleSnapshot.dark.color).toBe(styleSnapshot.dark.expectedColor);
@@ -142,9 +130,5 @@ test.describe('侧边栏一级菜单样式', () => {
     expect(styleSnapshot.dark.borderRgba.b).toBeGreaterThan(styleSnapshot.dark.borderRgba.g);
     expect(styleSnapshot.dark.borderRgba.b).toBeGreaterThan(styleSnapshot.dark.borderRgba.r);
     expect(styleSnapshot.dark.borderWidth).toBe('1px');
-    expect(styleSnapshot.dark.scrollBorderColors.length).toBeGreaterThan(0);
-    styleSnapshot.dark.scrollBorderColors.forEach((color) => {
-      expect(color).toBe(styleSnapshot.dark.expectedBaseBorder);
-    });
   });
 });
