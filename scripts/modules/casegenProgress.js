@@ -19,6 +19,12 @@
     var caseGenProgressToggle = dom.caseGenProgressToggle;
     var caseGenProgressTabDot = dom.caseGenProgressTabDot;
     var sidebarTabCasegen = dom.sidebarTabCasegen;
+    var xmindCaseGenHomeProgress = dom.xmindCaseGenHomeProgress;
+    var xmindCaseGenHomeProgressPercent = dom.xmindCaseGenHomeProgressPercent;
+    var xmindCaseGenHomeProgressTrack = dom.xmindCaseGenHomeProgressTrack;
+    var xmindCaseGenHomeProgressFill = dom.xmindCaseGenHomeProgressFill;
+    var xmindCaseGenHomeProgressMeta = dom.xmindCaseGenHomeProgressMeta;
+    var xmindCaseGenHomeProgressList = dom.xmindCaseGenHomeProgressList;
     var persistWorkflowState = ctx.persistWorkflowState || function() {};
     var persistSettings = ctx.persistSettings || function() {};
     var caseGenProgressBoardHtml = '';
@@ -136,6 +142,87 @@
       return 'pending';
     }
 
+    function normalizeProgressPercent(value) {
+      var number = Number(value);
+      if (!Number.isFinite(number)) return 0;
+      return Math.max(0, Math.min(100, Math.round(number)));
+    }
+
+    function buildHomeProgressSummary(items) {
+      var source = Array.isArray(items) ? items : [];
+      var totals = source.reduce(function(result, item) {
+        var stateName = resolveWorkspaceProgressState(item);
+        var percent = normalizeProgressPercent(item && item.progressPercent);
+        result.percent += percent;
+        result.modules += Math.max(0, Number(item && item.moduleCount || 0));
+        result.cases += Math.max(0, Number(item && item.caseCount || 0));
+        if (stateName === 'running') result.running += 1;
+        if (stateName === 'error') result.error += 1;
+        if (percent >= 100) result.completed += 1;
+        return result;
+      }, { percent: 0, modules: 0, cases: 0, running: 0, error: 0, completed: 0 });
+      return {
+        percent: source.length ? normalizeProgressPercent(totals.percent / source.length) : 0,
+        count: source.length,
+        modules: totals.modules,
+        cases: totals.cases,
+        running: totals.running,
+        error: totals.error,
+        completed: totals.completed,
+      };
+    }
+
+    function buildHomeProgressMeta(summary) {
+      if (!summary || summary.count <= 0) return '暂无生成任务';
+      var parts = [String(summary.count) + ' 个任务'];
+      if (summary.running > 0) parts.push(String(summary.running) + ' 个进行中');
+      if (summary.error > 0) parts.push(String(summary.error) + ' 个失败');
+      if (summary.completed > 0) parts.push(String(summary.completed) + ' 个已完成');
+      parts.push(String(summary.modules) + ' 个模块');
+      parts.push(String(summary.cases) + ' 条用例');
+      return parts.join(' · ');
+    }
+
+    function renderHomeProgress(items) {
+      if (!xmindCaseGenHomeProgress) return;
+      var source = Array.isArray(items) ? items : [];
+      var summary = buildHomeProgressSummary(source);
+      var percentText = String(summary.percent) + '%';
+      if (xmindCaseGenHomeProgressPercent) xmindCaseGenHomeProgressPercent.textContent = percentText;
+      if (xmindCaseGenHomeProgressFill) xmindCaseGenHomeProgressFill.style.width = percentText;
+      if (xmindCaseGenHomeProgressTrack) {
+        xmindCaseGenHomeProgressTrack.setAttribute('aria-valuenow', String(summary.percent));
+        xmindCaseGenHomeProgressTrack.setAttribute('aria-valuetext', percentText);
+      }
+      if (xmindCaseGenHomeProgressMeta) {
+        xmindCaseGenHomeProgressMeta.textContent = buildHomeProgressMeta(summary);
+      }
+      if (!xmindCaseGenHomeProgressList) return;
+      if (!source.length) {
+        xmindCaseGenHomeProgressList.innerHTML = '<div class="xmind-casegen-home-progress-empty">暂无生成任务</div>';
+        return;
+      }
+      xmindCaseGenHomeProgressList.innerHTML = source.map(function(item) {
+        var stateCls = resolveWorkspaceProgressState(item);
+        var percent = normalizeProgressPercent(item && item.progressPercent);
+        var progressLabel = item && item.progressLabel ? String(item.progressLabel || '') : '等待开始';
+        return '' +
+          '<button type="button" class="xmind-casegen-home-task state-' + stateCls + '" data-casegen-home-workspace="' + escapeHtml(item && item.id ? item.id : '') + '">' +
+            '<span class="xmind-casegen-home-task-main">' +
+              '<span class="xmind-casegen-home-task-state" aria-hidden="true"></span>' +
+              '<span class="xmind-casegen-home-task-copy">' +
+                '<strong>' + escapeHtml(item && item.title ? item.title : '未命名生成') + '</strong>' +
+                '<span>' + escapeHtml(progressLabel) + ' · ' + String(item && item.moduleCount !== undefined ? item.moduleCount : 0) + ' 模块 · ' + String(item && item.caseCount !== undefined ? item.caseCount : 0) + ' 用例</span>' +
+              '</span>' +
+              '<span class="xmind-casegen-home-task-percent">' + String(percent) + '%</span>' +
+            '</span>' +
+            '<span class="xmind-casegen-home-task-track" role="progressbar" aria-label="' + escapeHtml(item && item.title ? item.title : '未命名生成') + '生成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + String(percent) + '">' +
+              '<span style="width:' + String(percent) + '%"></span>' +
+            '</span>' +
+          '</button>';
+      }).join('');
+    }
+
     function persistProgressNotice() {
       if (typeof persistWorkflowState === 'function') {
         persistWorkflowState();
@@ -227,8 +314,9 @@
     }
 
     function renderCaseGenProgressBoard() {
-      if (!caseGenProgressPanel || !caseGenProgressList) return;
       var items = getXmindWorkspaceProgressItems();
+      renderHomeProgress(items);
+      if (!caseGenProgressPanel || !caseGenProgressList) return;
       if (!items.length) {
         var emptyHtml = '<p class="hint">暂无 xmind 生成页签，点击打开 XMind 用例生成</p>';
         var panelWasHidden = caseGenProgressPanel.classList.contains('hidden');
@@ -378,6 +466,15 @@
         var item = e.target && e.target.closest ? e.target.closest('[data-casegen-workspace]') : null;
         if (!item) return;
         var workspaceId = item.dataset ? item.dataset.casegenWorkspace : '';
+        openXmindWorkspace(workspaceId || '');
+      });
+    }
+
+    if (xmindCaseGenHomeProgressList && xmindCaseGenHomeProgressList.addEventListener) {
+      xmindCaseGenHomeProgressList.addEventListener('click', function(e) {
+        var item = e.target && e.target.closest ? e.target.closest('[data-casegen-home-workspace]') : null;
+        if (!item) return;
+        var workspaceId = item.dataset ? item.dataset.casegenHomeWorkspace : '';
         openXmindWorkspace(workspaceId || '');
       });
     }

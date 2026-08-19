@@ -1,0 +1,514 @@
+- generic [ref=f2e2]:
+  - complementary [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - text: 当前用户
+      - strong [ref=f2e5]: 未登录
+      - button "用户菜单" [ref=f2e6]: 个人
+      - button "登出" [ref=f2e8]
+    - heading "用例助手" [level=1] [ref=f2e10]
+    - navigation [ref=f2e11]:
+      - generic [ref=f2e12]:
+        - button "AI 功能" [ref=f2e13]
+        - generic [ref=f2e14]:
+          - button "XMind 用例生成" [ref=f2e15]
+          - button "功能指派" [ref=f2e16]
+          - button "模型管理" [ref=f2e17]
+      - generic [ref=f2e18]:
+        - button "用例相关" [ref=f2e19]
+        - generic [ref=f2e20]:
+          - button "用例执行" [ref=f2e21]
+          - button "用例库" [ref=f2e22]
+          - button "用例归档" [ref=f2e23]
+          - button "执行总览" [ref=f2e24]
+      - generic [ref=f2e25]:
+        - button "管理" [ref=f2e26]
+        - generic [ref=f2e27]:
+          - button "项目管理" [ref=f2e28]
+          - button "人员管理" [ref=f2e29]
+          - button "操作记录" [ref=f2e30]
+      - generic [ref=f2e31]:
+        - button "设置" [ref=f2e32]
+        - button "通用设置" [ref=f2e34]
+    - generic [ref=f2e35]:
+      - generic [ref=f2e36]:
+        - button "xmind用例生成进度" [ref=f2e37]
+        - button "个人备忘" [ref=f2e38]
+      - generic [ref=f2e39]:
+        - generic [ref=f2e41]:
+          - generic [ref=f2e42]:
+            - generic [ref=f2e43]:
+              - text: xmind用例生成进度
+              - button "收起" [expanded] [ref=f2e44]
+            - text: 点击打开对应 XMind 生成页签
+          - paragraph [ref=f2e46]: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+        - generic [ref=f2e48]:
+          - generic [ref=f2e50]:
+            - generic [ref=f2e51]: 个人备忘 0/0
+            - button "收起" [expanded] [ref=f2e52]
+          - button "新增备忘页" [ref=f2e54]: +
+  - complementary "用例执行页面导航" [ref=f2e55]:
+    - heading "用例执行" [level=2] [ref=f2e57]
+    - navigation "执行操作" [ref=f2e58]:
+      - generic [ref=f2e60]:
+        - button "用例导入 导入用例并确认入库" [ref=f2e61]
+        - button "选择用例执行 直接打开选择用例执行抽屉" [ref=f2e66]
+        - button "执行分配 项目/版本分组、专注区与执行人分配" [ref=f2e71]
+        - button "归档操作&进度预览 预览进度并归档用例（可跳转归档详情）" [ref=f2e76]
+  - generic [ref=f2e83]:
+    - generic [ref=f2e85]:
+      - generic [ref=f2e86]:
+        - generic [ref=f2e87]: 执行总览导航
+        - button "收起" [expanded] [ref=f2e88]
+      - generic [ref=f2e89]:
+        - paragraph [ref=f2e90]: 按项目/版本查看各人员执行进度，点击卡片快速操作。
+        - button "刷新 重新拉取可访问项目与总览" [ref=f2e92]
+    - banner [ref=f2e97]:
+      - heading "用例执行" [level=1] [ref=f2e98]
+    - generic [ref=f2e100]:
+      - generic [ref=f2e101]:
+        - button "AI 用例生成" [disabled] [ref=f2e102]
+        - button "XMind结构展示" [disabled] [ref=f2e103]
+        - button "用例变更" [disabled] [ref=f2e104]
+        - button "导出XMind" [disabled] [ref=f2e105]
+        - button "导出XMind（无结果）" [disabled] [ref=f2e106]
+      - generic [ref=f2e107]: 专注区： 同步展示【执行分配】中的专注区用例。
+    - main [ref=f2e109]:
+      - generic [ref=f2e111]:
+        - generic [ref=f2e112]:
+          - heading "用例导入" [level=3] [ref=f2e113]
+          - button "收起" [ref=f2e114]
+        - generic [ref=f2e116]:
+          - heading "用例导入" [level=2] [ref=f2e117]
+          - generic [ref=f2e118]:
+            - paragraph [ref=f2e119]: 导入 XMind/JSON/文本测试用例后，可在“执行视图”直接执行并记录实际结果；支持多份文件切换，执行数据会自动保存。
+            - generic [ref=f2e120]:
+              - strong [ref=f2e121]: 温馨提示
+              - paragraph [ref=f2e122]: 导入用例后需要点击“确认入库”，入库完成后才能进行下一步操作（如：执行分配 / 进入执行视图）。
+            - generic [ref=f2e124]:
+              - button "常用用例模版 ▼" [disabled] [ref=f2e125]
+              - generic [ref=f2e126]: 正在加载模版...
+            - generic [ref=f2e129]:
+              - generic [ref=f2e130]:
+                - generic [ref=f2e131]:
+                  - strong [ref=f2e132]: 测试用例
+                  - text: 拖拽或点击选择
+                - generic [ref=f2e133]: 拖拽或点击选择文件后，还需要选择项目与版本并确认才会入库
+              - paragraph [ref=f2e134]: 未选择文件
+              - generic [ref=f2e135]:
+                - text: 项目
+                - combobox [ref=f2e136]:
+                  - option "请选择项目" [selected]
+                - text: 版本
+                - combobox [disabled] [ref=f2e137]:
+                  - option "请选择版本" [selected]
+                - button "确认入库" [disabled] [ref=f2e138]
+              - paragraph
+      - generic [ref=f2e140]:
+        - generic [ref=f2e141]:
+          - heading "执行分配" [level=3] [ref=f2e142]
+          - button "收起" [ref=f2e143]
+        - generic [ref=f2e145]:
+          - generic [ref=f2e146]:
+            - heading "执行分配" [level=2] [ref=f2e147]
+            - button "＋ 添加执行用例" [ref=f2e148]
+          - generic [ref=f2e149]:
+            - paragraph [ref=f2e150]: 在此页面进行执行分配：可按需求查看用例列表、创建版本分组、拖拽需求盒子进版本、拖拽用例到专注区；也可在执行视图进行执行人分配与结果录入。
+            - paragraph [ref=f2e152]: 需求用例组（可拖拽操作）
+            - generic [ref=f2e153]: 暂无导入的测试用例
+            - generic [ref=f2e154]:
+              - generic [ref=f2e155]: 版本分组
+              - generic [ref=f2e156]:
+                - button "＋ 新建版本" [ref=f2e157]
+                - button "收起版本区" [ref=f2e158]
+            - generic [ref=f2e159]: 暂无版本，点击“新建版本”创建
+            - generic [ref=f2e160]:
+              - generic [ref=f2e161]: 专注区
+              - generic [ref=f2e162]: 拖拽用例到此区域，专注处理关键用例
+              - paragraph [ref=f2e163]: 可从上方列表拖拽用例到此，移出专注不会影响用例原本的分组与顺序
+      - generic [ref=f2e165]:
+        - generic [ref=f2e166]:
+          - heading "同名用例差异对比" [level=3] [ref=f2e167]
+          - button "收起" [ref=f2e168]
+        - generic [ref=f2e169]:
+          - paragraph [ref=f2e170]: 同一列表展示导入与执行中差异：绿色表示新增，红色表示差异或将被覆盖/移除。
+          - paragraph
+          - generic:
+            - paragraph
+          - table [ref=f2e172]:
+            - rowgroup [ref=f2e173]:
+              - row [ref=f2e174]:
+                - columnheader "#" [ref=f2e175]
+                - columnheader "模块" [ref=f2e176]
+                - columnheader "用例标题" [ref=f2e177]
+                - columnheader "优先级" [ref=f2e178]
+                - columnheader "前提条件" [ref=f2e179]
+                - columnheader "操作步骤" [ref=f2e180]
+                - columnheader "预期结果" [ref=f2e181]
+                - columnheader "实际结果" [ref=f2e182]
+                - columnheader "备注" [ref=f2e183]
+                - columnheader "缺陷链接" [ref=f2e184]
+            - rowgroup [ref=f2e185]:
+              - row [ref=f2e186]:
+                - cell [ref=f2e187]:
+                  - paragraph [ref=f2e188]: 暂无数据
+          - generic [ref=f2e189]:
+            - button "确认覆盖导入" [ref=f2e190]
+            - button "关闭" [ref=f2e191]
+      - generic [ref=f2e193]:
+        - generic [ref=f2e194]:
+          - heading "导入用例重复校验" [level=3] [ref=f2e195]
+          - button "收起" [ref=f2e196]
+        - generic [ref=f2e197]:
+          - paragraph [ref=f2e198]: 检测到导入文件内存在重复条目（按 模块+用例标题+预期结果 判重），数据库不支持重复条目，将在确认后自动去重。
+          - paragraph
+          - table [ref=f2e200]:
+            - rowgroup [ref=f2e201]:
+              - row [ref=f2e202]:
+                - columnheader "行号" [ref=f2e203]
+                - columnheader "模块" [ref=f2e204]
+                - columnheader "用例标题" [ref=f2e205]
+                - columnheader "优先级" [ref=f2e206]
+                - columnheader "前提条件" [ref=f2e207]
+                - columnheader "操作步骤" [ref=f2e208]
+                - columnheader "预期结果" [ref=f2e209]
+                - columnheader "实际结果" [ref=f2e210]
+                - columnheader "备注" [ref=f2e211]
+                - columnheader "缺陷链接" [ref=f2e212]
+                - columnheader "处理" [ref=f2e213]
+            - rowgroup [ref=f2e214]:
+              - row [ref=f2e215]:
+                - cell [ref=f2e216]:
+                  - paragraph [ref=f2e217]: 暂无数据
+          - generic [ref=f2e218]:
+            - button "确认继续入库（自动去重）" [ref=f2e219]
+            - button "取消" [ref=f2e220]
+      - generic [ref=f2e221]:
+        - heading "执行视图" [level=2] [ref=f2e222]
+        - generic [ref=f2e223]: 暂无执行用例，请在“用例导入”中导入，或在“执行分配”中选择历史记录
+      - generic [ref=f2e227]:
+        - generic [ref=f2e228]:
+          - heading "AI 用例生成" [level=3] [ref=f2e229]
+          - button "收起" [ref=f2e230]
+        - generic [ref=f2e231]:
+          - generic [ref=f2e232]:
+            - heading "需求导入" [level=4] [ref=f2e233]
+            - generic [ref=f2e235]:
+              - paragraph [ref=f2e236]: 点击选择或拖拽文件，解析后的需求会出现在下方文本框。
+              - generic [ref=f2e237]:
+                - generic [ref=f2e238]:
+                  - strong [ref=f2e239]: 点击选择
+                  - text: 或拖拽文件到此处
+                - generic [ref=f2e240]: 未选择文件
+              - paragraph
+              - textbox "需求内容将出现在这里，也可以直接粘贴/输入..." [ref=f2e241]
+              - button "清空需求" [ref=f2e243]
+          - button "生成用例" [disabled] [ref=f2e245]
+          - paragraph
+          - generic [ref=f2e246]:
+            - generic [ref=f2e247]:
+              - generic [ref=f2e248]:
+                - button "全选" [ref=f2e249]
+                - button "全不选" [ref=f2e250]
+                - button "清空结果" [ref=f2e251]
+                - button "重新生成" [ref=f2e252]
+              - generic [ref=f2e253]: 已选 0 条
+            - table [ref=f2e255]:
+              - rowgroup [ref=f2e256]:
+                - row [ref=f2e257]:
+                  - columnheader [ref=f2e258]:
+                    - checkbox "全选/全不选" [ref=f2e259]
+                  - columnheader "覆盖率" [ref=f2e260]
+                  - columnheader "模块" [ref=f2e261]
+                  - columnheader "用例标题" [ref=f2e262]
+                  - columnheader "优先级" [ref=f2e263]
+                  - columnheader "前提条件" [ref=f2e264]
+                  - columnheader "操作步骤" [ref=f2e265]
+                  - columnheader "预期结果" [ref=f2e266]
+              - rowgroup [ref=f2e267]:
+                - row [ref=f2e268]:
+                  - cell [ref=f2e269]:
+                    - paragraph [ref=f2e270]: 暂无生成结果
+            - button "确认追加" [disabled] [ref=f2e272]
+      - generic [ref=f2e274]:
+        - generic [ref=f2e275]:
+          - heading "用例变更" [level=3] [ref=f2e276]
+          - button "收起" [ref=f2e277]
+        - generic [ref=f2e278]:
+          - paragraph [ref=f2e279]: 进入执行页或刷新执行页时会同步用例库增删改，此处展示最近一次变更差异；可通过“用例变更”按钮重复查看。
+          - paragraph
+          - generic [ref=f2e280]:
+            - generic [ref=f2e281]: 用例：
+            - button "选择用例" [ref=f2e282]
+          - generic [ref=f2e283]:
+            - button "追加 0" [ref=f2e284]
+            - button "新增 0" [ref=f2e285]
+            - button "改动 0" [ref=f2e286]
+            - button "删除 0" [ref=f2e287]
+          - table [ref=f2e289]:
+            - rowgroup [ref=f2e290]:
+              - row [ref=f2e291]:
+                - columnheader "类型" [ref=f2e292]
+                - columnheader "修改时间" [ref=f2e293]
+                - columnheader "操作人员" [ref=f2e294]
+                - columnheader "模块" [ref=f2e295]
+                - columnheader "用例标题" [ref=f2e296]
+                - columnheader "前提条件" [ref=f2e297]
+                - columnheader "操作步骤" [ref=f2e298]
+                - columnheader "预期结果" [ref=f2e299]
+            - rowgroup [ref=f2e300]:
+              - row [ref=f2e301]:
+                - cell [ref=f2e302]:
+                  - paragraph [ref=f2e303]: 暂无变更
+          - button "关闭" [ref=f2e305]
+      - generic [ref=f2e307]:
+        - generic [ref=f2e308]:
+          - heading "用例执行总览" [level=3] [ref=f2e309]
+          - button "收起" [ref=f2e310]
+        - generic [ref=f2e312]:
+          - heading "用例执行总览" [level=2] [ref=f2e313]
+          - generic [ref=f2e314]:
+            - paragraph [ref=f2e315]: 按文件汇总执行进度（当前导入与历史导入），颜色区分不同执行状态。
+            - button "返回执行视图" [ref=f2e317]
+            - paragraph [ref=f2e319]: 暂无用例执行数据
+      - generic [ref=f2e321]:
+        - generic [ref=f2e322]:
+          - heading "填写归档原因" [level=3] [ref=f2e323]
+          - button "收起" [ref=f2e324]
+        - generic [ref=f2e325]:
+          - paragraph [ref=f2e326]: 原则上归档前需全部执行通过；如仍有未通过/未执行用例，请填写归档原因后继续。
+          - generic [ref=f2e328]:
+            - text: 归档原因
+            - textbox "归档原因" [ref=f2e329]:
+              - /placeholder: 请说明原因（必填）
+          - generic [ref=f2e330]:
+            - button "确认归档" [ref=f2e331]
+            - button "取消" [ref=f2e332]
+          - paragraph
+      - generic [ref=f2e334]:
+        - generic [ref=f2e335]:
+          - heading "选择用例执行" [level=3] [ref=f2e336]
+          - button "收起" [ref=f2e337]
+        - generic [ref=f2e338]:
+          - generic [ref=f2e339]:
+            - generic [ref=f2e340]:
+              - text: 项目
+              - combobox "项目" [ref=f2e341]
+              - text: 版本
+              - combobox "版本" [disabled] [ref=f2e342]
+              - text: 用例名
+              - textbox "用例名" [ref=f2e343]:
+                - /placeholder: 搜索用例名
+            - generic [ref=f2e344]:
+              - button "刷新" [ref=f2e345]
+              - button "批量转到执行" [disabled] [ref=f2e346]
+          - paragraph
+          - table [ref=f2e348]:
+            - rowgroup [ref=f2e349]:
+              - row [ref=f2e350]:
+                - columnheader [ref=f2e351]:
+                  - checkbox "全选/全不选" [ref=f2e352]
+                - columnheader "所属项目" [ref=f2e353]
+                - columnheader "版本" [ref=f2e354]
+                - columnheader "用例名" [ref=f2e355]
+                - columnheader "执行页状态" [ref=f2e356]
+                - columnheader "导入人员" [ref=f2e357]
+                - columnheader "导入时间" [ref=f2e358]
+                - columnheader "更新时间" [ref=f2e359]
+                - columnheader "关联用例" [ref=f2e360]
+                - columnheader "操作" [ref=f2e361]
+            - rowgroup [ref=f2e362]:
+              - row [ref=f2e363]:
+                - cell [ref=f2e364]:
+                  - paragraph [ref=f2e365]: 请选择项目后自动刷新。
+          - button "关闭" [ref=f2e367]
+      - generic [ref=f2e369]:
+        - generic [ref=f2e370]:
+          - heading "用例关联" [level=3] [ref=f2e371]
+          - button "收起" [ref=f2e372]
+        - generic [ref=f2e373]:
+          - generic [ref=f2e374]: 主用例 --
+          - paragraph
+          - button "新增关联" [ref=f2e378]
+          - table [ref=f2e380]:
+            - rowgroup [ref=f2e381]:
+              - row [ref=f2e382]:
+                - columnheader "关联用例名" [ref=f2e383]
+                - columnheader "关联用例数" [ref=f2e384]
+                - columnheader "操作" [ref=f2e385]
+            - rowgroup [ref=f2e386]:
+              - row [ref=f2e387]:
+                - cell [ref=f2e388]:
+                  - paragraph [ref=f2e389]: 暂无关联副用例
+          - button "关闭" [ref=f2e391]
+      - generic [ref=f2e393]:
+        - generic [ref=f2e394]:
+          - heading "选择关联副用例" [level=3] [ref=f2e395]
+          - button "收起" [ref=f2e396]
+        - generic [ref=f2e397]:
+          - paragraph
+          - generic [ref=f2e398]:
+            - generic [ref=f2e399]:
+              - text: 版本
+              - combobox "版本" [disabled] [ref=f2e400]:
+                - option "请选择版本" [selected]
+              - text: 副用例名
+              - textbox "副用例名" [ref=f2e401]:
+                - /placeholder: 搜索副用例
+            - generic [ref=f2e402]:
+              - button "查询" [ref=f2e403]
+              - button "刷新副用例" [ref=f2e404]
+          - table [ref=f2e406]:
+            - rowgroup [ref=f2e407]:
+              - row [ref=f2e408]:
+                - columnheader "选择" [ref=f2e409]
+                - columnheader "用例名" [ref=f2e410]
+                - columnheader "版本" [ref=f2e411]
+                - columnheader "条目数" [ref=f2e412]
+            - rowgroup [ref=f2e413]:
+              - row [ref=f2e414]:
+                - cell [ref=f2e415]:
+                  - paragraph [ref=f2e416]: 请先选择版本并查询
+          - generic [ref=f2e417]:
+            - button "下一步选择条目" [ref=f2e418]
+            - button "取消" [ref=f2e419]
+      - generic [ref=f2e421]:
+        - generic [ref=f2e422]:
+          - heading "选择关联条目" [level=3] [ref=f2e423]
+          - button "收起" [ref=f2e424]
+        - generic [ref=f2e425]:
+          - paragraph [ref=f2e426]:
+            - text: 已选副用例：
+            - strong [ref=f2e427]: "--"
+          - table [ref=f2e429]:
+            - rowgroup [ref=f2e430]:
+              - row [ref=f2e431]:
+                - columnheader [ref=f2e432]:
+                  - checkbox "全选/全不选" [ref=f2e433]
+                - columnheader "编号" [ref=f2e434]
+                - columnheader "模块" [ref=f2e435]
+                - columnheader "用例标题" [ref=f2e436]
+                - columnheader "优先级" [ref=f2e437]
+                - columnheader "前提条件" [ref=f2e438]
+                - columnheader "操作步骤" [ref=f2e439]
+                - columnheader "预期结果" [ref=f2e440]
+            - rowgroup [ref=f2e441]:
+              - row [ref=f2e442]:
+                - cell [ref=f2e443]:
+                  - paragraph [ref=f2e444]: 请先在上一步选择副用例
+          - generic [ref=f2e445]:
+            - button "确认关联" [ref=f2e446]
+            - button "取消" [ref=f2e447]
+      - generic [ref=f2e449]:
+        - generic [ref=f2e450]:
+          - heading "确认删除关联" [level=3] [ref=f2e451]
+          - button "收起" [ref=f2e452]
+        - generic [ref=f2e453]:
+          - paragraph [ref=f2e454]: 确认删除该副用例与主用例的关联吗？删除后不会影响原始用例内容。
+          - generic [ref=f2e455]:
+            - button "确认删除" [ref=f2e456]
+            - button "取消" [ref=f2e457]
+      - generic [ref=f2e459]:
+        - generic [ref=f2e460]:
+          - heading "从用例库中选择" [level=3] [ref=f2e461]
+          - button "收起" [ref=f2e462]
+        - generic [ref=f2e463]:
+          - paragraph [ref=f2e464]: 选择项目与版本后查询，并将所选用例导入当前操作。
+          - generic [ref=f2e465]:
+            - generic [ref=f2e466]:
+              - text: 项目
+              - combobox "项目" [ref=f2e467]
+              - text: 版本
+              - combobox "版本" [disabled] [ref=f2e468]
+              - text: 用例名
+              - textbox "用例名" [ref=f2e469]:
+                - /placeholder: 搜索用例名
+            - generic [ref=f2e470]:
+              - button "查询" [ref=f2e471]
+              - button "批量导入" [disabled] [ref=f2e472]
+          - paragraph
+          - table [ref=f2e474]:
+            - rowgroup [ref=f2e475]:
+              - row [ref=f2e476]:
+                - columnheader [ref=f2e477]:
+                  - checkbox "全选/全不选" [ref=f2e478]
+                - columnheader "所属项目" [ref=f2e479]
+                - columnheader "版本" [ref=f2e480]
+                - columnheader "用例名" [ref=f2e481]
+                - columnheader "复用类型" [ref=f2e482]
+                - columnheader "条目数" [ref=f2e483]
+                - columnheader "操作" [ref=f2e484]
+            - rowgroup [ref=f2e485]:
+              - row [ref=f2e486]:
+                - cell [ref=f2e487]:
+                  - paragraph [ref=f2e488]: 请选择项目后点击“查询”。
+          - button "关闭" [ref=f2e490]
+      - generic [ref=f2e492]:
+        - generic [ref=f2e493]:
+          - heading "选择执行版本" [level=3] [ref=f2e494]
+          - button "收起" [ref=f2e495]
+        - generic [ref=f2e496]:
+          - paragraph [ref=f2e497]: 导入版本仅用于记录用例库归属；执行版本用于“用例执行”页面的版本分组、归档筛选等展示与统计。
+          - generic [ref=f2e498]:
+            - generic [ref=f2e499]: 项目 --
+            - generic [ref=f2e500]: 导入版本 --
+          - generic [ref=f2e501]:
+            - text: 执行版本
+            - combobox [disabled] [ref=f2e502]:
+              - option "加载中..." [selected]
+          - paragraph
+          - generic [ref=f2e503]:
+            - button "确认并继续" [disabled] [ref=f2e504]
+            - button "取消" [ref=f2e505]
+      - generic [ref=f2e507]:
+        - generic [ref=f2e508]:
+          - heading "确认操作" [level=3] [ref=f2e509]
+          - button "收起" [ref=f2e510]
+        - generic [ref=f2e511]:
+          - paragraph
+          - generic [ref=f2e513]:
+            - text: 输入内容
+            - textbox "输入内容" [ref=f2e514]:
+              - /placeholder: 请输入内容
+            - combobox [ref=f2e515]
+          - paragraph
+          - paragraph
+          - generic [ref=f2e516]:
+            - button "确认" [ref=f2e517]
+            - button "取消" [ref=f2e518]
+      - generic [ref=f2e519]:
+        - heading "执行总览" [level=2] [ref=f2e520]
+        - generic [ref=f2e521]:
+          - paragraph [ref=f2e522]: 暂无可用项目
+          - generic [ref=f2e523]:
+            - generic [ref=f2e524]:
+              - heading "项目" [level=3] [ref=f2e525]
+              - generic [ref=f2e526]:
+                - text: 版本
+                - combobox "版本" [ref=f2e527]
+            - generic [ref=f2e528]:
+              - generic [ref=f2e529]:
+                - heading "版本总览" [level=4] [ref=f2e530]
+                - text: 汇总该项目所有执行人进度
+              - paragraph [ref=f2e531]: 暂无版本汇总
+            - paragraph [ref=f2e532]: 暂无执行数据
+      - generic [ref=f2e534]:
+        - generic [ref=f2e535]:
+          - heading "执行列表" [level=3] [ref=f2e536]
+          - button "收起" [ref=f2e537]
+        - generic [ref=f2e538]:
+          - generic [ref=f2e540]:
+            - textbox "搜索模块 / 用例标题 / 实际结果" [ref=f2e541]
+            - button "清空" [disabled] [ref=f2e542]
+          - generic [ref=f2e543]:
+            - table [ref=f2e544]:
+              - rowgroup [ref=f2e545]:
+                - row [ref=f2e546]:
+                  - columnheader "模块" [ref=f2e547]
+                  - columnheader "用例标题" [ref=f2e548]
+                  - columnheader "实际结果" [ref=f2e549]
+                  - columnheader "更新时间" [ref=f2e550]
+              - rowgroup
+            - paragraph [ref=f2e551]: 暂无用例
+      - generic [ref=f2e554]:
+        - heading "XMind 用例结构" [level=3] [ref=f2e555]
+        - button "收起" [ref=f2e556]

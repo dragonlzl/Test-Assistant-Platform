@@ -103,7 +103,19 @@ test.describe('用例相关视图窄屏适配', () => {
     await expect(navButtons).toHaveCount(1, { timeout: 5000 });
     await navButtons.first().click({ force: true });
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('#tempExecToolbar .toolbar-actions')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('#tempExecToolbar .toolbar-primary-row')).toBeVisible({ timeout: 20000 });
+    await page.evaluate(() => {
+      const state = window.app && window.app.state ? window.app.state : null;
+      const api = window.app && window.app.tempExecApi ? window.app.tempExecApi : null;
+      const active = state && Array.isArray(state.tempExecFiles)
+        ? state.tempExecFiles.find((file) => file && String(file.id) === String(state.tempExecActiveId))
+        : null;
+      if (active && api && typeof api.renderTempExecView === 'function') {
+        active.reuseEnabled = true;
+        api.renderTempExecView();
+      }
+    });
+    await expect(page.locator('#tempExecToolbar .toolbar-preset-actions')).toBeVisible();
 
     const layout = await page.evaluate(() => {
       function rect(el) {
@@ -112,9 +124,13 @@ test.describe('用例相关视图窄屏适配', () => {
         return { x: Math.round(box.x), y: Math.round(box.y) };
       }
       return {
-        search: rect(document.querySelector('#tempExecToolbar .toolbar-actions .toolbar-search')),
-        middle: rect(document.querySelector('#tempExecToolbar .toolbar-actions .toolbar-middle')),
-        exportBlock: rect(document.querySelector('#tempExecToolbar .toolbar-actions .toolbar-export')),
+        header: rect(document.querySelector('.case-exec-content-header')),
+        actions: rect(document.querySelector('#tempExecToolbar .toolbar-current-actions')),
+        search: rect(document.querySelector('#tempExecToolbar .toolbar-primary-row .toolbar-search')),
+        presets: rect(document.querySelector('#tempExecToolbar .toolbar-primary-row .toolbar-preset-actions')),
+        change: rect(document.querySelector('#tempExecCaseLibraryChangesBtn')),
+        nav: rect(document.querySelector('#tempExecToolbar .toolbar-primary-row .toolbar-nav')),
+        more: rect(document.querySelector('#tempExecToolbar .toolbar-primary-row .toolbar-more')),
         pillsOverflow: (function() {
           var el = document.querySelector('#tempExecToolbar .toolbar-pills');
           if (!el || !window.getComputedStyle) return '';
@@ -123,12 +139,20 @@ test.describe('用例相关视图窄屏适配', () => {
       };
     });
     expect(layout.search).toBeTruthy();
-    expect(layout.middle).toBeTruthy();
-    expect(layout.exportBlock).toBeTruthy();
-    expect(layout.search.y).toBeLessThan(layout.middle.y);
-    expect(layout.middle.y).toBeLessThan(layout.exportBlock.y);
-    expect(Math.abs(layout.search.x - layout.middle.x)).toBeLessThan(12);
+    expect(layout.presets).toBeTruthy();
+    expect(layout.nav).toBeTruthy();
+    expect(layout.more).toBeTruthy();
+    expect(layout.actions.y).toBeGreaterThanOrEqual(layout.header.y);
+    expect(layout.presets.y).toBeGreaterThanOrEqual(layout.search.y);
+    expect(layout.change.x).toBeLessThan(layout.nav.x);
+    expect(layout.more.y).toBeGreaterThanOrEqual(layout.search.y);
     expect(layout.pillsOverflow).toBe('auto');
+
+    await expect(page.locator('#tempExecToolbar .toolbar-primary-row > .toolbar-reuse-toggle')).toHaveCount(0);
+    await page.getByRole('button', { name: '更多操作' }).click();
+    await expect(page.locator('#tempExecMoreMenu [data-temp-reuse-toggle]')).toBeVisible();
+    await expect(page.locator('#tempExecMoreMenu [data-temp-missing-reminder-toggle]')).toBeVisible();
+    await page.keyboard.press('Escape');
 
     const viewSize = await page.evaluate(() => {
       var el = document.getElementById('tempExecView');
@@ -140,9 +164,32 @@ test.describe('用例相关视图窄屏适配', () => {
     await page.waitForTimeout(200);
     const midSize = await page.evaluate(() => {
       var el = document.getElementById('tempExecView');
-      return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
+      var primary = document.querySelector('#tempExecToolbar .toolbar-primary-row');
+      var pills = document.querySelector('#tempExecToolbar .toolbar-pills');
+      var header = document.querySelector('.case-exec-content-header');
+      var actions = document.querySelector('#tempExecToolbar .toolbar-current-actions');
+      var primaryRect = primary ? primary.getBoundingClientRect() : null;
+      var pillsRect = pills ? pills.getBoundingClientRect() : null;
+      var headerRect = header ? header.getBoundingClientRect() : null;
+      var actionsRect = actions ? actions.getBoundingClientRect() : null;
+      return {
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+        primaryBottom: primaryRect ? primaryRect.bottom : 0,
+        pillsTop: pillsRect ? pillsRect.top : 0,
+        headerTop: headerRect ? headerRect.top : 0,
+        headerRight: headerRect ? headerRect.right : 0,
+        headerBottom: headerRect ? headerRect.bottom : 0,
+        actionsTop: actionsRect ? actionsRect.top : 0,
+        actionsRight: actionsRect ? actionsRect.right : 0,
+        actionsBottom: actionsRect ? actionsRect.bottom : 0,
+      };
     });
     expect(midSize.scrollWidth).toBeGreaterThan(midSize.clientWidth);
+    expect(midSize.pillsTop).toBeGreaterThanOrEqual(midSize.primaryBottom - 1);
+    expect(midSize.actionsTop).toBeGreaterThanOrEqual(midSize.headerTop);
+    expect(midSize.actionsBottom).toBeLessThanOrEqual(midSize.headerBottom + 1);
+    expect(Math.abs(midSize.actionsRight - midSize.headerRight)).toBeLessThanOrEqual(20);
   });
 
   test('用例库编辑视图窄屏工具栏与信息区适配', async ({ page }) => {
@@ -249,13 +296,37 @@ test.describe('用例相关视图窄屏适配', () => {
     await switchToTab(page, 'case-library');
     await expect(page.locator('#caseLibraryHead')).toBeVisible();
 
+    await expect.poll(() => page.locator('#caseLibraryHead').evaluate((element) => element.getBoundingClientRect().width))
+      .toBeGreaterThan(576);
+    const sectionNavLayout = await page.evaluate(() => {
+      var section = document.getElementById('caseLibraryHead').getBoundingClientRect();
+      var content = document.querySelector('.content-shell').getBoundingClientRect();
+      return {
+        sectionWidth: section.width,
+        sectionBottom: section.bottom,
+        contentTop: content.top,
+        viewportWidth: window.innerWidth,
+        toggleDisplay: getComputedStyle(document.getElementById('caseLibrarySectionNavToggle')).display,
+      };
+    });
+    expect(sectionNavLayout.sectionWidth).toBeGreaterThan(sectionNavLayout.viewportWidth * 0.9);
+    expect(sectionNavLayout.contentTop).toBeGreaterThanOrEqual(sectionNavLayout.sectionBottom - 1);
+    expect(sectionNavLayout.toggleDisplay).toBe('none');
+
     await page.click('#openCaseLibraryEditDrawerBtn');
     await expect(page.locator('#caseLibraryEditDrawer')).toHaveClass(/open/);
     await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
     await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
-    await expect(page.locator('#caseLibraryEditCard .case-library-drawer-toolbar')).toBeVisible();
+    await expect(page.locator('#caseLibraryToolbarCard')).toBeVisible();
+    await expect(page.locator('#caseLibraryContextTitle')).toContainText('项目');
+    await expect(page.locator('#caseLibraryContextTitle')).toContainText(project.name);
+    await expect(page.locator('#caseLibraryContextTitle')).toContainText(versions[0].name);
+    await expect(page.locator('#caseLibraryContextTitle')).toContainText('用例库B');
+    await expect(page.getByLabel('显示易漏用例参考')).not.toBeChecked();
+    await expect(page.locator('.case-library-workspace-section > h2')).toHaveCount(0);
+    await expect(page.locator('#caseLibrary > .hint')).toHaveCount(0);
 
     const layout = await page.evaluate(() => {
       function rect(el) {
@@ -263,16 +334,25 @@ test.describe('用例相关视图窄屏适配', () => {
         var box = el.getBoundingClientRect();
         return { x: Math.round(box.x), y: Math.round(box.y) };
       }
-      var toolbar = document.querySelector('#caseLibraryEditCard .case-library-drawer-toolbar');
+      var toolbar = document.querySelector('#caseLibraryToolbarCard .case-library-workspace-toolbar');
       return {
         toolbarExists: Boolean(toolbar),
-        search: rect(document.querySelector('#caseLibraryEditCard .case-library-search')),
-        actions: rect(document.querySelector('#caseLibraryEditCard .case-library-drawer-actions')),
+        search: rect(document.querySelector('#caseLibraryToolbarCard .case-library-search')),
+        ai: rect(document.getElementById('caseLibraryAiGenBtn')),
+        xmind: rect(document.getElementById('caseLibraryXmindViewBtn')),
+        missing: rect(document.querySelector('#caseLibraryToolbarCard .case-library-missing-toggle')),
+        actions: rect(document.querySelector('#caseLibraryToolbarCard .case-library-drawer-actions')),
       };
     });
     expect(layout.toolbarExists).toBe(true);
     expect(layout.search).toBeTruthy();
+    expect(layout.ai).toBeTruthy();
+    expect(layout.xmind).toBeTruthy();
+    expect(layout.missing).toBeTruthy();
     expect(layout.actions).toBeTruthy();
+    expect(layout.ai.y).toBeGreaterThanOrEqual(layout.search.y);
+    expect(layout.xmind.y).toBeGreaterThanOrEqual(layout.ai.y);
+    expect(layout.missing.y).toBeGreaterThanOrEqual(layout.xmind.y);
     expect(layout.search.y).toBeLessThan(layout.actions.y);
     const viewSize = await page.evaluate(() => {
       var el = document.getElementById('caseLibraryEditView');

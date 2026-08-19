@@ -70,6 +70,7 @@
   var selectExecRequestSessionKey = 'tap-case-library-select-exec-request';
   var missingDrawerRequestSessionKey = 'tap-case-library-missing-drawer-request';
   var tempExecAssignRequestSessionKey = 'tap-temp-exec-assign-request';
+  var caseLibraryPriorityOptions = ['P0', 'P1', 'P2'];
   var missingDrawerOpenTimer = 0;
   var missingDrawerSkipTimer = 0;
 
@@ -380,7 +381,6 @@
     editDrawerOpenBtn: document.getElementById('openCaseLibraryEditDrawerBtn'),
 
     editCard: document.getElementById('caseLibraryEditCard'),
-    editCardTitle: document.getElementById('caseLibraryEditCardTitle'),
     editProject: document.getElementById('caseLibraryEditProject'),
     editVersion: document.getElementById('caseLibraryEditVersion'),
     editFileName: document.getElementById('caseLibraryEditFileName'),
@@ -413,6 +413,7 @@
     aiGenResultSummary: document.getElementById('caseLibraryAiGenResultSummary'),
     aiGenSelectionHint: document.getElementById('caseLibraryAiGenSelectionHint'),
     aiGenAppendBtn: document.getElementById('caseLibraryAiGenAppendBtn'),
+    missingReminderToggle: document.getElementById('caseLibraryMissingReminderToggle'),
     missingReminderTop: document.getElementById('caseLibraryMissingReminderTop'),
     missingReminderBottom: document.getElementById('caseLibraryMissingReminderBottom'),
     missingCard: document.getElementById('caseLibraryMissingCard'),
@@ -784,6 +785,7 @@
       pendingToast: null,
       pendingRemaining: 0,
       restoring: false,
+      missingReminderVisible: false,
     },
 
     aiGen: {
@@ -9865,6 +9867,15 @@
 
   function renderMissingReminder() {
     var reminder = ensureMissingReminderState();
+    if (!state.editor || state.editor.missingReminderVisible !== true) {
+      [dom.missingReminderTop, dom.missingReminderBottom].forEach(function(target) {
+        if (!target) return;
+        target.innerHTML = '';
+        target.classList.add('hidden');
+      });
+      cleanupMissingReminderObserver(reminder);
+      return;
+    }
     var aiEnabled = resolveMissingReminderAiEnabled() === 'on';
     if (aiEnabled) {
       syncMissingReminderAiTaskState(reminder);
@@ -9942,6 +9953,11 @@
   function requestMissingReminderRefresh() {
     var reminder = ensureMissingReminderState();
     if (reminder.refreshTimer) clearTimeout(reminder.refreshTimer);
+    if (!state.editor || state.editor.missingReminderVisible !== true) {
+      reminder.refreshTimer = null;
+      renderMissingReminder();
+      return;
+    }
     reminder.refreshTimer = setTimeout(function() {
       reminder.refreshTimer = null;
       refreshMissingReminder();
@@ -14224,7 +14240,6 @@
     var fields = [
       { key: 'module', multiline: false, required: true },
       { key: 'title', multiline: false, required: true },
-      { key: 'priority', multiline: false },
       { key: 'precondition', multiline: true },
       { key: 'steps', multiline: true },
       { key: 'expected', multiline: true, required: true },
@@ -14259,7 +14274,6 @@
     var fields = [
       { key: 'module', multiline: false },
       { key: 'title', multiline: false },
-      { key: 'priority', multiline: false },
       { key: 'precondition', multiline: true },
       { key: 'steps', multiline: true },
       { key: 'expected', multiline: true },
@@ -14302,13 +14316,19 @@
 	      var editPlaceholder = '点击此处编辑';
 	      var moduleText = stripInvisibleMarkers(item.module);
 	      var titleText = stripInvisibleMarkers(item.title);
-	      var priorityText = stripInvisibleMarkers(item.priority);
+	      var currentPriority = normalizePriorityInput(stripInvisibleMarkers(item.priority)).toUpperCase();
+	      if (caseLibraryPriorityOptions.indexOf(currentPriority) === -1) {
+	        currentPriority = 'P1';
+	        item.priority = currentPriority;
+	      }
+	      var priorityOptions = caseLibraryPriorityOptions.map(function(option) {
+	        return '<option value="' + option + '" ' + (currentPriority === option ? 'selected' : '') + '>' + option + '</option>';
+	      }).join('');
 	      var preText = stripInvisibleMarkers(item.precondition);
 	      var stepsText = stripInvisibleMarkers(item.steps);
 	      var expectedText = stripInvisibleMarkers(item.expected);
 	      var moduleHtml = moduleText ? escapeHtml(moduleText) : '';
 	      var titleHtml = titleText ? escapeHtml(titleText) : '';
-	      var priorityHtml = priorityText ? escapeHtml(priorityText) : '';
 		      var preHtml = preText ? escapeHtml(preText).replace(/\n/g, '<br>') : '';
 		      var stepsHtml = stepsText ? escapeHtml(stepsText).replace(/\n/g, '<br>') : '';
 		      var expectedHtml = expectedText ? escapeHtml(expectedText).replace(/\n/g, '<br>') : '';
@@ -14319,7 +14339,7 @@
           '<td class=\"index\">' + (idx + 1) + '</td>' +
           '<td class=\"module\"><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"module\" data-index=\"' + idx + '\" data-case-lib-multiline=\"false\" data-placeholder=\"' + editPlaceholder + '\">' + moduleHtml + '</div></td>' +
           '<td class=\"title\"><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"title\" data-index=\"' + idx + '\" data-case-lib-multiline=\"false\" data-placeholder=\"' + editPlaceholder + '\">' + titleHtml + '</div></td>' +
-          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"priority\" data-index=\"' + idx + '\" data-case-lib-multiline=\"false\" data-placeholder=\"' + editPlaceholder + '\">' + priorityHtml + '</div></td>' +
+          '<td class=\"priority\"><select class=\"priority-select\" aria-label=\"修改优先级\" data-case-lib-priority data-index=\"' + idx + '\" data-priority=\"' + currentPriority.toLowerCase() + '\">' + priorityOptions + '</select></td>' +
 	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"precondition\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + preHtml + '</div></td>' +
 	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"steps\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + stepsHtml + '</div></td>' +
 	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"expected\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + expectedHtml + '</div></td>' +
@@ -14372,7 +14392,13 @@
     var file = state.editor.caseFile;
     if (!file) {
       showEditorCard(false);
+      if (dom.editProject) dom.editProject.textContent = '未选择';
+      if (dom.editVersion) dom.editVersion.textContent = '未选择';
+      if (dom.editFileName) dom.editFileName.textContent = '暂无用例';
       clearMissingReminder();
+      syncEditorSearchControls();
+      syncEditorBatchDeleteControls();
+      syncEditorBatchAddControls();
       syncCaseLibraryAiGenContext();
       return;
     }
@@ -14382,7 +14408,6 @@
     if (dom.editProject) dom.editProject.textContent = projectName;
     if (dom.editVersion) dom.editVersion.textContent = versionName;
     if (dom.editFileName) dom.editFileName.textContent = file.file_name_clean || ('文件#' + file.id);
-    if (dom.editCardTitle) dom.editCardTitle.textContent = '用例编辑视图：' + (file.file_name_clean || ('#' + file.id));
     renderEditorTable();
     syncEditorSearchControls();
     syncEditorBatchDeleteControls();
@@ -14395,11 +14420,16 @@
   }
 
   function syncEditorSearchControls() {
-    if (!dom.editClearSearchBtn) return;
+    var hasFile = Boolean(state.editor && state.editor.caseFile);
     var val = '';
     if (dom.editSearchInput) val = String(dom.editSearchInput.value || '');
     var term = String(state.editor && state.editor.searchText ? state.editor.searchText : '') || val;
-    dom.editClearSearchBtn.disabled = !term.trim();
+    if (dom.editSearchInput) dom.editSearchInput.disabled = !hasFile;
+    if (dom.editClearSearchBtn) dom.editClearSearchBtn.disabled = !hasFile || !term.trim();
+    if (dom.missingReminderToggle) {
+      dom.missingReminderToggle.disabled = !hasFile;
+      dom.missingReminderToggle.checked = Boolean(state.editor && state.editor.missingReminderVisible === true);
+    }
   }
 
   function syncEditorBatchDeleteControls() {
@@ -18753,6 +18783,17 @@
     if (dom.missingReminderBottom) {
       dom.missingReminderBottom.addEventListener('click', handleMissingReminderAction);
     }
+    if (dom.missingReminderToggle) {
+      dom.missingReminderToggle.addEventListener('change', function() {
+        state.editor.missingReminderVisible = Boolean(dom.missingReminderToggle.checked);
+        if (state.editor.missingReminderVisible) {
+          requestMissingReminderRefresh();
+        } else {
+          renderMissingReminder();
+        }
+        syncEditorSearchControls();
+      });
+    }
     if (dom.aiGenBtn) {
       dom.aiGenBtn.addEventListener('click', function() {
         openCaseLibraryAiGenPrepAndRun();
@@ -18984,9 +19025,9 @@
 	        batchInsertCaseItems(t);
 	      });
 	    }
-		    if (dom.editToExecBtn) {
-		      dom.editToExecBtn.addEventListener('click', function() {
-		        var file = state.editor.caseFile;
+	    if (dom.editToExecBtn) {
+	      dom.editToExecBtn.addEventListener('click', function() {
+	        var file = state.editor.caseFile;
 		        if (!file) {
 	          setStatus(dom.editStatus, '请先选择用例', 'warn');
 	          return;
@@ -19056,6 +19097,18 @@
 	      dom.editView.addEventListener('change', function(e) {
 	        var t = e && e.target ? e.target : null;
 	        if (!t) return;
+        if (t.hasAttribute && t.hasAttribute('data-case-lib-priority')) {
+          var priorityIndex = Number(t.getAttribute('data-index'));
+          if (!isFinite(priorityIndex)) return;
+          var priorityItem = state.editor.items[priorityIndex];
+          if (!priorityItem) return;
+          var nextPriority = normalizePriorityInput(t.value).toUpperCase();
+          if (caseLibraryPriorityOptions.indexOf(nextPriority) === -1) return;
+          priorityItem.priority = nextPriority;
+          saveCaseItemAtIndex(priorityIndex, '保存');
+          requestMissingReminderRefresh();
+          return;
+        }
         if (t.hasAttribute && t.hasAttribute('data-case-lib-page-input')) {
           handlePaginationJump(t.value);
           return;

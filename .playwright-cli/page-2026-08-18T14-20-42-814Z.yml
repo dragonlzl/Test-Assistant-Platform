@@ -1,0 +1,226 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e3]:
+    - heading "用例助手" [level=1] [ref=f3e5]:
+      - generic [ref=f3e6]: T
+    - navigation [ref=f3e8]:
+      - generic [ref=f3e9]:
+        - heading "AI 功能" [level=2] [ref=f3e10]
+        - generic [ref=f3e12]:
+          - button "用例生成" [ref=f3e13] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f3e20] [cursor=pointer]:
+            - generic [ref=f3e27]: 功能指派
+            - generic [ref=f3e28]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f3e29] [cursor=pointer]:
+            - generic [ref=f3e34]: 模型管理
+            - generic [ref=f3e35]: 未配置模型
+      - generic [ref=f3e36]:
+        - heading "用例相关" [level=2] [ref=f3e37]
+        - generic [ref=f3e38]:
+          - button "用例执行" [ref=f3e39] [cursor=pointer]
+          - button "用例库" [ref=f3e45] [cursor=pointer]
+          - button "用例归档" [ref=f3e50] [cursor=pointer]
+          - button "执行总览" [ref=f3e56] [cursor=pointer]
+      - generic [ref=f3e61]:
+        - heading "管理" [level=2] [ref=f3e62]
+        - generic [ref=f3e63]:
+          - button "项目管理" [ref=f3e64] [cursor=pointer]
+          - button "人员管理" [ref=f3e70] [cursor=pointer]
+          - button "操作记录" [ref=f3e78] [cursor=pointer]
+      - generic [ref=f3e84]:
+        - heading "设置" [level=2] [ref=f3e85]
+        - button "通用设置" [ref=f3e87] [cursor=pointer]
+    - generic "个人工具" [ref=f3e94]:
+      - button "生成进度" [ref=f3e95] [cursor=pointer]
+      - button "个人备忘" [ref=f3e102] [cursor=pointer]
+    - generic [ref=f3e107]:
+      - generic [ref=f3e108]: 当前用户
+      - button "用户菜单" [ref=f3e109] [cursor=pointer]:
+        - generic [ref=f3e110]: u
+      - menu:
+        - generic:
+          - generic: u
+          - generic:
+            - strong: ui_admin
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f3e111]:
+    - heading "用例执行" [level=2] [ref=f3e113]
+    - navigation "用例执行快捷入口" [ref=f3e114]:
+      - generic [ref=f3e115]:
+        - generic [ref=f3e116] [cursor=pointer]: 专注区
+        - generic [ref=f3e118]: 暂无专注用例
+      - generic [ref=f3e120]:
+        - button "用例导入" [ref=f3e121] [cursor=pointer]
+        - button "选择用例执行" [ref=f3e127] [cursor=pointer]
+        - button "执行分配" [ref=f3e133] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f3e139] [cursor=pointer]
+  - generic [ref=f3e147]:
+    - banner [ref=f3e148]:
+      - heading "项目 元气骑士 版本 版本#version-1 用例 角色皮肤专项用例" [level=1] [ref=f3e149]:
+        - generic [ref=f3e309]:
+          - generic [ref=f3e310]: 项目
+          - strong [ref=f3e311]: 元气骑士
+        - generic [ref=f3e312]: /
+        - generic [ref=f3e313]:
+          - generic [ref=f3e314]: 版本
+          - strong [ref=f3e315]: 版本#version-1
+        - generic [ref=f3e316]: /
+        - generic [ref=f3e317]:
+          - generic [ref=f3e318]: 用例
+          - strong [ref=f3e319]: 角色皮肤专项用例
+    - generic [ref=f3e163]:
+      - generic [ref=f3e320]:
+        - textbox "搜索用例关键字" [ref=f3e322]
+        - generic [ref=f3e323] [cursor=pointer]:
+          - checkbox "用例复用" [checked] [ref=f3e324]
+          - generic [ref=f3e325]: 用例复用
+        - generic [ref=f3e326] [cursor=pointer]:
+          - checkbox "显示易漏用例参考" [ref=f3e327]
+          - generic [ref=f3e328]: 易漏用例参考
+        - generic [ref=f3e329]:
+          - group "切换用例" [ref=f3e330]:
+            - generic [ref=f3e331]: 用例切换：
+            - button "上一份" [disabled] [ref=f3e332]
+            - button "下一份" [disabled] [ref=f3e333]
+          - button "归档" [ref=f3e335] [cursor=pointer]
+          - button "更多操作" [ref=f3e337] [cursor=pointer]
+      - generic [ref=f3e340]:
+        - button "已执行 0" [ref=f3e341] [cursor=pointer]
+        - button "未执行 2" [ref=f3e342] [cursor=pointer]
+        - button "通过 0" [ref=f3e343] [cursor=pointer]
+        - button "失败 0" [ref=f3e344] [cursor=pointer]
+        - button "阻塞 0" [ref=f3e345] [cursor=pointer]
+        - button "不适用 0" [ref=f3e346] [cursor=pointer]
+    - main [ref=f3e191]:
+      - option "请选择项目" [selected]
+      - option "元气骑士"
+      - option "请选择版本" [selected]
+      - generic [ref=f3e194]:
+        - generic [ref=f3e347]:
+          - generic [ref=f3e348]:
+            - button "＋ 预设子项" [ref=f3e349] [cursor=pointer]
+            - button "展开所有子项" [ref=f3e350] [cursor=pointer]
+            - button "快速执行" [ref=f3e351] [cursor=pointer]
+          - generic [ref=f3e352]:
+            - generic [ref=f3e353]:
+              - textbox "输入预设子项..." [ref=f3e354]
+              - button "保存" [ref=f3e355] [cursor=pointer]
+              - button "取消" [ref=f3e356] [cursor=pointer]
+            - generic [ref=f3e357]:
+              - generic "点击编辑" [ref=f3e358] [cursor=pointer]: 碎片获取
+              - combobox "获取/解锁方式" [ref=f3e359]:
+                - option "未设置"
+                - option "碎片" [selected]
+                - option "宝石"
+                - option "付费"
+                - option "小鱼干"
+                - option "赛季商店"
+                - option "老皮肤赠送"
+                - option "条件解锁"
+              - generic "删除预设子项" [ref=f3e360] [cursor=pointer]: ×
+            - generic [ref=f3e361]:
+              - generic "点击编辑" [ref=f3e362] [cursor=pointer]: 宝石购买
+              - combobox "获取/解锁方式" [ref=f3e363]:
+                - option "未设置"
+                - option "碎片"
+                - option "宝石" [selected]
+                - option "付费"
+                - option "小鱼干"
+                - option "赛季商店"
+                - option "老皮肤赠送"
+                - option "条件解锁"
+              - generic "删除预设子项" [ref=f3e364] [cursor=pointer]: ×
+            - generic [ref=f3e365]:
+              - generic "点击编辑" [ref=f3e366] [cursor=pointer]: 付费解锁
+              - combobox "获取/解锁方式" [ref=f3e367]:
+                - option "未设置"
+                - option "碎片"
+                - option "宝石"
+                - option "付费" [selected]
+                - option "小鱼干"
+                - option "赛季商店"
+                - option "老皮肤赠送"
+                - option "条件解锁"
+              - generic "删除预设子项" [ref=f3e368] [cursor=pointer]: ×
+        - generic [ref=f3e369]:
+          - generic [ref=f3e370]: 显示 1-2 / 2 条，每页 20 条
+          - generic [ref=f3e371]:
+            - button "上一页" [disabled] [ref=f3e372]
+            - generic [ref=f3e373]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=f3e374]
+            - generic [ref=f3e375]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f3e376]: "1"
+              - text: 页
+        - table [ref=f3e377]:
+          - rowgroup [ref=f3e391]:
+            - row [ref=f3e392]:
+              - columnheader [ref=f3e393]:
+                - checkbox [ref=f3e394]
+              - columnheader "编号" [ref=f3e395]
+              - columnheader "模块" [ref=f3e396]
+              - columnheader "用例标题" [ref=f3e397]
+              - columnheader "优先级" [ref=f3e398]
+              - columnheader "前提条件" [ref=f3e399]
+              - columnheader "操作步骤" [ref=f3e400]
+              - columnheader "预期结果" [ref=f3e401]
+              - columnheader "实际结果" [ref=f3e402]
+              - columnheader "备注" [ref=f3e403]
+              - columnheader "缺陷链接" [ref=f3e404]
+              - columnheader "增删" [ref=f3e405]
+          - rowgroup [ref=f3e406]:
+            - row [ref=f3e407]:
+              - cell [ref=f3e408]:
+                - checkbox [ref=f3e409]
+              - cell "1" [ref=f3e410]
+              - cell "碎片皮肤" [ref=f3e411]
+              - cell "碎片获取途径" [ref=f3e412]
+              - cell "P1" [ref=f3e414]
+              - cell "已进入角色皮肤页面" [ref=f3e416]
+              - cell "选择碎片皮肤并查看解锁方式" [ref=f3e418]
+              - cell "展示正确的碎片需求" [ref=f3e420]
+              - cell [ref=f3e422]:
+                - button "未执行" [ref=f3e423] [cursor=pointer]
+              - cell [ref=f3e424]:
+                - button "备注" [ref=f3e425] [cursor=pointer]
+              - cell [ref=f3e426]:
+                - button "缺陷链接" [ref=f3e427] [cursor=pointer]
+              - cell [ref=f3e428]:
+                - generic [ref=f3e429]:
+                  - button "−" [ref=f3e430] [cursor=pointer]
+                  - button "＋" [ref=f3e431] [cursor=pointer]
+            - row [ref=f3e432]:
+              - cell [ref=f3e433]:
+                - checkbox [ref=f3e434]
+              - cell "2" [ref=f3e435]
+              - cell "宝石皮肤" [ref=f3e436]
+              - cell "宝石购买" [ref=f3e437]
+              - cell "P1" [ref=f3e439]
+              - cell "宝石余额充足" [ref=f3e441]
+              - cell "选择宝石皮肤并确认购买" [ref=f3e443]
+              - cell "购买成功并完成解锁" [ref=f3e445]
+              - cell [ref=f3e447]:
+                - button "未执行" [ref=f3e448] [cursor=pointer]
+              - cell [ref=f3e449]:
+                - button "备注" [ref=f3e450] [cursor=pointer]
+              - cell [ref=f3e451]:
+                - button "缺陷链接" [ref=f3e452] [cursor=pointer]
+              - cell [ref=f3e453]:
+                - generic [ref=f3e454]:
+                  - button "−" [ref=f3e455] [cursor=pointer]
+                  - button "＋" [ref=f3e456] [cursor=pointer]
+        - generic [ref=f3e457]:
+          - generic [ref=f3e458]: 显示 1-2 / 2 条，每页 20 条
+          - generic [ref=f3e459]:
+            - button "上一页" [disabled] [ref=f3e460]
+            - generic [ref=f3e461]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=f3e462]
+            - generic [ref=f3e463]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f3e464]: "1"
+              - text: 页
+      - option "全部版本" [selected]
+      - option "版本#version-1"
+      - option "请选择版本" [selected]

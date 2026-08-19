@@ -1,0 +1,157 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e3]:
+    - heading "用例助手" [level=1] [ref=f3e5]:
+      - generic [ref=f3e6]: T
+      - generic [ref=f3e213]:
+        - generic [ref=f3e214]: 用例助手
+        - generic [ref=f3e215]: TEST ASSISTANT
+    - navigation [ref=f3e8]:
+      - generic [ref=f3e9]:
+        - heading "AI 功能" [level=2] [ref=f3e10]
+        - generic [ref=f3e12]:
+          - button "用例生成" [ref=f3e13] [cursor=pointer]
+          - button "功能指派，未保存指派模型" [active] [ref=f3e177] [cursor=pointer]:
+            - generic [ref=f3e27]: 功能指派
+            - generic [ref=f3e28]: 未保存指派模型
+          - button "模型管理" [ref=f3e178] [cursor=pointer]
+      - generic [ref=f3e36]:
+        - heading "用例相关" [level=2] [ref=f3e37]
+        - generic [ref=f3e38]:
+          - button "用例执行" [ref=f3e39] [cursor=pointer]
+          - button "用例库" [ref=f3e45] [cursor=pointer]
+          - button "用例归档" [ref=f3e50] [cursor=pointer]
+          - button "执行总览" [ref=f3e56] [cursor=pointer]
+      - generic [ref=f3e61]:
+        - heading "管理" [level=2] [ref=f3e62]
+        - generic [ref=f3e63]:
+          - button "项目管理" [ref=f3e64] [cursor=pointer]
+          - button "人员管理" [ref=f3e70] [cursor=pointer]
+          - button "操作记录" [ref=f3e78] [cursor=pointer]
+      - generic [ref=f3e84]:
+        - heading "设置" [level=2] [ref=f3e85]
+        - button "通用设置" [ref=f3e87] [cursor=pointer]
+    - generic "个人工具" [ref=f3e94]:
+      - button "生成进度" [ref=f3e95] [cursor=pointer]
+      - button "个人备忘" [ref=f3e102] [cursor=pointer]
+    - generic [ref=f3e107]:
+      - generic [ref=f3e108]: 当前用户
+      - button "用户菜单" [expanded] [ref=f3e109] [cursor=pointer]:
+        - generic [ref=f3e110]: e
+      - strong [ref=f3e217]: e2e
+      - menu [ref=f3e218]:
+        - generic [ref=f3e219]:
+          - generic [ref=f3e220]: e
+          - generic [ref=f3e221]:
+            - strong [ref=f3e222]: e2e
+            - generic [ref=f3e223]: 角色
+            - generic [ref=f3e224]: 管理员
+        - menuitem "通用设置" [ref=f3e225] [cursor=pointer]
+        - menuitem "退出登录" [ref=f3e230] [cursor=pointer]
+  - main [ref=f3e112]:
+    - generic [ref=f3e235]:
+      - heading "功能指派" [level=2] [ref=f3e236]
+      - generic [ref=f3e237]:
+        - paragraph [ref=f3e238]: 先在“模型管理”中创建模型，再为每个功能指派具体模型。
+        - generic [ref=f3e239]:
+          - generic [ref=f3e240]: 未保存指派模型，请先保存指派
+          - button "保存指派" [ref=f3e241] [cursor=pointer]
+        - generic [ref=f3e242]:
+          - strong [ref=f3e243]: 注意事项
+          - paragraph [ref=f3e244]: 提示词内的 JSON 数据结构需要严格遵循，改动提示词时，请不要影响到 JSON 的数据结构要求！！！
+        - generic [ref=f3e245]:
+          - button "设为默认提示词" [ref=f3e246] [cursor=pointer]
+          - button "导出默认提示词" [ref=f3e247] [cursor=pointer]
+          - button "导入默认提示词" [ref=f3e248] [cursor=pointer]
+        - paragraph [ref=f3e249]
+        - generic [ref=f3e250]:
+          - strong [ref=f3e251]: 全局指派
+          - generic [ref=f3e252]:
+            - generic [ref=f3e253]: 统一模型
+            - combobox "统一模型" [ref=f3e254]:
+              - option "请选择模型"
+              - option "视觉验收模型 A (deepseek)" [selected]
+              - option "视觉验收模型 B (deepseek)"
+            - button "确认" [ref=f3e255] [cursor=pointer]
+          - paragraph [ref=f3e256]: 选择模型后点击“确认”，将当前页面全部功能统一指派并立即保存为该模型。
+          - paragraph [ref=f3e257]
+        - generic [ref=f3e258]:
+          - strong [ref=f3e259]: XMind 用例生成功能
+          - generic [ref=f3e260]:
+            - generic [ref=f3e261]: 使用模型
+            - combobox "使用模型" [ref=f3e262]:
+              - option "视觉验收模型 A (deepseek)" [selected]
+              - option "视觉验收模型 B (deepseek)"
+          - generic [ref=f3e263]:
+            - generic [ref=f3e264]: 提示词
+            - textbox "提示词" [ref=f3e265]:
+              - /placeholder: 为空则使用默认 XMind 用例生成提示词
+              - text: "你是资深测试设计专家，负责 XMind 用例生成页面的结构化结果输出。你必须严格遵循以下规则： 1、只输出合法 JSON，不要输出任何解释、备注、Markdown 或代码块围栏。 2、输出结构固定为：{modules:[{module,key_scenarios,test_points,coupled_modules,cases}]}。 3、每个模块字段要求：module 为模块名；key_scenarios/test_points/coupled_modules 均为数组；cases 可为空数组或省略。 4、每条用例字段固定为：{module,title,priority,preconditions,steps,expected}，priority 仅允许 P0、P1、P2。 5、用例标题 title 必须简洁明了，只表达测试意图，不要写成长句，不要把步骤或预期塞进标题。 6、steps 必须是数组，数组中每一项都必须自带中文序号前缀，格式严格为“1、xxx”“2、xxx”。 7、不得重复输出已有模块，也不得重复输出与已有用例语义重复的用例；模块命名要稳定、清晰、避免同义重复。 8、是否允许新增模块、是否给新模块生成用例、是否给已有模块生成用例，必须严格遵守传入的 operation_contract。 9、当 operation_contract 指定只补模块时，不要为模块生成 cases；当没有可补充内容时返回 {\"modules\":[]}。 【用例编写风格与人工特征参考：AI_CASE_WRITING_STYLE_GUIDE.md】 在保证覆盖质量、字段完整、语义不重复的前提下，生成结果要贴近人工从 XMind/表格整理检查点的写法，并根据需求类型补充人工高频漏点： 1、module 使用短业务分类，可保留项目编号习惯，不要写成长标题。 2、title 写短检查点，优先 4-12 个字，不要批量写成“验证XXX功能是否正常”，不要把步骤或预期塞进标题。 3、priority 只能填写 P0、P1、P2；P0 最高，核心链路/登录/支付/严重阻断/版本主功能用 P0，默认多数用例用 P1，边界/低频/兼容/展示细节可用 P2。 4、preconditions 写当前测试状态，保持短句；多条时可用中文序号分点，不写背景解释。 5、steps 优先单行动作，常用“进入、点击、查看、观察、检查、选择、装备、领取、购买、重复、重登”等测试动作，不要扩写成教学流程。 6、expected 写直接可观察结果，常用“正常、正确、显示、展示、提示、可、不可、不会、到账、扣除、刷新、一致”等结果词。 7、保留项目业务词和测试人员口吻，例如平A、红武、词条、专精、保底、回流、pvp、ui、重铸、羁绊；允许轻微人工差异和重复标题。 8、优先补人工常见漏点：旧入口/旧逻辑兼容、真实入口矩阵、跨模式/跨场景兼容、快速连点/多指/重复进入等异常操作、断网/后台/重启/重登恢复、云存档/本地缓存/跨局/跨日状态一致性。 9、涉及资源或奖励时，覆盖领取、购买、兑换、分解、返还、扣费、到账、次数减少、余额刷新、货币上限、已拥有/未拥有/全部拥有、取消不生效、失败不扣费、成功后刷新。 10、涉及配置或随机时，覆盖空配置、缺字段、非法编号、异常品质、候选池不足、概率0/100、全档位映射、相邻档位切换、按兜底策略处理。 11、涉及联机或多人时，覆盖主机/从机、自己/队友、第三人称观察、同步显示、归属隔离、多人弹窗或候选结果是否一致。 12、涉及 UI、演示或资源时，覆盖多语言、字体切换、特殊分辨率、长文本超框、音画同步、资源缺失兜底、关闭返回层级和多次切换稳定性。 13、不要为追求风格牺牲质量：字段必须完整，步骤和预期必须可执行/可观察，涉及数值、配置、奖励、付费、登录、状态变化时要写清关键校验点。"
+          - generic [ref=f3e266]:
+            - generic [ref=f3e267]: Temperature
+            - spinbutton "Temperature" [ref=f3e268]: "0.2"
+            - paragraph [ref=f3e269]: 0~1，默认 0.2
+          - generic [ref=f3e270]:
+            - button "测试连通性" [ref=f3e271] [cursor=pointer]
+            - button "保存指派" [ref=f3e272] [cursor=pointer]
+          - paragraph [ref=f3e273]
+        - generic [ref=f3e274]:
+          - strong [ref=f3e275]: 用例相似对比
+          - generic [ref=f3e276]:
+            - generic [ref=f3e277]: 使用模型
+            - combobox "使用模型" [ref=f3e278]:
+              - option "视觉验收模型 A (deepseek)" [selected]
+              - option "视觉验收模型 B (deepseek)"
+          - generic [ref=f3e279]:
+            - generic [ref=f3e280]: 提示词
+            - textbox "提示词" [ref=f3e281]:
+              - /placeholder: 为空则使用默认相似度对比提示词
+              - text: "你是测试用例去重专家，请比较“生成用例候选”与“已导入用例”。保留在导入用例中不存在或不高度相似的候选，用例结构保持与输入一致，输出 JSON 用例列表，每条用例字段：{module, title, priority（仅从P0、P1、P2中选择）, preconditions, steps, expected}，steps 为数组。"
+          - generic [ref=f3e282]:
+            - generic [ref=f3e283]: Temperature
+            - spinbutton "Temperature" [ref=f3e284]: "0.2"
+            - paragraph [ref=f3e285]: 0~1，默认 0.2
+          - generic [ref=f3e286]:
+            - button "测试连通性" [ref=f3e287] [cursor=pointer]
+            - button "保存指派" [ref=f3e288] [cursor=pointer]
+          - paragraph [ref=f3e289]
+        - generic [ref=f3e290]:
+          - strong [ref=f3e291]: 易漏用例推荐
+          - generic [ref=f3e292]:
+            - generic [ref=f3e293]: 使用模型
+            - combobox "使用模型" [ref=f3e294]:
+              - option "视觉验收模型 A (deepseek)" [selected]
+              - option "视觉验收模型 B (deepseek)"
+          - generic [ref=f3e295]:
+            - generic [ref=f3e296]: 提示词
+            - textbox "提示词" [ref=f3e297]:
+              - /placeholder: 为空则使用默认易漏用例推荐提示词
+              - text: "你是测试用例关联推荐专家。请根据“当前用例信息”从“候选易漏用例字典”（id -> 用例字段，包含 match_level=高/中/低）中筛选适合当前用例执行/查看的关联用例，并按关联度从高到低排序。严格输出 JSON：{ids: [\"1\",\"2\"]}，若无适合用例输出 {ids: []}，不要输出任何其他文本。"
+          - generic [ref=f3e298]:
+            - generic [ref=f3e299]: Temperature
+            - spinbutton "Temperature" [ref=f3e300]: "0.2"
+            - paragraph [ref=f3e301]: 0~1，默认 0.2
+          - generic [ref=f3e302]:
+            - button "测试连通性" [ref=f3e303] [cursor=pointer]
+            - button "保存指派" [ref=f3e304] [cursor=pointer]
+          - paragraph [ref=f3e305]
+        - generic [ref=f3e306]:
+          - strong [ref=f3e307]: 用例库页面生成用例
+          - generic [ref=f3e308]:
+            - generic [ref=f3e309]: 使用模型
+            - combobox "使用模型" [ref=f3e310]:
+              - option "视觉验收模型 A (deepseek)" [selected]
+              - option "视觉验收模型 B (deepseek)"
+          - generic [ref=f3e311]:
+            - generic [ref=f3e312]: 提示词
+            - textbox "提示词" [ref=f3e313]:
+              - /placeholder: 为空则使用默认用例库生成提示词
+              - text: "你是资深测试用例设计专家，请基于输入 JSON 中的 requirement_text、module_list、existing_cases、coverage_threshold 生成补充用例。要求：1) 分析需求覆盖模块，若需求包含的模块多于 module_list，先在 missing_modules 中补齐缺失模块；若 module_list 多于需求模块可忽略多出模块。2) 对 module_list 中每个模块评估 existing_cases 在当前需求下的覆盖率 coverage(0-100)，覆盖率>=coverage_threshold 的模块可不生成用例。3) 对覆盖率低于阈值的模块生成用例，并与 existing_cases 做语义去重，测试点相似的用例不要输出。4) 缺失模块 coverage 必然为 0，必须生成用例。严格输出 JSON：{missing_modules:[{module,coverage,cases:[{module,title,priority,precondition,steps,expected,remark}]}], existing_modules:[{module,coverage,cases:[{module,title,priority,precondition,steps,expected,remark}]}]}。priority 仅允许 P0/P1/P2，steps 为字符串(可换行)，其他字段为空用空字符串，仅输出 JSON。 【用例编写风格与人工特征参考：AI_CASE_WRITING_STYLE_GUIDE.md】 在保证覆盖质量、字段完整、语义不重复的前提下，生成结果要贴近人工从 XMind/表格整理检查点的写法，并根据需求类型补充人工高频漏点： 1、module 使用短业务分类，可保留项目编号习惯，不要写成长标题。 2、title 写短检查点，优先 4-12 个字，不要批量写成“验证XXX功能是否正常”，不要把步骤或预期塞进标题。 3、priority 只能填写 P0、P1、P2；P0 最高，核心链路/登录/支付/严重阻断/版本主功能用 P0，默认多数用例用 P1，边界/低频/兼容/展示细节可用 P2。 4、preconditions 写当前测试状态，保持短句；多条时可用中文序号分点，不写背景解释。 5、steps 优先单行动作，常用“进入、点击、查看、观察、检查、选择、装备、领取、购买、重复、重登”等测试动作，不要扩写成教学流程。 6、expected 写直接可观察结果，常用“正常、正确、显示、展示、提示、可、不可、不会、到账、扣除、刷新、一致”等结果词。 7、保留项目业务词和测试人员口吻，例如平A、红武、词条、专精、保底、回流、pvp、ui、重铸、羁绊；允许轻微人工差异和重复标题。 8、优先补人工常见漏点：旧入口/旧逻辑兼容、真实入口矩阵、跨模式/跨场景兼容、快速连点/多指/重复进入等异常操作、断网/后台/重启/重登恢复、云存档/本地缓存/跨局/跨日状态一致性。 9、涉及资源或奖励时，覆盖领取、购买、兑换、分解、返还、扣费、到账、次数减少、余额刷新、货币上限、已拥有/未拥有/全部拥有、取消不生效、失败不扣费、成功后刷新。 10、涉及配置或随机时，覆盖空配置、缺字段、非法编号、异常品质、候选池不足、概率0/100、全档位映射、相邻档位切换、按兜底策略处理。 11、涉及联机或多人时，覆盖主机/从机、自己/队友、第三人称观察、同步显示、归属隔离、多人弹窗或候选结果是否一致。 12、涉及 UI、演示或资源时，覆盖多语言、字体切换、特殊分辨率、长文本超框、音画同步、资源缺失兜底、关闭返回层级和多次切换稳定性。 13、不要为追求风格牺牲质量：字段必须完整，步骤和预期必须可执行/可观察，涉及数值、配置、奖励、付费、登录、状态变化时要写清关键校验点。"
+          - generic [ref=f3e314]:
+            - generic [ref=f3e315]: Temperature
+            - spinbutton "Temperature" [ref=f3e316]: "0.2"
+            - paragraph [ref=f3e317]: 0~1，默认 0.2
+          - generic [ref=f3e318]:
+            - button "测试连通性" [ref=f3e319] [cursor=pointer]
+            - button "保存指派" [ref=f3e320] [cursor=pointer]
+          - paragraph [ref=f3e321]
+        - button "保存指派" [ref=f3e323] [cursor=pointer]

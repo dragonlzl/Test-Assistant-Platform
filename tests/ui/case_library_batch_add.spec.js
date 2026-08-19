@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/case-library.html?tab=case-library');
 }
 
 async function waitAppReady(page, timeoutMs) {
@@ -219,6 +219,8 @@ test.describe('用例库编辑视图批量新增', () => {
 
     await expect(page.locator('#caseLibraryEditView [data-case-lib-pagination]').first()).toContainText('第 2 /');
     await expect(page.locator('#caseLibraryEditView tr.case-row.new-added')).toHaveCount(5);
+    await expect(page.locator('#caseLibraryEditView tr.case-row.new-added select[data-case-lib-priority]')).toHaveCount(5);
+    await expect(page.locator('#caseLibraryEditView tr.case-row.new-added select[data-case-lib-priority]').first()).toHaveValue('P1');
     await expect(page.locator('.temp-undo-toast')).toContainText('已新增用例 5 条');
 
     await page.click('.temp-undo-toast button', { force: true });
@@ -229,6 +231,7 @@ test.describe('用例库编辑视图批量新增', () => {
     await page.click('#caseLibraryEditBatchAddBtn');
     await page.waitForTimeout(8500);
     expect(createCalls).toBe(5);
+    expect(caseItemsByFileId[caseFileId].slice(-5).every((item) => item.priority === 'P1')).toBeTruthy();
     await expect(page.locator('#caseLibraryEditStatus')).toContainText('批量新增已入库');
   });
 

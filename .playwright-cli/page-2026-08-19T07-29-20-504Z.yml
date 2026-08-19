@@ -1,0 +1,211 @@
+- generic [ref=f15e2]:
+  - complementary [ref=f15e3]:
+    - heading "用例助手" [level=1] [ref=f15e5]:
+      - generic [ref=f15e6]: T
+      - generic [ref=f15e8]:
+        - generic [ref=f15e9]: 用例助手
+        - generic [ref=f15e10]: TEST ASSISTANT
+    - navigation [ref=f15e11]:
+      - generic [ref=f15e12]:
+        - heading "AI 功能" [level=2] [ref=f15e13]
+        - generic [ref=f15e15]:
+          - button "用例生成" [ref=f15e16] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f15e23] [cursor=pointer]:
+            - generic [ref=f15e30]: 功能指派
+            - generic [ref=f15e31]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f15e32] [cursor=pointer]:
+            - generic [ref=f15e37]: 模型管理
+            - generic [ref=f15e38]: 未配置模型
+      - generic [ref=f15e39]:
+        - heading "用例相关" [level=2] [ref=f15e40]
+        - generic [ref=f15e41]:
+          - button "用例执行" [ref=f15e42] [cursor=pointer]
+          - button "用例库" [ref=f15e48] [cursor=pointer]
+          - button "用例归档" [ref=f15e53] [cursor=pointer]
+          - button "执行总览" [ref=f15e59] [cursor=pointer]
+      - generic [ref=f15e64]:
+        - heading "管理" [level=2] [ref=f15e65]
+        - generic [ref=f15e66]:
+          - button "项目管理" [ref=f15e67] [cursor=pointer]
+          - button "人员管理" [ref=f15e73] [cursor=pointer]
+          - button "操作记录" [ref=f15e81] [cursor=pointer]
+      - generic [ref=f15e87]:
+        - heading "设置" [level=2] [ref=f15e88]
+        - button "通用设置" [ref=f15e90] [cursor=pointer]
+    - generic "个人工具" [ref=f15e97]:
+      - button "生成进度" [ref=f15e98] [cursor=pointer]
+      - button "个人备忘" [ref=f15e105] [cursor=pointer]
+    - generic [ref=f15e110]:
+      - generic [ref=f15e111]: 当前用户
+      - button "用户菜单" [ref=f15e112] [cursor=pointer]:
+        - generic [ref=f15e113]: s
+      - strong [ref=f15e115]: shell_admin
+      - menu:
+        - generic:
+          - generic: s
+          - generic:
+            - strong: shell_admin
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - generic [ref=f15e116]:
+    - generic "设置分类" [ref=f15e119]:
+      - button "常规" [ref=f15e120] [cursor=pointer]
+      - button "AI 与知识库" [ref=f15e126] [cursor=pointer]
+      - button "易漏用例" [ref=f15e132] [cursor=pointer]
+      - button "项目" [ref=f15e137] [cursor=pointer]
+      - button "执行视图" [ref=f15e143] [cursor=pointer]
+    - main [ref=f15e148]:
+      - generic [ref=f15e149]:
+        - generic [ref=f15e150]: 个人设置
+        - heading "通用设置" [level=1] [ref=f15e151]
+      - generic [ref=f15e152]:
+        - heading "常规" [level=2] [ref=f15e153]
+        - generic [ref=f15e154]:
+          - generic [ref=f15e155]:
+            - generic [ref=f15e156]:
+              - generic [ref=f15e157]:
+                - strong [ref=f15e158]: 全局分页设置
+                - paragraph [ref=f15e159]: 设置列表类视图每页展示条数，范围 5-200 条，默认为 20。
+              - spinbutton "请输入条数" [ref=f15e161]: "20"
+            - button "保存分页设置" [ref=f15e163] [cursor=pointer]
+          - generic [ref=f15e164]:
+            - generic [ref=f15e165]:
+              - generic [ref=f15e166]:
+                - strong [ref=f15e167]: 用例视图字号
+                - paragraph [ref=f15e168]: 设置用例执行和用例库编辑视图字号，范围 11-16，默认为 13。
+              - spinbutton "请输入字号" [ref=f15e170]: "13"
+            - button "保存字号" [ref=f15e172] [cursor=pointer]
+          - generic [ref=f15e173]:
+            - generic [ref=f15e174]:
+              - generic [ref=f15e175]:
+                - strong [ref=f15e176]: 页面主题
+                - paragraph [ref=f15e177]: 选择页面配色主题，保存后同步到当前账号。
+              - combobox [ref=f15e179]:
+                - option "白色主题" [selected]
+                - option "黑色主题"
+            - button "保存主题" [ref=f15e181] [cursor=pointer]
+          - generic [ref=f15e183]:
+            - generic [ref=f15e184]:
+              - strong [ref=f15e185]: 导航栏智能收起
+              - paragraph [ref=f15e186]: 向下滚动时自动收起顶部导航，回到顶部后自动展开。
+            - generic [ref=f15e188]:
+              - checkbox "启用" [ref=f15e189]
+              - text: 启用
+      - generic [ref=f15e190]:
+        - heading "AI 与知识库" [level=2] [ref=f15e191]
+        - generic [ref=f15e192]:
+          - generic [ref=f15e193]:
+            - generic [ref=f15e194]:
+              - generic [ref=f15e195]:
+                - strong [ref=f15e196]: Case Assistant 项目路径
+                - paragraph [ref=f15e197]: 用于 Electron 环境调用，仅支持绝对目录路径。
+              - textbox "如：E:/workspace/project 或 /Users/name/project" [ref=f15e199]
+            - button "保存项目路径" [ref=f15e201] [cursor=pointer]
+          - generic [ref=f15e202]:
+            - generic [ref=f15e203]:
+              - generic [ref=f15e204]:
+                - strong [ref=f15e205]: 共享知识库地址
+                - paragraph [ref=f15e206]: XMind 用例生成会在生成前检索并注入知识库上下文。
+              - textbox "如：http://192.168.50.10:8003/sk/" [ref=f15e208]
+            - generic [ref=f15e209]:
+              - button "保存地址" [ref=f15e210] [cursor=pointer]
+              - button "校验地址" [ref=f15e211] [cursor=pointer]
+          - generic [ref=f15e212]:
+            - generic [ref=f15e213]:
+              - generic [ref=f15e214]:
+                - strong [ref=f15e215]: 知识库/XMind 上限设置
+                - paragraph [ref=f15e216]: 调整目录检索、知识库注入和 XMind 请求体的本地上限。
+              - generic [ref=f15e217]:
+                - generic [ref=f15e218]:
+                  - generic [ref=f15e219]: 目录送模上限（字符）
+                  - spinbutton "目录送模上限（字符）" [ref=f15e220]: "120000"
+                - generic [ref=f15e221]:
+                  - generic [ref=f15e222]: 知识库注入上限（字符）
+                  - spinbutton "知识库注入上限（字符）" [ref=f15e223]: "24000"
+                - generic [ref=f15e224]:
+                  - generic [ref=f15e225]: XMind 请求体上限（字符）
+                  - spinbutton "XMind 请求体上限（字符）" [ref=f15e226]: "4000000"
+            - button "保存上限" [ref=f15e228] [cursor=pointer]
+          - generic [ref=f15e229]:
+            - generic [ref=f15e230]:
+              - generic [ref=f15e231]:
+                - strong [ref=f15e232]: 用例库生成覆盖度阈值
+                - paragraph [ref=f15e233]: 范围 50-100，默认 90。
+              - spinbutton "请输入阈值" [ref=f15e235]: "90"
+            - button "保存阈值" [ref=f15e237] [cursor=pointer]
+      - generic [ref=f15e238]:
+        - heading "易漏用例" [level=2] [ref=f15e239]
+        - generic [ref=f15e240]:
+          - generic [ref=f15e241]:
+            - generic [ref=f15e242]:
+              - generic [ref=f15e243]:
+                - strong [ref=f15e244]: 提醒区域位置
+                - paragraph [ref=f15e245]: 选择易漏用例提醒区域展示在用例列表上方或下方。
+              - combobox [ref=f15e247]:
+                - option "上方" [selected]
+                - option "下方"
+            - button "保存位置" [ref=f15e249] [cursor=pointer]
+          - generic [ref=f15e250]:
+            - generic [ref=f15e251]:
+              - generic [ref=f15e252]:
+                - strong [ref=f15e253]: 命中设定
+                - paragraph [ref=f15e254]: 选择提醒区的第一优先级命中条件，至少勾选一个。
+              - generic [ref=f15e255]:
+                - generic [ref=f15e256]:
+                  - checkbox "类型" [checked] [ref=f15e257]
+                  - text: 类型
+                - generic [ref=f15e258]:
+                  - checkbox "模块" [checked] [ref=f15e259]
+                  - text: 模块
+            - button "保存设定" [ref=f15e261] [cursor=pointer]
+          - generic [ref=f15e262]:
+            - generic [ref=f15e263]:
+              - generic [ref=f15e264]:
+                - strong [ref=f15e265]: 大模型推荐
+                - paragraph [ref=f15e266]: 开启后可在提醒区生成关联易漏用例。
+              - combobox [ref=f15e268]:
+                - option "关闭" [selected]
+                - option "开启"
+            - button "保存开关" [ref=f15e270] [cursor=pointer]
+      - generic [ref=f15e271]:
+        - heading "项目" [level=2] [ref=f15e272]
+        - generic [ref=f15e274]:
+          - generic [ref=f15e275]:
+            - strong [ref=f15e276]: 项目排序与默认项目
+            - paragraph [ref=f15e277]: 拖拽调整展示顺序；点击项目可设置为默认项目。
+          - paragraph [ref=f15e279]: 暂无可排序项目
+          - paragraph [ref=f15e280]: 加载项目中...
+      - generic [ref=f15e281]:
+        - heading "执行视图" [level=2] [ref=f15e282]
+        - generic [ref=f15e283]:
+          - generic [ref=f15e284]:
+            - strong [ref=f15e285]: 列表列显示
+            - paragraph [ref=f15e286]: 仅控制执行视图表头展示，不修改用例数据。
+          - generic [ref=f15e287]:
+            - generic [ref=f15e288]:
+              - checkbox "选择框（必选）" [checked] [disabled] [ref=f15e289]
+              - text: 选择框（必选）
+            - generic [ref=f15e290]:
+              - checkbox "编号" [checked] [ref=f15e291]
+              - text: 编号
+            - generic [ref=f15e292]:
+              - checkbox "模块" [checked] [ref=f15e293]
+              - text: 模块
+            - generic [ref=f15e294]:
+              - checkbox "优先级" [checked] [ref=f15e295]
+              - text: 优先级
+            - generic [ref=f15e296]:
+              - checkbox "前提条件" [checked] [ref=f15e297]
+              - text: 前提条件
+            - generic [ref=f15e298]:
+              - checkbox "操作步骤" [checked] [ref=f15e299]
+              - text: 操作步骤
+            - generic [ref=f15e300]:
+              - checkbox "预期结果" [checked] [ref=f15e301]
+              - text: 预期结果
+            - generic [ref=f15e302]: 用例标题（必选）
+            - generic [ref=f15e303]: 实际结果（必选）
+            - generic [ref=f15e304]: 备注（必选）
+            - generic [ref=f15e305]: 缺陷链接（必选）

@@ -1,0 +1,671 @@
+.workspace-shell-enabled .workspace-list-view {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--workspace-border);
+  border-radius: 6px;
+  background: var(--workspace-surface);
+  scrollbar-gutter: stable;
+}
+
+.workspace-shell-enabled body[data-page="case-exec"] main {
+  gap: 0;
+  padding: 0 16px 24px;
+}
+
+.workspace-shell-enabled body[data-page="case-exec"] [data-section-id="tempexec-view"] {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.workspace-shell-enabled body[data-page="case-exec"] [data-section-id="tempexec-view"] > h2 {
+  display: none;
+}
+
+.workspace-shell-enabled body[data-page="case-exec"] [data-section-id="tempexec-view"] > .card-body {
+  padding: 0;
+}
+
+.workspace-shell-enabled body[data-page="case-exec"] #tempExecView.workspace-list-view {
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+}
+
+.workspace-shell-enabled .workspace-list-view:has(.temp-case-empty) {
+  border-style: dashed;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-case-empty {
+  border: 0;
+  border-radius: 0;
+  background: var(--workspace-surface);
+}
+
+.workspace-shell-enabled .workspace-list-view table,
+.workspace-shell-enabled table.workspace-data-table {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  border: 0;
+  border-spacing: 0;
+  border-collapse: separate;
+  table-layout: fixed;
+  background: var(--workspace-surface);
+}
+
+.workspace-shell-enabled .workspace-list-view thead {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+}
+
+.workspace-shell-enabled .workspace-list-view th,
+.workspace-shell-enabled .workspace-list-view td {
+  padding: 8px 10px;
+  border-top: 0;
+  border-right: 1px solid var(--workspace-border);
+  border-bottom: 1px solid var(--workspace-border);
+  color: var(--workspace-text);
+  background: var(--workspace-surface);
+  font-size: var(--case-view-font-size, 13px);
+  line-height: 1.45;
+  letter-spacing: 0;
+  vertical-align: top;
+}
+
+.workspace-shell-enabled .workspace-list-view td {
+  max-height: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.workspace-shell-enabled .workspace-list-view th:last-child,
+.workspace-shell-enabled .workspace-list-view td:last-child {
+  border-right: 0;
+}
+
+.workspace-shell-enabled .workspace-list-view tbody tr:last-child > td {
+  border-bottom: 0;
+}
+
+.workspace-shell-enabled .workspace-list-view th {
+  height: 36px;
+  color: var(--workspace-text-soft);
+  background: var(--workspace-surface-muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.workspace-shell-enabled body[data-page="case-exec"] #tempExecView th {
+  text-align: center;
+}
+
+.workspace-shell-enabled body[data-page="case-library"] .workspace-list-view th {
+  text-align: center;
+}
+
+.workspace-shell-enabled body[data-page="case-exec"] #tempExecView tr.case-row > td {
+  padding: 5px 8px;
+}
+
+.workspace-shell-enabled body[data-page="case-exec"] #tempExecView tr.case-row > td.priority,
+.workspace-shell-enabled body[data-page="case-exec"] #tempExecView tr.case-row > td.actual,
+.workspace-shell-enabled body[data-page="case-exec"] #tempExecView tr.case-row > td.remark,
+.workspace-shell-enabled body[data-page="case-exec"] #tempExecView tr.case-row > td.defect {
+  vertical-align: middle;
+}
+
+.workspace-shell-enabled .workspace-list-view tr.case-row:hover > td {
+  background: var(--workspace-surface-hover);
+}
+
+.workspace-shell-enabled .workspace-list-view tr.case-row.new-added > td {
+  background: rgba(24, 134, 75, 0.09);
+}
+
+.workspace-shell-enabled .workspace-list-view tr.case-row.association-sub > td {
+  background: rgba(37, 99, 235, 0.06);
+}
+
+.workspace-shell-enabled .workspace-list-view .check,
+.workspace-shell-enabled .workspace-list-view .index,
+.workspace-shell-enabled .workspace-list-view .actual,
+.workspace-shell-enabled .workspace-list-view .case-op-col {
+  vertical-align: middle;
+}
+
+.workspace-shell-enabled .workspace-list-view [data-workspace-wrap="true"] {
+  display: block;
+  min-height: 1.45em;
+  max-height: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+.workspace-shell-enabled .workspace-list-view [data-workspace-wrap="true"]:focus,
+.workspace-shell-enabled .workspace-list-view [data-workspace-wrap="true"].workspace-is-editing {
+  display: block;
+  max-height: none;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+.workspace-shell-enabled .workspace-list-view [data-workspace-wrap-cell="true"] {
+  max-height: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit {
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit:focus {
+  position: relative;
+  z-index: 3;
+  color: var(--workspace-text);
+  background: var(--workspace-surface);
+  box-shadow: inset 0 0 0 1px var(--workspace-accent), var(--workspace-focus);
+  outline: none;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 34px;
+  min-height: 22px;
+  max-height: none;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  overflow: visible;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="p0"],
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="high"] {
+  border-color: rgba(195, 59, 69, 0.25);
+  color: #a52d37;
+  background: #fdebed;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="p1"] {
+  border-color: rgba(180, 83, 9, 0.25);
+  color: #9a4707;
+  background: #fff1dc;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="p2"],
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="medium"] {
+  border-color: rgba(37, 99, 235, 0.2);
+  color: #1d4ed8;
+  background: #eaf1ff;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="p3"],
+.workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="low"] {
+  border-color: rgba(82, 96, 113, 0.2);
+  color: #526071;
+  background: #eef1f4;
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="p0"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="high"] {
+  color: #ffabb1;
+  background: rgba(195, 59, 69, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="p1"] {
+  color: #f0b35e;
+  background: rgba(180, 83, 9, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="p2"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="medium"] {
+  color: #9dbdff;
+  background: rgba(37, 99, 235, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="p3"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .temp-inline-edit[data-priority="low"] {
+  color: #c2cad4;
+  background: rgba(123, 135, 148, 0.16);
+}
+
+.workspace-shell-enabled .workspace-list-view .status-select {
+  display: block;
+  width: 100%;
+  min-width: 76px;
+  height: 28px;
+  padding: 4px 4px 4px 8px;
+  border: 1px solid var(--workspace-border-strong);
+  border-radius: 4px;
+  color: var(--workspace-text-soft);
+  background-color: var(--workspace-surface-muted);
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  appearance: auto;
+  -moz-appearance: auto;
+  -webkit-appearance: menulist;
+}
+
+.workspace-shell-enabled .workspace-list-view .priority-select {
+  display: block;
+  width: 100%;
+  min-width: 54px;
+  height: 28px;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--workspace-border-strong);
+  border-radius: 4px;
+  box-shadow: none;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  appearance: auto;
+  -moz-appearance: auto;
+  -webkit-appearance: menulist;
+}
+
+.workspace-shell-enabled .workspace-list-view .priority-select[data-priority="p0"] {
+  border-color: rgba(195, 59, 69, 0.28);
+  color: #a52d37;
+  background-color: #fdebed;
+}
+
+.workspace-shell-enabled .workspace-list-view .priority-select[data-priority="p1"] {
+  border-color: rgba(180, 83, 9, 0.28);
+  color: #9a4707;
+  background-color: #fff1dc;
+}
+
+.workspace-shell-enabled .workspace-list-view .priority-select[data-priority="p2"] {
+  border-color: rgba(37, 99, 235, 0.24);
+  color: #1d4ed8;
+  background-color: #eaf1ff;
+}
+
+.workspace-shell-enabled .workspace-list-view .priority-select option,
+.workspace-shell-enabled .workspace-list-view .status-select option {
+  font-weight: 600;
+}
+
+.workspace-shell-enabled .workspace-list-view .priority-select option[value="P0"],
+.workspace-shell-enabled .workspace-list-view .status-select option[value="失败"] {
+  color: #a52d37;
+  background-color: #fdebed;
+}
+
+.workspace-shell-enabled .workspace-list-view .priority-select option[value="P1"],
+.workspace-shell-enabled .workspace-list-view .status-select option[value="阻塞"] {
+  color: #9a4707;
+  background-color: #fff1dc;
+}
+
+.workspace-shell-enabled .workspace-list-view .priority-select option[value="P2"],
+.workspace-shell-enabled .workspace-list-view .status-select option[value="不适用"],
+.workspace-shell-enabled .workspace-list-view .status-select option[value="变更重跑"],
+.workspace-shell-enabled .workspace-list-view .status-select option[value="有改动"] {
+  color: #1d4ed8;
+  background-color: #eaf1ff;
+}
+
+.workspace-shell-enabled .workspace-list-view .status-select option[value="通过"] {
+  color: #11703d;
+  background-color: #e5f5eb;
+}
+
+.workspace-shell-enabled .workspace-list-view .status-select option[value="未执行"] {
+  color: #526071;
+  background-color: #eef1f4;
+}
+
+.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="success"] {
+  border-color: rgba(24, 134, 75, 0.28);
+  color: #11703d;
+  background-color: #e5f5eb;
+}
+
+.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="danger"] {
+  border-color: rgba(195, 59, 69, 0.28);
+  color: #a52d37;
+  background-color: #fdebed;
+}
+
+.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="warning"] {
+  border-color: rgba(180, 83, 9, 0.28);
+  color: #9a4707;
+  background-color: #fff1dc;
+}
+
+.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="muted"] {
+  color: var(--workspace-muted);
+  background-color: var(--workspace-surface-muted);
+}
+
+.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="info"] {
+  border-color: rgba(37, 99, 235, 0.24);
+  color: #1d4ed8;
+  background-color: #eaf1ff;
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="success"] {
+  color: #91deb0;
+  background-color: rgba(24, 134, 75, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="danger"] {
+  color: #ffabb1;
+  background-color: rgba(195, 59, 69, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="warning"] {
+  color: #f0b35e;
+  background-color: rgba(180, 83, 9, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .priority-select[data-priority="p0"] {
+  color: #ffabb1;
+  background-color: rgba(195, 59, 69, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .priority-select[data-priority="p1"] {
+  color: #f0b35e;
+  background-color: rgba(180, 83, 9, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .priority-select[data-priority="p2"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="info"] {
+  color: #9dbdff;
+  background-color: rgba(37, 99, 235, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .priority-select option[value="P0"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select option[value="失败"] {
+  color: #ffabb1;
+  background-color: #3b2025;
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .priority-select option[value="P1"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select option[value="阻塞"] {
+  color: #f0b35e;
+  background-color: #382818;
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .priority-select option[value="P2"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select option[value="不适用"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select option[value="变更重跑"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select option[value="有改动"] {
+  color: #9dbdff;
+  background-color: #1d2d4d;
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select option[value="通过"] {
+  color: #91deb0;
+  background-color: #173526;
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select option[value="未执行"] {
+  color: #c2cad4;
+  background-color: #252b33;
+}
+
+.workspace-shell-enabled .workspace-list-view .remark-toggle,
+.workspace-shell-enabled .workspace-list-view .defect-toggle,
+.workspace-shell-enabled .workspace-list-view .reuse-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 4px;
+  box-shadow: none;
+  transform: none;
+}
+
+.workspace-shell-enabled .workspace-list-view .remark-toggle:hover,
+.workspace-shell-enabled .workspace-list-view .defect-toggle:hover,
+.workspace-shell-enabled .workspace-list-view .reuse-status:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+.workspace-shell-enabled .workspace-list-view .case-ops {
+  display: grid;
+  grid-template-columns: repeat(2, 28px);
+  gap: 4px;
+  justify-content: center;
+}
+
+.workspace-shell-enabled .workspace-list-view .case-op {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  transform: none;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-pagination {
+  min-width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--workspace-border);
+  background: var(--workspace-surface);
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-pagination-controls {
+  gap: 6px;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-pagination-controls button {
+  min-width: 64px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: var(--workspace-control-radius);
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-pagination-controls input {
+  width: 62px;
+  height: 30px;
+  padding: 4px 6px;
+  border-radius: 5px;
+}
+
+.workspace-shell-enabled .workspace-list-view .temp-pagination:last-child {
+  border-top: 1px solid var(--workspace-border);
+  border-bottom: 0;
+}
+
+.workspace-shell-enabled .temp-reuse-toggle,
+.workspace-shell-enabled .reuse-presets {
+  min-width: max-content;
+  margin: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--workspace-border);
+  border-radius: 0;
+  background: var(--workspace-surface);
+}
+
+.workspace-shell-enabled .workspace-command {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.workspace-shell-enabled .workspace-command-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.workspace-shell-enabled #caseLibraryEditCard {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.workspace-shell-enabled #caseLibraryEditCard > h3 {
+  margin-bottom: 10px;
+  font-size: 16px;
+}
+
+.workspace-shell-enabled #caseLibraryEditCard > .card-body {
+  padding: 0;
+}
+
+.workspace-shell-enabled .case-library-drawer-meta {
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.workspace-shell-enabled .case-library-drawer-meta .meta-line {
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 5px;
+  background: var(--workspace-surface-muted);
+}
+
+.workspace-shell-enabled .case-library-drawer-toolbar {
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 6px;
+  background: var(--workspace-surface-muted);
+}
+
+.workspace-shell-enabled .case-library-search-group,
+.workspace-shell-enabled .case-library-drawer-actions {
+  gap: 6px;
+}
+
+.workspace-shell-enabled .case-library-search {
+  min-width: 260px;
+  border-radius: 5px;
+}
+
+.workspace-shell-enabled .case-library-drawer-toolbar button,
+.workspace-shell-enabled .temp-exec-toolbar button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  box-shadow: none;
+  transform: none;
+}
+
+.workspace-shell-enabled .case-library-drawer-toolbar button:hover,
+.workspace-shell-enabled .temp-exec-toolbar button:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+.workspace-shell-enabled .admin-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--workspace-border);
+  border-radius: 6px;
+  background: var(--workspace-surface);
+}
+
+.workspace-shell-enabled .admin-table {
+  margin: 0;
+  border: 0;
+  background: var(--workspace-surface);
+}
+
+.workspace-shell-enabled .admin-table th {
+  height: 36px;
+  padding: 8px 10px;
+  color: var(--workspace-text-soft);
+  background: var(--workspace-surface-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workspace-shell-enabled .admin-table td {
+  padding: 8px 10px;
+  color: var(--workspace-text);
+  border-color: var(--workspace-border);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* 列表页沿用工作台外观契约，并覆盖历史详情行中的胶囊按钮与圆角面板。 */
+.workspace-shell-enabled .workspace-list-view,
+.workspace-shell-enabled body[data-page="case-exec"] #tempExecView.workspace-list-view,
+.workspace-shell-enabled .workspace-list-view .temp-pagination,
+.workspace-shell-enabled .workspace-list-view .reuse-panel,
+.workspace-shell-enabled .workspace-list-view .defect-panel,
+.workspace-shell-enabled .workspace-list-view .remark-panel,
+.workspace-shell-enabled .workspace-list-view .clarify-panel {
+  border-radius: var(--workspace-frame-radius) !important;
+}
+
+.workspace-shell-enabled .workspace-list-view button,
+.workspace-shell-enabled .workspace-list-view select {
+  border-radius: var(--workspace-control-radius) !important;
+}
+
+.workspace-shell-enabled .workspace-list-view input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+.workspace-shell-enabled .workspace-list-view textarea {
+  border-radius: var(--workspace-frame-radius) !important;
+}
+
+@media (max-width: 980px) {
+  .workspace-shell-enabled body[data-page="case-exec"] main {
+    padding: 0 12px 20px;
+  }
+
+  .workspace-shell-enabled .workspace-list-view {
+    max-width: calc(100vw - 24px);
+  }
+
+  .workspace-shell-enabled .case-library-drawer-toolbar {
+    align-items: stretch;
+  }
+
+  .workspace-shell-enabled .case-library-search-group,
+  .workspace-shell-enabled .case-library-drawer-actions {
+    width: 100%;
+  }
+
+  .workspace-shell-enabled .case-library-search {
+    width: 100%;
+    min-width: 0;
+  }
+}

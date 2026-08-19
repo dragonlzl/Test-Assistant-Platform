@@ -1,5 +1,12 @@
 const { test, expect } = require('@playwright/test');
 
+async function openTempExecMoreActions(page) {
+  const toggle = page.locator('#tempExecToolbar [data-temp-more-toggle]');
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await expect(page.locator('#tempExecMoreMenu')).toBeVisible();
+}
+
 async function ensureMindElixirReady(page, url) {
   var maxRetry = 3;
   for (var i = 0; i < maxRetry; i += 1) {
@@ -380,6 +387,7 @@ test.describe('XMind 只读态节点选择', () => {
       return Boolean(btn && !btn.disabled && !(btn.classList && btn.classList.contains('hidden')));
     }, {}, { timeout: 15000 });
 
+    await openTempExecMoreActions(page);
     await page.click('#tempExecXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     await runReadonlySelectionAssertions(page, '#tempExecXmindStructureViewer', '余额不足时支付失败', '优惠券支付成功');
@@ -561,6 +569,7 @@ test.describe('XMind 只读态节点选择', () => {
       var btn = document.getElementById('tempExecXmindViewBtn');
       return Boolean(btn && !btn.disabled && !(btn.classList && btn.classList.contains('hidden')));
     }, {}, { timeout: 15000 });
+    await openTempExecMoreActions(page);
     await page.click('#tempExecXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]');

@@ -17,6 +17,22 @@ async function waitAppReady(page, timeoutMs) {
 }
 
 async function switchToTab(page, tabName) {
+  const pageByTab = {
+    tempexec: /case-exec\.html\?tab=tempexec/,
+    'case-library': /case-library\.html\?tab=case-library/,
+  };
+  const target = pageByTab[tabName];
+  if (target) {
+    await Promise.all([
+      page.waitForURL(target, { timeout: 20000 }),
+      page.evaluate((name) => {
+        if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(name);
+      }, tabName),
+    ]);
+    await waitAppReady(page, 30000);
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    return;
+  }
   await page.evaluate((name) => {
     if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(name);
   }, tabName);
@@ -468,12 +484,17 @@ test.describe('暗色主题 UI 对比增强', () => {
     await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
     await switchToTab(page, 'tempexec');
 
-    const activeGroup = page.locator('.tab-group-btn[data-group="cases"]');
-    const idleGroup = page.locator('.tab-group-btn[data-group="ai"]');
-    await expect(activeGroup).toHaveClass(/active/);
-    const activeBorder = await activeGroup.evaluate((el) => getComputedStyle(el).borderColor);
-    const idleBorder = await idleGroup.evaluate((el) => getComputedStyle(el).borderColor);
-    expect(activeBorder).not.toBe(idleBorder);
+    const groupButtons = page.locator('.tab-group-btn');
+    const activeEntry = page.locator('[data-tab-btn="tempexec"]');
+    const idleEntry = page.locator('[data-tab-btn="case-library"]');
+    await expect(activeEntry).toHaveClass(/active/);
+    const groupBorders = await groupButtons.evaluateAll((buttons) => {
+      return buttons.map((button) => getComputedStyle(button).borderTopWidth);
+    });
+    expect(groupBorders.every((width) => width === '0px')).toBeTruthy();
+    const activeBackground = await activeEntry.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const idleBackground = await idleEntry.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(activeBackground).not.toBe(idleBackground);
   });
 
   test('暗色主题专注区选中状态更明显', async ({ page }) => {

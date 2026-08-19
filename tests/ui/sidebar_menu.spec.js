@@ -34,69 +34,36 @@ test.describe('侧边分级菜单', () => {
     await page.waitForFunction(() => window.app && window.app._inited === true, { timeout: 20000 });
   });
 
-  test('点击一级菜单展开二级并可关闭', async ({ page }) => {
-    const bound = await page.evaluate(() => window.app && window.app.tabGroupBound);
-    console.log('tab group bound', bound);
+  test('一级分类不展示且菜单入口常驻', async ({ page }) => {
     const groupBtn = page.locator('.tab-group-btn', { hasText: 'AI 功能' });
-    await groupBtn.click();
     const submenu = page.locator('[data-group-menu="ai"]');
-    const debugState = await page.evaluate(() => {
-      var menu = document.querySelector('[data-group-menu="ai"]');
-      var group = menu && menu.closest('.tab-group');
-      return {
-        openClass: group ? group.classList.contains('open') : false,
-        hiddenClass: menu ? menu.classList.contains('hidden') : true,
-        display: menu ? getComputedStyle(menu).display : '',
-        lastGroup: window.app && window.app.lastTabGroup,
-        groupBtnCount: document.querySelectorAll('.tab-group-btn').length,
-        lastClick: window.app && window.app.lastTabClick,
-        lastShowCall: window.app && window.app.lastShowCall,
-        lastShowRan: window.app && window.app.lastShowRan,
-      };
-    });
-    console.log('tab submenu state after click', debugState);
+    await expect(groupBtn).toHaveAttribute('role', 'heading');
+    await expect(groupBtn).toHaveAttribute('aria-level', '2');
+    await expect(groupBtn).toHaveAttribute('tabindex', '-1');
+    await expect(groupBtn).toHaveCSS('opacity', '0');
+    await groupBtn.click();
     await expect(submenu).toBeVisible();
     await expect(submenu.locator('[data-tab-btn="auto"]')).toHaveCount(0);
     await expect(submenu.locator('[data-tab-btn="clean"]')).toHaveCount(0);
 
     await submenu.locator('[data-tab-btn="casesgen"]').click();
     await expect(page.locator('[data-tab-section="casesgen"]').first()).toBeVisible();
-    const activeGroup = await page.evaluate(() => {
-      var activeBtn = document.querySelector('.tab-group-btn.active');
-      return activeBtn && activeBtn.dataset ? activeBtn.dataset.group : '';
+    await expect(submenu.locator('[data-tab-btn="casesgen"]')).toHaveClass(/active/);
+    const categoryState = await page.evaluate(() => {
+      return Array.prototype.map.call(document.querySelectorAll('.tab-group-btn'), function(button) {
+        return {
+          active: button.classList.contains('active'),
+          hovering: button.classList.contains('hovering'),
+        };
+      });
     });
-    expect(activeGroup).toBe('ai');
-
-    await page.hover('.tab-group-btn[data-group="cases"]');
-    const hoverState = await page.evaluate(() => {
-      var activeBtn = document.querySelector('.tab-group-btn.active');
-      var hoveringBtn = document.querySelector('.tab-group-btn.hovering');
-      return {
-        activeGroup: activeBtn && activeBtn.dataset ? activeBtn.dataset.group : '',
-        hoveringGroup: hoveringBtn && hoveringBtn.dataset ? hoveringBtn.dataset.group : '',
-      };
-    });
-    expect(hoverState.activeGroup).toBe('ai');
-    expect(hoverState.hoveringGroup).toBe('cases');
-
-    await page.hover('main');
-    const hoverCleared = await page.evaluate(() => {
-      var activeBtn = document.querySelector('.tab-group-btn.active');
-      var hoveringBtn = document.querySelector('.tab-group-btn.hovering');
-      return {
-        activeGroup: activeBtn && activeBtn.dataset ? activeBtn.dataset.group : '',
-        hoveringGroup: hoveringBtn && hoveringBtn.dataset ? hoveringBtn.dataset.group : '',
-      };
-    });
-    expect(hoverCleared.activeGroup).toBe('ai');
-    expect(hoverCleared.hoveringGroup).toBe('');
+    expect(categoryState.every((state) => !state.active && !state.hovering)).toBeTruthy();
 
     await page.locator('main').click();
-    await expect(submenu).toBeHidden();
+    await expect(submenu).toBeVisible();
   });
 
   test('抽屉打开时侧边导航不可点击', async ({ page }) => {
-    await page.click('.tab-group-btn[data-group="ai"]');
     await page.click('[data-tab-btn="casesgen"]');
     await page.waitForSelector('#xmindCaseGenOpenBtn');
     await page.click('#xmindCaseGenOpenBtn');
@@ -123,10 +90,7 @@ test.describe('侧边分级菜单', () => {
   expect(afterProgrammatic.drawerOpen).toBeTruthy();
   expect(afterProgrammatic.sidebarEvents).toBe('none');
 
-  const groupBtn = page.locator('.tab-group-btn', { hasText: '用例相关' });
-  await groupBtn.click({ force: true });
-  const afterForcedClick = await page.evaluate(() => window.app && window.app.state ? window.app.state.activeTab : '');
-  expect(afterForcedClick).toBe(beforeState.active);
+  await expect(page.locator('.tab-group-btn', { hasText: '用例相关' })).toHaveAttribute('role', 'heading');
   });
 
   test('无可见二级入口时隐藏对应一级菜单', async ({ page }) => {

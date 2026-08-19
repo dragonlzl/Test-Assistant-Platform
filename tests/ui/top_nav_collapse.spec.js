@@ -36,7 +36,7 @@ test.describe('顶部导航收起展开', () => {
     await setupPage(page);
   });
 
-  test('收起状态按页面持久化', async ({ page }) => {
+  test('页面内导航常驻且执行总览收起状态独立持久化', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html');
     await waitForAppReady(page);
@@ -44,15 +44,7 @@ test.describe('顶部导航收起展开', () => {
     const tempexecNav = page.locator('#tempexecFlowNav');
     const tempexecToggle = page.locator('#tempexecFlowNav [data-flow-toggle]');
     await expect(tempexecNav).not.toHaveClass(/is-collapsed/);
-    await expect(tempexecToggle).toHaveText('收起');
-
-    await tempexecToggle.click();
-    await expect(tempexecNav).toHaveClass(/is-collapsed/);
-    await expect(tempexecToggle).toHaveText('展开');
-
-    await page.reload();
-    await waitForAppReady(page);
-    await expect(tempexecNav).toHaveClass(/is-collapsed/);
+    await expect(tempexecToggle).toHaveCount(0);
 
     await page.evaluate(() => {
       if (window.app && typeof window.app.switchTab === 'function') {
@@ -63,7 +55,98 @@ test.describe('顶部导航收起展开', () => {
     const execOverviewToggle = page.locator('#execOverviewFlowNav [data-flow-toggle]');
     await execOverviewNav.waitFor({ state: 'visible', timeout: 10000 });
     await expect(execOverviewNav).not.toHaveClass(/is-collapsed/);
-    await expect(execOverviewToggle).toHaveText('收起');
+    await execOverviewToggle.click();
+    await expect(execOverviewNav).toHaveClass(/is-collapsed/);
+    await expect(execOverviewToggle).toHaveText('展开');
+
+    await page.reload();
+    await waitForAppReady(page);
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('exec-overview');
+      }
+    });
+    await execOverviewNav.waitFor({ state: 'visible', timeout: 10000 });
+    await expect(execOverviewNav).toHaveClass(/is-collapsed/);
+  });
+
+  test('用例库入口使用可收起的页面内侧栏', async ({ page }) => {
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/case-library.html?tab=case-library');
+    await waitForAppReady(page);
+
+    const sectionNav = page.locator('#caseLibraryHead');
+    const nav = page.locator('#caseLibraryFlowNav');
+    const toggle = page.locator('#caseLibrarySectionNavToggle');
+    await expect(sectionNav).toBeVisible();
+    await expect(sectionNav.locator('.workspace-section-nav-header h2')).toHaveText('用例库');
+    await expect(nav.locator('[data-flow-toggle]')).toHaveCount(0);
+    await expect(nav.locator('.nav-entry-card')).toHaveCount(6);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(toggle).toHaveCSS('border-top-width', '0px');
+
+    const expanded = await page.evaluate(() => {
+      var section = document.getElementById('caseLibraryHead').getBoundingClientRect();
+      var content = document.querySelector('.content-shell').getBoundingClientRect();
+      var cards = Array.prototype.map.call(document.querySelectorAll('#caseLibraryFlowNav .nav-entry-card'), function(card) {
+        var box = card.getBoundingClientRect();
+        return { left: box.left, top: box.top };
+      });
+      return { sectionWidth: section.width, contentLeft: content.left, cards: cards };
+    });
+    expect(expanded.sectionWidth).toBeGreaterThanOrEqual(174);
+    expect(expanded.sectionWidth).toBeLessThanOrEqual(178);
+    expect(expanded.cards.every((card) => Math.abs(card.left - expanded.cards[0].left) < 2)).toBeTruthy();
+    expect(expanded.cards[1].top).toBeGreaterThan(expanded.cards[0].top);
+
+    await page.click('#openCaseLibraryImportDrawerBtn');
+    await expect(page.locator('#caseLibraryImportDrawer')).toHaveClass(/open/);
+    await expect.poll(async () => {
+      const activeBackground = await page.locator('#openCaseLibraryImportDrawerBtn')
+        .evaluate((button) => getComputedStyle(button).backgroundColor);
+      const idleBackground = await page.locator('#openCaseLibraryEditDrawerBtn')
+        .evaluate((button) => getComputedStyle(button).backgroundColor);
+      return activeBackground !== idleBackground;
+    }).toBeTruthy();
+    await page.click('#caseLibraryImportDrawer .drawer-mask', { position: { x: 10, y: 10 } });
+    await expect(page.locator('#caseLibraryImportDrawer')).not.toHaveClass(/open/);
+
+    await toggle.click();
+    await expect(sectionNav).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toHaveAttribute('aria-label', '展开快捷导航');
+    await expect(toggle).toHaveCSS('border-top-width', '0px');
+    await expect.poll(() => toggle.evaluate((element) => element.parentElement.id))
+      .toBe('caseLibrarySectionNavToggleHost');
+
+    const collapsed = await page.evaluate(() => {
+      var section = document.getElementById('caseLibraryHead').getBoundingClientRect();
+      var content = document.querySelector('.content-shell').getBoundingClientRect();
+      var toggleBox = document.getElementById('caseLibrarySectionNavToggle').getBoundingClientRect();
+      var title = document.querySelector('.case-library-content-header h1').getBoundingClientRect();
+      return {
+        sectionWidth: section.width,
+        contentLeft: content.left,
+        toggleRight: toggleBox.right,
+        toggleCenterY: toggleBox.top + toggleBox.height / 2,
+        titleLeft: title.left,
+        titleCenterY: title.top + title.height / 2,
+      };
+    });
+    expect(collapsed.sectionWidth).toBe(0);
+    expect(expanded.contentLeft - collapsed.contentLeft).toBeGreaterThan(150);
+    expect(collapsed.toggleRight).toBeLessThanOrEqual(collapsed.titleLeft);
+    expect(Math.abs(collapsed.toggleCenterY - collapsed.titleCenterY)).toBeLessThanOrEqual(1);
+
+    await toggle.click();
+    await expect(sectionNav).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect.poll(() => toggle.evaluate((element) => element.parentElement.className))
+      .toContain('workspace-section-nav-header');
+
+    await page.evaluate(() => window.app.switchTab('case-archive'));
+    await expect(sectionNav).toBeHidden();
+    await expect(page.locator('#caseArchiveHead')).toBeVisible();
   });
 
   test('智能收起随滚动展开', async ({ page }) => {
@@ -77,7 +160,9 @@ test.describe('顶部导航收起展开', () => {
 
     await page.goto(base + '/case-library.html');
     await waitForAppReady(page);
-    const nav = page.locator('#caseLibraryFlowNav');
+    await page.evaluate(() => window.app.switchTab('case-archive'));
+    const nav = page.locator('#caseArchiveFlowNav');
+    await nav.waitFor({ state: 'visible', timeout: 10000 });
     await expect(nav).not.toHaveClass(/is-collapsed/);
 
     await page.mouse.wheel(0, 160);
@@ -124,40 +209,19 @@ test.describe('顶部导航收起展开', () => {
     await waitForAppReady(page);
     await page.evaluate(() => {
       if (window.app && typeof window.app.switchTab === 'function') {
-        window.app.switchTab('case-library');
+        window.app.switchTab('case-archive');
       }
     });
-    const nav = page.locator('#caseLibraryFlowNav');
+    const nav = page.locator('#caseArchiveFlowNav');
     await nav.waitFor({ state: 'visible', timeout: 10000 });
     await expect(nav).not.toHaveClass(/is-collapsed/);
 
-    await page.click('#sidebarTabCasegen');
-    await expect(page.locator('[data-sidebar-panel="casegen"]')).toHaveClass(/is-active/);
-
     const scrollReady = await page.evaluate(() => {
-      function fillCasegen() {
-        var panelWrap = document.querySelector('[data-sidebar-panel="casegen"]');
-        if (panelWrap) {
-          panelWrap.classList.add('is-active');
-          panelWrap.style.display = 'flex';
-        }
-        var panel = document.getElementById('caseGenProgressPanel');
-        if (panel && panel.classList) panel.classList.remove('is-collapsed');
-        var list = document.getElementById('caseGenProgressList');
-        if (!list) return false;
-        var items = '';
-        for (var i = 0; i < 24; i += 1) {
-          items += '<div class="casegen-progress-item"><span>模块' + (i + 1) + '</span></div>';
-        }
-        list.innerHTML = items;
-        list.style.maxHeight = '120px';
-        list.style.overflowY = 'auto';
-        return list.scrollHeight > list.clientHeight;
-      }
-
       function fillReminder() {
         var editCard = document.getElementById('caseLibraryEditCard');
         if (editCard && editCard.classList) editCard.classList.remove('hidden');
+        var section = editCard && editCard.closest ? editCard.closest('section[data-tab-section="case-library"]') : null;
+        if (section && section.classList) section.classList.remove('hidden');
         var host = document.getElementById('caseLibraryMissingReminderTop') || document.getElementById('caseLibraryMissingReminderBottom');
         if (!host) return false;
         if (host.classList) host.classList.remove('hidden');
@@ -179,19 +243,10 @@ test.describe('顶部导航收起展开', () => {
       }
 
       return {
-        casegen: fillCasegen(),
         reminder: fillReminder(),
       };
     });
-    expect(scrollReady.casegen).toBe(true);
     expect(scrollReady.reminder).toBe(true);
-
-    await page.evaluate(() => {
-      var target = document.getElementById('caseGenProgressList');
-      if (!target) return;
-      target.dispatchEvent(new WheelEvent('wheel', { deltaY: 160, bubbles: true, cancelable: true }));
-    });
-    await expect(nav).not.toHaveClass(/is-collapsed/);
 
     await page.click('#sidebarTabMemo');
     await expect(page.locator('[data-sidebar-panel="memo"]')).toHaveClass(/is-active/);

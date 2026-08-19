@@ -1,0 +1,128 @@
+- generic [ref=f4e2]:
+  - complementary:
+    - generic:
+      - heading "用例助手" [level=1]:
+        - generic: T
+    - navigation:
+      - generic:
+        - heading "AI 功能" [level=2]
+        - generic:
+          - button "用例生成"
+          - button "功能指派，未配置模型":
+            - generic: 功能指派
+            - generic: 未配置模型
+          - button "模型管理，未配置模型":
+            - generic: 模型管理
+            - generic: 未配置模型
+      - generic:
+        - heading "用例相关" [level=2]
+        - generic:
+          - button "用例执行"
+          - button "用例库"
+          - button "用例归档"
+          - button "执行总览"
+      - generic:
+        - heading "管理" [level=2]
+        - generic:
+          - button "项目管理"
+          - button "人员管理"
+          - button "操作记录"
+      - generic:
+        - heading "设置" [level=2]
+        - generic:
+          - button "通用设置"
+    - generic:
+      - generic "个人工具":
+        - button "生成进度"
+        - button "个人备忘"
+    - generic:
+      - generic: 当前用户
+      - button "用户菜单":
+        - generic: e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例库页面导航" [ref=f4e111]:
+    - generic [ref=f4e112]:
+      - heading "用例库" [level=2] [ref=f4e113]
+      - button "收起快捷导航" [expanded] [ref=f4e213] [cursor=pointer]
+    - navigation "用例库快捷入口":
+      - generic:
+        - button "编写用例"
+        - button "导入用例" [active]
+        - button "查看&编辑"
+        - button "易漏用例"
+        - button "选择用例执行"
+        - button "用例改动历史"
+  - generic [ref=f4e155]:
+    - banner [ref=f4e157]:
+      - heading "用例库" [level=1] [ref=f4e158]
+    - main [ref=f4e159]:
+      - generic [ref=f4e160]:
+        - heading "用例库" [level=2] [ref=f4e161]
+        - generic [ref=f4e163]:
+          - paragraph [ref=f4e164]: 提示：请使用左侧快捷导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=f4e165]: 请求失败，状态码 404
+          - generic [ref=f4e166]:
+            - heading "用例编辑视图" [level=3] [ref=f4e167]
+            - generic [ref=f4e168]:
+              - generic [ref=f4e169]:
+                - generic [ref=f4e170]:
+                  - generic [ref=f4e171]: 项目
+                  - generic [ref=f4e172]: "--"
+                - generic [ref=f4e173]:
+                  - generic [ref=f4e174]: 版本
+                  - generic [ref=f4e175]: "--"
+                - generic [ref=f4e176]:
+                  - generic [ref=f4e177]: 用例名
+                  - generic [ref=f4e178]: "--"
+              - generic [ref=f4e179]:
+                - generic [ref=f4e180]:
+                  - button "清空搜索" [ref=f4e181] [cursor=pointer]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=f4e186]
+                  - button "AI 用例生成" [ref=f4e187]
+                  - button "XMind结构展示" [disabled] [ref=f4e190]
+                - generic [ref=f4e195]:
+                  - textbox "批量新增数量" [ref=f4e196]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=f4e197] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=f4e199]
+                  - button "转到执行" [ref=f4e203] [cursor=pointer]
+              - paragraph [ref=f4e206]
+      - generic [ref=f4e219]:
+        - generic [ref=f4e220]:
+          - heading "导入用例" [level=3] [ref=f4e221]
+          - button "收起" [ref=f4e222] [cursor=pointer]
+        - generic [ref=f4e223]:
+          - paragraph [ref=f4e224]: 拖拽或选择文件后，还需要选择项目与版本，点击确认才会入库。
+          - generic [ref=f4e225]:
+            - generic [ref=f4e226]:
+              - strong [ref=f4e227]: 拖拽
+              - generic [ref=f4e228]: 用例文件到此处，或点击选择
+            - paragraph [ref=f4e229]: 未选择文件
+          - generic [ref=f4e230]:
+            - generic [ref=f4e231]:
+              - generic [ref=f4e232]: 项目
+              - combobox "项目" [ref=f4e233] [cursor=pointer]:
+                - option "请选择项目" [selected]
+              - generic [ref=f4e234]: 版本
+              - combobox "版本" [disabled] [ref=f4e235]:
+                - option "请选择版本" [selected]
+              - generic [ref=f4e236]: Excel模板
+              - combobox "Excel模板" [ref=f4e237] [cursor=pointer]:
+                - option "非复用模板" [selected]
+                - option "复用模板"
+            - generic [ref=f4e238]:
+              - button "Excel导入模板" [ref=f4e239] [cursor=pointer]
+              - button "XMind导入模板" [ref=f4e240] [cursor=pointer]
+              - button "确认入库" [disabled] [ref=f4e241]
+          - paragraph [ref=f4e242]
+          - button "关闭" [ref=f4e244] [cursor=pointer]
+      - option "请选择版本" [selected]

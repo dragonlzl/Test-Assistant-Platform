@@ -60,7 +60,7 @@ async function waitForAppReady(page) {
 }
 
 test.describe('侧边栏页签持久化', () => {
-  test('用例生成进度/个人备忘页签切换可持久化', async ({ page }) => {
+  test('个人备忘作为唯一工具入口并保持激活状态', async ({ page }) => {
     const serverState = { settings: [] };
     await page.addInitScript(() => {
       try { localStorage.setItem('tap-auth-token', 'sidebar-tab-token'); } catch (err) {}
@@ -78,7 +78,8 @@ test.describe('侧边栏页签持久化', () => {
     await page.goto(base + '/index.html');
     await waitForAppReady(page);
 
-    await expect(page.locator('#sidebarTabCasegen')).toHaveClass(/is-active/);
+    await expect(page.locator('#sidebarTabCasegen')).toHaveCount(0);
+    await expect(page.locator('#sidebarTabMemo')).toHaveClass(/is-active/);
     await page.click('#sidebarTabMemo');
     await expect(page.locator('#sidebarTabMemo')).toHaveClass(/is-active/);
     await expect(page.locator('[data-sidebar-panel="memo"]')).toHaveClass(/is-active/);

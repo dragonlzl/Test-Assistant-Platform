@@ -13,9 +13,6 @@
     const defaultTemperature = 0.2;
     const assignmentName = 'default';
     const api = window.app && window.app.apiClient;
-    const showCenterToast = window.app && window.app.utils && typeof window.app.utils.showCenterToast === 'function'
-      ? window.app.utils.showCenterToast
-      : null;
     const previousCaseWritingStyleGuidePrompt = [
       '【用例编写风格参考：AI_CASE_WRITING_STYLE_GUIDE.md】',
       '在保证覆盖质量、字段完整、语义不重复的前提下，生成结果要贴近人工从 XMind/表格整理检查点的写法：',
@@ -48,6 +45,7 @@
     const modelFormStatus = pickEl('modelFormStatus', 'modelFormStatus');
     const modelListEl = pickEl('modelListEl', 'modelList');
     const createModelBtn = pickEl('createModelBtn', 'createModelBtn');
+    const modelFormHome = pickEl('modelFormHome', 'modelFormHome');
     const modelFormWrapper = pickEl('modelFormWrapper', 'modelFormWrapper');
     const modelFormTitle = pickEl('modelFormTitle', 'modelFormTitle');
     const saveModelBtn = pickEl('saveModelBtn', 'saveModelBtn');
@@ -61,7 +59,6 @@
     const caseFilterAssignStatus = pickEl('caseFilterAssignStatus', 'caseFilterAssignStatus');
     const missingReminderAssignStatus = pickEl('missingReminderAssignStatus', 'missingReminderAssignStatus');
     const caseLibraryGenAssignStatus = pickEl('caseLibraryGenAssignStatus', 'caseLibraryGenAssignStatus');
-    const saveAssignmentsTopBtn = pickEl('saveAssignmentsTopBtn', 'saveAssignmentsTop');
     const assignSaveBar = pickEl('assignSaveBar', 'assignSaveBar');
     const xmindCaseGenPromptEl = pickEl('xmindCaseGenPromptEl', 'xmindCaseGenPrompt');
     const caseFilterPromptEl = pickEl('caseFilterPromptEl', 'caseFilterPrompt');
@@ -116,11 +113,6 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
-    }
-
-    function showAssignmentSavedToast() {
-      if (!showCenterToast) return;
-      showCenterToast('指派已保存', 'ok', 3000);
     }
 
     function normalizeCapabilityKey(value) {
@@ -416,6 +408,9 @@
       model.remoteId = remoteId;
       model.id = stableId;
       if (oldId && oldId !== stableId) {
+        if (state.editingId && String(state.editingId) === String(oldId)) {
+          state.editingId = stableId;
+        }
         updateAssignmentsModelId(oldId, stableId, { pushRemote: true });
       }
       persistModelsLocal();
@@ -606,8 +601,36 @@
       }
     }
 
+    function restoreModelFormHome() {
+      if (!modelFormHome || !modelFormWrapper || !modelFormHome.parentNode) return;
+      modelFormHome.parentNode.insertBefore(modelFormWrapper, modelFormHome.nextSibling);
+      modelFormWrapper.classList.remove('model-edit-panel-inline');
+    }
+
+    function findRenderedModelCard(id) {
+      if (!modelListEl) return null;
+      var targetId = id === undefined || id === null ? '' : String(id);
+      var cards = modelListEl.querySelectorAll('.model-card[data-id]');
+      for (var index = 0; index < cards.length; index += 1) {
+        if (cards[index].getAttribute('data-id') === targetId) return cards[index];
+      }
+      return null;
+    }
+
+    function mountModelFormAfterModel(id) {
+      if (!modelFormWrapper) return;
+      var card = findRenderedModelCard(id);
+      if (!card || !card.parentNode) {
+        restoreModelFormHome();
+        return;
+      }
+      card.parentNode.insertBefore(modelFormWrapper, card.nextSibling);
+      modelFormWrapper.classList.add('model-edit-panel-inline');
+    }
+
     function renderModels() {
       if (!modelListEl) return;
+      restoreModelFormHome();
       if (!state.models.length) {
         modelListEl.innerHTML = '<p class="hint">尚未配置模型，请先创建。</p>';
         updateDeepseekTokenHint();
@@ -656,12 +679,16 @@
           deleteModel(btn.dataset.delete);
         });
       });
+      if (state.editingId) {
+        mountModelFormAfterModel(state.editingId);
+      }
       updateDeepseekTokenHint();
       updateTabNotices();
     }
 
     function resetModelForm(hide = false) {
       state.editingId = null;
+      restoreModelFormHome();
       if (modelDisplayNameEl) modelDisplayNameEl.value = '';
       if (modelProviderEl) modelProviderEl.value = 'deepseek';
       if (modelBaseUrlEl) modelBaseUrlEl.value = '';
@@ -681,8 +708,9 @@
       const model = findModelByAnyId(id);
       if (!model) return;
       state.editingId = getStableModelId(model) || id;
+      mountModelFormAfterModel(state.editingId);
       if (modelFormWrapper) modelFormWrapper.classList.remove('hidden');
-      if (modelFormTitle) modelFormTitle.textContent = '编辑模型';
+      if (modelFormTitle) modelFormTitle.textContent = '编辑模型：' + (model.name || '未命名模型');
       if (modelDisplayNameEl) modelDisplayNameEl.value = model.name || '';
       if (modelProviderEl) modelProviderEl.value = model.provider || 'custom';
       if (modelBaseUrlEl) modelBaseUrlEl.value = model.baseUrl || '';
@@ -710,6 +738,11 @@
           setStatus(modelFormStatus, err && err.message ? err.message : '删除模型失败，请重试', 'warn');
           return;
         }
+      }
+      if (state.editingId && String(state.editingId) === getStableModelId(removed)) {
+        state.editingId = null;
+        restoreModelFormHome();
+        if (modelFormWrapper) modelFormWrapper.classList.add('hidden');
       }
       state.models = state.models.filter(function(m) { return getStableModelId(m) !== targetId; });
       persistModelsLocal();
@@ -774,6 +807,7 @@
         setStatus(modelFormStatus, '模型已保存', 'ok');
       }
       state.editingId = null;
+      restoreModelFormHome();
       saveModels();
       if (modelFormWrapper) modelFormWrapper.classList.add('hidden');
       renderAssignmentsSelect();
@@ -1285,6 +1319,7 @@
     }
     if (createModelBtn) {
       createModelBtn.addEventListener('click', () => {
+        restoreModelFormHome();
         if (modelFormTitle) modelFormTitle.textContent = '新增模型';
         if (modelFormWrapper) modelFormWrapper.classList.remove('hidden');
         resetModelForm();
@@ -1296,13 +1331,6 @@
     if (resetModelFormBtn) {
       resetModelFormBtn.addEventListener('click', () => resetModelForm(true));
     }
-    if (saveAssignmentsTopBtn) {
-      saveAssignmentsTopBtn.addEventListener('click', function() {
-        saveAssignments();
-        showAssignmentSavedToast();
-      });
-    }
-
     loadModels();
     loadAssignments();
     renderModels();

@@ -164,6 +164,8 @@
 })();
 </script>
 <link rel="stylesheet" href="./style.css"/>
+<link rel="stylesheet" href="./styles/workspace-shell.css"/>
+<link rel="stylesheet" href="./styles/workspace-lists.css"/>
 </head>
 <body data-page="ai-tools">
 <div class="app-layout">
@@ -217,28 +219,10 @@
 </nav>
 <div class="sidebar-tabs" id="sidebarTabs">
 <div class="sidebar-tab-bar" id="sidebarTabBar">
-<button class="sidebar-tab is-active" type="button" id="sidebarTabCasegen" data-sidebar-tab="casegen">
-xmind用例生成进度
-<span class="sidebar-tab-dot" id="caseGenProgressTabDot"></span>
-</button>
-<button class="sidebar-tab" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
+<button class="sidebar-tab is-active" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
 </div>
 <div class="sidebar-tab-panels" id="sidebarTabPanels">
-<div class="sidebar-tab-panel is-active" data-sidebar-panel="casegen">
-<div class="casegen-progress-panel" id="caseGenProgressPanel">
-<div class="panel-head">
-<div class="panel-title-row">
-<span class="title">xmind用例生成进度</span>
-<button class="panel-toggle" type="button" id="caseGenProgressToggle" aria-expanded="true" aria-controls="caseGenProgressList">收起</button>
-</div>
-<span class="meta">点击打开对应 XMind 生成页签</span>
-</div>
-<div class="casegen-progress-list" id="caseGenProgressList">
-<p class="hint">暂无 xmind 生成页签，点击打开 XMind 用例生成</p>
-</div>
-</div>
-</div>
-<div class="sidebar-tab-panel" data-sidebar-panel="memo">
+<div class="sidebar-tab-panel is-active" data-sidebar-panel="memo">
 <div class="memo-pad-panel" id="memoPadPanel">
 <div class="panel-head">
 <div class="panel-title-row">
@@ -266,6 +250,33 @@ xmind用例生成进度
   
   
   
+	<div class="tempexec-head assignment-head hidden" data-tab-section="assign" id="assignmentHead">
+	  <div class="flow" id="assignmentFlowNav">
+	    <div class="flow-title">功能指派</div>
+	    <div class="nav-entry-grid assignment-nav-grid" aria-label="功能指派分类">
+	      <button class="nav-entry-card is-active" id="assignmentNavGlobalBtn" type="button" data-assignment-target="global" data-assignment-icon="assign" aria-current="page">
+	        <span class="nav-entry-icon" aria-hidden="true"></span>
+	        <span class="nav-entry-title">全局指派</span>
+	      </button>
+	      <button class="nav-entry-card" id="assignmentNavXmindBtn" type="button" data-assignment-target="xmind-casegen" data-assignment-icon="xmind">
+	        <span class="nav-entry-icon" aria-hidden="true"></span>
+	        <span class="nav-entry-title">XMind 用例生成</span>
+	      </button>
+	      <button class="nav-entry-card" id="assignmentNavFilterBtn" type="button" data-assignment-target="case-filter" data-assignment-icon="search">
+	        <span class="nav-entry-icon" aria-hidden="true"></span>
+	        <span class="nav-entry-title">用例相似对比</span>
+	      </button>
+	      <button class="nav-entry-card" id="assignmentNavMissingBtn" type="button" data-assignment-target="missing-reminder" data-assignment-icon="sparkles">
+	        <span class="nav-entry-icon" aria-hidden="true"></span>
+	        <span class="nav-entry-title">易漏用例推荐</span>
+	      </button>
+	      <button class="nav-entry-card" id="assignmentNavLibraryBtn" type="button" data-assignment-target="case-library-gen" data-assignment-icon="case-library">
+	        <span class="nav-entry-icon" aria-hidden="true"></span>
+	        <span class="nav-entry-title">用例库生成</span>
+	      </button>
+	    </div>
+	  </div>
+	</div>
 		
 <main>
 
@@ -294,14 +305,18 @@ xmind用例生成进度
 
 
 
-<section class="card hidden" data-tab-section="assign">
-<h2>功能指派</h2>
-<div class="card-body">
+<header class="assignment-page-header hidden" data-tab-section="assign" id="assignmentPageHeader">
+<span>AI 配置</span>
+<h1>功能指派</h1>
 <p class="hint">先在“模型管理”中创建模型，再为每个功能指派具体模型。</p>
 <div class="assign-save-bar hidden" id="assignSaveBar">
 <div class="assign-save-text">未保存指派模型，请先保存指派</div>
-<button class="primary" id="saveAssignmentsTop">保存指派</button>
+<button class="primary" id="saveAssignmentsTop" data-save-assignments>保存指派</button>
 </div>
+</header>
+<section class="card assignment-content-section hidden" data-tab-section="assign" data-assignment-section="global" id="assignmentGlobalSection">
+<h2>全局指派</h2>
+<div class="card-body model-card assignment-panel assignment-global-panel">
 <div class="notice-card" style="background:linear-gradient(120deg,rgba(248,113,113,0.15),rgba(249,115,22,0.12));border-color:rgba(249,115,22,0.35);">
 <strong style="display:block;margin-bottom:6px;color:#b91c1c;">注意事项</strong>
 <p style="margin:0;color:#7c2d12;font-weight:600;">提示词内的 JSON 数据结构需要严格遵循，改动提示词时，请不要影响到 JSON 的数据结构要求！！！</p>
@@ -313,18 +328,24 @@ xmind用例生成进度
 <input accept=".json,.txt" hidden="" id="importDefaultPromptsFile" type="file"/>
 </div>
 <p class="status" id="defaultPromptStatus"></p>
-<div class="model-card">
+<div class="assignment-global-control">
 <strong>全局指派</strong>
 <div class="row">
 <label for="globalAssignModelSelect">统一模型</label>
 <select id="globalAssignModelSelect"></select>
-<button class="secondary" id="applyGlobalAssignBtn" type="button">确认</button>
 </div>
 <p class="hint">选择模型后点击“确认”，将当前页面全部功能统一指派并立即保存为该模型。</p>
+<div class="actions assignment-feature-actions">
+<button class="primary" id="applyGlobalAssignBtn" type="button">确认</button>
+</div>
 <p class="status" id="globalAssignStatus"></p>
 </div>
-<div class="model-card">
-<strong>XMind 用例生成功能</strong>
+</div>
+</section>
+<section class="card assignment-content-section hidden" data-tab-section="assign" data-assignment-section="xmind-casegen" id="assignmentXmindSection">
+<h2>XMind 用例生成</h2>
+<div class="card-body model-card assignment-panel">
+<strong>模型配置</strong>
 <div class="row">
 <label for="xmindCaseGenModelSelect">使用模型</label>
 <select id="xmindCaseGenModelSelect"></select>
@@ -348,13 +369,17 @@ xmind用例生成进度
 </select>
 <p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
 </div>
-<div class="actions">
+<div class="actions assignment-feature-actions">
 <button class="secondary" id="testXmindCaseGenModel">测试连通性</button>
+<button class="primary" type="button" data-save-assignments>保存指派</button>
 </div>
 <p class="status" id="xmindCaseGenAssignStatus"></p>
 </div>
-<div class="model-card">
-<strong>用例相似对比</strong>
+</section>
+<section class="card assignment-content-section hidden" data-tab-section="assign" data-assignment-section="case-filter" id="assignmentFilterSection">
+<h2>用例相似对比</h2>
+<div class="card-body model-card assignment-panel">
+<strong>模型配置</strong>
 <div class="row">
 <label for="caseFilterModelSelect">使用模型</label>
 <select id="caseFilterModelSelect"></select>
@@ -378,13 +403,17 @@ xmind用例生成进度
 </select>
 <p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
 </div>
-<div class="actions">
+<div class="actions assignment-feature-actions">
 <button class="secondary" id="testCaseFilterModel">测试连通性</button>
+<button class="primary" type="button" data-save-assignments>保存指派</button>
 </div>
 <p class="status" id="caseFilterAssignStatus"></p>
 </div>
-<div class="model-card">
-<strong>易漏用例推荐</strong>
+</section>
+<section class="card assignment-content-section hidden" data-tab-section="assign" data-assignment-section="missing-reminder" id="assignmentMissingSection">
+<h2>易漏用例推荐</h2>
+<div class="card-body model-card assignment-panel">
+<strong>模型配置</strong>
 <div class="row">
 <label for="missingReminderModelSelect">使用模型</label>
 <select id="missingReminderModelSelect"></select>
@@ -408,13 +437,17 @@ xmind用例生成进度
 </select>
 <p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
 </div>
-<div class="actions">
+<div class="actions assignment-feature-actions">
 <button class="secondary" id="testMissingReminderModel">测试连通性</button>
+<button class="primary" type="button" data-save-assignments>保存指派</button>
 </div>
 <p class="status" id="missingReminderAssignStatus"></p>
 </div>
-<div class="model-card">
-<strong>用例库页面生成用例</strong>
+</section>
+<section class="card assignment-content-section hidden" data-tab-section="assign" data-assignment-section="case-library-gen" id="assignmentLibrarySection">
+<h2>用例库页面生成用例</h2>
+<div class="card-body model-card assignment-panel">
+<strong>模型配置</strong>
 <div class="row">
 <label for="caseLibraryGenModelSelect">使用模型</label>
 <select id="caseLibraryGenModelSelect"></select>
@@ -438,14 +471,11 @@ xmind用例生成进度
 </select>
 <p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
 </div>
-<div class="actions">
+<div class="actions assignment-feature-actions">
 <button class="secondary" id="testCaseLibraryGenModel">测试连通性</button>
+<button class="primary" type="button" data-save-assignments>保存指派</button>
 </div>
 <p class="status" id="caseLibraryGenAssignStatus"></p>
-</div>
-<div class="actions">
-<button id="saveAssignments">保存指派</button>
-</div>
 </div>
 </section>
 
@@ -488,7 +518,8 @@ xmind用例生成进度
 </div>
 <p class="status" id="modelTimeoutStatus"></p>
 </div>
-<div class="model-card hidden" id="modelFormWrapper">
+<div id="modelFormHome"></div>
+<div class="model-card model-edit-panel hidden" id="modelFormWrapper">
 <h3 id="modelFormTitle">新增模型</h3>
 <div class="row">
 <label for="modelDisplayName">模型名称</label>
@@ -694,6 +725,9 @@ xmind用例生成进度
 </div>
 </div>
 <script src="./scripts/vendor/jszip.min.js" defer></script>
+<script src="./scripts/vendor/workspace-icons.js" defer></script>
+<script src="./scripts/base/workspaceShell.js" defer></script>
+<script src="./scripts/base/workspaceListPresentation.js" defer></script>
 <script src="./config/constants.js" defer></script>
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>

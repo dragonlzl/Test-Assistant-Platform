@@ -1,0 +1,83 @@
+- generic [ref=f2e2]:
+  - complementary:
+    - generic:
+      - heading "用例助手 TEST ASSISTANT" [level=1]:
+        - generic:
+          - generic: 用例助手
+          - generic: TEST ASSISTANT
+    - navigation:
+      - generic:
+        - heading "AI 功能" [level=2]
+        - generic:
+          - button "XMind 用例生成"
+          - button "功能指派":
+            - text: 功能指派
+            - generic: 未配置模型
+          - button "模型管理":
+            - text: 模型管理
+            - generic: 未配置模型
+      - generic:
+        - heading "用例相关" [level=2]
+        - generic:
+          - button "用例执行"
+          - button "用例库"
+          - button "用例归档"
+          - button "执行总览"
+      - generic:
+        - heading "管理" [level=2]
+        - generic:
+          - button "项目管理"
+          - button "人员管理"
+          - button "操作记录"
+      - generic:
+        - heading "设置" [level=2]
+        - generic:
+          - button "通用设置"
+    - generic:
+      - text: 个人工具
+      - generic "个人工具":
+        - button "XMind 生成进度"
+        - button "个人备忘"
+    - generic:
+      - generic: 当前用户
+      - button "用户菜单":
+        - generic: e
+      - generic:
+        - strong: e2e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f2e106]:
+    - heading "用例执行" [level=2] [ref=f2e108]
+    - navigation "执行操作":
+      - generic:
+        - button "用例导入"
+        - button "选择用例执行"
+        - button "执行分配"
+        - button "归档操作&进度预览" [active]
+  - generic [ref=f2e137]:
+    - banner [ref=f2e139]:
+      - heading "用例执行" [level=1] [ref=f2e140]
+    - main [ref=f2e141]:
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=f2e142]:
+        - heading "执行视图" [level=2] [ref=f2e143]
+        - generic [ref=f2e144]: 暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录
+      - generic [ref=f2e150]:
+        - generic [ref=f2e151]:
+          - heading "用例执行总览" [level=3] [ref=f2e152]
+          - button "收起" [ref=f2e153] [cursor=pointer]
+        - generic [ref=f2e155]:
+          - heading "用例执行总览" [level=2] [ref=f2e156]
+          - generic [ref=f2e157]:
+            - paragraph [ref=f2e158]: 按文件汇总执行进度（当前导入与历史导入），颜色区分不同执行状态。
+            - button "返回执行视图" [ref=f2e160] [cursor=pointer]
+            - paragraph [ref=f2e162]: 暂无用例执行数据
+      - option "请选择版本" [selected]

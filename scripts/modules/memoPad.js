@@ -187,7 +187,7 @@
     var activeSidebarTab = '';
 
     function isValidSidebarTab(tabId) {
-      return tabId === 'casegen' || tabId === 'memo';
+      return tabId === 'memo';
     }
 
     function getStoredSidebarTab() {
@@ -215,13 +215,13 @@
       if (current && current.dataset && current.dataset.sidebarTab) {
         return String(current.dataset.sidebarTab);
       }
-      return 'casegen';
+      return 'memo';
     }
 
     function setSidebarTab(tabId, shouldPersist) {
       if (!sidebarTabBar || !sidebarTabPanels) return;
       var target = tabId ? String(tabId) : getDefaultSidebarTab();
-      if (!isValidSidebarTab(target)) target = 'casegen';
+      if (!isValidSidebarTab(target)) target = 'memo';
       var tabs = sidebarTabBar.querySelectorAll('[data-sidebar-tab]');
       Array.prototype.forEach.call(tabs, function(btn) {
         var isActive = btn.dataset && btn.dataset.sidebarTab === target;

@@ -1,0 +1,104 @@
+- generic [ref=f4e2]:
+  - complementary [ref=f4e3]:
+    - heading "用例助手" [level=1] [ref=f4e5]:
+      - generic [ref=f4e6]: T
+    - navigation [ref=f4e8]:
+      - generic [ref=f4e9]:
+        - heading "AI 功能" [level=2] [ref=f4e10]
+        - generic [ref=f4e12]:
+          - button "用例生成" [ref=f4e13] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f4e20] [cursor=pointer]:
+            - generic [ref=f4e27]: 功能指派
+            - generic [ref=f4e28]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f4e29] [cursor=pointer]:
+            - generic [ref=f4e34]: 模型管理
+            - generic [ref=f4e35]: 未配置模型
+      - generic [ref=f4e36]:
+        - heading "用例相关" [level=2] [ref=f4e37]
+        - generic [ref=f4e38]:
+          - button "用例执行" [ref=f4e39] [cursor=pointer]
+          - button "用例库" [ref=f4e45] [cursor=pointer]
+          - button "用例归档" [ref=f4e50] [cursor=pointer]
+          - button "执行总览" [ref=f4e56] [cursor=pointer]
+      - generic [ref=f4e61]:
+        - heading "管理" [level=2] [ref=f4e62]
+        - generic [ref=f4e63]:
+          - button "项目管理" [ref=f4e64] [cursor=pointer]
+          - button "人员管理" [ref=f4e70] [cursor=pointer]
+          - button "操作记录" [ref=f4e78] [cursor=pointer]
+      - generic [ref=f4e84]:
+        - heading "设置" [level=2] [ref=f4e85]
+        - button "通用设置" [ref=f4e87] [cursor=pointer]
+    - generic "个人工具" [ref=f4e94]:
+      - button "生成进度" [ref=f4e95] [cursor=pointer]
+      - button "个人备忘" [ref=f4e102] [cursor=pointer]
+    - generic [ref=f4e107]:
+      - generic [ref=f4e108]: 当前用户
+      - button "用户菜单" [ref=f4e109] [cursor=pointer]:
+        - generic [ref=f4e110]: c
+      - menu:
+        - generic:
+          - generic: c
+          - generic:
+            - strong: casegen_progress
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例库页面导航" [ref=f4e111]:
+    - generic [ref=f4e112]:
+      - heading "用例库" [level=2] [ref=f4e113]
+      - button "收起快捷导航" [expanded] [ref=f4e114] [cursor=pointer]
+    - navigation "用例库快捷入口" [ref=f4e118]:
+      - generic [ref=f4e119]:
+        - button "编写用例" [ref=f4e120] [cursor=pointer]
+        - button "导入用例" [ref=f4e126] [cursor=pointer]
+        - button "查看&编辑" [ref=f4e132] [cursor=pointer]
+        - button "易漏用例" [ref=f4e138] [cursor=pointer]
+        - button "选择用例执行" [ref=f4e143] [cursor=pointer]
+        - button "用例改动历史" [ref=f4e148] [cursor=pointer]
+  - generic [ref=f4e155]:
+    - generic [ref=f4e156]:
+      - banner [ref=f4e157]:
+        - heading "项目 未选择 版本 未选择 用例名 暂无用例" [level=1] [ref=f4e158]:
+          - generic [ref=f4e159]:
+            - generic [ref=f4e160]: 项目
+            - strong [ref=f4e161]: 未选择
+          - generic [ref=f4e162]: /
+          - generic [ref=f4e163]:
+            - generic [ref=f4e164]: 版本
+            - strong [ref=f4e165]: 未选择
+          - generic [ref=f4e166]: /
+          - generic [ref=f4e167]:
+            - generic [ref=f4e168]: 用例名
+            - strong [ref=f4e169]: 暂无用例
+      - region "用例库操作栏" [ref=f4e170]:
+        - generic [ref=f4e172]:
+          - generic [ref=f4e173]:
+            - textbox "搜索用例关键字" [disabled] [ref=f4e175]
+            - button "AI 用例生成" [ref=f4e176]
+            - button "XMind结构展示" [disabled] [ref=f4e179]
+            - generic [ref=f4e184]:
+              - checkbox "显示易漏用例参考" [disabled] [ref=f4e185]
+              - generic [ref=f4e186]: 易漏用例参考
+          - generic [ref=f4e187]:
+            - textbox "批量新增数量" [ref=f4e188]:
+              - /placeholder: 1-10
+              - text: "5"
+            - button "批量新增" [ref=f4e189] [cursor=pointer]
+            - button "批量删除" [disabled] [ref=f4e191]
+            - button "转到执行" [ref=f4e195] [cursor=pointer]
+    - main [ref=f4e198]:
+      - generic [ref=f4e201]:
+        - paragraph [ref=f4e202]
+        - paragraph [ref=f4e205]
+      - option "请选择项目" [selected]
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择项目" [selected]
+      - option "请选择项目" [selected]
+      - option "请选择项目" [selected]
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "请选择项目" [selected]

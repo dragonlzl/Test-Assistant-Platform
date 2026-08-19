@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/case-exec.html?tab=tempexec');
 }
 
 async function waitAppReady(page, timeoutMs) {
@@ -32,12 +32,6 @@ async function waitAppReady(page, timeoutMs) {
     await page.waitForTimeout(200);
   }
   throw new Error('waitAppReady timeout: ' + JSON.stringify(last || {}));
-}
-
-async function switchToTab(page, tabName) {
-  await page.evaluate((name) => {
-    if (window.app && typeof window.app.switchTab === 'function') window.app.switchTab(name);
-  }, tabName);
 }
 
 async function ensureAuthed(page, token, user) {
@@ -171,13 +165,7 @@ test.describe('执行页编辑保存时机', () => {
     await page.waitForFunction(() => window.app && window.app.apiClient && window.app.state);
     await ensureAuthed(page, token, user);
     await waitAppReady(page, 30000);
-    await switchToTab(page, 'tempexec');
-    await page.evaluate(() => {
-      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.loadTempExecState === 'function') {
-        return window.app.tempExecApi.loadTempExecState();
-      }
-      return null;
-    });
+    await page.waitForLoadState('networkidle');
 
     const titleCell = page.locator('[data-temp-edit-field="title"]').first();
     await expect(titleCell).toBeVisible();
@@ -189,7 +177,7 @@ test.describe('执行页编辑保存时机', () => {
     const patchWait = page.waitForResponse((resp) => {
       return resp.url().includes(`/api/exec/cases/${execCase.id}`) && resp.request().method() === 'PATCH';
     });
-    await page.click('#tempExecToolbar');
+    await page.locator('#tempExecToolbar input[data-temp-search-input]').click();
     await patchWait;
     expect(patchCalls).toBe(1);
     expect(patchPayloads.length).toBe(1);

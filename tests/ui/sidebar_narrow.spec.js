@@ -28,7 +28,7 @@ async function waitAppReady(page, timeoutMs) {
 }
 
 test.describe('左侧导航窄屏适配', () => {
-  test('窄屏下侧边栏改为全宽并展开分组菜单', async ({ page }) => {
+  test('窄屏下侧边栏改为全宽且隐藏分类标题', async ({ page }) => {
     await page.setViewportSize({ width: 640, height: 900 });
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -85,6 +85,7 @@ test.describe('左侧导航窄屏适配', () => {
     });
     expect(menuLayout.btn).toBeTruthy();
     expect(menuLayout.menu).toBeTruthy();
+    expect(menuLayout.btn.bottom - menuLayout.btn.y).toBeLessThanOrEqual(4);
     const menuPosition = await page.evaluate(() => {
       var menu = document.querySelector('.tab-group-btn[data-group="cases"] + .tab-submenu');
       if (!menu || !window.getComputedStyle) return '';

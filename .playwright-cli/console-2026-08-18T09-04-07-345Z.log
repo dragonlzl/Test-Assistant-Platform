@@ -1,0 +1,6 @@
+[      77ms] [INFO] [portal-auth] initialized {portalOrigin: http://192.168.50.10:8756, currentOrigin: http://127.0.0.1:3000} @ http://192.168.50.10:8756/portal-auth.js?v=20260428-jwt2:795
+[      93ms] [INFO] [portal-auth] loginWithJwt:redirect {returnTo: http://127.0.0.1:3000/case-exec.html, clientId: http://127.0.0.1:3000, ssoUrl: http://192.168.50.10:8756/sso/jwt/start?return_to=…exec.html&client_id=http%3A%2F%2F127.0.0.1%3A3000} @ http://192.168.50.10:8756/portal-auth.js?v=20260428-jwt2:795
+[     449ms] [INFO] [portal-auth] initialized {portalOrigin: http://192.168.50.10:8756, currentOrigin: http://192.168.50.10:8756} @ http://192.168.50.10:8756/portal-auth.js?v=20260428-jwt2:795
+[     449ms] [INFO] [portal-home] initialize:start {href: http://192.168.50.10:8756/index.html?login=1&retur…client_id%3Dhttp%253A%252F%252F127.0.0.1%253A3000, hasPortalAuth: true} @ http://192.168.50.10:8756/app.js?v=20260430-search1:22
+[     449ms] [INFO] [portal-auth] consumeLoginRequest {returnTo: http://192.168.50.10:8756/sso/jwt/start?return_to=…exec.html&client_id=http%3A%2F%2F127.0.0.1%3A3000} @ http://192.168.50.10:8756/portal-auth.js?v=20260428-jwt2:795
+[     450ms] [INFO] [portal-home] initialize:consumeLoginRequest @ http://192.168.50.10:8756/app.js?v=20260430-search1:33

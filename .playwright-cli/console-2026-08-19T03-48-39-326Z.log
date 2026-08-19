@@ -1,0 +1,39 @@
+[      81ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/projects:0
+[      81ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/settings?scope=all&owner_id=0:0
+[      81ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/models?scope=all&owner_id=0:0
+[      81ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/features?scope=all&owner_id=0:0
+[      90ms] [WARNING] 加载设置失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/settings.js:560
+[      90ms] [WARNING] 加载远端模型失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:407
+[      90ms] [WARNING] 加载功能指派失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:566
+[      95ms] Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19
+[  746285ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/projects:0
+[  746285ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/settings?scope=all&owner_id=0:0
+[  746285ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/models?scope=all&owner_id=0:0
+[  746285ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/features?scope=all&owner_id=0:0
+[  746290ms] [WARNING] 加载设置失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/settings.js:560
+[  746290ms] [WARNING] 加载远端模型失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:407
+[  746290ms] [WARNING] 加载功能指派失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:566
+[  746294ms] Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19
+[  936125ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/projects:0
+[  936125ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/settings?scope=all&owner_id=0:0
+[  936125ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/models?scope=all&owner_id=0:0
+[  936125ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/features?scope=all&owner_id=0:0
+[  936127ms] [WARNING] 加载设置失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/settings.js:560
+[  936127ms] [WARNING] 加载远端模型失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:407
+[  936127ms] [WARNING] 加载功能指派失败 Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19 @ http://127.0.0.1:8090/scripts/modules/models.js:566
+[  936129ms] Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19
+[ 1171267ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://127.0.0.1:8090/api/projects:0
+[ 1171269ms] Error: 请求失败，状态码 404
+    at http://127.0.0.1:8090/services/apiClient.js:193:19

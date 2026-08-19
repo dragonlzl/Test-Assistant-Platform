@@ -1,0 +1,100 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e3]:
+    - heading "用例助手" [level=1] [ref=f3e5]:
+      - generic [ref=f3e6]: T
+      - generic [ref=f3e8]:
+        - generic [ref=f3e9]: 用例助手
+        - generic [ref=f3e10]: TEST ASSISTANT
+    - navigation [ref=f3e11]:
+      - generic [ref=f3e12]:
+        - heading "AI 功能" [level=2] [ref=f3e13]
+        - generic [ref=f3e15]:
+          - button "用例生成" [ref=f3e16] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f3e23] [cursor=pointer]:
+            - generic [ref=f3e30]: 功能指派
+            - generic [ref=f3e31]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f3e32] [cursor=pointer]:
+            - generic [ref=f3e37]: 模型管理
+            - generic [ref=f3e38]: 未配置模型
+      - generic [ref=f3e39]:
+        - heading "用例相关" [level=2] [ref=f3e40]
+        - generic [ref=f3e41]:
+          - button "用例执行" [ref=f3e42] [cursor=pointer]
+          - button "用例库" [ref=f3e48] [cursor=pointer]
+          - button "用例归档" [ref=f3e53] [cursor=pointer]
+          - button "执行总览" [ref=f3e59] [cursor=pointer]
+      - generic [ref=f3e64]:
+        - heading "管理" [level=2] [ref=f3e65]
+        - generic [ref=f3e66]:
+          - button "项目管理" [ref=f3e67] [cursor=pointer]
+          - button "人员管理" [ref=f3e73] [cursor=pointer]
+          - button "操作记录" [ref=f3e81] [cursor=pointer]
+      - generic [ref=f3e87]:
+        - heading "设置" [level=2] [ref=f3e88]
+        - button "通用设置" [ref=f3e90] [cursor=pointer]
+    - generic "个人工具" [ref=f3e97]:
+      - button "生成进度" [ref=f3e98] [cursor=pointer]
+      - button "个人备忘" [ref=f3e105] [cursor=pointer]
+    - generic [ref=f3e110]:
+      - generic [ref=f3e111]: 当前用户
+      - button "用户菜单" [ref=f3e112] [cursor=pointer]:
+        - generic [ref=f3e113]: e
+      - strong [ref=f3e115]: e2e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例库页面导航" [ref=f3e116]:
+    - heading "用例库" [level=2] [ref=f3e118]
+    - navigation "用例库快捷入口" [ref=f3e119]:
+      - generic [ref=f3e120]:
+        - button "编写用例" [ref=f3e121] [cursor=pointer]
+        - button "导入用例" [ref=f3e127] [cursor=pointer]
+        - button "查看&编辑" [ref=f3e133] [cursor=pointer]
+        - button "易漏用例" [ref=f3e139] [cursor=pointer]
+        - button "选择用例执行" [ref=f3e144] [cursor=pointer]
+        - button "用例改动历史" [ref=f3e149] [cursor=pointer]
+  - generic [ref=f3e156]:
+    - banner [ref=f3e158]:
+      - heading "用例库" [level=1] [ref=f3e159]
+    - main [ref=f3e160]:
+      - generic [ref=f3e161]:
+        - heading "用例库" [level=2] [ref=f3e162]
+        - generic [ref=f3e164]:
+          - paragraph [ref=f3e165]: 提示：请使用左侧快捷导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=f3e166]: 请求失败，状态码 404
+          - generic [ref=f3e167]:
+            - heading "用例编辑视图" [level=3] [ref=f3e168]
+            - generic [ref=f3e169]:
+              - generic [ref=f3e170]:
+                - generic [ref=f3e171]:
+                  - generic [ref=f3e172]: 项目
+                  - generic [ref=f3e173]: "--"
+                - generic [ref=f3e174]:
+                  - generic [ref=f3e175]: 版本
+                  - generic [ref=f3e176]: "--"
+                - generic [ref=f3e177]:
+                  - generic [ref=f3e178]: 用例名
+                  - generic [ref=f3e179]: "--"
+              - generic [ref=f3e180]:
+                - generic [ref=f3e181]:
+                  - button "清空搜索" [ref=f3e182] [cursor=pointer]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=f3e187]
+                  - button "AI 用例生成" [ref=f3e188]
+                  - button "XMind结构展示" [disabled] [ref=f3e191]
+                - generic [ref=f3e196]:
+                  - textbox "批量新增数量" [ref=f3e197]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=f3e198] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=f3e200]
+                  - button "转到执行" [ref=f3e204] [cursor=pointer]
+              - paragraph [ref=f3e207]
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择版本" [selected]

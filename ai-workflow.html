@@ -165,6 +165,8 @@
 </script>
 <link rel="stylesheet" href="./style.css"/>
 <link rel="stylesheet" href="./scripts/vendor/mind-elixir.css"/>
+<link rel="stylesheet" href="./styles/workspace-shell.css"/>
+<link rel="stylesheet" href="./styles/workspace-lists.css"/>
 </head>
 <body data-page="ai-workflow">
 <div class="app-layout">
@@ -218,28 +220,10 @@
 </nav>
 <div class="sidebar-tabs" id="sidebarTabs">
 <div class="sidebar-tab-bar" id="sidebarTabBar">
-<button class="sidebar-tab is-active" type="button" id="sidebarTabCasegen" data-sidebar-tab="casegen">
-xmind用例生成进度
-<span class="sidebar-tab-dot" id="caseGenProgressTabDot"></span>
-</button>
-<button class="sidebar-tab" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
+<button class="sidebar-tab is-active" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
 </div>
 <div class="sidebar-tab-panels" id="sidebarTabPanels">
-<div class="sidebar-tab-panel is-active" data-sidebar-panel="casegen">
-<div class="casegen-progress-panel" id="caseGenProgressPanel">
-<div class="panel-head">
-<div class="panel-title-row">
-<span class="title">xmind用例生成进度</span>
-<button class="panel-toggle" type="button" id="caseGenProgressToggle" aria-expanded="true" aria-controls="caseGenProgressList">收起</button>
-</div>
-<span class="meta">点击打开对应 XMind 生成页签</span>
-</div>
-<div class="casegen-progress-list" id="caseGenProgressList">
-<p class="hint">暂无 xmind 生成页签，点击打开 XMind 用例生成</p>
-</div>
-</div>
-</div>
-<div class="sidebar-tab-panel" data-sidebar-panel="memo">
+<div class="sidebar-tab-panel is-active" data-sidebar-panel="memo">
 <div class="memo-pad-panel" id="memoPadPanel">
 <div class="panel-head">
 <div class="panel-title-row">
@@ -263,10 +247,33 @@ xmind用例生成进度
 <div class="content-shell">
   <main>
 <section class="card xmind-casegen-entry" data-section-id="casesgen" data-tab-section="casesgen">
-  <header class="xmind-casegen-entry-content">
-    <h2>XMind 用例生成</h2>
-    <button class="xmind-casegen-entry-button casegen-tab-launcher" id="xmindCaseGenOpenBtn" type="button" aria-controls="xmindCaseGenDrawer" aria-expanded="false">打开 XMind 用例生成</button>
-  </header>
+  <div class="xmind-casegen-entry-layout">
+    <header class="xmind-casegen-entry-content">
+      <h2>XMind 用例生成</h2>
+      <button class="xmind-casegen-entry-button casegen-tab-launcher" id="xmindCaseGenOpenBtn" type="button" aria-controls="xmindCaseGenDrawer" aria-expanded="false">打开 XMind 用例生成</button>
+    </header>
+    <section class="xmind-casegen-home-progress" id="xmindCaseGenHomeProgress" aria-labelledby="xmindCaseGenHomeProgressTitle">
+      <header class="xmind-casegen-home-progress-head">
+        <div>
+          <span class="xmind-casegen-home-progress-eyebrow">任务概览</span>
+          <h3 id="xmindCaseGenHomeProgressTitle">生成进度</h3>
+        </div>
+        <div class="xmind-casegen-home-progress-total">
+          <strong id="xmindCaseGenHomeProgressPercent">0%</strong>
+          <span>整体进度</span>
+        </div>
+      </header>
+      <div class="xmind-casegen-home-progress-summary">
+        <div class="xmind-casegen-home-progress-track" id="xmindCaseGenHomeProgressTrack" role="progressbar" aria-label="XMind 用例生成整体进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span id="xmindCaseGenHomeProgressFill"></span>
+        </div>
+        <div class="xmind-casegen-home-progress-meta" id="xmindCaseGenHomeProgressMeta">暂无生成任务</div>
+      </div>
+      <div class="xmind-casegen-home-progress-list" id="xmindCaseGenHomeProgressList">
+        <div class="xmind-casegen-home-progress-empty">暂无生成任务</div>
+      </div>
+    </section>
+  </div>
 </section>
 <div class="drawer" id="xmindCaseGenDrawer" data-tab-section="casesgen">
   <div class="drawer-mask" data-drawer-close="xmindCaseGenDrawer"></div>
@@ -534,6 +541,9 @@ xmind用例生成进度
 </div>
 <script src="./scripts/vendor/jszip.min.js" defer></script>
 <script src="./scripts/vendor/mind-elixir.iife.js" defer></script>
+<script src="./scripts/vendor/workspace-icons.js" defer></script>
+<script src="./scripts/base/workspaceShell.js" defer></script>
+<script src="./scripts/base/workspaceListPresentation.js" defer></script>
 <script src="./config/constants.js" defer></script>
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>

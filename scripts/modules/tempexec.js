@@ -4082,8 +4082,15 @@
       }
     }
 
+    function isTempExecSearchFocused() {
+      if (typeof document === 'undefined') return false;
+      var active = document.activeElement;
+      return Boolean(active && active.dataset && active.dataset.tempSearchInput !== undefined);
+    }
+
     function autoCollapseTempExecReusePanels() {
       if (!tempExecView || !api.ensureTempExecReuseOpen || !api.toggleTempExecReusePanel) return;
+      if (isTempExecSearchFocused()) return;
       if (tempExecView.classList && tempExecView.classList.contains('hidden')) return;
       if (tempExecViewSection && tempExecViewSection.classList && tempExecViewSection.classList.contains('hidden')) return;
       var fileId = state && state.tempExecActiveId ? String(state.tempExecActiveId || '') : '';
@@ -5930,6 +5937,15 @@
     }
 
     if (tempExecToolbar) {
+      function setTempExecMoreMenuOpen(open, returnFocus) {
+        var menu = tempExecToolbar.querySelector('[data-temp-more-menu]');
+        var toggle = tempExecToolbar.querySelector('[data-temp-more-toggle]');
+        if (!menu || !toggle) return;
+        menu.classList.toggle('hidden', !open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (!open && returnFocus && typeof toggle.focus === 'function') toggle.focus();
+      }
+
       var applyTempExecSearchDebounced = debounce(function(fileId, raw) {
         if (!api.applyTempExecSearch) return;
         api.applyTempExecSearch(fileId, raw, raw);
@@ -5963,7 +5979,66 @@
         var val = target.value || '';
         applyTempExecSearchDebounced(fileId, val);
       });
+      tempExecToolbar.addEventListener('change', function(e) {
+        var target = e && e.target ? e.target : null;
+        if (!target || !target.dataset) return;
+        if (target.dataset.tempReuseToggle !== undefined && api.handleTempExecReuseToggle) {
+          api.handleTempExecReuseToggle(target.dataset.tempReuseToggle, target.checked, target);
+          return;
+        }
+        if (target.dataset.tempMissingReminderToggle !== undefined) {
+          state.tempExecMissingReminderVisible = target.checked === true;
+          if (api.renderTempExecView) api.renderTempExecView();
+        }
+      });
       tempExecToolbar.addEventListener('click', function(e) {
+        var moreToggle = e.target.closest('[data-temp-more-toggle]');
+        if (moreToggle) {
+          var isOpen = moreToggle.getAttribute('aria-expanded') === 'true';
+          setTempExecMoreMenuOpen(!isOpen, false);
+          return;
+        }
+        var presetAddBtn = e.target.closest('[data-temp-reuse-preset-add]');
+        if (presetAddBtn && api.startTempExecPresetDraft) {
+          var presetFileId = presetAddBtn.dataset.tempReusePresetAdd;
+          var presetFile = api.getTempExecFile && api.getTempExecFile(presetFileId);
+          if (presetFile && presetFile.reuseEnabled) {
+            api.startTempExecPresetDraft(presetFileId);
+          } else if (tempExecStatus) {
+            setStatus(tempExecStatus, '请先开启用例复用再添加预设子项', 'warn');
+          }
+          return;
+        }
+        var applicabilityApplyBtn = e.target.closest('[data-temp-reuse-applicability-apply]');
+        if (applicabilityApplyBtn && api.applyTempExecReuseApplicability) {
+          api.applyTempExecReuseApplicability(applicabilityApplyBtn.dataset.tempReuseApplicabilityApply);
+          return;
+        }
+        var reuseToggleAllBtn = e.target.closest('[data-temp-reuse-toggle-all]');
+        if (reuseToggleAllBtn && api.ensureTempExecReuseOpen && api.renderTempExecView) {
+          var reuseFileId = reuseToggleAllBtn.dataset.tempReuseToggleAll;
+          var reuseVisibleIndexes = (reuseToggleAllBtn.dataset.tempVisible || '').split(',').map(function(val) {
+            var num = Number(val);
+            return Number.isFinite(num) ? num : null;
+          }).filter(function(num) { return num !== null; });
+          if (reuseVisibleIndexes.length) {
+            if (!state.tempExecReuseBatchExpanded || typeof state.tempExecReuseBatchExpanded !== 'object') {
+              state.tempExecReuseBatchExpanded = {};
+            }
+            var reuseOpenSet = api.ensureTempExecReuseOpen(reuseFileId);
+            var reuseAllExpanded = reuseToggleAllBtn.dataset.tempExpanded === '1';
+            state.tempExecPreserveScrollOnce = true;
+            clearTempExecReusePlaceholders(reuseFileId, reuseVisibleIndexes);
+            reuseVisibleIndexes.forEach(function(idx) {
+              if (reuseAllExpanded) reuseOpenSet.delete(idx);
+              else reuseOpenSet.add(idx);
+            });
+            state.tempExecReuseBatchExpanded[reuseFileId] = !reuseAllExpanded;
+            api.renderTempExecView();
+            if (!reuseAllExpanded) scheduleTempExecReusePanelHeightRecord(reuseFileId, reuseVisibleIndexes);
+          }
+          return;
+        }
         var navBtn = e.target.closest('[data-temp-file-nav]');
         if (navBtn) {
           if (navBtn.disabled) return;
@@ -5997,6 +6072,20 @@
           api.setTempExecStatusFilter(sfFileId, sfStatus);
           return;
         }
+        if (e.target.closest('[data-temp-more-menu] button')) {
+          setTempExecMoreMenuOpen(false, false);
+        }
+      });
+      tempExecToolbar.addEventListener('keydown', function(e) {
+        if (!e || e.key !== 'Escape') return;
+        var toggle = tempExecToolbar.querySelector('[data-temp-more-toggle]');
+        if (!toggle || toggle.getAttribute('aria-expanded') !== 'true') return;
+        e.preventDefault();
+        setTempExecMoreMenuOpen(false, true);
+      });
+      document.addEventListener('click', function(e) {
+        if (!tempExecToolbar || tempExecToolbar.contains(e.target)) return;
+        setTempExecMoreMenuOpen(false, false);
       });
     }
 
@@ -7344,18 +7433,26 @@
       });
     }
 
-    function updateFocusZoneIndicator(zone, draggingId, clientX) {
+    function isVerticalFocusZone(zone) {
+      if (!zone || typeof window === 'undefined' || typeof window.getComputedStyle !== 'function') return false;
+      return window.getComputedStyle(zone).flexDirection === 'column';
+    }
+
+    function updateFocusZoneIndicator(zone, draggingId, clientX, clientY) {
       var buttons = getFocusButtons(zone, draggingId);
       var indicator = ensureFocusZoneIndicator(zone);
       if (!indicator) return;
       var index = buttons.length;
       var ref = null;
-      var x = (typeof clientX === 'number' && Number.isFinite(clientX)) ? clientX : 0;
+      var vertical = isVerticalFocusZone(zone);
+      var pointer = vertical ? clientY : clientX;
+      var coordinate = (typeof pointer === 'number' && Number.isFinite(pointer)) ? pointer : 0;
       if (buttons.length) {
         for (var i = 0; i < buttons.length; i += 1) {
           var rect = buttons[i].getBoundingClientRect ? buttons[i].getBoundingClientRect() : null;
           if (!rect) continue;
-          if (x <= rect.left + rect.width / 2) {
+          var midpoint = vertical ? rect.top + rect.height / 2 : rect.left + rect.width / 2;
+          if (coordinate <= midpoint) {
             index = i;
             ref = buttons[i];
             break;
@@ -7378,7 +7475,7 @@
       }
     }
 
-    function resolveFocusDropIndex(zone, draggingId, clientX) {
+    function resolveFocusDropIndex(zone, draggingId, clientX, clientY) {
       if (!zone) return 0;
       var indicator = zone._focusIndicator || null;
       if (indicator && indicator.parentNode === zone && indicator.dataset && indicator.dataset.dropIndex !== undefined) {
@@ -7387,11 +7484,14 @@
       }
       var buttons = getFocusButtons(zone, draggingId);
       if (!buttons.length) return 0;
-      var x = (typeof clientX === 'number' && Number.isFinite(clientX)) ? clientX : 0;
+      var vertical = isVerticalFocusZone(zone);
+      var pointer = vertical ? clientY : clientX;
+      var coordinate = (typeof pointer === 'number' && Number.isFinite(pointer)) ? pointer : 0;
       for (var i = 0; i < buttons.length; i += 1) {
         var rect = buttons[i].getBoundingClientRect ? buttons[i].getBoundingClientRect() : null;
         if (!rect) continue;
-        if (x <= rect.left + rect.width / 2) return i;
+        var midpoint = vertical ? rect.top + rect.height / 2 : rect.left + rect.width / 2;
+        if (coordinate <= midpoint) return i;
       }
       return buttons.length;
     }
@@ -7409,7 +7509,7 @@
         if (!dragId) return;
         e.preventDefault();
         zone.classList.add('dragover');
-        updateFocusZoneIndicator(zone, dragId, e.clientX);
+        updateFocusZoneIndicator(zone, dragId, e.clientX, e.clientY);
       });
       zone.addEventListener('dragleave', function(e) {
         if (!e || e.currentTarget !== zone) return;
@@ -7436,7 +7536,7 @@
         setTempDragContext(null);
         if (!fileId) return;
         dragId = fileId;
-        var insertIndex = resolveFocusDropIndex(zone, dragId, e.clientX);
+        var insertIndex = resolveFocusDropIndex(zone, dragId, e.clientX, e.clientY);
         if (api && typeof api.insertTempExecFocus === 'function') {
           api.insertTempExecFocus(fileId, insertIndex);
         } else {
@@ -7779,22 +7879,6 @@
           }
           return;
         }
-        var presetAddBtn = e.target.closest('[data-temp-reuse-preset-add]');
-        if (presetAddBtn && api.startTempExecPresetDraft) {
-          var fileId = presetAddBtn.dataset.tempReusePresetAdd;
-          var file = api.getTempExecFile && api.getTempExecFile(fileId);
-          if (file && file.reuseEnabled) {
-            api.startTempExecPresetDraft(fileId);
-          } else if (tempExecStatus) {
-            setStatus(tempExecStatus, '请先开启用例复用再添加预设子项', 'warn');
-          }
-          return;
-        }
-        var applicabilityApplyBtn = e.target.closest('[data-temp-reuse-applicability-apply]');
-        if (applicabilityApplyBtn && api.applyTempExecReuseApplicability) {
-          api.applyTempExecReuseApplicability(applicabilityApplyBtn.dataset.tempReuseApplicabilityApply);
-          return;
-        }
         var presetCancelBtn = e.target.closest('[data-temp-reuse-preset-cancel]');
         if (presetCancelBtn && api.cancelTempExecPresetDraft) {
           api.cancelTempExecPresetDraft();
@@ -7937,38 +8021,6 @@
           if (!Number.isNaN(drIdx) && drLinkId) api.removeTempExecDefectLink(drFileId, drIdx, drLinkId);
           return;
         }
-        var reuseToggleAllBtn = e.target.closest('[data-temp-reuse-toggle-all]');
-        if (reuseToggleAllBtn && api.ensureTempExecReuseOpen && api.renderTempExecView) {
-          var rtaFileId = reuseToggleAllBtn.dataset.tempReuseToggleAll;
-          var reuseVisibleIndexes = (reuseToggleAllBtn.dataset.tempVisible || '').split(',').map(function(val) {
-            var num = Number(val);
-            return Number.isFinite(num) ? num : null;
-          }).filter(function(num) { return num !== null; });
-          if (reuseVisibleIndexes.length) {
-            if (!state.tempExecReuseBatchExpanded || typeof state.tempExecReuseBatchExpanded !== 'object') {
-              state.tempExecReuseBatchExpanded = {};
-            }
-            var reuseOpenSetAll = api.ensureTempExecReuseOpen(rtaFileId);
-            var reuseAllExpanded = reuseToggleAllBtn.dataset.tempExpanded === '1';
-            state.tempExecPreserveScrollOnce = true;
-            clearTempExecReusePlaceholders(rtaFileId, reuseVisibleIndexes);
-            if (reuseAllExpanded) {
-              reuseVisibleIndexes.forEach(function(idx) {
-                reuseOpenSetAll.delete(idx);
-              });
-              state.tempExecReuseBatchExpanded[rtaFileId] = false;
-              api.renderTempExecView();
-            } else {
-              reuseVisibleIndexes.forEach(function(idx) {
-                reuseOpenSetAll.add(idx);
-              });
-              state.tempExecReuseBatchExpanded[rtaFileId] = true;
-              api.renderTempExecView();
-              scheduleTempExecReusePanelHeightRecord(rtaFileId, reuseVisibleIndexes);
-            }
-          }
-          return;
-        }
         var reuseBtn = e.target.closest('[data-temp-reuse-panel]');
         if (reuseBtn && api.ensureTempExecSelection && api.toggleTempExecReusePanel) {
           var rFileId = reuseBtn.dataset.tempReusePanel;
@@ -8085,6 +8137,15 @@
           if (!Number.isNaN(selIdx)) api.toggleTempExecSelection(selFileId, selIdx, target.checked);
           return;
         }
+        if (target.dataset.tempPriority !== undefined && api.updateTempExecCaseField) {
+          var priorityFileId = target.dataset.tempPriority;
+          var priorityIdx = Number(target.dataset.index);
+          if (!Number.isNaN(priorityIdx)) {
+            api.updateTempExecCaseField(priorityFileId, priorityIdx, 'priority', target.value);
+            target.dataset.priority = String(target.value || '').toLowerCase();
+          }
+          return;
+        }
         if (target.dataset.tempResult !== undefined && api.updateTempExecResult) {
           var resFileId = target.dataset.tempResult;
           var resIdx = Number(target.dataset.index);
@@ -8092,10 +8153,6 @@
             api.updateTempExecResult(resFileId, resIdx, target.value);
             target.dataset.status = target.value;
           }
-          return;
-        }
-        if (target.dataset.tempReuseToggle !== undefined && api.handleTempExecReuseToggle) {
-          api.handleTempExecReuseToggle(target.dataset.tempReuseToggle, target.checked, target);
           return;
         }
         if (target.dataset.tempReusePresetApplicability !== undefined && api.updateTempExecPresetApplicability) {

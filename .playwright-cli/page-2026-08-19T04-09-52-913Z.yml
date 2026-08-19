@@ -1,0 +1,60 @@
+- generic [ref=f4e2]:
+  - complementary [ref=f4e3]:
+    - heading "用例助手" [level=1] [ref=f4e5]:
+      - generic [ref=f4e6]: T
+    - navigation [ref=f4e8]:
+      - generic [ref=f4e9]:
+        - heading "AI 功能" [level=2] [ref=f4e10]
+        - generic [ref=f4e12]:
+          - button "用例生成" [ref=f4e13] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f4e20] [cursor=pointer]:
+            - generic [ref=f4e27]: 功能指派
+            - generic [ref=f4e28]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f4e29] [cursor=pointer]:
+            - generic [ref=f4e34]: 模型管理
+            - generic [ref=f4e35]: 未配置模型
+      - generic [ref=f4e36]:
+        - heading "用例相关" [level=2] [ref=f4e37]
+        - generic [ref=f4e38]:
+          - button "用例执行" [ref=f4e39] [cursor=pointer]
+          - button "用例库" [ref=f4e45] [cursor=pointer]
+          - button "用例归档" [active] [ref=f4e50] [cursor=pointer]
+          - button "执行总览" [ref=f4e56] [cursor=pointer]
+      - generic [ref=f4e61]:
+        - heading "管理" [level=2] [ref=f4e62]
+        - generic [ref=f4e63]:
+          - button "项目管理" [ref=f4e64] [cursor=pointer]
+          - button "人员管理" [ref=f4e70] [cursor=pointer]
+          - button "操作记录" [ref=f4e78] [cursor=pointer]
+      - generic [ref=f4e84]:
+        - heading "设置" [level=2] [ref=f4e85]
+        - button "通用设置" [ref=f4e87] [cursor=pointer]
+    - generic "个人工具" [ref=f4e94]:
+      - button "生成进度" [ref=f4e95] [cursor=pointer]
+      - button "个人备忘" [ref=f4e102] [cursor=pointer]
+    - generic [ref=f4e107]:
+      - generic [ref=f4e108]: 当前用户
+      - button "用户菜单" [ref=f4e109] [cursor=pointer]:
+        - generic [ref=f4e110]: e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - generic [ref=f4e155]:
+    - generic [ref=f4e246]:
+      - generic [ref=f4e247]:
+        - generic [ref=f4e248]: 用例归档导航
+        - button "收起" [expanded] [ref=f4e249] [cursor=pointer]
+      - button "查看归档" [ref=f4e252] [cursor=pointer]
+    - main [ref=f4e159]:
+      - generic [ref=f4e256]:
+        - heading "用例归档" [level=2] [ref=f4e257]
+        - generic [ref=f4e259]:
+          - paragraph [ref=f4e260]: 提示：使用顶部导航中的【查看归档】选择归档用例记录。
+          - paragraph [ref=f4e261]
+      - option "请选择版本" [selected]

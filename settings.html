@@ -164,6 +164,8 @@
 })();
 </script>
 <link rel="stylesheet" href="./style.css"/>
+<link rel="stylesheet" href="./styles/workspace-shell.css"/>
+<link rel="stylesheet" href="./styles/workspace-lists.css"/>
 </head>
 <body data-page="settings">
 <div class="app-layout">
@@ -217,28 +219,10 @@
 </nav>
 <div class="sidebar-tabs" id="sidebarTabs">
 <div class="sidebar-tab-bar" id="sidebarTabBar">
-<button class="sidebar-tab is-active" type="button" id="sidebarTabCasegen" data-sidebar-tab="casegen">
-xmind用例生成进度
-<span class="sidebar-tab-dot" id="caseGenProgressTabDot"></span>
-</button>
-<button class="sidebar-tab" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
+<button class="sidebar-tab is-active" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
 </div>
 <div class="sidebar-tab-panels" id="sidebarTabPanels">
-<div class="sidebar-tab-panel is-active" data-sidebar-panel="casegen">
-<div class="casegen-progress-panel" id="caseGenProgressPanel">
-<div class="panel-head">
-<div class="panel-title-row">
-<span class="title">xmind用例生成进度</span>
-<button class="panel-toggle" type="button" id="caseGenProgressToggle" aria-expanded="true" aria-controls="caseGenProgressList">收起</button>
-</div>
-<span class="meta">点击打开对应 XMind 生成页签</span>
-</div>
-<div class="casegen-progress-list" id="caseGenProgressList">
-<p class="hint">暂无 xmind 生成页签，点击打开 XMind 用例生成</p>
-</div>
-</div>
-</div>
-<div class="sidebar-tab-panel" data-sidebar-panel="memo">
+<div class="sidebar-tab-panel is-active" data-sidebar-panel="memo">
 <div class="memo-pad-panel" id="memoPadPanel">
 <div class="panel-head">
 <div class="panel-title-row">
@@ -267,42 +251,27 @@ xmind用例生成进度
   
   <div class="tempexec-head hidden" data-tab-section="settings" id="settingsHead">
     <div class="flow" id="settingsFlowNav">
-      <div class="flow-title">设置导航</div>
-      <p class="hint" style="margin:0 0 6px;">设置项入口汇总于此，点击卡片快速定位。</p>
-      <div class="nav-entry-grid settings-nav-grid">
-        <button class="nav-entry-card nav-entry-view" id="settingsNavColumnsBtn" type="button" data-settings-target="tempexec-columns">
-          <span class="nav-entry-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-              <rect x="4" y="5" width="16" height="14" rx="2"></rect>
-              <path d="M9 5v14"></path>
-              <path d="M15 5v14"></path>
-              <path d="M4 10h16"></path>
-              <path d="M4 14h16"></path>
-            </svg>
-          </span>
-          <span class="nav-entry-text">
-            <span class="nav-entry-title">执行视图列显示</span>
-            <span class="nav-entry-desc">控制执行视图表头展示</span>
-          </span>
+      <div class="flow-title">设置</div>
+      <div class="nav-entry-grid settings-nav-grid" aria-label="设置分类">
+        <button class="nav-entry-card is-active" id="settingsNavMiscBtn" type="button" data-settings-target="misc" data-settings-icon="settings" aria-current="page">
+          <span class="nav-entry-icon" aria-hidden="true"></span>
+          <span class="nav-entry-title">常规</span>
         </button>
-        <button class="nav-entry-card nav-entry-overview" id="settingsNavMiscBtn" type="button" data-settings-target="misc">
-          <span class="nav-entry-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-              <path d="M12 3v2"></path>
-              <path d="M12 19v2"></path>
-              <path d="M4.9 4.9l1.4 1.4"></path>
-              <path d="M17.7 17.7l1.4 1.4"></path>
-              <path d="M3 12h2"></path>
-              <path d="M19 12h2"></path>
-              <path d="M4.9 19.1l1.4-1.4"></path>
-              <path d="M17.7 6.3l1.4-1.4"></path>
-              <circle cx="12" cy="12" r="4"></circle>
-            </svg>
-          </span>
-          <span class="nav-entry-text">
-            <span class="nav-entry-title">通用设置</span>
-            <span class="nav-entry-desc">主题/分页/项目排序等</span>
-          </span>
+        <button class="nav-entry-card" id="settingsNavIntegrationBtn" type="button" data-settings-target="integrations" data-settings-icon="models">
+          <span class="nav-entry-icon" aria-hidden="true"></span>
+          <span class="nav-entry-title">AI 与知识库</span>
+        </button>
+        <button class="nav-entry-card" id="settingsNavMissingBtn" type="button" data-settings-target="missing-cases" data-settings-icon="sparkles">
+          <span class="nav-entry-icon" aria-hidden="true"></span>
+          <span class="nav-entry-title">易漏用例</span>
+        </button>
+        <button class="nav-entry-card" id="settingsNavProjectBtn" type="button" data-settings-target="projects" data-settings-icon="project-admin">
+          <span class="nav-entry-icon" aria-hidden="true"></span>
+          <span class="nav-entry-title">项目</span>
+        </button>
+        <button class="nav-entry-card" id="settingsNavColumnsBtn" type="button" data-settings-target="tempexec-columns" data-settings-icon="exec-overview">
+          <span class="nav-entry-icon" aria-hidden="true"></span>
+          <span class="nav-entry-title">执行视图</span>
         </button>
       </div>
     </div>
@@ -350,218 +319,152 @@ xmind用例生成进度
 
 
 
-<section class="card hidden" data-tab-section="settings" data-settings-section="tempexec-columns" id="settingsTempExecSection">
-<h2>执行视图列显示</h2>
-<div class="card-body">
-<p class="hint">控制“用例执行”视图的表头展示，仅影响显示，不会修改用例数据。用例标题/实际结果/备注/缺陷链接为必选。</p>
-<form id="tempExecColumnForm" class="settings-grid">
-<label class="disabled"><input type="checkbox" data-temp-exec-col="select"/> 选择框（必选）</label>
-<label><input type="checkbox" data-temp-exec-col="index"/> 编号</label>
-<label><input type="checkbox" data-temp-exec-col="module"/> 模块</label>
-<label><input type="checkbox" data-temp-exec-col="priority"/> 优先级</label>
-<label><input type="checkbox" data-temp-exec-col="preconditions"/> 前提条件</label>
-<label><input type="checkbox" data-temp-exec-col="steps"/> 操作步骤</label>
-<label><input type="checkbox" data-temp-exec-col="expected"/> 预期结果</label>
-<label class="disabled">用例标题（必选）</label>
-<label class="disabled">实际结果（必选）</label>
-<label class="disabled">备注（必选）</label>
-<label class="disabled">缺陷链接（必选）</label>
-</form>
-<p class="status" id="tempExecColumnStatus"></p>
-</div>
-</section>
-<section class="card hidden" data-tab-section="settings" data-settings-section="misc" id="settingsOtherSection">
-<h2>通用设置</h2>
-<div class="card-body">
-<div class="settings-inline">
-<div class="meta">
-<strong>全局分页设置</strong>
-<p>设置列表类视图每页展示条数（用例执行 / 用例归档 / 执行总览等），范围 5-200 条，默认为 20。</p>
-</div>
-<div class="control">
-<input id="tempExecPageSizeInput" type="number" min="5" max="200" step="5" placeholder="请输入条数"/>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveTempExecPageSize">保存分页设置</button>
-</div>
-<p class="status" id="tempExecPageSizeStatus"></p>
+<header class="settings-page-header hidden" data-tab-section="settings" id="settingsPageHeader">
+  <span>个人设置</span>
+  <h1>通用设置</h1>
+</header>
 
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>用例视图字号</strong>
-<p>设置用例执行/用例库编辑视图字号，范围 11-16，默认为 13。</p>
-</div>
-<div class="control">
-<input id="caseViewFontSizeInput" type="number" min="11" max="16" step="1" placeholder="请输入字号"/>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveCaseViewFontSize">保存字号</button>
-</div>
-<p class="status" id="caseViewFontSizeStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>Case Assistant 项目路径</strong>
-<p>用于 Electron 环境下调用 case-assistant:request。仅支持绝对目录路径；为空或格式非法时将自动跳过该调用。</p>
-</div>
-<div class="control">
-<input id="caseAssistantProjectRootInput" type="text" placeholder="如：E:/workspace/project 或 /Users/name/project"/>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveCaseAssistantProjectRoot">保存项目路径</button>
-</div>
-<p class="status" id="caseAssistantProjectRootStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>共享知识库地址</strong>
-<p>可选配置。保存后，XMind 用例生成会在每次生成前执行规则检索、AI 精筛，并把最终结果作为知识库上下文注入。示例：`http://192.168.50.10:8003/sk/`。</p>
-</div>
-<div class="control">
-<input id="knowledgeBaseBaseUrlInput" type="text" placeholder="如：http://192.168.50.10:8003/sk/"/>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveKnowledgeBaseBaseUrl">保存知识库地址</button>
-<button class="secondary" id="validateKnowledgeBaseBaseUrl">校验地址</button>
-</div>
-<p class="status" id="knowledgeBaseBaseUrlStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>知识库/XMind 上限设置</strong>
-<p>用于放宽 AI 目录检索、知识库上下文注入和 XMind 多模态请求体的本地上限。默认值已提高；若模型提示上下文或请求过大，可继续在这里调高。</p>
-</div>
-<div class="control">
-<label class="settings-field">
-<span>目录送模上限（字符）</span>
-<input id="knowledgeBaseCatalogCharLimitInput" type="number" min="20000" step="1000" placeholder="如：120000"/>
-</label>
-<label class="settings-field">
-<span>知识库注入上限（字符）</span>
-<input id="knowledgeBaseInjectedContextCharLimitInput" type="number" min="4000" step="1000" placeholder="如：24000"/>
-</label>
-<label class="settings-field">
-<span>XMind 请求体上限（字符）</span>
-<input id="xmindRequestPayloadLimitInput" type="number" min="500000" step="100000" placeholder="如：4000000"/>
-</label>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveKnowledgeBaseLimitSettings">保存知识库上限</button>
-</div>
-<p class="status" id="knowledgeBaseLimitSettingsStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>用例库生成用例覆盖度阈值</strong>
-<p>设置用例库 AI 生成用例的覆盖度阈值，范围 50-100，默认 90。</p>
-</div>
-<div class="control">
-<input id="caseLibraryGenCoverageInput" type="number" min="50" max="100" step="1" placeholder="请输入阈值"/>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveCaseLibraryGenCoverage">保存阈值</button>
-</div>
-<p class="status" id="caseLibraryGenCoverageStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>页面主题</strong>
-<p>选择页面配色主题，保存后生效并同步到账号。</p>
-</div>
-<div class="control">
-<select id="themeSelect">
-<option value="light">白色主题</option>
-<option value="dark">黑色主题</option>
-</select>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveThemeSetting">保存主题</button>
-</div>
-<p class="status" id="themeSettingStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>易漏用例提醒区域</strong>
-<p>选择易漏用例提醒区域展示位置，可选上方或下方。</p>
-</div>
-<div class="control">
-<select id="missingReminderPlacementSelect">
-<option value="top">上方</option>
-<option value="bottom">下方</option>
-</select>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveMissingReminderPlacement">保存展示位置</button>
-</div>
-<p class="status" id="missingReminderPlacementStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>易漏用例命中设定</strong>
-<p>选择提醒区的第一优先级命中条件，至少勾选一个。</p>
-</div>
-<div class="control">
-<label><input type="checkbox" id="missingReminderMatchType" data-missing-reminder-match="type"/> 类型</label>
-<label><input type="checkbox" id="missingReminderMatchModule" data-missing-reminder-match="module"/> 模块</label>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveMissingReminderMatch">保存命中设定</button>
-</div>
-<p class="status" id="missingReminderMatchStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline">
-<div class="meta">
-<strong>易漏用例推荐（大模型）</strong>
-<p>开启后可在提醒区点击 AI 推荐生成关联易漏用例。</p>
-</div>
-<div class="control">
-<select id="missingReminderAiSelect">
-<option value="off">关闭</option>
-<option value="on">开启</option>
-</select>
-</div>
-</div>
-<div class="actions">
-<button class="secondary" id="saveMissingReminderAi">保存开关</button>
-</div>
-<p class="status" id="missingReminderAiStatus"></p>
-
-<div class="settings-divider"></div>
-<h3>导航栏智能收起</h3>
-<p class="hint">勾选后向下滚动会自动收起顶部导航；滚动到顶部继续向上滚动可自动展开。</p>
-<form class="settings-grid" id="smartTopNavSettingsGrid">
-  <label><input type="checkbox" id="smartTopNavToggle" data-smart-top-nav="1"/> 启用导航栏智能收起</label>
-</form>
-<p class="status" id="smartTopNavStatus"></p>
-
-<div class="settings-divider"></div>
-<div class="settings-inline" style="align-items:flex-start;">
-  <div class="meta">
-    <strong>项目排序</strong>
-    <p>拖拽项目卡片调整展示顺序；点击卡片可设置默认项目（影响各页面项目卡片/下拉框的顺序与默认选中）。</p>
+<section class="card settings-content-section hidden" data-tab-section="settings" data-settings-section="misc" id="settingsOtherSection">
+  <h2>常规</h2>
+  <div class="card-body settings-panel">
+    <div class="settings-item">
+      <div class="settings-inline">
+        <div class="meta"><strong>全局分页设置</strong><p>设置列表类视图每页展示条数，范围 5-200 条，默认为 20。</p></div>
+        <div class="control"><input id="tempExecPageSizeInput" type="number" min="5" max="200" step="5" placeholder="请输入条数"/></div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveTempExecPageSize">保存分页设置</button></div>
+      <p class="status" id="tempExecPageSizeStatus"></p>
+    </div>
+    <div class="settings-item">
+      <div class="settings-inline">
+        <div class="meta"><strong>用例视图字号</strong><p>设置用例执行和用例库编辑视图字号，范围 11-16，默认为 13。</p></div>
+        <div class="control"><input id="caseViewFontSizeInput" type="number" min="11" max="16" step="1" placeholder="请输入字号"/></div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveCaseViewFontSize">保存字号</button></div>
+      <p class="status" id="caseViewFontSizeStatus"></p>
+    </div>
+    <div class="settings-item">
+      <div class="settings-inline">
+        <div class="meta"><strong>页面主题</strong><p>选择页面配色主题，保存后同步到当前账号。</p></div>
+        <div class="control"><select id="themeSelect"><option value="light">白色主题</option><option value="dark">黑色主题</option></select></div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveThemeSetting">保存主题</button></div>
+      <p class="status" id="themeSettingStatus"></p>
+    </div>
+    <div class="settings-item">
+      <div class="settings-inline">
+        <div class="meta"><strong>导航栏智能收起</strong><p>向下滚动时自动收起顶部导航，回到顶部后自动展开。</p></div>
+        <div class="control settings-check-control">
+          <label><input type="checkbox" id="smartTopNavToggle" data-smart-top-nav="1"/> 启用</label>
+        </div>
+      </div>
+      <p class="status" id="smartTopNavStatus"></p>
+    </div>
   </div>
-</div>
-<div class="project-sort-grid" id="projectSortGrid"></div>
-<p class="status" id="projectSortStatus"></p>
-</div>
+</section>
+
+<section class="card settings-content-section hidden" data-tab-section="settings" data-settings-section="integrations" id="settingsIntegrationSection">
+  <h2>AI 与知识库</h2>
+  <div class="card-body settings-panel">
+    <div class="settings-item settings-item-wide-control">
+      <div class="settings-inline">
+        <div class="meta"><strong>Case Assistant 项目路径</strong><p>用于 Electron 环境调用，仅支持绝对目录路径。</p></div>
+        <div class="control"><input id="caseAssistantProjectRootInput" type="text" placeholder="如：E:/workspace/project 或 /Users/name/project"/></div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveCaseAssistantProjectRoot">保存项目路径</button></div>
+      <p class="status" id="caseAssistantProjectRootStatus"></p>
+    </div>
+    <div class="settings-item settings-item-wide-control">
+      <div class="settings-inline">
+        <div class="meta"><strong>共享知识库地址</strong><p>XMind 用例生成会在生成前检索并注入知识库上下文。</p></div>
+        <div class="control"><input id="knowledgeBaseBaseUrlInput" type="text" placeholder="如：http://192.168.50.10:8003/sk/"/></div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveKnowledgeBaseBaseUrl">保存地址</button><button class="secondary" id="validateKnowledgeBaseBaseUrl">校验地址</button></div>
+      <p class="status" id="knowledgeBaseBaseUrlStatus"></p>
+    </div>
+    <div class="settings-item settings-item-stacked-control">
+      <div class="settings-inline">
+        <div class="meta"><strong>知识库/XMind 上限设置</strong><p>调整目录检索、知识库注入和 XMind 请求体的本地上限。</p></div>
+        <div class="control">
+          <label class="settings-field"><span>目录送模上限（字符）</span><input id="knowledgeBaseCatalogCharLimitInput" type="number" min="20000" step="1000" placeholder="如：120000"/></label>
+          <label class="settings-field"><span>知识库注入上限（字符）</span><input id="knowledgeBaseInjectedContextCharLimitInput" type="number" min="4000" step="1000" placeholder="如：24000"/></label>
+          <label class="settings-field"><span>XMind 请求体上限（字符）</span><input id="xmindRequestPayloadLimitInput" type="number" min="500000" step="100000" placeholder="如：4000000"/></label>
+        </div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveKnowledgeBaseLimitSettings">保存上限</button></div>
+      <p class="status" id="knowledgeBaseLimitSettingsStatus"></p>
+    </div>
+    <div class="settings-item">
+      <div class="settings-inline">
+        <div class="meta"><strong>用例库生成覆盖度阈值</strong><p>范围 50-100，默认 90。</p></div>
+        <div class="control"><input id="caseLibraryGenCoverageInput" type="number" min="50" max="100" step="1" placeholder="请输入阈值"/></div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveCaseLibraryGenCoverage">保存阈值</button></div>
+      <p class="status" id="caseLibraryGenCoverageStatus"></p>
+    </div>
+  </div>
+</section>
+
+<section class="card settings-content-section hidden" data-tab-section="settings" data-settings-section="missing-cases" id="settingsMissingCasesSection">
+  <h2>易漏用例</h2>
+  <div class="card-body settings-panel">
+    <div class="settings-item">
+      <div class="settings-inline">
+        <div class="meta"><strong>提醒区域位置</strong><p>选择易漏用例提醒区域展示在用例列表上方或下方。</p></div>
+        <div class="control"><select id="missingReminderPlacementSelect"><option value="top">上方</option><option value="bottom">下方</option></select></div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveMissingReminderPlacement">保存位置</button></div>
+      <p class="status" id="missingReminderPlacementStatus"></p>
+    </div>
+    <div class="settings-item">
+      <div class="settings-inline">
+        <div class="meta"><strong>命中设定</strong><p>选择提醒区的第一优先级命中条件，至少勾选一个。</p></div>
+        <div class="control settings-check-control"><label><input type="checkbox" id="missingReminderMatchType" data-missing-reminder-match="type"/> 类型</label><label><input type="checkbox" id="missingReminderMatchModule" data-missing-reminder-match="module"/> 模块</label></div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveMissingReminderMatch">保存设定</button></div>
+      <p class="status" id="missingReminderMatchStatus"></p>
+    </div>
+    <div class="settings-item">
+      <div class="settings-inline">
+        <div class="meta"><strong>大模型推荐</strong><p>开启后可在提醒区生成关联易漏用例。</p></div>
+        <div class="control"><select id="missingReminderAiSelect"><option value="off">关闭</option><option value="on">开启</option></select></div>
+      </div>
+      <div class="actions"><button class="secondary" id="saveMissingReminderAi">保存开关</button></div>
+      <p class="status" id="missingReminderAiStatus"></p>
+    </div>
+  </div>
+</section>
+
+<section class="card settings-content-section hidden" data-tab-section="settings" data-settings-section="projects" id="settingsProjectsSection">
+  <h2>项目</h2>
+  <div class="card-body settings-panel">
+    <div class="settings-project-item">
+      <div class="meta"><strong>项目排序与默认项目</strong><p>拖拽调整展示顺序；点击项目可设置为默认项目。</p></div>
+      <div class="project-sort-grid" id="projectSortGrid"></div>
+      <p class="status" id="projectSortStatus"></p>
+    </div>
+  </div>
+</section>
+
+<section class="card settings-content-section hidden" data-tab-section="settings" data-settings-section="tempexec-columns" id="settingsTempExecSection">
+  <h2>执行视图</h2>
+  <div class="card-body settings-panel settings-columns-panel">
+    <div class="settings-columns-intro"><strong>列表列显示</strong><p>仅控制执行视图表头展示，不修改用例数据。</p></div>
+    <form id="tempExecColumnForm" class="settings-grid">
+      <label class="disabled"><input type="checkbox" data-temp-exec-col="select"/> 选择框（必选）</label>
+      <label><input type="checkbox" data-temp-exec-col="index"/> 编号</label>
+      <label><input type="checkbox" data-temp-exec-col="module"/> 模块</label>
+      <label><input type="checkbox" data-temp-exec-col="priority"/> 优先级</label>
+      <label><input type="checkbox" data-temp-exec-col="preconditions"/> 前提条件</label>
+      <label><input type="checkbox" data-temp-exec-col="steps"/> 操作步骤</label>
+      <label><input type="checkbox" data-temp-exec-col="expected"/> 预期结果</label>
+      <label class="disabled">用例标题（必选）</label>
+      <label class="disabled">实际结果（必选）</label>
+      <label class="disabled">备注（必选）</label>
+      <label class="disabled">缺陷链接（必选）</label>
+    </form>
+    <p class="status" id="tempExecColumnStatus"></p>
+  </div>
 </section>
 
 
@@ -710,6 +613,9 @@ xmind用例生成进度
 </div>
 </div>
 <script src="./scripts/vendor/jszip.min.js" defer></script>
+<script src="./scripts/vendor/workspace-icons.js" defer></script>
+<script src="./scripts/base/workspaceShell.js" defer></script>
+<script src="./scripts/base/workspaceListPresentation.js" defer></script>
 <script src="./config/constants.js" defer></script>
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>

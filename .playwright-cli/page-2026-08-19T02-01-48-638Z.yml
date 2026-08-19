@@ -1,0 +1,113 @@
+- generic [ref=f2e2]:
+  - complementary:
+    - generic:
+      - heading "用例助手" [level=1]:
+        - generic: T
+        - generic:
+          - generic: 用例助手
+          - generic: TEST ASSISTANT
+    - navigation:
+      - generic:
+        - heading "AI 功能" [level=2]
+        - generic:
+          - button "用例生成"
+          - button "功能指派，未配置模型":
+            - generic: 功能指派
+            - generic: 未配置模型
+          - button "模型管理，未配置模型":
+            - generic: 模型管理
+            - generic: 未配置模型
+      - generic:
+        - heading "用例相关" [level=2]
+        - generic:
+          - button "用例执行"
+          - button "用例库"
+          - button "用例归档"
+          - button "执行总览"
+      - generic:
+        - heading "管理" [level=2]
+        - generic:
+          - button "项目管理"
+          - button "人员管理"
+          - button "操作记录"
+      - generic:
+        - heading "设置" [level=2]
+        - generic:
+          - button "通用设置"
+    - generic:
+      - generic "个人工具":
+        - button "生成进度"
+        - button "个人备忘"
+    - generic:
+      - generic: 当前用户
+      - button "用户菜单":
+        - generic: e
+      - generic:
+        - strong: e2e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f2e111]:
+    - heading "用例执行" [level=2] [ref=f2e113]
+    - navigation "用例执行快捷入口":
+      - generic:
+        - generic: 专注区
+        - generic: 暂无专注用例
+      - generic:
+        - button "用例导入" [active]
+        - button "选择用例执行"
+        - button "执行分配"
+        - button "归档操作&进度预览"
+  - generic [ref=f2e147]:
+    - banner [ref=f2e149]:
+      - heading "项目 未选择 版本 未选择 用例 暂无执行用例" [level=1] [ref=f2e150]:
+        - generic [ref=f2e151]:
+          - generic [ref=f2e152]: 项目
+          - strong [ref=f2e153]: 未选择
+        - generic [ref=f2e154]: /
+        - generic [ref=f2e155]:
+          - generic [ref=f2e156]: 版本
+          - strong [ref=f2e157]: 未选择
+        - generic [ref=f2e158]: /
+        - generic [ref=f2e159]:
+          - generic [ref=f2e160]: 用例
+          - strong [ref=f2e161]: 暂无执行用例
+    - main [ref=f2e162]:
+      - generic [ref=f2e169]:
+        - generic [ref=f2e170]:
+          - heading "用例导入" [level=3] [ref=f2e171]
+          - button "收起" [ref=f2e172] [cursor=pointer]
+        - generic [ref=f2e174]:
+          - heading "用例导入" [level=2] [ref=f2e175]
+          - generic [ref=f2e176]:
+            - paragraph [ref=f2e177]: 导入 XMind/JSON/文本测试用例后，可在“执行视图”直接执行并记录实际结果；支持多份文件切换，执行数据会自动保存。
+            - generic [ref=f2e178]:
+              - strong [ref=f2e179]: 温馨提示
+              - paragraph [ref=f2e180]: 导入用例后需要点击“确认入库”，入库完成后才能进行下一步操作（如：执行分配 / 进入执行视图）。
+            - button "常用用例模版 ▼" [disabled] [ref=f2e183]:
+              - generic [ref=f2e184]: 常用用例模版
+              - generic [ref=f2e185]: ▼
+            - generic [ref=f2e187]:
+              - generic [ref=f2e188]:
+                - generic [ref=f2e189]:
+                  - strong [ref=f2e190]: 测试用例
+                  - generic [ref=f2e191]: 拖拽或点击选择
+                - generic [ref=f2e192]: 拖拽或点击选择文件后，还需要选择项目与版本并确认才会入库
+              - paragraph [ref=f2e193]: 未选择文件
+              - generic [ref=f2e194]:
+                - generic [ref=f2e195]: 项目
+                - combobox [ref=f2e196] [cursor=pointer]:
+                  - option "请选择项目" [selected]
+                - generic [ref=f2e197]: 版本
+                - combobox [disabled] [ref=f2e198]:
+                  - option "请选择版本" [selected]
+                - button "确认入库" [disabled] [ref=f2e199]
+              - paragraph [ref=f2e200]
+      - generic [ref=f2e163]: 暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录
+      - option "请选择版本" [selected]

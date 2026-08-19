@@ -5,6 +5,13 @@ const apiBase = process.env.API_BASE_URL || base;
 const adminUser = process.env.ADMIN_USER || 'admin';
 const adminPass = process.env.ADMIN_PASS || 'chillytest_admin';
 
+async function openTempExecMoreActions(page) {
+  const toggle = page.locator('#tempExecToolbar [data-temp-more-toggle]');
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await expect(page.locator('#tempExecMoreMenu')).toBeVisible();
+}
+
 async function loginApi(ctx, username, password) {
   const res = await ctx.post(`${apiBase}/api/auth/login`, {
     data: { username: username, password: password },
@@ -220,6 +227,7 @@ test.describe('执行页-多用户用例库变更同步', () => {
     const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
     const isOpen = await diffDrawer.evaluate((el) => el.classList.contains('open'));
     if (!isOpen) {
+      await openTempExecMoreActions(page);
       await btn.click();
     }
     await expect(diffDrawer).toHaveClass(/open/);
@@ -517,6 +525,7 @@ test.describe('执行页-多用户用例库变更同步', () => {
     const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
     const isOpen = await diffDrawer.evaluate((el) => el.classList.contains('open'));
     if (!isOpen) {
+      await openTempExecMoreActions(page);
       await btn.click();
     }
     await expect(diffDrawer).toHaveClass(/open/);

@@ -1,0 +1,201 @@
+- generic [ref=f2e2]:
+  - complementary [ref=f2e3]:
+    - heading "用例助手" [level=1] [ref=f2e5]:
+      - generic [ref=f2e6]: T
+    - navigation [ref=f2e8]:
+      - generic [ref=f2e9]:
+        - heading "AI 功能" [level=2] [ref=f2e10]
+        - generic [ref=f2e12]:
+          - button "用例生成" [ref=f2e13] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f2e20] [cursor=pointer]:
+            - generic [ref=f2e27]: 功能指派
+            - generic [ref=f2e28]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f2e29] [cursor=pointer]:
+            - generic [ref=f2e34]: 模型管理
+            - generic [ref=f2e35]: 未配置模型
+      - generic [ref=f2e36]:
+        - heading "用例相关" [level=2] [ref=f2e37]
+        - generic [ref=f2e38]:
+          - button "用例执行" [ref=f2e39] [cursor=pointer]
+          - button "用例库" [ref=f2e45] [cursor=pointer]
+          - button "用例归档" [ref=f2e50] [cursor=pointer]
+          - button "执行总览" [ref=f2e56] [cursor=pointer]
+      - generic [ref=f2e61]:
+        - heading "管理" [level=2] [ref=f2e62]
+        - generic [ref=f2e63]:
+          - button "项目管理" [ref=f2e64] [cursor=pointer]
+          - button "人员管理" [ref=f2e70] [cursor=pointer]
+          - button "操作记录" [ref=f2e78] [cursor=pointer]
+      - generic [ref=f2e84]:
+        - heading "设置" [level=2] [ref=f2e85]
+        - button "通用设置" [ref=f2e87] [cursor=pointer]
+    - generic "个人工具" [ref=f2e94]:
+      - button "生成进度" [ref=f2e95] [cursor=pointer]
+      - button "个人备忘" [ref=f2e102] [cursor=pointer]
+    - generic [ref=f2e107]:
+      - generic [ref=f2e108]: 当前用户
+      - button "用户菜单" [ref=f2e109] [cursor=pointer]:
+        - generic [ref=f2e110]: l
+      - menu:
+        - generic:
+          - generic: l
+          - generic:
+            - strong: layout_preview
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f2e111]:
+    - heading "用例执行" [level=2] [ref=f2e113]
+    - navigation "用例执行快捷入口" [ref=f2e114]:
+      - generic [ref=f2e115]:
+        - generic [ref=f2e116] [cursor=pointer]: 专注区
+        - generic [ref=f2e118]: 暂无专注用例
+      - generic [ref=f2e120]:
+        - button "用例导入" [ref=f2e121] [cursor=pointer]
+        - button "选择用例执行" [ref=f2e127] [cursor=pointer]
+        - button "执行分配" [ref=f2e133] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f2e139] [cursor=pointer]
+  - generic [ref=f2e147]:
+    - generic [ref=f2e148]:
+      - banner [ref=f2e149]:
+        - heading "项目 元气骑士 版本 未归属 用例 角色皮肤解锁验证.xmind" [level=1] [ref=f2e297]:
+          - generic [ref=f2e298]:
+            - generic [ref=f2e299]: 项目
+            - strong [ref=f2e300]: 元气骑士
+          - generic [ref=f2e301]: /
+          - generic [ref=f2e302]:
+            - generic [ref=f2e303]: 版本
+            - strong [ref=f2e304]: 未归属
+          - generic [ref=f2e305]: /
+          - generic [ref=f2e306]:
+            - generic [ref=f2e307]: 用例
+            - strong [ref=f2e308]: 角色皮肤解锁验证.xmind
+      - generic [ref=f2e164]:
+        - generic [ref=f2e309]:
+          - textbox "搜索用例关键字" [ref=f2e311]
+          - group "预设操作" [ref=f2e312]:
+            - button "＋ 预设子项" [ref=f2e313] [cursor=pointer]
+            - button "展开所有子项" [ref=f2e314] [cursor=pointer]
+            - button "快速执行" [ref=f2e315] [cursor=pointer]
+          - generic [ref=f2e316]:
+            - button "用例变更" [disabled] [ref=f2e173]
+            - group "切换用例" [ref=f2e318]:
+              - generic [ref=f2e319]: 用例切换：
+              - button "上一份" [disabled] [ref=f2e320]
+              - button "下一份" [disabled] [ref=f2e321]
+            - button "更多操作" [active] [ref=f2e323] [cursor=pointer]
+        - generic [ref=f2e326]:
+          - button "已执行 0" [ref=f2e327] [cursor=pointer]
+          - button "未执行 2" [ref=f2e328] [cursor=pointer]
+          - button "通过 0" [ref=f2e329] [cursor=pointer]
+          - button "失败 0" [ref=f2e330] [cursor=pointer]
+          - button "阻塞 0" [ref=f2e331] [cursor=pointer]
+          - button "不适用 0" [ref=f2e332] [cursor=pointer]
+    - main [ref=f2e189]:
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=f2e192]:
+        - generic [ref=f2e334]:
+          - generic [ref=f2e335]:
+            - generic "点击编辑" [ref=f2e336] [cursor=pointer]: 宝石解锁
+            - combobox "获取/解锁方式" [ref=f2e337]:
+              - option "未设置"
+              - option "碎片"
+              - option "宝石" [selected]
+              - option "付费"
+              - option "小鱼干"
+              - option "赛季商店"
+              - option "老皮肤赠送"
+              - option "条件解锁"
+            - generic "删除预设子项" [ref=f2e338] [cursor=pointer]: ×
+          - generic [ref=f2e339]:
+            - generic "点击编辑" [ref=f2e340] [cursor=pointer]: 付费解锁
+            - combobox "获取/解锁方式" [ref=f2e341]:
+              - option "未设置"
+              - option "碎片"
+              - option "宝石"
+              - option "付费" [selected]
+              - option "小鱼干"
+              - option "赛季商店"
+              - option "老皮肤赠送"
+              - option "条件解锁"
+            - generic "删除预设子项" [ref=f2e342] [cursor=pointer]: ×
+        - generic [ref=f2e343]:
+          - generic [ref=f2e344]: 显示 1-2 / 2 条，每页 20 条
+          - generic [ref=f2e345]:
+            - button "上一页" [disabled] [ref=f2e346]
+            - generic [ref=f2e347]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=f2e348]
+            - generic [ref=f2e349]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f2e350]: "1"
+              - text: 页
+        - table [ref=f2e351]:
+          - rowgroup [ref=f2e365]:
+            - row [ref=f2e366]:
+              - columnheader [ref=f2e367]:
+                - checkbox [ref=f2e368]
+              - columnheader "编号" [ref=f2e369]
+              - columnheader "模块" [ref=f2e370]
+              - columnheader "用例标题" [ref=f2e371]
+              - columnheader "优先级" [ref=f2e372]
+              - columnheader "前提条件" [ref=f2e373]
+              - columnheader "操作步骤" [ref=f2e374]
+              - columnheader "预期结果" [ref=f2e375]
+              - columnheader "实际结果" [ref=f2e376]
+              - columnheader "备注" [ref=f2e377]
+              - columnheader "缺陷链接" [ref=f2e378]
+              - columnheader "增删" [ref=f2e379]
+          - rowgroup [ref=f2e380]:
+            - row [ref=f2e381]:
+              - cell [ref=f2e382]:
+                - checkbox [ref=f2e383]
+              - cell "1" [ref=f2e384]
+              - cell "角色皮肤" [ref=f2e385]
+              - cell "验证宝石解锁皮肤" [ref=f2e386]
+              - cell "P1" [ref=f2e388]
+              - cell "账号已登录" [ref=f2e390]
+              - cell "进入皮肤页面并选择宝石解锁" [ref=f2e392]
+              - cell "皮肤解锁成功" [ref=f2e394]
+              - cell [ref=f2e396]:
+                - button "未执行" [ref=f2e397] [cursor=pointer]
+              - cell [ref=f2e398]:
+                - button "备注" [ref=f2e399] [cursor=pointer]
+              - cell [ref=f2e400]:
+                - button "缺陷链接" [ref=f2e401] [cursor=pointer]
+              - cell [ref=f2e402]:
+                - generic [ref=f2e403]:
+                  - button "−" [ref=f2e404] [cursor=pointer]
+                  - button "＋" [ref=f2e405] [cursor=pointer]
+            - row [ref=f2e406]:
+              - cell [ref=f2e407]:
+                - checkbox [ref=f2e408]
+              - cell "2" [ref=f2e409]
+              - cell "角色皮肤" [ref=f2e410]
+              - cell "验证付费解锁皮肤" [ref=f2e411]
+              - cell "P1" [ref=f2e413]
+              - cell "账号已登录" [ref=f2e415]
+              - cell "进入皮肤页面并选择付费解锁" [ref=f2e417]
+              - cell "皮肤解锁成功" [ref=f2e419]
+              - cell [ref=f2e421]:
+                - button "未执行" [ref=f2e422] [cursor=pointer]
+              - cell [ref=f2e423]:
+                - button "备注" [ref=f2e424] [cursor=pointer]
+              - cell [ref=f2e425]:
+                - button "缺陷链接" [ref=f2e426] [cursor=pointer]
+              - cell [ref=f2e427]:
+                - generic [ref=f2e428]:
+                  - button "−" [ref=f2e429] [cursor=pointer]
+                  - button "＋" [ref=f2e430] [cursor=pointer]
+        - generic [ref=f2e431]:
+          - generic [ref=f2e432]: 显示 1-2 / 2 条，每页 20 条
+          - generic [ref=f2e433]:
+            - button "上一页" [disabled] [ref=f2e434]
+            - generic [ref=f2e435]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=f2e436]
+            - generic [ref=f2e437]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f2e438]: "1"
+              - text: 页
+      - option "请选择版本" [selected]

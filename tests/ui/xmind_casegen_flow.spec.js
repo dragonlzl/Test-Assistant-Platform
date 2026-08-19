@@ -2916,7 +2916,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenManualRequirementText')).toHaveValue('这是页签B的需求描述');
   });
 
-  test('左下角 xmind 用例生成进度面板复用 XMind 页签摘要，并支持点击切换对应页签', async ({ page }) => {
+  test('首页生成进度复用 XMind 页签摘要，并支持点击切换对应页签', async ({ page }) => {
     const token = 'xmind-progress-panel-token';
     const user = { id: 8022, username: 'xmind-progress-panel' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
@@ -2933,22 +2933,22 @@ test.describe('XMind 用例生成抽屉', () => {
       completePrep: true,
     });
 
-    await expect(page.locator('#sidebarTabCasegen')).toContainText('xmind用例生成进度');
-    await expect(page.locator('#caseGenProgressPanel .title')).toHaveText('xmind用例生成进度');
-    await expect(page.locator('#caseGenProgressList [data-casegen-workspace]')).toHaveCount(2);
+    await expect(page.locator('#sidebarTabCasegen')).toHaveCount(0);
+    await expect(page.locator('#caseGenProgressPanel')).toHaveCount(0);
+    await expect(page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]')).toHaveCount(2);
 
     const summaries = await page.evaluate(() => {
       function normalizeText(text) {
         return String(text || '').replace(/\s+/g, ' ').trim();
       }
       var tabs = Array.prototype.map.call(
-        document.querySelectorAll('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab] .xmind-casegen-tab-label'),
+        document.querySelectorAll('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab] .xmind-casegen-tab-title'),
         function(node) {
           return normalizeText(node ? node.textContent : '');
         }
       );
       var panel = Array.prototype.map.call(
-        document.querySelectorAll('#caseGenProgressList [data-casegen-workspace] .titles'),
+        document.querySelectorAll('#xmindCaseGenHomeProgressList [data-casegen-home-workspace] .xmind-casegen-home-task-copy strong'),
         function(node) {
           return normalizeText(node ? node.textContent : '');
         }
@@ -2964,7 +2964,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
     await page.waitForTimeout(400);
 
-    await page.locator('#caseGenProgressList [data-casegen-workspace]').first().dispatchEvent('click');
+    await page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]').first().dispatchEvent('click');
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab].active')).toContainText('侧栏摘要-A');
   });
@@ -3338,7 +3338,7 @@ test.describe('XMind 用例生成抽屉', () => {
         && summary['缓存失败-B'].statusText === '未入库';
     }, {}, { timeout: 20000 });
 
-    const progressCards = page.locator('#caseGenProgressList [data-casegen-workspace]');
+    const progressCards = page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]');
     await expect(progressCards).toHaveCount(2);
     await expect(progressCards.first()).toContainText('缓存失败-A');
     await expect(progressCards.first()).toContainText('2 模块');
@@ -8527,10 +8527,10 @@ test.describe('XMind 用例生成抽屉', () => {
     });
     await waitXmindDrawerClosedStable(page);
 
-    const progressCardA = page.locator('#caseGenProgressList [data-casegen-workspace]', {
+    const progressCardA = page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]', {
       hasText: '空结果页签-A',
     }).first();
-    const progressCardB = page.locator('#caseGenProgressList [data-casegen-workspace]', {
+    const progressCardB = page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]', {
       hasText: '空结果页签-B',
     }).first();
 
@@ -8787,10 +8787,10 @@ test.describe('XMind 用例生成抽屉', () => {
     const successWorkspaceTab = page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]', {
       hasText: '成功页签-A',
     }).first();
-    const failedProgressCard = page.locator('#caseGenProgressList [data-casegen-workspace]', {
+    const failedProgressCard = page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]', {
       hasText: 'XMind补全失败需求',
     }).first();
-    const successProgressCard = page.locator('#caseGenProgressList [data-casegen-workspace]', {
+    const successProgressCard = page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]', {
       hasText: '成功页签-A',
     }).first();
 
@@ -8799,7 +8799,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(successWorkspaceTab).toContainText('未入库');
     await expect(failedProgressCard).toContainText('失败');
     await expect(successProgressCard).not.toContainText('失败');
-    await expect(successProgressCard).toContainText('未入库');
+    await expect(successProgressCard).toContainText('生成完成');
 
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
     const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
@@ -11459,7 +11459,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenInterruptBtn')).toBeDisabled();
   });
 
-  test('关闭 XMind 抽屉后，后台完成会同步左下角进度摘要', async ({ page }) => {
+  test('关闭 XMind 抽屉后，后台完成会同步首页进度摘要', async ({ page }) => {
     const token = 'token-xmind-progress-board-after-close';
     const user = { id: 307, username: 'demo_user_progress_board_after_close', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
@@ -11500,11 +11500,11 @@ test.describe('XMind 用例生成抽屉', () => {
         && String(item.statusText || '') === '未入库';
     }, {}, { timeout: 20000 });
 
-    const progressCard = page.locator('#caseGenProgressList [data-casegen-workspace]').first();
+    const progressCard = page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]').first();
     await expect(progressCard).toContainText('XMind后台摘要同步需求');
     await expect(progressCard).toContainText('2 模块');
     await expect(progressCard).toContainText('4 用例');
-    await expect(progressCard).toContainText('未入库');
+    await expect(progressCard).toContainText('生成完成');
     await expect(page.locator('#xmindCaseGenDrawer')).not.toHaveClass(/open/);
   });
 
@@ -11706,9 +11706,9 @@ test.describe('XMind 用例生成抽屉', () => {
       if (api && typeof api.close === 'function') api.close();
     });
     await waitXmindDrawerClosedStable(page);
-    const progressCardsBeforeComplete = page.locator('#caseGenProgressList [data-casegen-workspace]');
+    const progressCardsBeforeComplete = page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]');
     await expect(progressCardsBeforeComplete).toHaveCount(2);
-    var progressWorkspaceIdBeforeComplete = await progressCardsBeforeComplete.first().getAttribute('data-casegen-workspace');
+    var progressWorkspaceIdBeforeComplete = await progressCardsBeforeComplete.first().getAttribute('data-casegen-home-workspace');
     await page.evaluate((workspaceId) => {
       var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
       if (api && typeof api.openWorkspace === 'function') {
@@ -11785,10 +11785,10 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(taskStateAfterACompleted.runningCount).toBeGreaterThan(0);
     expect(taskStateAfterACompleted.terminalRootCount).toBe(0);
 
-    const progressCardsDuringRunning = page.locator('#caseGenProgressList [data-casegen-workspace]');
+    const progressCardsDuringRunning = page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]');
     await expect(progressCardsDuringRunning).toHaveCount(2);
 
-    var progressWorkspaceIdDuringRunningA = await progressCardsDuringRunning.first().getAttribute('data-casegen-workspace');
+    var progressWorkspaceIdDuringRunningA = await progressCardsDuringRunning.first().getAttribute('data-casegen-home-workspace');
     await page.evaluate((workspaceId) => {
       var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
       if (api && typeof api.openWorkspace === 'function') {
@@ -11806,7 +11806,7 @@ test.describe('XMind 用例生成抽屉', () => {
     });
     await waitXmindDrawerClosedStable(page);
 
-    var progressWorkspaceIdDuringRunningB = await progressCardsDuringRunning.nth(1).getAttribute('data-casegen-workspace');
+    var progressWorkspaceIdDuringRunningB = await progressCardsDuringRunning.nth(1).getAttribute('data-casegen-home-workspace');
     await page.evaluate((workspaceId) => {
       var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
       if (api && typeof api.openWorkspace === 'function') {
@@ -11936,7 +11936,7 @@ test.describe('XMind 用例生成抽屉', () => {
       },
     ]);
 
-    const progressCards = page.locator('#caseGenProgressList [data-casegen-workspace]');
+    const progressCards = page.locator('#xmindCaseGenHomeProgressList [data-casegen-home-workspace]');
     await expect(progressCards).toHaveCount(2);
     await expect(progressCards.nth(0)).toContainText('后台摘要-A');
     await expect(progressCards.nth(0)).toContainText('2 模块');
@@ -11945,7 +11945,7 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(progressCards.nth(1)).toContainText('2 模块');
     await expect(progressCards.nth(1)).toContainText('4 用例');
 
-    var progressWorkspaceIdFinalA = await progressCards.first().getAttribute('data-casegen-workspace');
+    var progressWorkspaceIdFinalA = await progressCards.first().getAttribute('data-casegen-home-workspace');
     await page.evaluate((workspaceId) => {
       var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
       if (api && typeof api.openWorkspace === 'function') {
@@ -11962,7 +11962,7 @@ test.describe('XMind 用例生成抽屉', () => {
     });
     await waitXmindDrawerClosedStable(page);
 
-    var progressWorkspaceIdFinalB = await progressCards.nth(1).getAttribute('data-casegen-workspace');
+    var progressWorkspaceIdFinalB = await progressCards.nth(1).getAttribute('data-casegen-home-workspace');
     await page.evaluate((workspaceId) => {
       var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
       if (api && typeof api.openWorkspace === 'function') {

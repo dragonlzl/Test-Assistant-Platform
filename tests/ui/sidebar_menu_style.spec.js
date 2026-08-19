@@ -44,49 +44,15 @@ async function setupRoutes(page) {
 }
 
 test.describe('侧边栏一级菜单样式', () => {
-  test('个人按钮文案与一级菜单描边（白色/黑色主题）', async ({ page }) => {
+  test('头像入口与无边框分类在白色/黑色主题下保持一致', async ({ page }) => {
     await setupRoutes(page);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(base + '/index.html');
     await waitForAppReady(page);
 
-    await expect(page.locator('#userMenuToggle')).toHaveText('个人');
+    await expect(page.locator('#userMenuToggle')).toHaveText('n');
 
     const styleSnapshot = await page.evaluate(() => {
-      function resolveColor(value) {
-        var temp = document.createElement('span');
-        temp.style.color = value;
-        document.body.appendChild(temp);
-        var color = getComputedStyle(temp).color;
-        document.body.removeChild(temp);
-        return color;
-      }
-
-      function parseColor(colorText) {
-        var raw = String(colorText || '').trim();
-        if (!raw || raw === 'transparent') return { r: 0, g: 0, b: 0, a: 0 };
-        var match = raw.match(/rgba?\(([^)]+)\)/);
-        if (match) {
-          var parts = match[1].split(',').map(function(item) { return parseFloat(String(item).trim()); });
-          return {
-            r: parts[0] || 0,
-            g: parts[1] || 0,
-            b: parts[2] || 0,
-            a: parts.length > 3 ? (parts[3] || 0) : 1,
-          };
-        }
-        var srgb = raw.match(/color\(\s*srgb\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)(?:\s*\/\s*([0-9.]+))?\s*\)/);
-        if (srgb) {
-          return {
-            r: Math.round((parseFloat(srgb[1]) || 0) * 255),
-            g: Math.round((parseFloat(srgb[2]) || 0) * 255),
-            b: Math.round((parseFloat(srgb[3]) || 0) * 255),
-            a: srgb[4] !== undefined ? (parseFloat(srgb[4]) || 0) : 1,
-          };
-        }
-        return { r: 0, g: 0, b: 0, a: 0 };
-      }
-
       function readStyles(theme) {
         if (theme) {
           document.documentElement.setAttribute('data-theme', theme);
@@ -96,17 +62,12 @@ test.describe('侧边栏一级菜单样式', () => {
           btn.classList.remove('active');
           btn.classList.remove('hovering');
         }
-        var rootStyle = getComputedStyle(document.documentElement);
-        var navColor = rootStyle.getPropertyValue('--nav-main-color').trim();
         return {
           theme: theme || 'light',
           fontFamily: getComputedStyle(btn).fontFamily,
           fontSize: getComputedStyle(btn).fontSize,
-          color: getComputedStyle(btn).color,
-          borderColor: getComputedStyle(btn).borderTopColor,
-          borderRgba: parseColor(getComputedStyle(btn).borderTopColor),
           borderWidth: getComputedStyle(btn).borderTopWidth,
-          expectedColor: resolveColor(navColor),
+          background: getComputedStyle(btn).backgroundColor,
         };
       }
 
@@ -116,19 +77,31 @@ test.describe('侧边栏一级菜单样式', () => {
       };
     });
 
-    expect(styleSnapshot.light.fontFamily).toContain('Noto Sans SC');
-    expect(styleSnapshot.light.fontSize).toBe('15px');
-    expect(styleSnapshot.light.color).toBe(styleSnapshot.light.expectedColor);
-    expect(styleSnapshot.light.borderRgba.a).toBeGreaterThan(0.3);
-    expect(styleSnapshot.light.borderRgba.b).toBeGreaterThan(styleSnapshot.light.borderRgba.g);
-    expect(styleSnapshot.light.borderRgba.b).toBeGreaterThan(styleSnapshot.light.borderRgba.r);
-    expect(styleSnapshot.light.borderWidth).toBe('1px');
-    expect(styleSnapshot.dark.fontFamily).toContain('Noto Sans SC');
-    expect(styleSnapshot.dark.fontSize).toBe('15px');
-    expect(styleSnapshot.dark.color).toBe(styleSnapshot.dark.expectedColor);
-    expect(styleSnapshot.dark.borderRgba.a).toBeGreaterThan(0.3);
-    expect(styleSnapshot.dark.borderRgba.b).toBeGreaterThan(styleSnapshot.dark.borderRgba.g);
-    expect(styleSnapshot.dark.borderRgba.b).toBeGreaterThan(styleSnapshot.dark.borderRgba.r);
-    expect(styleSnapshot.dark.borderWidth).toBe('1px');
+    expect(styleSnapshot.light.fontFamily).toContain('Geist Variable');
+    expect(styleSnapshot.light.fontSize).toBe('10px');
+    expect(styleSnapshot.light.borderWidth).toBe('0px');
+    expect(styleSnapshot.light.background).toBe('rgba(0, 0, 0, 0)');
+    expect(styleSnapshot.dark.fontFamily).toContain('Geist Variable');
+    expect(styleSnapshot.dark.fontSize).toBe('10px');
+    expect(styleSnapshot.dark.borderWidth).toBe('0px');
+    expect(styleSnapshot.dark.background).toBe('rgba(0, 0, 0, 0)');
+
+    const modelNotice = page.locator('[data-tab-btn="models"] .tab-notice');
+    await expect(modelNotice).toBeVisible();
+    const noticeBox = await modelNotice.boundingBox();
+    expect(noticeBox.width).toBeLessThanOrEqual(8);
+    expect(noticeBox.height).toBeLessThanOrEqual(8);
+    await expect(page.locator('[data-tab-btn="models"]')).toHaveAttribute('title', /未配置模型/);
+    await expect(page.locator('[data-tab-btn="models"]')).toHaveAttribute('aria-label', /未配置模型/);
+
+    await page.setViewportSize({ width: 760, height: 900 });
+    await page.reload();
+    await waitForAppReady(page);
+    const narrowButton = await page.locator('[data-tab-btn="models"]').boundingBox();
+    const narrowNotice = await page.locator('[data-tab-btn="models"] .tab-notice').boundingBox();
+    expect(narrowNotice.width).toBeLessThanOrEqual(8);
+    expect(narrowNotice.height).toBeLessThanOrEqual(8);
+    expect(narrowNotice.x).toBeGreaterThan(narrowButton.x + narrowButton.width - 20);
+    expect(narrowNotice.y).toBeLessThan(narrowButton.y + 16);
   });
 });

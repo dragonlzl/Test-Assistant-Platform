@@ -66,6 +66,32 @@ test.describe('模型管理与保留设置', () => {
     await page.click('#resetModelForm');
     await expect(formWrapper).toHaveClass(/hidden/);
   });
+
+  test('编辑模型时表单在对应模型下方原地展开', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
+    const createModel = async (name, key) => {
+      await page.click('#createModelBtn');
+      await page.fill('#modelDisplayName', name);
+      await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
+      await page.fill('#modelApiKey', key);
+      await page.fill('#modelIdentifier', 'deepseek-chat');
+      await page.click('#saveModelBtn');
+    };
+    await createModel('原地编辑模型 A', 'sk-a');
+    await createModel('原地编辑模型 B', 'sk-b');
+
+    const cards = page.locator('#modelList > .model-card[data-id]');
+    await cards.nth(1).locator('[data-edit]').click();
+    await expect(page.locator('#modelFormTitle')).toHaveText('编辑模型：原地编辑模型 B');
+    await expect(page.locator('#modelDisplayName')).toHaveValue('原地编辑模型 B');
+    await expect(cards.nth(1).locator('+ #modelFormWrapper')).toBeVisible();
+    await expect(page.locator('#modelFormWrapper')).toHaveCount(1);
+
+    await cards.nth(0).locator('[data-edit]').click();
+    await expect(page.locator('#modelDisplayName')).toHaveValue('原地编辑模型 A');
+    await expect(cards.nth(0).locator('+ #modelFormWrapper')).toBeVisible();
+    await expect(cards.nth(1).locator('+ #modelFormWrapper')).toHaveCount(0);
+  });
   test('XMind 鍚庡彴浠诲姟淇濈暀妯″瀷娴佸紡閰嶇疆', async ({ page }) => {
     const snapshot = await page.evaluate(() => {
       if (!window.app || !window.app.xmindCaseGenTaskManager || typeof window.app.xmindCaseGenTaskManager.createTask !== 'function') {
@@ -155,7 +181,7 @@ test.describe('模型管理与保留设置', () => {
     for (const sel of selects) {
       await page.selectOption(`#${sel}`, modelId);
     }
-    await page.click('#saveAssignments');
+    await page.locator('.assignment-feature-actions [data-save-assignments]').first().click();
     await expect(assignTab.locator('.tab-notice')).toHaveCount(0);
     const assignment = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
     expect(assignment.xmindCaseGenTemperature).toBeCloseTo(0.6);
@@ -204,10 +230,88 @@ test.describe('模型管理与保留设置', () => {
     await page.selectOption('#xmindCaseGenModelSelect', modelId);
     await expect(page.locator('.temp-center-toast', { hasText: '指派已保存' })).toHaveCount(0);
 
-    await page.locator('#saveAssignments').scrollIntoViewIfNeeded();
-    await page.click('#saveAssignments');
+    const featureSaveBtn = page.locator('.assignment-feature-actions [data-save-assignments]').first();
+    await featureSaveBtn.scrollIntoViewIfNeeded();
+    await featureSaveBtn.click();
     await expect(toast).toBeVisible();
     await expect(toast).toHaveCount(0, { timeout: 5000 });
+  });
+
+  test('功能指派使用分类导航和独立分区布局', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
+
+    const assignmentNav = page.locator('#assignmentHead [data-assignment-target]');
+    const assignmentSections = page.locator('[data-assignment-section]');
+    await expect(page.locator('#assignmentHead')).toBeVisible();
+    await expect(page.locator('body')).toHaveClass(/assignment-layout-active/);
+    await expect(assignmentNav).toHaveCount(5);
+    await expect(assignmentSections).toHaveCount(5);
+    await expect(page.locator('#assignmentHead .nav-entry-icon svg')).toHaveCount(5);
+
+    await page.click('#assignmentNavMissingBtn');
+    await expect(page.locator('#assignmentNavMissingBtn')).toHaveAttribute('aria-current', 'page');
+    await expect.poll(async () => {
+      return page.locator('#assignmentMissingSection').evaluate((section) => section.getBoundingClientRect().top);
+    }).toBeLessThan(360);
+
+    await page.setViewportSize({ width: 720, height: 720 });
+    const narrowMetrics = await page.evaluate(() => {
+      const head = document.getElementById('assignmentHead');
+      const nav = head ? head.querySelector('.assignment-nav-grid') : null;
+      return {
+        headHeight: head ? head.getBoundingClientRect().height : 0,
+        navDirection: nav ? window.getComputedStyle(nav).flexDirection : '',
+        overflow: document.documentElement.scrollWidth - window.innerWidth,
+      };
+    });
+    expect(narrowMetrics.headHeight).toBeLessThan(90);
+    expect(narrowMetrics.navDirection).toBe('row');
+    expect(narrowMetrics.overflow).toBeLessThanOrEqual(1);
+  });
+
+  test('每个功能区都可保存整页指派', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
+    const featureCards = page.locator('[data-tab-section="assign"] .model-card').filter({
+      has: page.locator('textarea.small-textarea')
+    });
+    await expect(featureCards).toHaveCount(4);
+    await expect(featureCards.locator('[data-save-assignments]')).toHaveCount(4);
+    await expect(page.locator('#saveAssignments')).toHaveCount(0);
+    const globalConfirmBtn = page.locator('#applyGlobalAssignBtn');
+    const featureSaveBtn = featureCards.first().locator('[data-save-assignments]');
+    await expect(page.locator('#globalAssignModelSelect + #applyGlobalAssignBtn')).toHaveCount(0);
+    await expect(page.locator('.assignment-feature-actions #applyGlobalAssignBtn')).toBeVisible();
+    const globalConfirmBox = await globalConfirmBtn.boundingBox();
+    const featureSaveBox = await featureSaveBtn.boundingBox();
+    expect(globalConfirmBox && featureSaveBox).toBeTruthy();
+    expect(globalConfirmBox.width).toBe(featureSaveBox.width);
+    expect(globalConfirmBox.height).toBe(featureSaveBox.height);
+    const buttonBackgrounds = await page.evaluate(() => {
+      const confirmBtn = document.getElementById('applyGlobalAssignBtn');
+      const saveBtn = document.querySelector('.assignment-feature-actions [data-save-assignments]');
+      return [window.getComputedStyle(confirmBtn).backgroundColor, window.getComputedStyle(saveBtn).backgroundColor];
+    });
+    expect(buttonBackgrounds[0]).toBe(buttonBackgrounds[1]);
+    await globalConfirmBtn.click();
+    await expect(page.locator('#globalAssignStatus')).toContainText('请先选择一个模型');
+    for (let index = 0; index < 4; index += 1) {
+      const buttons = featureCards.nth(index).locator('.assignment-feature-actions button');
+      const testButtonBox = await buttons.nth(0).boundingBox();
+      const saveButtonBox = await buttons.nth(1).boundingBox();
+      expect(testButtonBox && saveButtonBox).toBeTruthy();
+      expect(testButtonBox.width).toBe(saveButtonBox.width);
+      expect(testButtonBox.height).toBe(saveButtonBox.height);
+    }
+
+    await page.fill('#xmindCaseGenPrompt', '来自卡片按钮的全量保存');
+    await page.fill('#caseLibraryGenTemperature', '0.7');
+    await featureCards.nth(2).locator('[data-save-assignments]').click();
+    await expect(page.locator('.temp-center-toast.ok', { hasText: '指派已保存' })).toBeVisible();
+
+    const assignment = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
+    expect(assignment.xmindCaseGenPrompt).toBe('来自卡片按钮的全量保存');
+    expect(assignment.caseLibraryGenTemperature).toBeCloseTo(0.7);
   });
 
   test('未指派提示点击页签自动定位到保存按钮', async ({ page }) => {
@@ -251,7 +355,7 @@ test.describe('模型管理与保留设置', () => {
     for (const sel of selectIds) {
       await page.selectOption(`#${sel}`, modelId);
     }
-    await page.click('#saveAssignments');
+    await page.locator('.assignment-feature-actions [data-save-assignments]').first().click();
     await expect(page.locator('[data-tab-btn="assign"]').locator('.tab-notice')).toHaveCount(0);
 
     const storedModels = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]'));

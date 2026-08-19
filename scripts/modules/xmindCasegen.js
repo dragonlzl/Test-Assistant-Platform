@@ -9282,6 +9282,74 @@
       return String(xmind.summaryResultKind || '') === 'error';
     }
 
+    function clampWorkspaceProgressPercent(value) {
+      var number = Number(value);
+      if (!Number.isFinite(number)) return 0;
+      return Math.max(0, Math.min(100, Math.round(number)));
+    }
+
+    function getWorkspaceProgressPipeline(record, useLiveState) {
+      if (useLiveState === true) return getRootPipelineState();
+      var snapshot = record && record.snapshot && typeof record.snapshot === 'object'
+        ? record.snapshot
+        : {};
+      var xmind = snapshot.xmind && typeof snapshot.xmind === 'object' ? snapshot.xmind : {};
+      var root = xmind.root && typeof xmind.root === 'object' ? xmind.root : {};
+      return root.pipeline && typeof root.pipeline === 'object' ? root.pipeline : null;
+    }
+
+    function deriveWorkspaceProgress(summary, pipeline) {
+      var source = summary && typeof summary === 'object' ? summary : {};
+      var statusCls = String(source.statusCls || 'is-idle');
+      var statusText = String(source.statusText || '待准备');
+      var stage = pipeline && pipeline.stage ? String(pipeline.stage || '') : '';
+      var percent = 0;
+      var label = statusText;
+
+      if (statusCls === 'is-running') {
+        if (statusText === '覆盖中') {
+          percent = 88;
+          label = '需求覆盖分析';
+        } else if (statusText === '去重中' || stage === 'deduping') {
+          percent = 92;
+          label = 'AI 用例去重';
+        } else if (stage === 'discovering') {
+          percent = 20;
+          label = '分析需求模块';
+        } else if (stage === 'modules') {
+          var total = Math.max(0, Number(pipeline && pipeline.moduleTaskTotal || 0));
+          var completed = Math.max(0, Number(pipeline && pipeline.moduleTaskCompleted || 0));
+          var ratio = total > 0 ? Math.min(completed, total) / total : 0.35;
+          percent = 35 + ratio * 50;
+          label = total > 0
+            ? ('生成模块用例 ' + String(Math.min(completed, total)) + '/' + String(total))
+            : '生成模块用例';
+        } else {
+          percent = 55;
+          label = '生成用例';
+        }
+      } else if (statusCls === 'is-error') {
+        percent = stage === 'deduping' ? 92 : (stage === 'modules' ? 55 : 0);
+        label = '生成失败';
+      } else if (statusCls === 'is-dirty') {
+        percent = 100;
+        label = '生成完成';
+      } else if (statusCls === 'is-ready') {
+        percent = 20;
+        label = '准备完成';
+      } else if (statusCls === 'is-draft') {
+        percent = 10;
+        label = '准备中';
+      } else {
+        label = '等待开始';
+      }
+
+      return {
+        progressPercent: clampWorkspaceProgressPercent(percent),
+        progressLabel: label,
+      };
+    }
+
     function listWorkspaceProgressItems() {
       var host = ensureWorkspaceHostState();
       var activeId = String(getWorkspaceUiSelectedId() || '');
@@ -9297,6 +9365,10 @@
           dirty: dirty,
           live: canUseLiveSummary && String(id || '') === liveWorkspaceId,
         });
+        var progress = deriveWorkspaceProgress(
+          summary,
+          getWorkspaceProgressPipeline(record, canUseLiveSummary && String(id || '') === liveWorkspaceId)
+        );
         return {
           id: id,
           active: id === activeId,
@@ -9307,6 +9379,8 @@
           caseCount: summary.caseCount,
           running: running,
           dirty: dirty,
+          progressPercent: progress.progressPercent,
+          progressLabel: progress.progressLabel,
         };
       }).filter(function(item) {
         return Boolean(item);

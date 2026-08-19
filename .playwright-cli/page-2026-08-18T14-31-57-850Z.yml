@@ -1,0 +1,649 @@
+- generic [ref=f1e2]:
+  - complementary [ref=f1e3]:
+    - heading "用例助手" [level=1] [ref=f1e5]:
+      - generic [ref=f1e6]: T
+    - navigation [ref=f1e8]:
+      - generic [ref=f1e9]:
+        - heading "AI 功能" [level=2] [ref=f1e10]
+        - generic [ref=f1e12]:
+          - button "用例生成" [ref=f1e13] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f1e20] [cursor=pointer]:
+            - generic [ref=f1e27]: 功能指派
+            - generic [ref=f1e28]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f1e29] [cursor=pointer]:
+            - generic [ref=f1e34]: 模型管理
+            - generic [ref=f1e35]: 未配置模型
+      - generic [ref=f1e36]:
+        - heading "用例相关" [level=2] [ref=f1e37]
+        - generic [ref=f1e38]:
+          - button "用例执行" [ref=f1e39] [cursor=pointer]
+          - button "用例库" [ref=f1e45] [cursor=pointer]
+          - button "用例归档" [ref=f1e50] [cursor=pointer]
+          - button "执行总览" [ref=f1e56] [cursor=pointer]
+      - generic [ref=f1e61]:
+        - heading "管理" [level=2] [ref=f1e62]
+        - generic [ref=f1e63]:
+          - button "项目管理" [ref=f1e64] [cursor=pointer]
+          - button "人员管理" [ref=f1e70] [cursor=pointer]
+          - button "操作记录" [ref=f1e78] [cursor=pointer]
+      - generic [ref=f1e84]:
+        - heading "设置" [level=2] [ref=f1e85]
+        - button "通用设置" [ref=f1e87] [cursor=pointer]
+    - generic "个人工具" [ref=f1e94]:
+      - button "生成进度" [ref=f1e95] [cursor=pointer]
+      - button "个人备忘" [ref=f1e102] [cursor=pointer]
+    - generic [ref=f1e107]:
+      - generic [ref=f1e108]: 当前用户
+      - button "用户菜单" [ref=f1e109] [cursor=pointer]:
+        - generic [ref=f1e110]: u
+      - menu:
+        - generic:
+          - generic: u
+          - generic:
+            - strong: ui_admin
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f1e111]:
+    - heading "用例执行" [level=2] [ref=f1e113]
+    - navigation "用例执行快捷入口" [ref=f1e114]:
+      - generic [ref=f1e115]:
+        - generic [ref=f1e116] [cursor=pointer]: 专注区
+        - generic [ref=f1e118]: 暂无专注用例
+      - generic [ref=f1e120]:
+        - button "用例导入" [ref=f1e121] [cursor=pointer]
+        - button "选择用例执行" [ref=f1e127] [cursor=pointer]
+        - button "执行分配" [ref=f1e133] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f1e139] [cursor=pointer]
+  - generic [ref=f1e147]:
+    - generic [ref=f1e148]:
+      - banner [ref=f1e149]:
+        - heading "项目 元气骑士 版本 912 用例 2025年11月新皮肤" [level=1] [ref=f1e150]:
+          - generic [ref=f1e151]:
+            - generic [ref=f1e152]: 项目
+            - strong [ref=f1e153]: 元气骑士
+          - generic [ref=f1e154]: /
+          - generic [ref=f1e155]:
+            - generic [ref=f1e156]: 版本
+            - strong [ref=f1e157]: "912"
+          - generic [ref=f1e158]: /
+          - generic [ref=f1e159]:
+            - generic [ref=f1e160]: 用例
+            - strong [ref=f1e161]: 2025年11月新皮肤
+      - generic [ref=f1e164]:
+        - generic [ref=f1e165]:
+          - textbox "搜索用例关键字" [ref=f1e167]
+          - generic [ref=f1e168] [cursor=pointer]:
+            - checkbox "用例复用" [ref=f1e169]
+            - generic [ref=f1e170]: 用例复用
+          - generic [ref=f1e171] [cursor=pointer]:
+            - checkbox "显示易漏用例参考" [ref=f1e172]
+            - generic [ref=f1e173]: 易漏用例参考
+          - generic [ref=f1e174]:
+            - group "切换用例" [ref=f1e175]:
+              - generic [ref=f1e176]: 用例切换：
+              - button "上一份" [ref=f1e177] [cursor=pointer]
+              - button "下一份" [ref=f1e178] [cursor=pointer]
+            - button "归档" [ref=f1e180] [cursor=pointer]
+            - generic [ref=f1e181]:
+              - button "更多操作" [expanded] [active] [ref=f1e182] [cursor=pointer]
+              - menu "更多操作" [ref=f1e742]:
+                - button "AI 用例生成" [ref=f1e744]
+                - button "XMind结构展示" [ref=f1e746] [cursor=pointer]
+                - button "用例变更" [ref=f1e748] [cursor=pointer]
+                - generic [ref=f1e749]:
+                  - button "导出XMind" [ref=f1e750] [cursor=pointer]
+                  - button "导出XMind（无结果）" [ref=f1e751] [cursor=pointer]
+        - generic [ref=f1e185]:
+          - button "已执行 0" [ref=f1e186] [cursor=pointer]
+          - button "未执行 40" [ref=f1e187] [cursor=pointer]
+          - button "通过 0" [ref=f1e188] [cursor=pointer]
+          - button "失败 0" [ref=f1e189] [cursor=pointer]
+          - button "阻塞 0" [ref=f1e190] [cursor=pointer]
+          - button "不适用 0" [ref=f1e191] [cursor=pointer]
+    - main [ref=f1e192]:
+      - option "请选择项目" [selected]
+      - option "元气骑士"
+      - option "请选择版本" [selected]
+      - generic [ref=f1e195]:
+        - generic [ref=f1e196]:
+          - generic [ref=f1e197]: 显示 1-20 / 40 条，每页 20 条
+          - generic [ref=f1e198]:
+            - button "上一页" [disabled] [ref=f1e199]
+            - generic [ref=f1e200]: 第 1 / 2 页
+            - button "下一页" [ref=f1e201] [cursor=pointer]
+            - generic [ref=f1e202]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f1e203]: "1"
+              - text: 页
+        - table [ref=f1e204]:
+          - rowgroup [ref=f1e218]:
+            - row [ref=f1e219]:
+              - columnheader [ref=f1e220]:
+                - checkbox [ref=f1e221]
+              - columnheader "编号" [ref=f1e222]
+              - columnheader "模块" [ref=f1e223]
+              - columnheader "用例标题" [ref=f1e224]
+              - columnheader "优先级" [ref=f1e225]
+              - columnheader "前提条件" [ref=f1e226]
+              - columnheader "操作步骤" [ref=f1e227]
+              - columnheader "预期结果" [ref=f1e228]
+              - columnheader "实际结果" [ref=f1e229]
+              - columnheader "备注" [ref=f1e230]
+              - columnheader "缺陷链接" [ref=f1e231]
+              - columnheader "增删" [ref=f1e232]
+          - rowgroup [ref=f1e233]:
+            - row [ref=f1e234]:
+              - cell [ref=f1e235]:
+                - checkbox [ref=f1e236]
+              - cell "1" [ref=f1e237]
+              - cell "碎片皮肤" [ref=f1e238]
+              - cell "角色皮肤验证用例1" [ref=f1e239]
+              - cell "P1" [ref=f1e241]
+              - cell "已进入角色皮肤页面" [ref=f1e243]
+              - cell "执行验证步骤1" [ref=f1e245]
+              - cell "结果符合预期" [ref=f1e247]
+              - cell "未执行" [ref=f1e249]:
+                - combobox [ref=f1e250]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e251]:
+                - button "备注" [ref=f1e252] [cursor=pointer]
+              - cell [ref=f1e253]:
+                - button "缺陷链接" [ref=f1e254] [cursor=pointer]
+              - cell [ref=f1e255]:
+                - generic [ref=f1e256]:
+                  - button "−" [ref=f1e257] [cursor=pointer]
+                  - button "＋" [ref=f1e258] [cursor=pointer]
+            - row [ref=f1e259]:
+              - cell [ref=f1e260]:
+                - checkbox [ref=f1e261]
+              - cell "2" [ref=f1e262]
+              - cell "宝石皮肤" [ref=f1e263]
+              - cell "角色皮肤验证用例2" [ref=f1e264]
+              - cell "P1" [ref=f1e266]
+              - cell "已进入角色皮肤页面" [ref=f1e268]
+              - cell "执行验证步骤2" [ref=f1e270]
+              - cell "结果符合预期" [ref=f1e272]
+              - cell "未执行" [ref=f1e274]:
+                - combobox [ref=f1e275]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e276]:
+                - button "备注" [ref=f1e277] [cursor=pointer]
+              - cell [ref=f1e278]:
+                - button "缺陷链接" [ref=f1e279] [cursor=pointer]
+              - cell [ref=f1e280]:
+                - generic [ref=f1e281]:
+                  - button "−" [ref=f1e282] [cursor=pointer]
+                  - button "＋" [ref=f1e283] [cursor=pointer]
+            - row [ref=f1e284]:
+              - cell [ref=f1e285]:
+                - checkbox [ref=f1e286]
+              - cell "3" [ref=f1e287]
+              - cell "碎片皮肤" [ref=f1e288]
+              - cell "角色皮肤验证用例3" [ref=f1e289]
+              - cell "P1" [ref=f1e291]
+              - cell "已进入角色皮肤页面" [ref=f1e293]
+              - cell "执行验证步骤3" [ref=f1e295]
+              - cell "结果符合预期" [ref=f1e297]
+              - cell "未执行" [ref=f1e299]:
+                - combobox [ref=f1e300]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e301]:
+                - button "备注" [ref=f1e302] [cursor=pointer]
+              - cell [ref=f1e303]:
+                - button "缺陷链接" [ref=f1e304] [cursor=pointer]
+              - cell [ref=f1e305]:
+                - generic [ref=f1e306]:
+                  - button "−" [ref=f1e307] [cursor=pointer]
+                  - button "＋" [ref=f1e308] [cursor=pointer]
+            - row [ref=f1e309]:
+              - cell [ref=f1e310]:
+                - checkbox [ref=f1e311]
+              - cell "4" [ref=f1e312]
+              - cell "宝石皮肤" [ref=f1e313]
+              - cell "角色皮肤验证用例4" [ref=f1e314]
+              - cell "P1" [ref=f1e316]
+              - cell "已进入角色皮肤页面" [ref=f1e318]
+              - cell "执行验证步骤4" [ref=f1e320]
+              - cell "结果符合预期" [ref=f1e322]
+              - cell "未执行" [ref=f1e324]:
+                - combobox [ref=f1e325]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e326]:
+                - button "备注" [ref=f1e327] [cursor=pointer]
+              - cell [ref=f1e328]:
+                - button "缺陷链接" [ref=f1e329] [cursor=pointer]
+              - cell [ref=f1e330]:
+                - generic [ref=f1e331]:
+                  - button "−" [ref=f1e332] [cursor=pointer]
+                  - button "＋" [ref=f1e333] [cursor=pointer]
+            - row [ref=f1e334]:
+              - cell [ref=f1e335]:
+                - checkbox [ref=f1e336]
+              - cell "5" [ref=f1e337]
+              - cell "碎片皮肤" [ref=f1e338]
+              - cell "角色皮肤验证用例5" [ref=f1e339]
+              - cell "P1" [ref=f1e341]
+              - cell "已进入角色皮肤页面" [ref=f1e343]
+              - cell "执行验证步骤5" [ref=f1e345]
+              - cell "结果符合预期" [ref=f1e347]
+              - cell "未执行" [ref=f1e349]:
+                - combobox [ref=f1e350]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e351]:
+                - button "备注" [ref=f1e352] [cursor=pointer]
+              - cell [ref=f1e353]:
+                - button "缺陷链接" [ref=f1e354] [cursor=pointer]
+              - cell [ref=f1e355]:
+                - generic [ref=f1e356]:
+                  - button "−" [ref=f1e357] [cursor=pointer]
+                  - button "＋" [ref=f1e358] [cursor=pointer]
+            - row [ref=f1e359]:
+              - cell [ref=f1e360]:
+                - checkbox [ref=f1e361]
+              - cell "6" [ref=f1e362]
+              - cell "宝石皮肤" [ref=f1e363]
+              - cell "角色皮肤验证用例6" [ref=f1e364]
+              - cell "P1" [ref=f1e366]
+              - cell "已进入角色皮肤页面" [ref=f1e368]
+              - cell "执行验证步骤6" [ref=f1e370]
+              - cell "结果符合预期" [ref=f1e372]
+              - cell "未执行" [ref=f1e374]:
+                - combobox [ref=f1e375]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e376]:
+                - button "备注" [ref=f1e377] [cursor=pointer]
+              - cell [ref=f1e378]:
+                - button "缺陷链接" [ref=f1e379] [cursor=pointer]
+              - cell [ref=f1e380]:
+                - generic [ref=f1e381]:
+                  - button "−" [ref=f1e382] [cursor=pointer]
+                  - button "＋" [ref=f1e383] [cursor=pointer]
+            - row [ref=f1e384]:
+              - cell [ref=f1e385]:
+                - checkbox [ref=f1e386]
+              - cell "7" [ref=f1e387]
+              - cell "碎片皮肤" [ref=f1e388]
+              - cell "角色皮肤验证用例7" [ref=f1e389]
+              - cell "P1" [ref=f1e391]
+              - cell "已进入角色皮肤页面" [ref=f1e393]
+              - cell "执行验证步骤7" [ref=f1e395]
+              - cell "结果符合预期" [ref=f1e397]
+              - cell "未执行" [ref=f1e399]:
+                - combobox [ref=f1e400]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e401]:
+                - button "备注" [ref=f1e402] [cursor=pointer]
+              - cell [ref=f1e403]:
+                - button "缺陷链接" [ref=f1e404] [cursor=pointer]
+              - cell [ref=f1e405]:
+                - generic [ref=f1e406]:
+                  - button "−" [ref=f1e407] [cursor=pointer]
+                  - button "＋" [ref=f1e408] [cursor=pointer]
+            - row [ref=f1e409]:
+              - cell [ref=f1e410]:
+                - checkbox [ref=f1e411]
+              - cell "8" [ref=f1e412]
+              - cell "宝石皮肤" [ref=f1e413]
+              - cell "角色皮肤验证用例8" [ref=f1e414]
+              - cell "P1" [ref=f1e416]
+              - cell "已进入角色皮肤页面" [ref=f1e418]
+              - cell "执行验证步骤8" [ref=f1e420]
+              - cell "结果符合预期" [ref=f1e422]
+              - cell "未执行" [ref=f1e424]:
+                - combobox [ref=f1e425]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e426]:
+                - button "备注" [ref=f1e427] [cursor=pointer]
+              - cell [ref=f1e428]:
+                - button "缺陷链接" [ref=f1e429] [cursor=pointer]
+              - cell [ref=f1e430]:
+                - generic [ref=f1e431]:
+                  - button "−" [ref=f1e432] [cursor=pointer]
+                  - button "＋" [ref=f1e433] [cursor=pointer]
+            - row [ref=f1e434]:
+              - cell [ref=f1e435]:
+                - checkbox [ref=f1e436]
+              - cell "9" [ref=f1e437]
+              - cell "碎片皮肤" [ref=f1e438]
+              - cell "角色皮肤验证用例9" [ref=f1e439]
+              - cell "P1" [ref=f1e441]
+              - cell "已进入角色皮肤页面" [ref=f1e443]
+              - cell "执行验证步骤9" [ref=f1e445]
+              - cell "结果符合预期" [ref=f1e447]
+              - cell "未执行" [ref=f1e449]:
+                - combobox [ref=f1e450]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e451]:
+                - button "备注" [ref=f1e452] [cursor=pointer]
+              - cell [ref=f1e453]:
+                - button "缺陷链接" [ref=f1e454] [cursor=pointer]
+              - cell [ref=f1e455]:
+                - generic [ref=f1e456]:
+                  - button "−" [ref=f1e457] [cursor=pointer]
+                  - button "＋" [ref=f1e458] [cursor=pointer]
+            - row [ref=f1e459]:
+              - cell [ref=f1e460]:
+                - checkbox [ref=f1e461]
+              - cell "10" [ref=f1e462]
+              - cell "宝石皮肤" [ref=f1e463]
+              - cell "角色皮肤验证用例10" [ref=f1e464]
+              - cell "P1" [ref=f1e466]
+              - cell "已进入角色皮肤页面" [ref=f1e468]
+              - cell "执行验证步骤10" [ref=f1e470]
+              - cell "结果符合预期" [ref=f1e472]
+              - cell "未执行" [ref=f1e474]:
+                - combobox [ref=f1e475]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e476]:
+                - button "备注" [ref=f1e477] [cursor=pointer]
+              - cell [ref=f1e478]:
+                - button "缺陷链接" [ref=f1e479] [cursor=pointer]
+              - cell [ref=f1e480]:
+                - generic [ref=f1e481]:
+                  - button "−" [ref=f1e482] [cursor=pointer]
+                  - button "＋" [ref=f1e483] [cursor=pointer]
+            - row [ref=f1e484]:
+              - cell [ref=f1e485]:
+                - checkbox [ref=f1e486]
+              - cell "11" [ref=f1e487]
+              - cell "碎片皮肤" [ref=f1e488]
+              - cell "角色皮肤验证用例11" [ref=f1e489]
+              - cell "P1" [ref=f1e491]
+              - cell "已进入角色皮肤页面" [ref=f1e493]
+              - cell "执行验证步骤11" [ref=f1e495]
+              - cell "结果符合预期" [ref=f1e497]
+              - cell "未执行" [ref=f1e499]:
+                - combobox [ref=f1e500]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e501]:
+                - button "备注" [ref=f1e502] [cursor=pointer]
+              - cell [ref=f1e503]:
+                - button "缺陷链接" [ref=f1e504] [cursor=pointer]
+              - cell [ref=f1e505]:
+                - generic [ref=f1e506]:
+                  - button "−" [ref=f1e507] [cursor=pointer]
+                  - button "＋" [ref=f1e508] [cursor=pointer]
+            - row [ref=f1e509]:
+              - cell [ref=f1e510]:
+                - checkbox [ref=f1e511]
+              - cell "12" [ref=f1e512]
+              - cell "宝石皮肤" [ref=f1e513]
+              - cell "角色皮肤验证用例12" [ref=f1e514]
+              - cell "P1" [ref=f1e516]
+              - cell "已进入角色皮肤页面" [ref=f1e518]
+              - cell "执行验证步骤12" [ref=f1e520]
+              - cell "结果符合预期" [ref=f1e522]
+              - cell "未执行" [ref=f1e524]:
+                - combobox [ref=f1e525]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e526]:
+                - button "备注" [ref=f1e527] [cursor=pointer]
+              - cell [ref=f1e528]:
+                - button "缺陷链接" [ref=f1e529] [cursor=pointer]
+              - cell [ref=f1e530]:
+                - generic [ref=f1e531]:
+                  - button "−" [ref=f1e532] [cursor=pointer]
+                  - button "＋" [ref=f1e533] [cursor=pointer]
+            - row [ref=f1e534]:
+              - cell [ref=f1e535]:
+                - checkbox [ref=f1e536]
+              - cell "13" [ref=f1e537]
+              - cell "碎片皮肤" [ref=f1e538]
+              - cell "角色皮肤验证用例13" [ref=f1e539]
+              - cell "P1" [ref=f1e541]
+              - cell "已进入角色皮肤页面" [ref=f1e543]
+              - cell "执行验证步骤13" [ref=f1e545]
+              - cell "结果符合预期" [ref=f1e547]
+              - cell "未执行" [ref=f1e549]:
+                - combobox [ref=f1e550]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e551]:
+                - button "备注" [ref=f1e552] [cursor=pointer]
+              - cell [ref=f1e553]:
+                - button "缺陷链接" [ref=f1e554] [cursor=pointer]
+              - cell [ref=f1e555]:
+                - generic [ref=f1e556]:
+                  - button "−" [ref=f1e557] [cursor=pointer]
+                  - button "＋" [ref=f1e558] [cursor=pointer]
+            - row [ref=f1e559]:
+              - cell [ref=f1e560]:
+                - checkbox [ref=f1e561]
+              - cell "14" [ref=f1e562]
+              - cell "宝石皮肤" [ref=f1e563]
+              - cell "角色皮肤验证用例14" [ref=f1e564]
+              - cell "P1" [ref=f1e566]
+              - cell "已进入角色皮肤页面" [ref=f1e568]
+              - cell "执行验证步骤14" [ref=f1e570]
+              - cell "结果符合预期" [ref=f1e572]
+              - cell "未执行" [ref=f1e574]:
+                - combobox [ref=f1e575]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e576]:
+                - button "备注" [ref=f1e577] [cursor=pointer]
+              - cell [ref=f1e578]:
+                - button "缺陷链接" [ref=f1e579] [cursor=pointer]
+              - cell [ref=f1e580]:
+                - generic [ref=f1e581]:
+                  - button "−" [ref=f1e582] [cursor=pointer]
+                  - button "＋" [ref=f1e583] [cursor=pointer]
+            - row [ref=f1e584]:
+              - cell [ref=f1e585]:
+                - checkbox [ref=f1e586]
+              - cell "15" [ref=f1e587]
+              - cell "碎片皮肤" [ref=f1e588]
+              - cell "角色皮肤验证用例15" [ref=f1e589]
+              - cell "P1" [ref=f1e591]
+              - cell "已进入角色皮肤页面" [ref=f1e593]
+              - cell "执行验证步骤15" [ref=f1e595]
+              - cell "结果符合预期" [ref=f1e597]
+              - cell "未执行" [ref=f1e599]:
+                - combobox [ref=f1e600]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e601]:
+                - button "备注" [ref=f1e602] [cursor=pointer]
+              - cell [ref=f1e603]:
+                - button "缺陷链接" [ref=f1e604] [cursor=pointer]
+              - cell [ref=f1e605]:
+                - generic [ref=f1e606]:
+                  - button "−" [ref=f1e607] [cursor=pointer]
+                  - button "＋" [ref=f1e608] [cursor=pointer]
+            - row [ref=f1e609]:
+              - cell [ref=f1e610]:
+                - checkbox [ref=f1e611]
+              - cell "16" [ref=f1e612]
+              - cell "宝石皮肤" [ref=f1e613]
+              - cell "角色皮肤验证用例16" [ref=f1e614]
+              - cell "P1" [ref=f1e616]
+              - cell "已进入角色皮肤页面" [ref=f1e618]
+              - cell "执行验证步骤16" [ref=f1e620]
+              - cell "结果符合预期" [ref=f1e622]
+              - cell "未执行" [ref=f1e624]:
+                - combobox [ref=f1e625]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e626]:
+                - button "备注" [ref=f1e627] [cursor=pointer]
+              - cell [ref=f1e628]:
+                - button "缺陷链接" [ref=f1e629] [cursor=pointer]
+              - cell [ref=f1e630]:
+                - generic [ref=f1e631]:
+                  - button "−" [ref=f1e632] [cursor=pointer]
+                  - button "＋" [ref=f1e633] [cursor=pointer]
+            - row [ref=f1e634]:
+              - cell [ref=f1e635]:
+                - checkbox [ref=f1e636]
+              - cell "17" [ref=f1e637]
+              - cell "碎片皮肤" [ref=f1e638]
+              - cell "角色皮肤验证用例17" [ref=f1e639]
+              - cell "P1" [ref=f1e641]
+              - cell "已进入角色皮肤页面" [ref=f1e643]
+              - cell "执行验证步骤17" [ref=f1e645]
+              - cell "结果符合预期" [ref=f1e647]
+              - cell "未执行" [ref=f1e649]:
+                - combobox [ref=f1e650]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e651]:
+                - button "备注" [ref=f1e652] [cursor=pointer]
+              - cell [ref=f1e653]:
+                - button "缺陷链接" [ref=f1e654] [cursor=pointer]
+              - cell [ref=f1e655]:
+                - generic [ref=f1e656]:
+                  - button "−" [ref=f1e657] [cursor=pointer]
+                  - button "＋" [ref=f1e658] [cursor=pointer]
+            - row [ref=f1e659]:
+              - cell [ref=f1e660]:
+                - checkbox [ref=f1e661]
+              - cell "18" [ref=f1e662]
+              - cell "宝石皮肤" [ref=f1e663]
+              - cell "角色皮肤验证用例18" [ref=f1e664]
+              - cell "P1" [ref=f1e666]
+              - cell "已进入角色皮肤页面" [ref=f1e668]
+              - cell "执行验证步骤18" [ref=f1e670]
+              - cell "结果符合预期" [ref=f1e672]
+              - cell "未执行" [ref=f1e674]:
+                - combobox [ref=f1e675]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e676]:
+                - button "备注" [ref=f1e677] [cursor=pointer]
+              - cell [ref=f1e678]:
+                - button "缺陷链接" [ref=f1e679] [cursor=pointer]
+              - cell [ref=f1e680]:
+                - generic [ref=f1e681]:
+                  - button "−" [ref=f1e682] [cursor=pointer]
+                  - button "＋" [ref=f1e683] [cursor=pointer]
+            - row [ref=f1e684]:
+              - cell [ref=f1e685]:
+                - checkbox [ref=f1e686]
+              - cell "19" [ref=f1e687]
+              - cell "碎片皮肤" [ref=f1e688]
+              - cell "角色皮肤验证用例19" [ref=f1e689]
+              - cell "P1" [ref=f1e691]
+              - cell "已进入角色皮肤页面" [ref=f1e693]
+              - cell "执行验证步骤19" [ref=f1e695]
+              - cell "结果符合预期" [ref=f1e697]
+              - cell "未执行" [ref=f1e699]:
+                - combobox [ref=f1e700]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e701]:
+                - button "备注" [ref=f1e702] [cursor=pointer]
+              - cell [ref=f1e703]:
+                - button "缺陷链接" [ref=f1e704] [cursor=pointer]
+              - cell [ref=f1e705]:
+                - generic [ref=f1e706]:
+                  - button "−" [ref=f1e707] [cursor=pointer]
+                  - button "＋" [ref=f1e708] [cursor=pointer]
+            - row [ref=f1e709]:
+              - cell [ref=f1e710]:
+                - checkbox [ref=f1e711]
+              - cell "20" [ref=f1e712]
+              - cell "宝石皮肤" [ref=f1e713]
+              - cell "角色皮肤验证用例20" [ref=f1e714]
+              - cell "P1" [ref=f1e716]
+              - cell "已进入角色皮肤页面" [ref=f1e718]
+              - cell "执行验证步骤20" [ref=f1e720]
+              - cell "结果符合预期" [ref=f1e722]
+              - cell "未执行" [ref=f1e724]:
+                - combobox [ref=f1e725]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f1e726]:
+                - button "备注" [ref=f1e727] [cursor=pointer]
+              - cell [ref=f1e728]:
+                - button "缺陷链接" [ref=f1e729] [cursor=pointer]
+              - cell [ref=f1e730]:
+                - generic [ref=f1e731]:
+                  - button "−" [ref=f1e732] [cursor=pointer]
+                  - button "＋" [ref=f1e733] [cursor=pointer]
+        - generic [ref=f1e734]:
+          - generic [ref=f1e735]: 显示 1-20 / 40 条，每页 20 条
+          - generic [ref=f1e736]:
+            - button "上一页" [disabled] [ref=f1e737]
+            - generic [ref=f1e738]: 第 1 / 2 页
+            - button "下一页" [ref=f1e739] [cursor=pointer]
+            - generic [ref=f1e740]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f1e741]: "1"
+              - text: 页
+      - option "全部版本" [selected]
+      - option "912"
+      - option "请选择版本" [selected]

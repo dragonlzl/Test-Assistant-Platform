@@ -13,7 +13,7 @@ async function waitAppReady(page, timeoutMs) {
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout });
 }
 
-test.describe('用例库编辑输入焦点稳定性', () => {
+test.describe('用例库编辑交互', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -24,7 +24,7 @@ test.describe('用例库编辑输入焦点稳定性', () => {
     });
   });
 
-  test('编辑时切换输入不应丢失焦点', async ({ page }) => {
+  test('切换输入保持焦点且优先级使用彩色下拉保存', async ({ page }) => {
     const token = 'token-case-library-edit-focus';
     const user = { id: 9, username: 'demo_admin', role: 'admin', level: 'leader' };
     const project = { id: 1, name: '项目A', description: 'for edit focus' };
@@ -50,6 +50,7 @@ test.describe('用例库编辑输入焦点稳定性', () => {
     ];
 
     const caseItemsByFileId = {};
+    let lastPriorityPatch = '';
     caseItemsByFileId[caseFileId] = [
       {
         id: 5101,
@@ -117,7 +118,10 @@ test.describe('用例库编辑输入焦点稳定性', () => {
         if (item) {
           if (Object.prototype.hasOwnProperty.call(body, 'module')) item.module = body.module;
           if (Object.prototype.hasOwnProperty.call(body, 'title')) item.title = body.title;
-          if (Object.prototype.hasOwnProperty.call(body, 'priority')) item.priority = body.priority;
+          if (Object.prototype.hasOwnProperty.call(body, 'priority')) {
+            item.priority = body.priority;
+            lastPriorityPatch = body.priority;
+          }
           if (Object.prototype.hasOwnProperty.call(body, 'precondition')) item.precondition = body.precondition;
           if (Object.prototype.hasOwnProperty.call(body, 'steps')) item.steps = body.steps;
           if (Object.prototype.hasOwnProperty.call(body, 'expected')) item.expected = body.expected;
@@ -169,5 +173,19 @@ test.describe('用例库编辑输入焦点稳定性', () => {
       return field ? `${field}:${idx}` : '';
     });
     expect(activeKey).toBe('title:0');
+
+    const prioritySelect = page.locator('#caseLibraryEditView select[data-case-lib-priority][data-index="0"]');
+    await expect(prioritySelect).toHaveValue('P0');
+    await expect(prioritySelect.locator('option')).toHaveCount(3);
+    expect(await prioritySelect.locator('option').evaluateAll((options) => options.map((option) => option.value)))
+      .toEqual(['P0', 'P1', 'P2']);
+    const optionColors = await prioritySelect.locator('option').evaluateAll((options) => {
+      return options.map((option) => getComputedStyle(option).color + '/' + getComputedStyle(option).backgroundColor);
+    });
+    expect(new Set(optionColors).size).toBe(3);
+
+    await prioritySelect.selectOption('P2');
+    await expect(prioritySelect).toHaveAttribute('data-priority', 'p2');
+    await expect.poll(() => lastPriorityPatch).toBe('P2');
   });
 });

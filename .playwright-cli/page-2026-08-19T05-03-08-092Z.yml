@@ -1,0 +1,79 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e3]:
+    - heading "用例助手" [level=1] [ref=f3e5]:
+      - generic [ref=f3e6]: T
+    - navigation [ref=f3e8]:
+      - generic [ref=f3e9]:
+        - heading "AI 功能" [level=2] [ref=f3e10]
+        - generic [ref=f3e12]:
+          - button "用例生成" [ref=f3e13] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f3e20] [cursor=pointer]:
+            - generic [ref=f3e27]: 功能指派
+            - generic [ref=f3e28]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f3e29] [cursor=pointer]:
+            - generic [ref=f3e34]: 模型管理
+            - generic [ref=f3e35]: 未配置模型
+      - generic [ref=f3e36]:
+        - heading "用例相关" [level=2] [ref=f3e37]
+        - generic [ref=f3e38]:
+          - button "用例执行" [ref=f3e39] [cursor=pointer]
+          - button "用例库" [ref=f3e45] [cursor=pointer]
+          - button "用例归档" [ref=f3e50] [cursor=pointer]
+          - button "执行总览" [ref=f3e56] [cursor=pointer]
+      - generic [ref=f3e61]:
+        - heading "管理" [level=2] [ref=f3e62]
+        - generic [ref=f3e63]:
+          - button "项目管理" [ref=f3e64] [cursor=pointer]
+          - button "人员管理" [ref=f3e70] [cursor=pointer]
+          - button "操作记录" [ref=f3e78] [cursor=pointer]
+      - generic [ref=f3e84]:
+        - heading "设置" [level=2] [ref=f3e85]
+        - button "通用设置" [ref=f3e87] [cursor=pointer]
+    - generic "个人工具" [ref=f3e94]:
+      - button "生成进度" [ref=f3e95] [cursor=pointer]
+      - button "个人备忘" [ref=f3e102] [cursor=pointer]
+    - generic [ref=f3e107]:
+      - generic [ref=f3e108]: 当前用户
+      - button "用户菜单" [ref=f3e109] [cursor=pointer]:
+        - generic [ref=f3e110]: e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - main [ref=f3e112]:
+    - generic [ref=f3e113]:
+      - heading "模型管理" [level=2] [ref=f3e114]
+      - generic [ref=f3e115]:
+        - generic [ref=f3e116]:
+          - heading "推荐配置" [level=3] [ref=f3e117]
+          - list [ref=f3e118]:
+            - listitem [ref=f3e119]:
+              - text: 优先指派
+              - strong [ref=f3e120]: DeepSeek-R1
+              - text: （模型 ID：
+              - code [ref=f3e121]: deepseek-reasoner
+              - text: ），输出质量更好。
+            - listitem [ref=f3e122]:
+              - text: 请将
+              - code [ref=f3e123]: Max Tokens
+              - text: 设置为
+              - strong [ref=f3e124]: "16384"
+              - text: 或更高，避免长回复被截断。
+            - listitem [ref=f3e125]: 为每个功能统一指派此模型，保持行为一致。
+        - paragraph [ref=f3e126]: 为不同供应商配置多个模型，可分配给 XMind 生成、用例筛选、易漏提醒和页面内生成。API Key 等敏感信息仅保存在本地浏览器。
+        - button "新增模型" [ref=f3e128] [cursor=pointer]
+        - generic [ref=f3e129]:
+          - strong [ref=f3e130]: 全局调用设置
+          - generic [ref=f3e131]:
+            - generic [ref=f3e132]: 模型超时时间（秒）
+            - spinbutton "模型超时时间（秒）" [ref=f3e133]: "300"
+          - paragraph [ref=f3e134]: 超时后会自动中断模型请求，建议 30-1800 秒之间，根据模型响应速度适当调整。
+          - button "保存超时设置" [ref=f3e136] [cursor=pointer]
+          - paragraph [ref=f3e137]
+        - heading "已配置模型" [level=3] [ref=f3e138]
+        - paragraph [ref=f3e140]: 尚未配置模型，请先创建。

@@ -1,0 +1,92 @@
+- generic [ref=f3e2]:
+  - complementary:
+    - generic:
+      - heading [level=1]
+    - navigation:
+      - generic:
+        - heading "AI 功能" [level=2]
+        - generic:
+          - button "用例生成"
+          - button "功能指派":
+            - generic: 未配置模型
+          - button "模型管理":
+            - generic: 未配置模型
+      - generic:
+        - heading "用例相关" [level=2]
+        - generic:
+          - button "用例执行"
+          - button "用例库"
+          - button "用例归档"
+          - button "执行总览"
+      - generic:
+        - heading "管理" [level=2]
+        - generic:
+          - button "项目管理"
+          - button "人员管理"
+          - button "操作记录"
+      - generic:
+        - heading "设置" [level=2]
+        - generic:
+          - button "通用设置"
+    - generic:
+      - text: 个人工具
+      - generic "个人工具":
+        - button "生成进度"
+        - button "个人备忘"
+    - generic:
+      - generic: 当前用户
+      - button "用户菜单":
+        - generic: e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f3e112]:
+    - heading "用例执行" [level=2] [ref=f3e114]
+    - navigation "执行操作":
+      - generic:
+        - button "用例导入" [active]
+        - button "选择用例执行"
+        - button "执行分配"
+        - button "归档操作&进度预览"
+  - generic [ref=f3e144]:
+    - banner [ref=f3e145]:
+      - heading "用例执行" [level=1] [ref=f3e146]
+    - main [ref=f3e147]:
+      - generic [ref=f3e154]:
+        - generic [ref=f3e155]:
+          - heading "用例导入" [level=3] [ref=f3e156]
+          - button "收起" [ref=f3e157] [cursor=pointer]
+        - generic [ref=f3e159]:
+          - heading "用例导入" [level=2] [ref=f3e160]
+          - generic [ref=f3e161]:
+            - paragraph [ref=f3e162]: 导入 XMind/JSON/文本测试用例后，可在“执行视图”直接执行并记录实际结果；支持多份文件切换，执行数据会自动保存。
+            - generic [ref=f3e163]:
+              - strong [ref=f3e164]: 温馨提示
+              - paragraph [ref=f3e165]: 导入用例后需要点击“确认入库”，入库完成后才能进行下一步操作（如：执行分配 / 进入执行视图）。
+            - button "常用用例模版 ▼" [disabled] [ref=f3e168]:
+              - generic [ref=f3e169]: 常用用例模版
+              - generic [ref=f3e170]: ▼
+            - generic [ref=f3e172]:
+              - generic [ref=f3e173]:
+                - generic [ref=f3e174]:
+                  - strong [ref=f3e175]: 测试用例
+                  - generic [ref=f3e176]: 拖拽或点击选择
+                - generic [ref=f3e177]: 拖拽或点击选择文件后，还需要选择项目与版本并确认才会入库
+              - paragraph [ref=f3e178]: 未选择文件
+              - generic [ref=f3e179]:
+                - generic [ref=f3e180]: 项目
+                - combobox [ref=f3e181] [cursor=pointer]:
+                  - option "请选择项目" [selected]
+                - generic [ref=f3e182]: 版本
+                - combobox [disabled] [ref=f3e183]:
+                  - option "请选择版本" [selected]
+                - button "确认入库" [disabled] [ref=f3e184]
+              - paragraph [ref=f3e185]
+      - generic [ref=f3e148]: 暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录
+      - option "请选择版本" [selected]

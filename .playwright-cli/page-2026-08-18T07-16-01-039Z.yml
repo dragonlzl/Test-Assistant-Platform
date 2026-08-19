@@ -1,0 +1,252 @@
+- iframe [active] [ref=f3e2]:
+  - generic [ref=f4e3]:
+    - complementary [ref=f4e4]:
+      - generic [ref=f4e9]:
+        - generic [ref=f4e10]: 用例助手
+        - generic [ref=f4e11]: TEST ASSISTANT
+      - generic [ref=f4e12]:
+        - generic [ref=f4e13]: AI 功能
+        - button "XMind 用例生成" [ref=f4e14]
+        - button "功能指派" [ref=f4e20]
+        - button "模型管理" [ref=f4e26]
+      - generic [ref=f4e31]:
+        - generic [ref=f4e32]: 用例相关
+        - button "用例执行" [ref=f4e33]
+        - button "用例库" [ref=f4e38]
+        - button "用例归档" [ref=f4e42]
+        - button "执行总览" [ref=f4e47]
+      - generic [ref=f4e50]:
+        - generic [ref=f4e51]: 管理
+        - button "项目管理" [ref=f4e52]
+        - button "人员管理" [ref=f4e65]
+        - button "操作记录" [ref=f4e72]
+      - generic [ref=f4e77]:
+        - generic [ref=f4e78]: A
+        - generic [ref=f4e79]: admin
+    - main [ref=f4e80]:
+      - generic [ref=f4e81]:
+        - generic [ref=f4e83]:
+          - generic [ref=f4e84]: 用例执行
+          - button "2025年11月新皮肤 · 项目 元-骑士 / 版本 912" [ref=f4e85] [cursor=pointer]
+        - generic [ref=f4e89]:
+          - generic [ref=f4e90]: 全部73
+          - generic [ref=f4e91]: 未执行59
+          - generic [ref=f4e92]: 通过0
+          - generic [ref=f4e93]: 失败0
+          - generic [ref=f4e94]: 阻塞0
+      - generic [ref=f4e95]:
+        - textbox [ref=f4e100]:
+          - /placeholder: 搜索编号、模块或用例标题
+        - button "筛选" [ref=f4e101] [cursor=pointer]
+        - button "排序" [ref=f4e103] [cursor=pointer]
+        - button "字段" [ref=f4e107] [cursor=pointer]
+        - button "执行配置" [ref=f4e110] [cursor=pointer]
+        - button "批量执行" [ref=f4e112] [cursor=pointer]
+        - button "更多操作" [ref=f4e116] [cursor=pointer]
+      - table "执行用例列表" [ref=f4e122]:
+        - rowgroup [ref=f4e123]:
+          - row [ref=f4e124]:
+            - columnheader [ref=f4e125]:
+              - checkbox "全选" [ref=f4e126]
+            - columnheader "编号" [ref=f4e127]
+            - columnheader "模块" [ref=f4e128]
+            - columnheader "用例标题" [ref=f4e129]
+            - columnheader "优先级" [ref=f4e130]
+            - columnheader "操作步骤" [ref=f4e131]
+            - columnheader "预期结果" [ref=f4e132]
+            - columnheader "实际结果" [ref=f4e133]
+            - columnheader [ref=f4e134]
+        - rowgroup [ref=f4e135]:
+          - row [ref=f4e136] [cursor=pointer]:
+            - cell [ref=f4e137]:
+              - checkbox "选择用例1" [ref=f4e138]
+            - cell "1" [ref=f4e139]
+            - cell "碎片皮肤" [ref=f4e140]
+            - cell "碎片获取途径" [ref=f4e141]
+            - cell "P1" [ref=f4e143]
+            - cell "前往设计台，并观察该皮肤" [ref=f4e145]
+            - cell "可到设计台的提示关卡击杀指定 boss 获得碎片" [ref=f4e147]
+            - cell [ref=f4e149]:
+              - button "未执行" [ref=f4e150]
+            - cell [ref=f4e154]:
+              - button "查看详情" [ref=f4e155]
+          - row [ref=f4e160] [cursor=pointer]:
+            - cell [ref=f4e161]:
+              - checkbox "选择用例2" [ref=f4e162]
+            - cell "2" [ref=f4e163]
+            - cell "碎片皮肤" [ref=f4e164]
+            - cell "任意角色获取碎片" [ref=f4e165]
+            - cell "P1" [ref=f4e167]
+            - cell "使用非皮肤对应角色击杀指定关卡的怪物 / boss" [ref=f4e169]
+            - cell "有一定概率获得碎片" [ref=f4e171]
+            - cell [ref=f4e173]:
+              - button "未执行" [ref=f4e174]
+            - cell [ref=f4e178]:
+              - button "查看详情" [ref=f4e179]
+          - row [ref=f4e184] [cursor=pointer]:
+            - cell [ref=f4e185]:
+              - checkbox "选择用例3" [ref=f4e186]
+            - cell "3" [ref=f4e187]
+            - cell "碎片皮肤" [ref=f4e188]
+            - cell "碎片不足时解锁" [ref=f4e189]
+            - cell "P1" [ref=f4e191]
+            - cell "拥有的皮肤碎片数量不足时尝试解锁皮肤" [ref=f4e193]
+            - cell "不可进行解锁操作，不会出现设计按钮" [ref=f4e195]
+            - cell [ref=f4e197]:
+              - button "阻塞" [ref=f4e198]
+            - cell [ref=f4e202]:
+              - button "查看详情" [ref=f4e203]
+          - row [ref=f4e208] [cursor=pointer]:
+            - cell [ref=f4e209]:
+              - checkbox "选择用例4" [ref=f4e210]
+            - cell "4" [ref=f4e211]
+            - cell "碎片皮肤" [ref=f4e212]
+            - cell "碎片足够时解锁" [ref=f4e213]
+            - cell "P1" [ref=f4e215]
+            - cell "拥有的皮肤碎片数量足够时尝试解锁皮肤" [ref=f4e217]
+            - cell "设计按钮可用，解锁成功并弹出提示" [ref=f4e219]
+            - cell [ref=f4e221]:
+              - button "通过" [ref=f4e222]
+            - cell [ref=f4e226]:
+              - button "查看详情" [ref=f4e227]
+          - row [ref=f4e232] [cursor=pointer]:
+            - cell [ref=f4e233]:
+              - checkbox "选择用例5" [ref=f4e234]
+            - cell "5" [ref=f4e235]
+            - cell "碎片皮肤" [ref=f4e236]
+            - cell "联机碎片掉落" [ref=f4e237]
+            - cell "P1" [ref=f4e239]
+            - cell "联机下击杀指定怪物 / boss，观察是否掉落碎片" [ref=f4e241]
+            - cell "正常通过击杀指定 boss，概率获得碎片" [ref=f4e243]
+            - cell [ref=f4e245]:
+              - button "未执行" [ref=f4e246]
+            - cell [ref=f4e250]:
+              - button "查看详情" [ref=f4e251]
+          - row [ref=f4e256] [cursor=pointer]:
+            - cell [ref=f4e257]:
+              - checkbox "选择用例6" [ref=f4e258]
+            - cell "6" [ref=f4e259]
+            - cell "碎片皮肤" [ref=f4e260]
+            - cell "碎片已满继续获取" [ref=f4e261]
+            - cell "P1" [ref=f4e263]
+            - cell "碎片已满时继续击杀对应怪物和 boss" [ref=f4e265]
+            - cell "无法继续获得碎片" [ref=f4e267]
+            - cell [ref=f4e269]:
+              - button "未执行" [ref=f4e270]
+            - cell [ref=f4e274]:
+              - button "查看详情" [ref=f4e275]
+          - row [ref=f4e280] [cursor=pointer]:
+            - cell [ref=f4e281]:
+              - checkbox "选择用例7" [ref=f4e282]
+            - cell "7" [ref=f4e283]
+            - cell "解锁提示" [ref=f4e284]
+            - cell "角色皮肤解锁提示" [ref=f4e285]
+            - cell "P2" [ref=f4e287]
+            - cell "在角色选择页打开新皮肤并查看解锁条件" [ref=f4e289]
+            - cell "清晰展示碎片数量和获取路径" [ref=f4e291]
+            - cell [ref=f4e293]:
+              - button "未执行" [ref=f4e294]
+            - cell [ref=f4e298]:
+              - button "查看详情" [ref=f4e299]
+          - row [ref=f4e304] [cursor=pointer]:
+            - cell [ref=f4e305]:
+              - checkbox "选择用例8" [ref=f4e306]
+            - cell "8" [ref=f4e307]
+            - cell "皮肤预览" [ref=f4e308]
+            - cell "皮肤预览动画" [ref=f4e309]
+            - cell "P2" [ref=f4e311]
+            - cell "进入皮肤预览，切换站立和攻击动作" [ref=f4e313]
+            - cell "动作播放完整，无贴图丢失和明显卡顿" [ref=f4e315]
+            - cell [ref=f4e317]:
+              - button "未执行" [ref=f4e318]
+            - cell [ref=f4e322]:
+              - button "查看详情" [ref=f4e323]
+          - row [ref=f4e328] [cursor=pointer]:
+            - cell [ref=f4e329]:
+              - checkbox "选择用例9" [ref=f4e330]
+            - cell "9" [ref=f4e331]
+            - cell "兼容性" [ref=f4e332]
+            - cell "低画质下皮肤表现" [ref=f4e333]
+            - cell "P2" [ref=f4e335]
+            - cell "切换到低画质并进入战斗场景" [ref=f4e337]
+            - cell "皮肤轮廓和特效层级显示正确" [ref=f4e339]
+            - cell [ref=f4e341]:
+              - button "未执行" [ref=f4e342]
+            - cell [ref=f4e346]:
+              - button "查看详情" [ref=f4e347]
+          - row [ref=f4e352] [cursor=pointer]:
+            - cell [ref=f4e353]:
+              - checkbox "选择用例10" [ref=f4e354]
+            - cell "10" [ref=f4e355]
+            - cell "数据存储" [ref=f4e356]
+            - cell "重新进入后解锁状态" [ref=f4e357]
+            - cell "P1" [ref=f4e359]
+            - cell "解锁皮肤后重启客户端并再次登录" [ref=f4e361]
+            - cell "解锁状态和碎片余额保存正确" [ref=f4e363]
+            - cell [ref=f4e365]:
+              - button "未执行" [ref=f4e366]
+            - cell [ref=f4e370]:
+              - button "查看详情" [ref=f4e371]
+          - row [ref=f4e376] [cursor=pointer]:
+            - cell [ref=f4e377]:
+              - checkbox "选择用例11" [ref=f4e378]
+            - cell "11" [ref=f4e379]
+            - cell "数据存储" [ref=f4e380]
+            - cell "多账号碎片数据隔离" [ref=f4e381]
+            - cell "P1" [ref=f4e383]
+            - cell "依次登录两个账号并分别获取不同数量的碎片" [ref=f4e385]
+            - cell "不同账号的碎片数量互不影响" [ref=f4e387]
+            - cell [ref=f4e389]:
+              - button "未执行" [ref=f4e390]
+            - cell [ref=f4e394]:
+              - button "查看详情" [ref=f4e395]
+          - row [ref=f4e400] [cursor=pointer]:
+            - cell [ref=f4e401]:
+              - checkbox "选择用例12" [ref=f4e402]
+            - cell "12" [ref=f4e403]
+            - cell "解锁提示" [ref=f4e404]
+            - cell "首次获得碎片提示" [ref=f4e405]
+            - cell "P2" [ref=f4e407]
+            - cell "首次获得目标皮肤碎片后返回大厅" [ref=f4e409]
+            - cell "展示获得提示并更新皮肤入口状态" [ref=f4e411]
+            - cell [ref=f4e413]:
+              - button "未执行" [ref=f4e414]
+            - cell [ref=f4e418]:
+              - button "查看详情" [ref=f4e419]
+      - generic [ref=f4e424]:
+        - generic [ref=f4e425]: 已选 0 条 · 共 73 条
+        - generic [ref=f4e426]:
+          - button "上一页" [ref=f4e427] [cursor=pointer]
+          - button "1" [ref=f4e430] [cursor=pointer]
+          - button "2" [ref=f4e431] [cursor=pointer]
+          - button "下一页" [ref=f4e432] [cursor=pointer]
+          - button "50 条 / 页" [ref=f4e435] [cursor=pointer]
+    - complementary "用例详情" [ref=f4e436]:
+      - generic [ref=f4e437]:
+        - generic [ref=f4e438]:
+          - generic [ref=f4e439]: 碎片获取途径
+          - generic [ref=f4e440]: 编号 1 · 碎片皮肤
+        - button "关闭" [active] [ref=f4e441] [cursor=pointer]
+      - generic [ref=f4e445]:
+        - button "用例信息" [ref=f4e446] [cursor=pointer]
+        - button "执行记录" [ref=f4e447] [cursor=pointer]
+        - button "复用参考" [ref=f4e448] [cursor=pointer]
+      - generic [ref=f4e449]:
+        - generic [ref=f4e450]:
+          - generic [ref=f4e451]: 前提条件
+          - generic [ref=f4e452]: 皮肤未解锁，碎片未满；当前角色具备进入设计台的权限。
+        - generic [ref=f4e453]:
+          - generic [ref=f4e454]: 操作步骤
+          - generic [ref=f4e455]: 1. 前往设计台2. 打开皮肤详情3. 查看碎片获取途径4. 按提示进入关卡并击杀指定 boss
+        - generic [ref=f4e456]:
+          - generic [ref=f4e457]: 预期结果
+          - generic [ref=f4e458]: 界面显示获取途径；击杀指定 boss 后有概率获得皮肤碎片。
+        - generic [ref=f4e459]:
+          - generic [ref=f4e460]: 备注与附件
+          - generic [ref=f4e461]: 尚未添加备注
+        - generic [ref=f4e462]:
+          - generic [ref=f4e463]: 关联缺陷
+          - button "关联缺陷" [ref=f4e464] [cursor=pointer]
+      - generic [ref=f4e468]:
+        - button "删除用例" [ref=f4e469] [cursor=pointer]
+        - button "保存" [ref=f4e470] [cursor=pointer]

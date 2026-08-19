@@ -11,9 +11,21 @@ async function waitTempExecReady(page) {
   await page.waitForFunction(() => window.app && window.app.tempExecApi);
 }
 
+async function openTempExecMoreActions(page) {
+  const toggle = page.locator('#tempExecToolbar [data-temp-more-toggle]');
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await expect(page.locator('#tempExecMoreMenu')).toBeVisible();
+}
+
+async function clickTempExecMoreAction(page, selector) {
+  await openTempExecMoreActions(page);
+  await page.locator(selector).click();
+}
+
 async function startTempExecAiGeneration(page, requirementText) {
   const overlay = page.locator('#casePageAiGenPrepOverlay-temp-exec');
-  await page.click('#tempExecAiGenBtn');
+  await clickTempExecMoreAction(page, '#tempExecAiGenBtn');
   await expect(overlay).toBeVisible();
   await expect(overlay).toContainText('生成前置准备');
   const documentMode = overlay.locator('input[name="casePageRequirementMode-temp-exec"][value="document"]');
@@ -142,8 +154,9 @@ test.describe('执行页 AI 用例生成', () => {
       return card && !card.classList.contains('hidden');
     });
 
+    await openTempExecMoreActions(page);
     await expect(page.locator('#tempExecAiGenBtn')).toBeVisible();
-    await page.click('#tempExecAiGenBtn');
+    await page.locator('#tempExecAiGenBtn').click();
     await expect(page.locator('.temp-center-toast')).toContainText('请到AI功能-功能指派 页面下，配置该功能模型。');
     await expect(page.locator('#tempExecAiGenDrawer')).not.toHaveClass(/open/);
   });
@@ -353,7 +366,7 @@ test.describe('执行页 AI 用例生成', () => {
 
     await page.click('#tempExecAiGenDrawer .drawer-header [data-drawer-close="tempExecAiGenDrawer"]');
     await expect(page.locator('#tempExecAiGenDrawer')).not.toHaveClass(/open/);
-    await page.click('#tempExecAiGenBtn');
+    await clickTempExecMoreAction(page, '#tempExecAiGenBtn');
     await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
     expect(semanticDedupeCalls).toBe(1);
@@ -369,7 +382,7 @@ test.describe('执行页 AI 用例生成', () => {
       const card = document.getElementById('tempExecToolbarCard');
       return card && !card.classList.contains('hidden');
     });
-    await page.click('#tempExecAiGenBtn');
+    await clickTempExecMoreAction(page, '#tempExecAiGenBtn');
     await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
     await expect(page.locator('#tempExecAiGenResultSummary')).toHaveText('生成 4 条，去重 2 条');
@@ -382,7 +395,7 @@ test.describe('执行页 AI 用例生成', () => {
     await expect(page.locator('#tempExecAiGenDrawer')).not.toHaveClass(/open|closing/);
     await expect(page.locator('.temp-center-toast')).toContainText('已清空本次 AI 生成结果');
 
-    await page.click('#tempExecAiGenBtn');
+    await clickTempExecMoreAction(page, '#tempExecAiGenBtn');
     await expect(page.locator('#casePageAiGenPrepOverlay-temp-exec')).toBeVisible();
     await page.click('#casePageAiGenPrepOverlay-temp-exec [data-case-page-prep-close]');
     await expect(page.locator('#casePageAiGenPrepOverlay-temp-exec')).toHaveCount(0);
@@ -494,7 +507,7 @@ test.describe('执行页 AI 用例生成', () => {
     });
 
     const overlay = page.locator('#casePageAiGenPrepOverlay-temp-exec');
-    await page.click('#tempExecAiGenBtn');
+    await clickTempExecMoreAction(page, '#tempExecAiGenBtn');
     await expect(overlay).toBeVisible();
     await page.fill('#casePageAiGenRequirementText-temp-exec', '需求：登录流程');
     await overlay.locator('[data-case-page-prep-nav="next"]').click();
@@ -688,7 +701,7 @@ test.describe('执行页 AI 用例生成', () => {
     await versionRow.click();
     await expect(versionRow).not.toHaveClass(/case-library-ai-gen-dot/);
 
-    await page.click('#tempExecAiGenBtn');
+    await clickTempExecMoreAction(page, '#tempExecAiGenBtn');
     await expect(page.locator('#tempExecAiGenBtn')).not.toHaveClass(/has-badge/);
   });
 
@@ -816,7 +829,7 @@ test.describe('执行页 AI 用例生成', () => {
       const card = document.getElementById('tempExecToolbarCard');
       return card && !card.classList.contains('hidden');
     });
-    await page.click('#tempExecAiGenBtn');
+    await clickTempExecMoreAction(page, '#tempExecAiGenBtn');
     await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
   });

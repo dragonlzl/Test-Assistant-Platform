@@ -1,0 +1,215 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e3]:
+    - heading [level=1] [ref=f3e5]
+    - navigation [ref=f3e9]:
+      - generic [ref=f3e10]:
+        - heading "AI 功能" [level=2] [ref=f3e11]
+        - generic [ref=f3e13]:
+          - button "用例生成" [ref=f3e14] [cursor=pointer]
+          - button "功能指派" [ref=f3e21] [cursor=pointer]:
+            - generic [ref=f3e29]: 未配置模型
+          - button "模型管理" [ref=f3e30] [cursor=pointer]:
+            - generic [ref=f3e36]: 未配置模型
+      - generic [ref=f3e37]:
+        - heading "用例相关" [level=2] [ref=f3e38]
+        - generic [ref=f3e39]:
+          - button "用例执行" [ref=f3e40] [cursor=pointer]
+          - button "用例库" [ref=f3e46] [cursor=pointer]
+          - button "用例归档" [ref=f3e51] [cursor=pointer]
+          - button "执行总览" [ref=f3e57] [cursor=pointer]
+      - generic [ref=f3e62]:
+        - heading "管理" [level=2] [ref=f3e63]
+        - generic [ref=f3e64]:
+          - button "项目管理" [ref=f3e65] [cursor=pointer]
+          - button "人员管理" [ref=f3e71] [cursor=pointer]
+          - button "操作记录" [ref=f3e79] [cursor=pointer]
+      - generic [ref=f3e85]:
+        - heading "设置" [level=2] [ref=f3e86]
+        - button "通用设置" [ref=f3e88] [cursor=pointer]
+    - generic [ref=f3e94]:
+      - text: 个人工具
+      - generic "个人工具" [ref=f3e95]:
+        - button "生成进度" [ref=f3e96] [cursor=pointer]
+        - button "个人备忘" [ref=f3e103] [cursor=pointer]
+    - generic [ref=f3e108]:
+      - generic [ref=f3e109]: 当前用户
+      - button "用户菜单" [ref=f3e110] [cursor=pointer]:
+        - generic [ref=f3e111]: e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f3e112]:
+    - heading "用例执行" [level=2] [ref=f3e114]
+    - navigation "执行操作" [ref=f3e115]:
+      - generic [ref=f3e117]:
+        - button "用例导入" [ref=f3e118] [cursor=pointer]
+        - button "选择用例执行" [ref=f3e124] [cursor=pointer]
+        - button "执行分配" [ref=f3e130] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f3e136] [cursor=pointer]
+  - generic [ref=f3e144]:
+    - banner [ref=f3e145]:
+      - heading "用例执行" [level=1] [ref=f3e146]
+    - generic [ref=f3e187]:
+      - generic [ref=f3e188]:
+        - generic [ref=f3e189]:
+          - text: 当前文件：
+          - strong [ref=f3e190]: case_library_import.json
+        - generic [ref=f3e191]:
+          - generic [ref=f3e192] [cursor=pointer]: 已执行 0
+          - generic [ref=f3e193] [cursor=pointer]: 未执行 2
+          - generic [ref=f3e194] [cursor=pointer]: 通过 0
+          - generic [ref=f3e195] [cursor=pointer]: 失败 0
+          - generic [ref=f3e196] [cursor=pointer]: 阻塞 0
+          - generic [ref=f3e197] [cursor=pointer]: 不适用 0
+        - generic [ref=f3e198]:
+          - textbox "搜索用例关键字" [ref=f3e200]
+          - generic [ref=f3e201]:
+            - button "AI 用例生成" [ref=f3e203]
+            - button "XMind结构展示" [ref=f3e205] [cursor=pointer]
+            - button "用例变更" [disabled] [ref=f3e207]
+            - group "切换用例" [ref=f3e208]:
+              - generic [ref=f3e209]: 用例切换：
+              - button "上一份" [disabled] [ref=f3e210]
+              - button "下一份" [disabled] [ref=f3e211]
+          - generic [ref=f3e212]:
+            - button "导出XMind" [ref=f3e213] [cursor=pointer]
+            - button "导出XMind（无结果）" [ref=f3e214] [cursor=pointer]
+      - generic [ref=f3e215]:
+        - generic [ref=f3e216]: 专注区：
+        - generic [ref=f3e218]: 暂无专注用例
+    - main [ref=f3e147]:
+      - generic:
+        - generic:
+          - generic:
+            - heading "用例导入" [level=3]
+            - button "收起" [active]
+          - generic:
+            - generic:
+              - heading "用例导入" [level=2]
+              - generic:
+                - paragraph: 导入 XMind/JSON/文本测试用例后，可在“执行视图”直接执行并记录实际结果；支持多份文件切换，执行数据会自动保存。
+                - generic:
+                  - strong: 温馨提示
+                  - paragraph: 导入用例后需要点击“确认入库”，入库完成后才能进行下一步操作（如：执行分配 / 进入执行视图）。
+                - generic:
+                  - generic:
+                    - button "常用用例模版 ▼" [disabled]:
+                      - generic: 常用用例模版
+                      - generic: ▼
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - strong: 测试用例
+                        - generic: 拖拽或点击选择
+                      - generic: 拖拽或点击选择文件后，还需要选择项目与版本并确认才会入库
+                    - paragraph: 未选择文件
+                    - generic:
+                      - generic: 项目
+                      - combobox:
+                        - option "请选择项目" [selected]
+                      - generic: 版本
+                      - combobox [disabled]:
+                        - option "请选择版本" [selected]
+                      - button "确认入库" [disabled]
+                    - paragraph: 已导入 1 份测试用例
+      - generic [ref=f3e150]:
+        - generic [ref=f3e221]:
+          - generic [ref=f3e222] [cursor=pointer]:
+            - checkbox "用例复用" [ref=f3e223]
+            - generic [ref=f3e224]: 用例复用
+          - generic [ref=f3e225]: 开启后可为用例记录多条执行项
+        - generic [ref=f3e226]:
+          - generic [ref=f3e227]: 显示 1-2 / 2 条，每页 20 条
+          - generic [ref=f3e228]:
+            - button "上一页" [disabled] [ref=f3e229]
+            - generic [ref=f3e230]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=f3e231]
+            - generic [ref=f3e232]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f3e233]: "1"
+              - text: 页
+        - table [ref=f3e234]:
+          - rowgroup [ref=f3e248]:
+            - row [ref=f3e249]:
+              - columnheader [ref=f3e250]:
+                - checkbox [ref=f3e251]
+              - columnheader "编号" [ref=f3e252]
+              - columnheader "模块" [ref=f3e253]
+              - columnheader "用例标题" [ref=f3e254]
+              - columnheader "优先级" [ref=f3e255]
+              - columnheader "前提条件" [ref=f3e256]
+              - columnheader "操作步骤" [ref=f3e257]
+              - columnheader "预期结果" [ref=f3e258]
+              - columnheader "实际结果" [ref=f3e259]
+              - columnheader "备注" [ref=f3e260]
+              - columnheader "缺陷链接" [ref=f3e261]
+              - columnheader "增删" [ref=f3e262]
+          - rowgroup [ref=f3e263]:
+            - row [ref=f3e264]:
+              - cell [ref=f3e265]:
+                - checkbox [ref=f3e266]
+              - cell "1" [ref=f3e267]
+              - cell "登录" [ref=f3e268]
+              - cell "正常登录" [ref=f3e269]
+              - cell "P0" [ref=f3e271]
+              - cell "已注册账号" [ref=f3e273]
+              - cell "1. 输入账号\\n2. 输入密码\\n3. 点击登录" [ref=f3e275]
+              - cell "登录成功进入主页" [ref=f3e277]
+              - cell "未执行" [ref=f3e279]:
+                - combobox [ref=f3e280]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f3e281]:
+                - button "备注" [ref=f3e282] [cursor=pointer]
+              - cell [ref=f3e283]:
+                - button "缺陷链接" [ref=f3e284] [cursor=pointer]
+              - cell [ref=f3e285]:
+                - generic [ref=f3e286]:
+                  - button "−" [ref=f3e287] [cursor=pointer]
+                  - button "＋" [ref=f3e288] [cursor=pointer]
+            - row [ref=f3e289]:
+              - cell [ref=f3e290]:
+                - checkbox [ref=f3e291]
+              - cell "2" [ref=f3e292]
+              - cell "登录" [ref=f3e293]
+              - cell "密码错误提示" [ref=f3e294]
+              - cell "P1" [ref=f3e296]
+              - cell "已注册账号" [ref=f3e298]
+              - cell "1. 输入账号\\n2. 输入错误密码\\n3. 点击登录" [ref=f3e300]
+              - cell "提示密码错误" [ref=f3e302]
+              - cell "未执行" [ref=f3e304]:
+                - combobox [ref=f3e305]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f3e306]:
+                - button "备注已填" [ref=f3e307] [cursor=pointer]
+              - cell [ref=f3e308]:
+                - button "缺陷链接" [ref=f3e309] [cursor=pointer]
+              - cell [ref=f3e310]:
+                - generic [ref=f3e311]:
+                  - button "−" [ref=f3e312] [cursor=pointer]
+                  - button "＋" [ref=f3e313] [cursor=pointer]
+        - generic [ref=f3e314]:
+          - generic [ref=f3e315]: 显示 1-2 / 2 条，每页 20 条
+          - generic [ref=f3e316]:
+            - button "上一页" [disabled] [ref=f3e317]
+            - generic [ref=f3e318]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=f3e319]
+            - generic [ref=f3e320]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f3e321]: "1"
+              - text: 页
+      - option "请选择版本" [selected]

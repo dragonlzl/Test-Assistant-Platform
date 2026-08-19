@@ -1,5 +1,12 @@
 const { test, expect } = require('@playwright/test');
 
+async function openTempExecMoreActions(page) {
+  const toggle = page.locator('#tempExecToolbar [data-temp-more-toggle]');
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await expect(page.locator('#tempExecMoreMenu')).toBeVisible();
+}
+
 async function ensureMindElixirReady(page, url) {
   var maxRetry = 3;
   for (var i = 0; i < maxRetry; i += 1) {
@@ -994,6 +1001,7 @@ test.describe('XMind 编辑态节点选择', () => {
       return Boolean(btn && !btn.disabled && !(btn.classList && btn.classList.contains('hidden')));
     }, {}, { timeout: 15000 });
 
+    await openTempExecMoreActions(page);
     await page.click('#tempExecXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     const viewer = page.locator('#tempExecXmindStructureViewer');
@@ -1121,6 +1129,7 @@ test.describe('XMind 编辑态节点选择', () => {
       return Boolean(btn && !btn.disabled && !(btn.classList && btn.classList.contains('hidden')));
     }, {}, { timeout: 15000 });
 
+    await openTempExecMoreActions(page);
     await page.click('#tempExecXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     const viewer = page.locator('#tempExecXmindStructureViewer');
@@ -1249,6 +1258,7 @@ test.describe('XMind 编辑态节点选择', () => {
       return Boolean(btn && !btn.disabled && !(btn.classList && btn.classList.contains('hidden')));
     }, {}, { timeout: 15000 });
 
+    await openTempExecMoreActions(page);
     await page.click('#tempExecXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     const viewer = page.locator('#tempExecXmindStructureViewer');

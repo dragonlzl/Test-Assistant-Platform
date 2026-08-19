@@ -202,8 +202,9 @@ test.describe('用例执行-归档后不自动切换项目', () => {
       { timeout: 8000 }
     ).toBe('');
 
-    await expect(page.locator('#tempExecView .temp-exec-context')).toContainText('项目 项目A');
-    await expect(page.locator('#tempExecView .temp-exec-context')).toContainText('版本 v1');
+    await expect(page.locator('#tempExecContextTitle')).toContainText('项目 项目A');
+    await expect(page.locator('#tempExecContextTitle')).toContainText('版本 v1');
+    await expect(page.locator('#tempExecContextTitle')).toContainText('用例 暂无执行用例');
     await expect(page.locator('#tempExecView')).toContainText('暂无执行用例');
     await expect(page.locator('#tempExecView')).not.toContainText('标题B');
   });
@@ -435,7 +436,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
       () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
       { timeout: 8000 }
     ).toBe('1101');
-    await expect(page.locator('#tempExecToolbar')).toContainText('用例A');
+    await expect(page.locator('#tempExecContextTitle')).toContainText('用例A');
     await expect(page.locator('#tempExecToolbar [data-temp-file-nav="next"]')).toBeEnabled();
 
     await page.click('#tempExecToolbar [data-temp-file-nav="next"]');
@@ -443,14 +444,14 @@ test.describe('用例执行-归档后不自动切换项目', () => {
       () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
       { timeout: 8000 }
     ).toBe('1102');
-    await expect(page.locator('#tempExecToolbar')).toContainText('用例B');
+    await expect(page.locator('#tempExecContextTitle')).toContainText('用例B');
 
     await page.click('#tempExecToolbar [data-temp-file-nav="prev"]');
     await expect.poll(
       () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
       { timeout: 8000 }
     ).toBe('1101');
-    await expect(page.locator('#tempExecToolbar')).toContainText('用例A');
+    await expect(page.locator('#tempExecContextTitle')).toContainText('用例A');
 
     await page.waitForFunction(() => {
       const st = window.app && window.app.state ? window.app.state : null;
@@ -464,7 +465,7 @@ test.describe('用例执行-归档后不自动切换项目', () => {
       () => page.evaluate(() => (window.app && window.app.state ? String(window.app.state.tempExecActiveId || '') : '')),
       { timeout: 8000 }
     ).toBe('1102');
-    await expect(page.locator('#tempExecToolbar')).toContainText('用例B');
+    await expect(page.locator('#tempExecContextTitle')).toContainText('用例B');
   });
 
   test('点击已归档“归”字标识：关闭总览抽屉并打开导入&分配抽屉', async ({ page }) => {

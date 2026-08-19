@@ -1,0 +1,98 @@
+- generic [ref=f5e2]:
+  - complementary [ref=f5e3]:
+    - heading "用例助手" [level=1] [ref=f5e5]:
+      - generic [ref=f5e6]: T
+    - navigation [ref=f5e8]:
+      - generic [ref=f5e9]:
+        - heading "AI 功能" [level=2] [ref=f5e10]
+        - generic [ref=f5e12]:
+          - button "用例生成" [ref=f5e13] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f5e20] [cursor=pointer]:
+            - generic [ref=f5e27]: 功能指派
+            - generic [ref=f5e28]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f5e29] [cursor=pointer]:
+            - generic [ref=f5e34]: 模型管理
+            - generic [ref=f5e35]: 未配置模型
+      - generic [ref=f5e36]:
+        - heading "用例相关" [level=2] [ref=f5e37]
+        - generic [ref=f5e38]:
+          - button "用例执行" [ref=f5e39] [cursor=pointer]
+          - button "用例库" [ref=f5e45] [cursor=pointer]
+          - button "用例归档" [ref=f5e50] [cursor=pointer]
+          - button "执行总览" [ref=f5e56] [cursor=pointer]
+      - generic [ref=f5e61]:
+        - heading "管理" [level=2] [ref=f5e62]
+        - generic [ref=f5e63]:
+          - button "项目管理" [ref=f5e64] [cursor=pointer]
+          - button "人员管理" [ref=f5e70] [cursor=pointer]
+          - button "操作记录" [ref=f5e78] [cursor=pointer]
+      - generic [ref=f5e84]:
+        - heading "设置" [level=2] [ref=f5e85]
+        - button "通用设置" [ref=f5e87] [cursor=pointer]
+    - generic "个人工具" [ref=f5e94]:
+      - button "生成进度" [ref=f5e95] [cursor=pointer]
+      - button "个人备忘" [ref=f5e102] [cursor=pointer]
+    - generic [ref=f5e107]:
+      - generic [ref=f5e108]: 当前用户
+      - button "用户菜单" [ref=f5e109] [cursor=pointer]:
+        - generic [ref=f5e110]: e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例库页面导航" [ref=f5e111]:
+    - generic [ref=f5e112]:
+      - heading "用例库" [level=2] [ref=f5e113]
+      - button "收起快捷导航" [expanded] [ref=f5e114] [cursor=pointer]
+    - navigation "用例库快捷入口" [ref=f5e118]:
+      - generic [ref=f5e119]:
+        - button "编写用例" [ref=f5e120] [cursor=pointer]
+        - button "导入用例" [ref=f5e126] [cursor=pointer]
+        - button "查看&编辑" [ref=f5e132] [cursor=pointer]
+        - button "易漏用例" [ref=f5e138] [cursor=pointer]
+        - button "选择用例执行" [ref=f5e143] [cursor=pointer]
+        - button "用例改动历史" [ref=f5e148] [cursor=pointer]
+  - generic [ref=f5e155]:
+    - banner [ref=f5e157]:
+      - heading "用例库" [level=1] [ref=f5e158]
+    - main [ref=f5e159]:
+      - generic [ref=f5e160]:
+        - heading "用例库" [level=2] [ref=f5e161]
+        - generic [ref=f5e163]:
+          - paragraph [ref=f5e164]: 提示：请使用左侧快捷导航进行导入、查看&编辑或选择用例转到执行。
+          - paragraph [ref=f5e165]: 请求失败，状态码 404
+          - generic [ref=f5e166]:
+            - heading "用例编辑视图" [level=3] [ref=f5e167]
+            - generic [ref=f5e168]:
+              - generic [ref=f5e169]:
+                - generic [ref=f5e170]:
+                  - generic [ref=f5e171]: 项目
+                  - generic [ref=f5e172]: "--"
+                - generic [ref=f5e173]:
+                  - generic [ref=f5e174]: 版本
+                  - generic [ref=f5e175]: "--"
+                - generic [ref=f5e176]:
+                  - generic [ref=f5e177]: 用例名
+                  - generic [ref=f5e178]: "--"
+              - generic [ref=f5e179]:
+                - generic [ref=f5e180]:
+                  - button "清空搜索" [ref=f5e181] [cursor=pointer]
+                  - textbox "搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果" [ref=f5e186]
+                  - button "AI 用例生成" [ref=f5e187]
+                  - button "XMind结构展示" [disabled] [ref=f5e190]
+                - generic [ref=f5e195]:
+                  - textbox "批量新增数量" [ref=f5e196]:
+                    - /placeholder: 1-10
+                    - text: "5"
+                  - button "批量新增" [ref=f5e197] [cursor=pointer]
+                  - button "批量删除" [disabled] [ref=f5e199]
+                  - button "转到执行" [ref=f5e203] [cursor=pointer]
+              - paragraph [ref=f5e206]
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择版本" [selected]

@@ -1064,7 +1064,7 @@
       }
       if (!needScroll) return;
       var saveBar = document.getElementById('assignSaveBar');
-      var saveBtn = document.getElementById('saveAssignments');
+      var saveBtn = document.getElementById('saveAssignmentsTop');
       if (saveBar) saveBar.classList.remove('hidden');
       var target = saveBar || saveBtn;
       if (!target) return;

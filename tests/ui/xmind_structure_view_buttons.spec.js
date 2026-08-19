@@ -56,7 +56,15 @@ async function waitExecReady(page) {
   await page.waitForFunction(() => window.app && window.app.tempExecApi, {}, { timeout: 30000 });
 }
 
+async function openTempExecMoreActions(page) {
+  const toggle = page.locator('#tempExecToolbar [data-temp-more-toggle]');
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await expect(page.locator('#tempExecMoreMenu')).toBeVisible();
+}
+
 async function waitTempExecXmindButtonReady(page) {
+  await openTempExecMoreActions(page);
   await page.waitForFunction(() => {
     var btn = document.getElementById('tempExecXmindViewBtn');
     if (!btn) return false;
@@ -768,6 +776,7 @@ test.describe('XMind 结构展示按钮', () => {
       return Boolean(drawer && drawer.classList && drawer.classList.contains('open'));
     });
     if (!drawerOpenAfterLocate) {
+      await openTempExecMoreActions(page);
       await page.click('#tempExecXmindViewBtn');
       await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
     }

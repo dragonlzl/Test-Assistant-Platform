@@ -199,7 +199,7 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await expect(pageA.locator('#caseLibraryGenModelSelect')).toHaveValue(remoteModelId);
     await pageA.fill('#xmindCaseGenTemperature', '0.6');
     await pageA.fill('#caseLibraryGenTemperature', '0.3');
-    await pageA.click('#saveAssignments');
+    await pageA.locator('.assignment-feature-actions [data-save-assignments]').first().click();
     await expect(pageA.locator('#xmindCaseGenAssignStatus')).toContainText('当前 XMind 用例生成模型');
     await expect.poll(() => serverState.features.length).toBe(1);
 

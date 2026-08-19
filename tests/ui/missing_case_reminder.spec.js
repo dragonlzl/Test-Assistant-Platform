@@ -114,6 +114,17 @@ async function openDrawer(page, buttonSelector, drawerSelector) {
   throw lastErr || new Error('openDrawer failed: ' + drawerSelector);
 }
 
+async function enableCaseLibraryMissingReminder(page) {
+  const toggle = page.getByLabel('显示易漏用例参考');
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toBeEnabled();
+  await expect(toggle).not.toBeChecked();
+  await expect(page.locator('#caseLibraryMissingReminderTop')).toBeHidden();
+  await expect(page.locator('#caseLibraryMissingReminderBottom')).toBeHidden();
+  await toggle.check();
+  await expect(toggle).toBeChecked();
+}
+
 async function waitForAppReady(page) {
   await page.waitForFunction(() => window.app && window.app._inited === true, null, { timeout: 20000 });
   await page.waitForFunction(() => window.app && typeof window.app.switchTab === 'function', null, { timeout: 20000 });
@@ -195,6 +206,9 @@ async function setupTempExecReminderPage(page, options) {
     if (pathName === '/api/exec/overview/layout' && method === 'GET') return respond(200, []);
     if (pathName === '/api/exec/sets' && method === 'GET') return respond(200, []);
     if (pathName === '/api/exec/sets/by-case-file' && method === 'GET') return respond(200, []);
+    if (aiEnabled && pathName === '/api/model-proxy' && method === 'POST') {
+      return respond(200, { choices: [{ message: { content: JSON.stringify({ ids: ['1'] }) } }] });
+    }
 
     if (pathName.startsWith('/api/')) return respond(200, []);
     return respond(404, { detail: 'not found' });
@@ -373,6 +387,7 @@ test.describe('易漏用例参考区域', () => {
     const editFirst = page.locator('[data-case-lib-edit="11"]');
     await expect(editFirst).toBeVisible();
     await editFirst.click();
+    await enableCaseLibraryMissingReminder(page);
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     const reminderBottom = page.locator('#caseLibraryMissingReminderBottom');
@@ -494,6 +509,7 @@ test.describe('易漏用例参考区域', () => {
     const editFirst = page.locator('[data-case-lib-edit="21"]');
     await expect(editFirst).toBeVisible();
     await editFirst.click();
+    await enableCaseLibraryMissingReminder(page);
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderTop).toBeVisible();
@@ -584,6 +600,11 @@ test.describe('易漏用例参考区域', () => {
       files: files,
       activeId: 'exec-file-a',
     });
+    await page.getByRole('button', { name: '更多操作' }).click();
+    const reminderToggle = page.getByLabel('显示易漏用例参考');
+    await expect(reminderToggle).not.toBeChecked();
+    await expect(page.locator('#tempExecView .missing-reminder-card')).toHaveCount(0);
+    await reminderToggle.check();
     await page.waitForFunction(() => {
       return window.app && window.app.state && window.app.state.tempExecMissingReminder;
     }, null, { timeout: 10000 });
@@ -689,6 +710,8 @@ test.describe('易漏用例参考区域', () => {
       activeId: 'exec-file-jump',
     });
 
+    await page.getByRole('button', { name: '更多操作' }).click();
+    await page.getByLabel('显示易漏用例参考').check();
     const reminder = page.locator('#tempExecView .missing-reminder-card');
     await expect(reminder).toHaveCount(1, { timeout: 10000 });
     const jumpBtn = reminder.locator('[data-missing-reminder-link]');
@@ -875,6 +898,7 @@ test.describe('易漏用例参考区域', () => {
     const editFirst = page.locator('[data-case-lib-edit="51"]');
     await expect(editFirst).toBeVisible();
     await editFirst.click();
+    await enableCaseLibraryMissingReminder(page);
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderTop).toBeVisible();
@@ -1013,6 +1037,10 @@ test.describe('易漏用例参考区域', () => {
         const moduleId = Number(parts[parts.length - 2]);
         return respond(200, missingItemsByModule[moduleId] || []);
       }
+      if (pathName === '/api/model-proxy' && method === 'POST') {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        return respond(200, { choices: [{ message: { content: JSON.stringify({ ids: ['2', '1'] }) } }] });
+      }
       if (pathName === '/api/auth/logout') return respond(200, {});
       if (pathName.startsWith('/api/')) return respond(200, []);
       return respond(404, { detail: 'not found' });
@@ -1025,6 +1053,7 @@ test.describe('易漏用例参考区域', () => {
     const editFirst = page.locator('[data-case-lib-edit="31"]');
     await expect(editFirst).toBeVisible();
     await editFirst.click();
+    await enableCaseLibraryMissingReminder(page);
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderTop).toBeVisible();
@@ -1189,6 +1218,10 @@ test.describe('易漏用例参考区域', () => {
         const moduleId = Number(parts[parts.length - 2]);
         return respond(200, missingItemsByModule[moduleId] || []);
       }
+      if (pathName === '/api/model-proxy' && method === 'POST') {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        return respond(200, { choices: [{ message: { content: JSON.stringify({ ids: ['2', '1'] }) } }] });
+      }
       if (pathName === '/api/auth/logout') return respond(200, {});
       if (pathName.startsWith('/api/')) return respond(200, []);
       return respond(404, { detail: 'not found' });
@@ -1201,6 +1234,7 @@ test.describe('易漏用例参考区域', () => {
     const editFirst = page.locator('[data-case-lib-edit="91"]');
     await expect(editFirst).toBeVisible();
     await editFirst.click();
+    await enableCaseLibraryMissingReminder(page);
 
     const reminderTop = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderTop).toBeVisible();
@@ -1249,6 +1283,7 @@ test.describe('易漏用例参考区域', () => {
     const editAgain = page.locator('[data-case-lib-edit="91"]');
     await expect(editAgain).toBeVisible();
     await editAgain.click();
+    await enableCaseLibraryMissingReminder(page);
 
     const reminderAgain = page.locator('#caseLibraryMissingReminderTop');
     await expect(reminderAgain).toContainText('工程师角色二技能效果', { timeout: 10000 });
@@ -1258,7 +1293,7 @@ test.describe('易漏用例参考区域', () => {
 
   test('执行视图AI推荐按钮可生成建议', async ({ page }) => {
     const token = 'token-missing-reminder-ai-exec';
-    const user = { id: 21, username: 'missing_ai_exec', role: 'user', level: 'member' };
+    const user = { id: 0, username: 'missing_ai_exec', role: 'user', level: 'member' };
     const project = { id: 4, name: 'AI执行项目', description: 'missing reminder ai exec' };
     const missingModules = [{ id: 701, project_id: 4, name: '支付', item_count: 1 }];
     const missingTypes = [{ id: 801, project_id: 4, name: '异常' }];
@@ -1333,6 +1368,8 @@ test.describe('易漏用例参考区域', () => {
       missingReminderAiEnabled: true,
     });
 
+    await page.getByRole('button', { name: '更多操作' }).click();
+    await page.getByLabel('显示易漏用例参考').check();
     const reminder = page.locator('#tempExecView .missing-reminder-card');
     await expect(reminder).toHaveCount(1, { timeout: 10000 });
     const aiBtn = reminder.locator('.missing-reminder-ai-btn');

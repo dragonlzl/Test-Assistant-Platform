@@ -1,0 +1,332 @@
+- generic [ref=f5e2]:
+  - complementary [ref=f5e3]:
+    - heading "用例助手" [level=1] [ref=f5e5]:
+      - generic [ref=f5e6]: T
+    - navigation [ref=f5e8]:
+      - generic [ref=f5e9]:
+        - heading "AI 功能" [level=2] [ref=f5e10]
+        - generic [ref=f5e12]:
+          - button "用例生成" [ref=f5e13] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f5e20] [cursor=pointer]:
+            - generic [ref=f5e27]: 功能指派
+            - generic [ref=f5e28]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f5e29] [cursor=pointer]:
+            - generic [ref=f5e34]: 模型管理
+            - generic [ref=f5e35]: 未配置模型
+      - generic [ref=f5e36]:
+        - heading "用例相关" [level=2] [ref=f5e37]
+        - generic [ref=f5e38]:
+          - button "用例执行" [ref=f5e39] [cursor=pointer]
+          - button "用例库" [ref=f5e45] [cursor=pointer]
+          - button "用例归档" [ref=f5e50] [cursor=pointer]
+          - button "执行总览" [ref=f5e56] [cursor=pointer]
+      - generic [ref=f5e61]:
+        - heading "管理" [level=2] [ref=f5e62]
+        - button "项目管理" [ref=f5e64] [cursor=pointer]
+      - generic [ref=f5e70]:
+        - heading "设置" [level=2] [ref=f5e71]
+        - button "通用设置" [ref=f5e73] [cursor=pointer]
+    - generic "个人工具" [ref=f5e80]:
+      - button "生成进度" [ref=f5e81] [cursor=pointer]
+      - button "个人备忘" [ref=f5e88] [cursor=pointer]
+    - generic [ref=f5e93]:
+      - generic [ref=f5e94]: 当前用户
+      - button "用户菜单" [ref=f5e95] [cursor=pointer]:
+        - generic [ref=f5e96]: p
+      - menu:
+        - generic:
+          - generic: p
+          - generic:
+            - strong: preview
+            - generic: 角色
+            - generic: 用户
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f5e97]:
+    - heading "用例执行" [level=2] [ref=f5e99]
+    - navigation "用例执行快捷入口" [ref=f5e100]:
+      - generic [ref=f5e101]:
+        - generic [ref=f5e102] [cursor=pointer]: 专注区
+        - generic [ref=f5e104]: 暂无专注用例
+      - generic [ref=f5e106]:
+        - button "用例导入" [ref=f5e107] [cursor=pointer]
+        - button "选择用例执行" [ref=f5e113] [cursor=pointer]
+        - button "执行分配" [ref=f5e119] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f5e125] [cursor=pointer]
+  - generic [ref=f5e133]:
+    - generic [ref=f5e134]:
+      - banner [ref=f5e135]:
+        - heading "项目 质量平台 版本 版本#version-preview 用例 角色皮肤用例" [level=1] [ref=f5e136]:
+          - generic [ref=f5e137]:
+            - generic [ref=f5e138]: 项目
+            - strong [ref=f5e139]: 质量平台
+          - generic [ref=f5e140]: /
+          - generic [ref=f5e141]:
+            - generic [ref=f5e142]: 版本
+            - strong [ref=f5e143]: 版本#version-preview
+          - generic [ref=f5e144]: /
+          - generic [ref=f5e145]:
+            - generic [ref=f5e146]: 用例
+            - strong [ref=f5e147]: 角色皮肤用例
+      - generic [ref=f5e150]:
+        - generic [ref=f5e151]:
+          - textbox "搜索用例关键字" [ref=f5e153]
+          - generic [ref=f5e154]:
+            - button "用例变更" [disabled] [ref=f5e156]
+            - group "切换用例" [ref=f5e157]:
+              - generic [ref=f5e158]: 用例切换：
+              - button "上一份" [disabled] [ref=f5e159]
+              - button "下一份" [disabled] [ref=f5e160]
+            - button "更多操作" [ref=f5e162] [cursor=pointer]
+        - generic [ref=f5e165]:
+          - button "已执行 5" [ref=f5e166] [cursor=pointer]
+          - button "未执行 2" [ref=f5e167] [cursor=pointer]
+          - button "通过 2" [ref=f5e168] [cursor=pointer]
+          - button "失败 1" [ref=f5e169] [cursor=pointer]
+          - button "阻塞 1" [ref=f5e170] [cursor=pointer]
+          - button "不适用 1" [ref=f5e171] [cursor=pointer]
+    - main [ref=f5e172]:
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=f5e175]:
+        - generic [ref=f5e176]:
+          - generic [ref=f5e177]: 显示 1-7 / 7 条，每页 20 条
+          - generic [ref=f5e178]:
+            - button "上一页" [disabled] [ref=f5e179]
+            - generic [ref=f5e180]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=f5e181]
+            - generic [ref=f5e182]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f5e183]: "1"
+              - text: 页
+        - table [ref=f5e184]:
+          - rowgroup [ref=f5e198]:
+            - row [ref=f5e199]:
+              - columnheader [ref=f5e200]:
+                - checkbox [ref=f5e201]
+              - columnheader "编号" [ref=f5e202]
+              - columnheader "模块" [ref=f5e203]
+              - columnheader "用例标题" [ref=f5e204]
+              - columnheader "优先级" [ref=f5e205]
+              - columnheader "前提条件" [ref=f5e206]
+              - columnheader "操作步骤" [ref=f5e207]
+              - columnheader "预期结果" [ref=f5e208]
+              - columnheader "实际结果" [ref=f5e209]
+              - columnheader "备注" [ref=f5e210]
+              - columnheader "缺陷链接" [ref=f5e211]
+              - columnheader "增删" [ref=f5e212]
+          - rowgroup [ref=f5e213]:
+            - row [ref=f5e214]:
+              - cell [ref=f5e215]:
+                - checkbox [ref=f5e216]
+              - cell "1" [ref=f5e217]
+              - cell "皮肤解锁" [ref=f5e218]
+              - cell "宝石解锁成功" [ref=f5e219]
+              - cell "P0" [ref=f5e221]:
+                - combobox "修改优先级" [ref=f5e222]:
+                  - option "P0" [selected]
+                  - option "P1"
+                  - option "P2"
+              - cell "进入角色详情页" [ref=f5e223]
+              - cell "选择目标皮肤并点击解锁" [ref=f5e225]
+              - cell "界面状态和资源数量正确" [ref=f5e227]
+              - cell "未执行" [ref=f5e229]:
+                - combobox [ref=f5e230]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f5e231]:
+                - button "备注" [ref=f5e232] [cursor=pointer]
+              - cell [ref=f5e233]:
+                - button "缺陷链接" [ref=f5e234] [cursor=pointer]
+              - cell [ref=f5e235]:
+                - generic [ref=f5e236]:
+                  - button "−" [ref=f5e237] [cursor=pointer]
+                  - button "＋" [ref=f5e238] [cursor=pointer]
+            - row [ref=f5e239]:
+              - cell [ref=f5e240]:
+                - checkbox [ref=f5e241]
+              - cell "2" [ref=f5e242]
+              - cell "皮肤解锁" [ref=f5e243]
+              - cell "付费解锁成功" [ref=f5e244]
+              - cell "P1" [ref=f5e246]:
+                - combobox "修改优先级" [active] [ref=f5e247]:
+                  - option "P0"
+                  - option "P1" [selected]
+                  - option "P2"
+              - cell "进入角色详情页" [ref=f5e248]
+              - cell "选择目标皮肤并点击解锁" [ref=f5e250]
+              - cell "界面状态和资源数量正确" [ref=f5e252]
+              - cell "通过" [ref=f5e254]:
+                - combobox [ref=f5e255]:
+                  - option "未执行"
+                  - option "通过" [selected]
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f5e256]:
+                - button "备注" [ref=f5e257] [cursor=pointer]
+              - cell [ref=f5e258]:
+                - button "缺陷链接" [ref=f5e259] [cursor=pointer]
+              - cell [ref=f5e260]:
+                - generic [ref=f5e261]:
+                  - button "−" [ref=f5e262] [cursor=pointer]
+                  - button "＋" [ref=f5e263] [cursor=pointer]
+            - row [ref=f5e264]:
+              - cell [ref=f5e265]:
+                - checkbox [ref=f5e266]
+              - cell "3" [ref=f5e267]
+              - cell "皮肤解锁" [ref=f5e268]
+              - cell "未满足条件时拦截解锁" [ref=f5e269]
+              - cell "P2" [ref=f5e271]:
+                - combobox "修改优先级" [ref=f5e272]:
+                  - option "P0"
+                  - option "P1"
+                  - option "P2" [selected]
+              - cell "进入角色详情页" [ref=f5e273]
+              - cell "选择目标皮肤并点击解锁" [ref=f5e275]
+              - cell "界面状态和资源数量正确" [ref=f5e277]
+              - cell "失败" [ref=f5e279]:
+                - combobox [ref=f5e280]:
+                  - option "未执行"
+                  - option "通过"
+                  - option "失败" [selected]
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f5e281]:
+                - button "备注已填" [ref=f5e282] [cursor=pointer]
+              - cell [ref=f5e283]:
+                - button "缺陷链接" [ref=f5e284] [cursor=pointer]
+              - cell [ref=f5e285]:
+                - generic [ref=f5e286]:
+                  - button "−" [ref=f5e287] [cursor=pointer]
+                  - button "＋" [ref=f5e288] [cursor=pointer]
+            - row [ref=f5e289]:
+              - cell [ref=f5e290]:
+                - checkbox [ref=f5e291]
+              - cell "4" [ref=f5e292]
+              - cell "皮肤展示" [ref=f5e293]
+              - cell "网络异常时提示重试" [ref=f5e294]
+              - cell "P0" [ref=f5e296]:
+                - combobox "修改优先级" [ref=f5e297]:
+                  - option "P0" [selected]
+                  - option "P1"
+                  - option "P2"
+              - cell "进入角色详情页" [ref=f5e298]
+              - cell "选择目标皮肤并点击解锁" [ref=f5e300]
+              - cell "界面状态和资源数量正确" [ref=f5e302]
+              - cell "阻塞" [ref=f5e304]:
+                - combobox [ref=f5e305]:
+                  - option "未执行"
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞" [selected]
+                  - option "不适用"
+              - cell [ref=f5e306]:
+                - button "备注" [ref=f5e307] [cursor=pointer]
+              - cell [ref=f5e308]:
+                - button "链接已填" [ref=f5e309] [cursor=pointer]
+              - cell [ref=f5e310]:
+                - generic [ref=f5e311]:
+                  - button "−" [ref=f5e312] [cursor=pointer]
+                  - button "＋" [ref=f5e313] [cursor=pointer]
+            - row [ref=f5e314]:
+              - cell [ref=f5e315]:
+                - checkbox [ref=f5e316]
+              - cell "5" [ref=f5e317]
+              - cell "皮肤展示" [ref=f5e318]
+              - cell "已拥有皮肤不重复扣费" [ref=f5e319]
+              - cell "P1" [ref=f5e321]:
+                - combobox "修改优先级" [ref=f5e322]:
+                  - option "P0"
+                  - option "P1" [selected]
+                  - option "P2"
+              - cell "进入角色详情页" [ref=f5e323]
+              - cell "选择目标皮肤并点击解锁" [ref=f5e325]
+              - cell "界面状态和资源数量正确" [ref=f5e327]
+              - cell "不适用" [ref=f5e329]:
+                - combobox [ref=f5e330]:
+                  - option "未执行"
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用" [selected]
+              - cell [ref=f5e331]:
+                - button "备注" [ref=f5e332] [cursor=pointer]
+              - cell [ref=f5e333]:
+                - button "缺陷链接" [ref=f5e334] [cursor=pointer]
+              - cell [ref=f5e335]:
+                - generic [ref=f5e336]:
+                  - button "−" [ref=f5e337] [cursor=pointer]
+                  - button "＋" [ref=f5e338] [cursor=pointer]
+            - row [ref=f5e339]:
+              - cell [ref=f5e340]:
+                - checkbox [ref=f5e341]
+              - cell "6" [ref=f5e342]
+              - cell "皮肤展示" [ref=f5e343]
+              - cell "切换皮肤后形象更新" [ref=f5e344]
+              - cell "P2" [ref=f5e346]:
+                - combobox "修改优先级" [ref=f5e347]:
+                  - option "P0"
+                  - option "P1"
+                  - option "P2" [selected]
+              - cell "进入角色详情页" [ref=f5e348]
+              - cell "选择目标皮肤并点击解锁" [ref=f5e350]
+              - cell "界面状态和资源数量正确" [ref=f5e352]
+              - cell "通过" [ref=f5e354]:
+                - combobox [ref=f5e355]:
+                  - option "未执行"
+                  - option "通过" [selected]
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f5e356]:
+                - button "备注" [ref=f5e357] [cursor=pointer]
+              - cell [ref=f5e358]:
+                - button "缺陷链接" [ref=f5e359] [cursor=pointer]
+              - cell [ref=f5e360]:
+                - generic [ref=f5e361]:
+                  - button "−" [ref=f5e362] [cursor=pointer]
+                  - button "＋" [ref=f5e363] [cursor=pointer]
+            - row [ref=f5e364]:
+              - cell [ref=f5e365]:
+                - checkbox [ref=f5e366]
+              - cell "7" [ref=f5e367]
+              - cell "皮肤展示" [ref=f5e368]
+              - cell "重进游戏保留已选皮肤" [ref=f5e369]
+              - cell "P0" [ref=f5e371]:
+                - combobox "修改优先级" [ref=f5e372]:
+                  - option "P0" [selected]
+                  - option "P1"
+                  - option "P2"
+              - cell "进入角色详情页" [ref=f5e373]
+              - cell "选择目标皮肤并点击解锁" [ref=f5e375]
+              - cell "界面状态和资源数量正确" [ref=f5e377]
+              - cell "未执行" [ref=f5e379]:
+                - combobox [ref=f5e380]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell [ref=f5e381]:
+                - button "备注" [ref=f5e382] [cursor=pointer]
+              - cell [ref=f5e383]:
+                - button "缺陷链接" [ref=f5e384] [cursor=pointer]
+              - cell [ref=f5e385]:
+                - generic [ref=f5e386]:
+                  - button "−" [ref=f5e387] [cursor=pointer]
+                  - button "＋" [ref=f5e388] [cursor=pointer]
+        - generic [ref=f5e389]:
+          - generic [ref=f5e390]: 显示 1-7 / 7 条，每页 20 条
+          - generic [ref=f5e391]:
+            - button "上一页" [disabled] [ref=f5e392]
+            - generic [ref=f5e393]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=f5e394]
+            - generic [ref=f5e395]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f5e396]: "1"
+              - text: 页
+      - option "请选择版本" [selected]

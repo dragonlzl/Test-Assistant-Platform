@@ -76,6 +76,7 @@
     var tempExecViewFocusZone = deps && deps.dom && deps.dom.tempExecViewFocusZone ? deps.dom.tempExecViewFocusZone : null;
     var tempExecOverview = deps && deps.dom && deps.dom.tempExecOverview ? deps.dom.tempExecOverview : null;
     var tempExecView = deps && deps.dom && deps.dom.tempExecView ? deps.dom.tempExecView : null;
+    var tempExecContextTitle = deps && deps.dom && deps.dom.tempExecContextTitle ? deps.dom.tempExecContextTitle : null;
     var tempExecToolbar = deps && deps.dom && deps.dom.tempExecToolbar ? deps.dom.tempExecToolbar : null;
     var tempExecToolbarCard = deps && deps.dom && deps.dom.tempExecToolbarCard ? deps.dom.tempExecToolbarCard : null;
     var tempReqToggleBtn = deps && deps.dom && deps.dom.toggleTempReq ? deps.dom.toggleTempReq : null;
@@ -168,6 +169,7 @@
         return Promise.resolve({ ok: ok });
       };
     var tempExecResultOptions = deps && deps.tempExecResultOptions ? deps.tempExecResultOptions : ['未执行', '通过', '失败', '阻塞', '不适用'];
+    var tempExecPriorityOptions = ['P0', 'P1', 'P2'];
     var reuseApplicabilityCore = deps && deps.reuseApplicabilityCore ? deps.reuseApplicabilityCore : null;
     var deriveCaseListFromText = deps && deps.deriveCaseListFromText ? deps.deriveCaseListFromText : function() { return []; };
     var parseXmindFile = deps && deps.parseXmindFile ? deps.parseXmindFile : function() { return Promise.resolve({ text: '', list: [] }); };
@@ -598,7 +600,7 @@
       var stash = document.getElementById('tempExecToolbarStash');
       var aiSlot = tempExecToolbar.querySelector('#tempExecAiGenSlot');
       var xmindSlot = tempExecToolbar.querySelector('#tempExecXmindSlot');
-      var changeSlot = tempExecToolbar.querySelector('#tempExecCaseLibraryChangeSlot');
+      var changeSlot = tempExecToolbar.querySelector('#tempExecCaseLibraryChangeBeforeNavSlot');
       var exportSlot = tempExecToolbar.querySelector('#tempExecExportSlot');
       if (tempExecAiGenBtn && aiSlot && tempExecAiGenBtn.parentNode !== aiSlot) {
         aiSlot.appendChild(tempExecAiGenBtn);
@@ -1409,6 +1411,30 @@
       var found = list.find(function(v) { return v && String(v.id) === vid; });
       var name = found && found.name ? String(found.name) : '';
       return name.trim() || ('版本#' + vid);
+    }
+
+    function renderTempExecContextTitle(file, projectName, versionName, hasContext) {
+      if (!tempExecContextTitle) return;
+      var projectValue = projectName || (hasContext ? '未归属' : '未选择');
+      var versionValue = versionName || (hasContext ? '未归属' : '未选择');
+      var caseValue = file && file.name ? String(file.name).trim() : '暂无执行用例';
+      if (!caseValue) caseValue = '未命名用例';
+      var parts = [
+        { key: 'project', label: '项目', value: projectValue },
+        { key: 'version', label: '版本', value: versionValue },
+        { key: 'case', label: '用例', value: caseValue },
+      ];
+      tempExecContextTitle.innerHTML = parts.map(function(part, index) {
+        var separator = index > 0 ? '<span class="case-exec-context-separator" aria-hidden="true"> / </span>' : '';
+        return separator +
+          '<span class="case-exec-context-part ' + part.key + '">' +
+            '<span class="label">' + part.label + '</span> ' +
+            '<strong class="value">' + escapeHtml(part.value) + '</strong>' +
+          '</span>';
+      }).join('');
+      tempExecContextTitle.setAttribute('title', parts.map(function(part) {
+        return part.label + ' ' + part.value;
+      }).join(' / '));
     }
 
     function updateTempExecFileCountBadge(fileId) {
@@ -3412,16 +3438,39 @@
         tempExecToolbarCard.classList.add('hidden');
         return;
       }
+      var previousSearch = tempExecToolbar.querySelector('[data-temp-search-input]');
+      var previousMoreToggle = tempExecToolbar.querySelector('[data-temp-more-toggle]');
+      var preserveMoreMenuOpen = Boolean(
+        previousSearch
+        && String(previousSearch.dataset.tempSearchInput || '') === String(file.id || '')
+        && previousMoreToggle
+        && previousMoreToggle.getAttribute('aria-expanded') === 'true'
+      );
       var summary = buildTempExecSummary(file);
       var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
       var activeFilter = statusFilter.fileId === file.id ? statusFilter.status : '';
       var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
       var searchRaw = searchState.fileId === file.id ? (searchState.raw || '') : '';
+      var reuseEnabled = Boolean(file && file.reuseEnabled);
+      var showMissingReminder = state.tempExecMissingReminderVisible === true;
       var orderedIds = getTempExecOrderedFileIds();
       var navDisabled = orderedIds.length < 2;
       var navAttr = navDisabled ? ' disabled' : '';
       var navHintPrev = navDisabled ? '暂无可切换用例' : '切换上一份用例';
       var navHintNext = navDisabled ? '暂无可切换用例' : '切换下一份用例';
+      var reuseBatchToggle = reuseEnabled ? buildTempExecReuseBatchToggle(file) : '';
+      var applicabilityProfile = reuseEnabled ? getTempExecReuseApplicabilityProfile(file) : null;
+      var presetActionsHtml = reuseEnabled
+        ? (
+          '<div class="toolbar-preset-actions" role="group" aria-label="预设操作">' +
+            '<button type="button" class="preset-add" data-temp-reuse-preset-add="' + file.id + '">＋ 预设子项</button>' +
+            reuseBatchToggle +
+            (applicabilityProfile
+              ? '<button type="button" class="preset-apply" data-temp-reuse-applicability-apply="' + file.id + '">快速执行</button>'
+              : '') +
+          '</div>'
+        )
+        : '';
       var navHtml =
         '<div class="toolbar-nav" role="group" aria-label="切换用例">' +
           '<span class="nav-label">用例切换：</span>' +
@@ -3442,35 +3491,58 @@
           '</button>';
       }
       var actionsHtml =
-        '<div class="toolbar-actions">' +
+        '<div class="toolbar-primary-row">' +
           '<div class="toolbar-block toolbar-search">' +
             '<input class="temp-search-input" data-temp-search-input="' + file.id + '" value="' + escapeHtml(searchRaw) + '" placeholder="搜索用例关键字">' +
           '</div>' +
-          '<div class="toolbar-block toolbar-middle">' +
-            '<div class="toolbar-ai-slot" id="tempExecAiGenSlot"></div>' +
-            '<div class="toolbar-xmind-slot" id="tempExecXmindSlot"></div>' +
-            '<div class="toolbar-change-slot" id="tempExecCaseLibraryChangeSlot"></div>' +
+          presetActionsHtml +
+          '<div class="toolbar-current-actions">' +
+            '<div class="toolbar-change-before-nav" id="tempExecCaseLibraryChangeBeforeNavSlot"></div>' +
             navHtml +
             '<div class="toolbar-archive-wrap">' + archiveHtml + '</div>' +
+            '<div class="toolbar-more">' +
+              '<button type="button" class="secondary toolbar-more-toggle" data-temp-more-toggle="1" aria-haspopup="menu" aria-expanded="false" aria-controls="tempExecMoreMenu">' +
+                '<span>更多操作</span><span class="toolbar-more-caret" aria-hidden="true"></span>' +
+              '</button>' +
+              '<div class="toolbar-more-menu hidden" id="tempExecMoreMenu" data-temp-more-menu="1" role="menu" aria-label="更多操作">' +
+                '<label class="toolbar-more-check toolbar-reuse-toggle">' +
+                  '<input type="checkbox" data-temp-reuse-toggle="' + file.id + '" aria-label="用例复用"' + (reuseEnabled ? ' checked' : '') + '>' +
+                  '<span>用例复用</span>' +
+                '</label>' +
+                '<label class="toolbar-more-check toolbar-missing-toggle">' +
+                  '<input type="checkbox" data-temp-missing-reminder-toggle="1" aria-label="显示易漏用例参考"' + (showMissingReminder ? ' checked' : '') + '>' +
+                  '<span>易漏用例参考</span>' +
+                '</label>' +
+                '<div class="toolbar-ai-slot" id="tempExecAiGenSlot"></div>' +
+                '<div class="toolbar-xmind-slot" id="tempExecXmindSlot"></div>' +
+                '<div class="toolbar-export" id="tempExecExportSlot"></div>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
-          '<div class="toolbar-block toolbar-export" id="tempExecExportSlot"></div>' +
         '</div>';
       var pillsHtml =
         '<div class="toolbar-pills">' +
-          '<span class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</span>' +
-          '<span class="summary-pill pending ' + (activeFilter === 'pending' ? 'active' : '') + '" data-temp-status-filter="pending" data-temp-status-file="' + file.id + '">未执行 ' + summary.pending + '</span>' +
-          '<span class="summary-pill passed ' + (activeFilter === 'passed' ? 'active' : '') + '" data-temp-status-filter="passed" data-temp-status-file="' + file.id + '">通过 ' + summary.passed + '</span>' +
-          '<span class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</span>' +
-          '<span class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</span>' +
-          '<span class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</span>' +
+          '<button type="button" class="summary-pill executed ' + (activeFilter === 'executed' ? 'active' : '') + '" data-temp-status-filter="executed" data-temp-status-file="' + file.id + '">已执行 ' + summary.executed + '</button>' +
+          '<button type="button" class="summary-pill pending ' + (activeFilter === 'pending' ? 'active' : '') + '" data-temp-status-filter="pending" data-temp-status-file="' + file.id + '">未执行 ' + summary.pending + '</button>' +
+          '<button type="button" class="summary-pill passed ' + (activeFilter === 'passed' ? 'active' : '') + '" data-temp-status-filter="passed" data-temp-status-file="' + file.id + '">通过 ' + summary.passed + '</button>' +
+          '<button type="button" class="summary-pill failed ' + (activeFilter === 'failed' ? 'active' : '') + '" data-temp-status-filter="failed" data-temp-status-file="' + file.id + '">失败 ' + summary.failed + '</button>' +
+          '<button type="button" class="summary-pill blocked ' + (activeFilter === 'blocked' ? 'active' : '') + '" data-temp-status-filter="blocked" data-temp-status-file="' + file.id + '">阻塞 ' + summary.blocked + '</button>' +
+          '<button type="button" class="summary-pill unspecified ' + (activeFilter === 'unspecified' ? 'active' : '') + '" data-temp-status-filter="unspecified" data-temp-status-file="' + file.id + '">不适用 ' + summary.unspecified + '</button>' +
         '</div>';
       var toolbarHtml = [
-        '<div class="toolbar-file">当前文件：<strong>' + escapeHtml(file.name) + '</strong></div>',
-        pillsHtml,
         actionsHtml,
+        pillsHtml,
       ].join('');
       tempExecToolbar.innerHTML = toolbarHtml;
       mountTempExecToolbarButtons();
+      if (preserveMoreMenuOpen) {
+        var nextMoreToggle = tempExecToolbar.querySelector('[data-temp-more-toggle]');
+        var nextMoreMenu = tempExecToolbar.querySelector('[data-temp-more-menu]');
+        if (nextMoreToggle && nextMoreMenu) {
+          nextMoreToggle.setAttribute('aria-expanded', 'true');
+          nextMoreMenu.classList.remove('hidden');
+        }
+      }
       tempExecToolbarCard.classList.remove('hidden');
     }
 
@@ -3482,6 +3554,55 @@
       if (matchKey === 'blocked') return status === '阻塞';
       if (matchKey === 'unspecified') return status === '不适用';
       return true;
+    }
+
+    function getTempExecCaseMatchIndexes(file) {
+      if (!file || !Array.isArray(file.cases)) return [];
+      var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
+      var searchTerm = searchState.fileId === file.id ? (searchState.term || '') : '';
+      var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+      var hasFilter = statusFilter.fileId === file.id && statusFilter.status;
+      return file.cases.map(function(item, idx) {
+        return { item: item, idx: idx };
+      }).filter(function(entry) {
+        var status = getCaseExecutionStatus(file, entry.item);
+        if (hasFilter && !mapFilterToStatus(statusFilter.status, status)) return false;
+        if (!searchTerm) return true;
+        var target = [
+          entry.item.module,
+          entry.item.title,
+          entry.item.priority,
+          entry.item.preconditions,
+          entry.item.steps,
+          entry.item.expected,
+          entry.item.remark,
+        ].map(function(text) { return (text || '').toString().toLowerCase(); }).join(' ');
+        return target.indexOf(searchTerm) !== -1;
+      }).map(function(entry) { return entry.idx; });
+    }
+
+    function buildTempExecReuseBatchToggle(file) {
+      if (!file || !file.reuseEnabled) return '';
+      var matchIndexes = getTempExecCaseMatchIndexes(file);
+      var reuseOpenSet = ensureTempExecReuseOpen(file.id);
+      var reusePlaceholderMap = state.tempExecReusePlaceholders && state.tempExecReusePlaceholders[file.id]
+        ? state.tempExecReusePlaceholders[file.id]
+        : null;
+      var allMatchedReuseOpen = matchIndexes.length > 0 && matchIndexes.every(function(idx) {
+        return reuseOpenSet.has(idx) || Boolean(reusePlaceholderMap && reusePlaceholderMap[String(idx)] !== undefined);
+      });
+      var reuseBatchExpandedMap = state.tempExecReuseBatchExpanded && typeof state.tempExecReuseBatchExpanded === 'object'
+        ? state.tempExecReuseBatchExpanded
+        : null;
+      var remembered = Boolean(
+        reuseBatchExpandedMap && Object.prototype.hasOwnProperty.call(reuseBatchExpandedMap, file.id)
+      );
+      var batchExpanded = remembered ? Boolean(reuseBatchExpandedMap[file.id]) : allMatchedReuseOpen;
+      return (
+        '<button type="button" class="secondary temp-reuse-expand-toggle" data-temp-reuse-toggle-all="' + file.id + '" data-temp-visible="' + escapeHtml(matchIndexes.join(',')) + '" data-temp-expanded="' + (batchExpanded ? '1' : '0') + '"' + (matchIndexes.length ? '' : ' disabled') + '>' +
+          (batchExpanded ? '收起所有子项' : '展开所有子项') +
+        '</button>'
+      );
     }
 
     function setTempExecStatusFilter(fileId, filterKey) {
@@ -4921,6 +5042,7 @@
     }
 
     function renderTempExecMissingReminderBlock() {
+      if (state.tempExecMissingReminderVisible !== true) return '';
       var reminder = ensureTempExecMissingReminderState();
       var aiEnabled = resolveMissingReminderAiEnabled() === 'on';
       if (aiEnabled) {
@@ -4969,6 +5091,7 @@
     }
 
     function scheduleTempExecMissingReminderLazyLoad() {
+      if (state.tempExecMissingReminderVisible !== true) return;
       var reminder = ensureTempExecMissingReminderState();
       if (!reminder.hasMatch || reminder.loading || reminder.loaded || !reminder.pendingPayload) return;
       var target = resolveTempExecMissingReminderTarget();
@@ -5033,6 +5156,11 @@
     }
 
     function refreshTempExecMissingReminder() {
+      if (state.tempExecMissingReminderVisible !== true) {
+        var hiddenReminder = ensureTempExecMissingReminderState();
+        cleanupTempExecMissingReminderObserver(hiddenReminder);
+        return;
+      }
       var reminder = ensureTempExecMissingReminderState();
       if (resolveMissingReminderAiEnabled() === 'on') {
         var prevReady = reminder.aiContextReady;
@@ -5889,27 +6017,16 @@
         : (ctx && ctx.versionId !== null && ctx.versionId !== undefined ? String(ctx.versionId || '') : '');
       var ctxProjectName = ctxProjectId ? resolveProjectName(ctxProjectId) : '';
       var ctxVersionName = (ctxProjectId && ctxVersionId) ? resolveVersionName(ctxProjectId, ctxVersionId) : '';
+      renderTempExecContextTitle(active, ctxProjectName, ctxVersionName, Boolean(active || ctxProjectId || ctxVersionId));
       if (active) ensureTempExecAssociationRows(active);
       var comboHtml = renderTempExecAssociationComposeHtml(active);
       var ctxHtml = '';
-      var ownerText = '';
-      if (ctxProjectName) ownerText += '项目 ' + escapeHtml(ctxProjectName);
-      if (ctxVersionName) ownerText += (ownerText ? ' / ' : '') + '版本 ' + escapeHtml(ctxVersionName);
-      if (ownerText || comboHtml) {
-        if (ownerText) {
-          ctxHtml +=
-            '<div class="temp-exec-context">' +
-              '<span class="temp-exec-context-label">当前用例归属：</span>' +
-              '<span class="temp-exec-context-kv">' + ownerText + '</span>' +
-            '</div>';
-        }
-        if (comboHtml) {
-          ctxHtml +=
-            '<div class="temp-exec-context temp-exec-context-combo">' +
-              '<span class="temp-exec-context-label">当前用例组合：</span>' +
-              '<span class="temp-exec-context-kv temp-exec-context-combo-line">' + comboHtml + '</span>' +
-            '</div>';
-        }
+      if (comboHtml) {
+        ctxHtml +=
+          '<div class="temp-exec-context temp-exec-context-combo">' +
+            '<span class="temp-exec-context-label">当前用例组合：</span>' +
+            '<span class="temp-exec-context-kv temp-exec-context-combo-line">' + comboHtml + '</span>' +
+          '</div>';
       }
       if (!active) {
         renderTempExecToolbar(null);
@@ -9351,6 +9468,7 @@
       var text = typeof value === 'string' ? value : '';
       if (field === 'priority') {
         var normalized = (text || '').trim().toUpperCase();
+        if (tempExecPriorityOptions.indexOf(normalized) === -1) return;
         file.cases[index][field] = normalized;
       } else {
         file.cases[index][field] = text;
@@ -9859,18 +9977,12 @@
       var placeholder = !chips && draft === null
         ? '<span class="hint">暂无预设子项，可提前配置常用测试项</span>'
         : '';
-      var applicabilityActions = applicabilityProfile
-        ? (
-          '<span class="preset-profile-label">' + escapeHtml(applicabilityProfile.label) + '</span>' +
-          '<button type="button" class="preset-apply" data-temp-reuse-applicability-apply="' + file.id + '">应用不适用</button>'
-        )
-        : '';
       return (
         '<div class="reuse-presets">' +
-          '<button type="button" class="preset-add" data-temp-reuse-preset-add="' + file.id + '">＋ 预设子项</button>' +
-          applicabilityActions +
-          inputHtml +
-          (chips || placeholder) +
+          '<div class="reuse-preset-items">' +
+            inputHtml +
+            (chips || placeholder) +
+          '</div>' +
         '</div>'
       );
     }
@@ -9933,26 +10045,8 @@
     }
 
     function renderTempExecTable(file) {
-      var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
-      var searchTerm = searchState.fileId === file.id ? (searchState.term || '') : '';
-      var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
-      var hasFilter = statusFilter.fileId === file.id && statusFilter.status;
-      var matches = file.cases.map(function(item, idx) { return { item: item, idx: idx }; }).filter(function(entry) {
-        var status = getCaseExecutionStatus(file, entry.item);
-        if (hasFilter && !mapFilterToStatus(statusFilter.status, status)) return false;
-        if (!searchTerm) return true;
-        var target = [
-          entry.item.module,
-          entry.item.title,
-          entry.item.priority,
-          entry.item.preconditions,
-          entry.item.steps,
-          entry.item.expected,
-          entry.item.remark,
-        ].map(function(text) { return (text || '').toString().toLowerCase(); }).join(' ');
-        return target.indexOf(searchTerm) !== -1;
-      });
-      var matchIndexes = matches.map(function(entry) { return entry.idx; });
+      var matchIndexes = getTempExecCaseMatchIndexes(file);
+      var matches = matchIndexes.map(function(idx) { return { item: file.cases[idx], idx: idx }; });
       var selection = ensureTempExecSelection(file.id);
       var remarkOpenSet = ensureTempExecRemarkOpen(file.id);
       var reuseOpenSet = ensureTempExecReuseOpen(file.id);
@@ -10001,7 +10095,7 @@
         actual: emToPx(7) + 'px',
         remark: emToPx(6) + 'px',
         defect: emToPx(6) + 'px',
-        ops: '40px',
+        ops: '76px',
       };
       stretchVisible.forEach(function(key) {
         var base = Number(baseEm[key]) || 0;
@@ -10024,7 +10118,11 @@
         var editPlaceholder = '点击此处编辑';
         var moduleHtml = escapeHtml(item.module || '-');
         var titleHtml = item.title ? escapeHtml(item.title) : '';
-        var priorityHtml = item.priority ? escapeHtml(item.priority) : '';
+        var currentPriority = item && item.priority ? String(item.priority).trim().toUpperCase() : 'P1';
+        if (tempExecPriorityOptions.indexOf(currentPriority) === -1) currentPriority = 'P1';
+        var priorityOptions = tempExecPriorityOptions.map(function(opt) {
+          return '<option value="' + opt + '" ' + (currentPriority === opt ? 'selected' : '') + '>' + opt + '</option>';
+        }).join('');
         var preHtml = item.preconditions ? escapeHtml(item.preconditions).replace(/\n/g, '<br>') : '';
         var stepsHtml = item.steps ? escapeHtml(item.steps).replace(/\n/g, '<br>') : '';
         var expectedHtml = item.expected ? escapeHtml(item.expected).replace(/\n/g, '<br>') : '';
@@ -10085,7 +10183,7 @@
             );
           } else if (key === 'priority') {
             cells.push(
-              '<td><div class="temp-inline-edit" contenteditable="true" data-temp-edit-field="priority" data-temp-edit-file="' + file.id + '" data-temp-edit-index="' + idx + '" data-temp-edit-multiline="false" data-placeholder="' + editPlaceholder + '">' + priorityHtml + '</div></td>'
+              '<td class="priority"><select class="priority-select" aria-label="修改优先级" data-temp-priority="' + file.id + '" data-index="' + idx + '" data-priority="' + currentPriority.toLowerCase() + '">' + priorityOptions + '</select></td>'
             );
           } else if (key === 'preconditions') {
             cells.push(
@@ -10102,9 +10200,9 @@
           } else if (key === 'actual') {
             cells.push(actualCell);
           } else if (key === 'remark') {
-            cells.push('<td><button type="button" class="' + remarkBtnClass.join(' ') + '" data-temp-remark-toggle="' + file.id + '" data-index="' + idx + '">' + (hasRemark ? '备注已填' : '备注') + '</button></td>');
+            cells.push('<td class="remark"><button type="button" class="' + remarkBtnClass.join(' ') + '" data-temp-remark-toggle="' + file.id + '" data-index="' + idx + '">' + (hasRemark ? '备注已填' : '备注') + '</button></td>');
           } else if (key === 'defect') {
-            cells.push('<td><button type="button" class="' + defectBtnClass.join(' ') + '" data-temp-defect-toggle="' + file.id + '" data-index="' + idx + '">' + (hasDefects ? '链接已填' : '缺陷链接') + '</button></td>');
+            cells.push('<td class="defect"><button type="button" class="' + defectBtnClass.join(' ') + '" data-temp-defect-toggle="' + file.id + '" data-index="' + idx + '">' + (hasDefects ? '链接已填' : '缺陷链接') + '</button></td>');
           } else if (key === 'ops') {
             cells.push(
               '<td class="case-op-col">' +
@@ -10198,44 +10296,6 @@
       var emptyRow = visibleIndexes.length
         ? ''
         : '<tr><td colspan="' + colCount + '">' + (file.cases.length ? '当前页暂无用例' : '未解析到有效用例') + '</td></tr>';
-      var summary = buildTempExecSummary(file);
-      var reusePlaceholderMap = state.tempExecReusePlaceholders && state.tempExecReusePlaceholders[file.id]
-        ? state.tempExecReusePlaceholders[file.id]
-        : null;
-      var allMatchedReuseOpen = reuseEnabled
-        && matchIndexes.length > 0
-        && matchIndexes.every(function(idx) {
-          return reuseOpenSet.has(idx) || Boolean(reusePlaceholderMap && reusePlaceholderMap[String(idx)] !== undefined);
-        });
-      var reuseBatchExpandedMap = state.tempExecReuseBatchExpanded && typeof state.tempExecReuseBatchExpanded === 'object'
-        ? state.tempExecReuseBatchExpanded
-        : null;
-      var reuseBatchExpandedRemembered = Boolean(
-        reuseBatchExpandedMap
-        && Object.prototype.hasOwnProperty.call(reuseBatchExpandedMap, file.id)
-      );
-      var batchExpanded = reuseBatchExpandedRemembered
-        ? Boolean(reuseBatchExpandedMap[file.id])
-        : allMatchedReuseOpen;
-      var reuseBatchToggle = reuseEnabled
-        ? (
-          '<button type="button" class="secondary temp-reuse-expand-toggle" data-temp-reuse-toggle-all="' + file.id + '" data-temp-visible="' + escapeHtml(matchIndexes.join(',')) + '" data-temp-expanded="' + (batchExpanded ? '1' : '0') + '"' + (matchIndexes.length ? '' : ' disabled') + '>' +
-            (batchExpanded ? '收起所有子项' : '展开所有子项') +
-          '</button>'
-        )
-        : '';
-      var reuseToggle = (
-        '<div class="temp-reuse-toggle">' +
-          '<div class="temp-reuse-toggle-main">' +
-            '<label>' +
-              '<input type="checkbox" data-temp-reuse-toggle="' + file.id + '" ' + (reuseEnabled ? 'checked' : '') + '>' +
-              '<span>用例复用</span>' +
-            '</label>' +
-            '<span class="hint">' + (reuseEnabled ? '可为单条用例补充多条执行记录' : '开启后可为用例记录多条执行项') + '</span>' +
-          '</div>' +
-          reuseBatchToggle +
-        '</div>'
-      );
       var presetPanel = reuseEnabled ? renderReusePresetPanel(file) : '';
       var paginationBlock = buildTempExecPagination(file, totalCases, pageIndex, totalPages, start, end);
       var headerCells = [];
@@ -10252,7 +10312,6 @@
       headerCells.push('<th>缺陷链接</th>');
       if (show('ops')) headerCells.push('<th class="ops" title="增删">增删</th>');
       return (
-        reuseToggle +
         presetPanel +
         paginationBlock +
         '<table data-resizable-id="temp-exec-' + escapeHtml(file.id) + '" data-resizable-label="执行视图 - ' + escapeHtml(file.name || '测试用例') + '">' +

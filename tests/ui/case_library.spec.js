@@ -720,8 +720,8 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     });
     await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').click();
     await page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]').fill('正常登录（已更新）');
-    // 保存依赖 focusout，这里点击标题触发 blur（清空按钮在无搜索时会禁用）
-    await page.click('#caseLibraryEditCardTitle');
+    // 保存依赖 focusout，这里点击顶部用例上下文触发 blur。
+    await page.click('#caseLibraryContextTitle');
     await editPatch;
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录（已更新）');
 
@@ -769,6 +769,10 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await page.waitForTimeout(600);
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('case-library'); });
+    await page.waitForURL(/case-library\.html/);
+    await waitCaseLibraryReady(page, 30000);
+    await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
+    await expect(page.locator('#caseLibraryEditFileName')).toContainText('case_library_import');
     await page.click('#caseLibraryEditToExecBtn');
     await expect(page.locator('#execVersionSelectDrawer')).toHaveClass(/open/);
     await expect(page.locator('#execVersionSelectDrawerConfirmBtn')).toBeEnabled();
@@ -2326,8 +2330,8 @@ test.describe('用例库页面（导入/编辑/选择执行）', () => {
     await expect(page.locator('#caseLibrarySelectBatchExecBtn')).toBeDisabled();
     await page.click('#caseLibrarySelectListBody input[data-case-lib-select-select="100"]');
     await page.fill('#caseLibrarySelectSearchInput', 'B');
-    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('鐢ㄤ緥A');
-    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('鐢ㄤ緥B');
+    await expect(page.locator('#caseLibrarySelectListBody')).not.toContainText('用例A');
+    await expect(page.locator('#caseLibrarySelectListBody')).toContainText('用例B');
     await page.click('#caseLibrarySelectListBody input[data-case-lib-select-select="101"]');
     await expect(page.locator('#caseLibrarySelectBatchExecBtn')).toBeEnabled();
 

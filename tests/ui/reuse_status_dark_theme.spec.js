@@ -268,7 +268,7 @@ test.describe('暗色主题复用执行按钮', () => {
     await waitForAppReady(page);
     await page.waitForFunction(() => window.app && window.app.state && window.app.state.activeTab === 'tempexec');
     await page.waitForSelector('.temp-case-view td.check input[type="checkbox"]', { state: 'attached', timeout: 8000 });
-    await page.waitForSelector('.temp-reuse-toggle input[type="checkbox"]', { state: 'attached', timeout: 8000 });
+    await page.waitForSelector('#tempExecToolbar input[data-temp-reuse-toggle]', { state: 'attached', timeout: 8000 });
 
     const expectedAccent = await page.evaluate(() => {
       var raw = getComputedStyle(document.documentElement).getPropertyValue('--primary').trim();
@@ -280,7 +280,7 @@ test.describe('暗色主题复用执行按钮', () => {
       return resolved;
     });
     const rowAccent = await page.$eval('.temp-case-view td.check input[type="checkbox"]', (el) => getComputedStyle(el).accentColor);
-    const reuseAccent = await page.$eval('.temp-reuse-toggle input[type="checkbox"]', (el) => getComputedStyle(el).accentColor);
+    const reuseAccent = await page.$eval('#tempExecToolbar input[data-temp-reuse-toggle]', (el) => getComputedStyle(el).accentColor);
     expect(rowAccent).toBe(expectedAccent);
     expect(reuseAccent).toBe(expectedAccent);
   });

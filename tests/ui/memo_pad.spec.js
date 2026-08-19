@@ -16,11 +16,6 @@ async function openMemoTab(page) {
   await expect(page.locator('[data-sidebar-panel="memo"]')).toHaveClass(/is-active/);
 }
 
-async function openCasegenTab(page) {
-  await page.click('#sidebarTabCasegen');
-  await expect(page.locator('[data-sidebar-panel="casegen"]')).toHaveClass(/is-active/);
-}
-
 async function setupRoutes(page, token, options) {
   const user = { id: 1, username: 'demo_user', role: 'user', level: 'member' };
   const project = { id: 1, name: '项目A', description: '' };
@@ -195,21 +190,20 @@ test.describe('个人备忘区', () => {
     await expect(page.locator('.memo-tab')).toHaveCount(1);
   });
 
-  test('侧边栏页签切换展示', async ({ page }) => {
+  test('个人备忘作为唯一侧边工具入口展示', async ({ page }) => {
     await setupRoutes(page, 'token-sidebar-tabs');
     await gotoIndex(page);
     await waitForSettingsReady(page);
 
-    await expect(page.locator('[data-sidebar-panel="casegen"]')).toHaveClass(/is-active/);
-    await expect(page.locator('#caseGenProgressPanel')).toBeVisible();
+    await expect(page.locator('#sidebarTabCasegen')).toHaveCount(0);
+    await expect(page.locator('[data-sidebar-panel="casegen"]')).toHaveCount(0);
+    await expect(page.locator('[data-sidebar-panel="memo"]')).toHaveClass(/is-active/);
+    await expect(page.locator('#workspaceToolOverlay')).not.toHaveClass(/is-open/);
+    await expect(page.locator('#caseGenProgressPanel')).toHaveCount(0);
     await expect(page.locator('#memoPadPanel')).toBeHidden();
 
     await openMemoTab(page);
+    await expect(page.locator('#workspaceToolOverlay')).toHaveClass(/is-open/);
     await expect(page.locator('#memoPadPanel')).toBeVisible();
-    await expect(page.locator('#caseGenProgressPanel')).toBeHidden();
-
-    await openCasegenTab(page);
-    await expect(page.locator('#caseGenProgressPanel')).toBeVisible();
-    await expect(page.locator('#memoPadPanel')).toBeHidden();
   });
 });

@@ -73,7 +73,7 @@ test.describe('临时执行搜索功能', () => {
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
     await expect(navButtons).toHaveCount(1, { timeout: 5000 });
     await expect(navButtons.first()).toBeVisible();
-    await navButtons.first().click({ force: true });
+    await navButtons.first().click();
     await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
     const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });
@@ -191,10 +191,14 @@ test.describe('临时执行搜索功能', () => {
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
 
     await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/closing/);
     await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
     await expect(navButtons).toHaveCount(1, { timeout: 5000 });
-    await navButtons.first().click({ force: true });
+    await navButtons.first().click();
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
     const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });
     await expect(caseRows).toHaveCount(3, { timeout: 15000 });
@@ -231,10 +235,14 @@ test.describe('临时执行搜索功能', () => {
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
 
     await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/closing/);
     await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
     await expect(navButtons).toHaveCount(1, { timeout: 5000 });
-    await navButtons.first().click({ force: true });
+    await navButtons.first().click();
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
     const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });
     await expect(caseRows).toHaveCount(3, { timeout: 15000 });
@@ -283,10 +291,14 @@ test.describe('临时执行搜索功能', () => {
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
 
     await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/closing/);
     await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
     await expect(navButtons).toHaveCount(1, { timeout: 5000 });
-    await navButtons.first().click({ force: true });
+    await navButtons.first().click();
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
     const caseRows = page.locator('#tempExecView table tbody tr').filter({ has: page.locator('[data-temp-case-remove]') });
     await expect(caseRows).toHaveCount(3, { timeout: 15000 });
@@ -332,13 +344,18 @@ test.describe('临时执行搜索功能', () => {
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
 
     await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/closing/);
     await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
     await expect(navButtons).toHaveCount(1, { timeout: 5000 });
-    await navButtons.first().click({ force: true });
+    await navButtons.first().click();
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
 
-    const reuseToggle = page.locator('#tempExecView input[data-temp-reuse-toggle]').first();
+    await page.getByRole('button', { name: '更多操作' }).click();
+    const reuseToggle = page.locator('#tempExecToolbar input[data-temp-reuse-toggle]').first();
     await expect(reuseToggle).toBeVisible();
     if (!(await reuseToggle.isChecked())) {
       await reuseToggle.check();
@@ -392,16 +409,21 @@ test.describe('临时执行搜索功能', () => {
     await expect(page.locator('#tempExecStatus')).toContainText('已导入', { timeout: 5000 });
 
     await page.click('#closeTempExecImportDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/open/);
+    await expect(page.locator('#tempExecImportDrawer')).not.toHaveClass(/closing/);
     await page.click('#openTempExecAssignDrawerBtn', { force: true });
+    await expect(page.locator('#tempExecAssignDrawer')).toHaveClass(/open/);
     const navButtons = page.locator('#tempExecNav button[data-temp-file]');
     await expect(navButtons).toHaveCount(1, { timeout: 5000 });
-    await navButtons.first().click({ force: true });
+    await navButtons.first().click();
+    await expect(page.locator('#tempExecAssignDrawer')).not.toHaveClass(/open/);
     await expect(page.locator('#tempExecView')).toBeVisible({ timeout: 15000 });
 
     const statusSelect = page.locator('#tempExecView select[data-temp-result]').first();
     await statusSelect.selectOption('通过');
 
-    const reuseToggle = page.locator('#tempExecView input[data-temp-reuse-toggle]').first();
+    await page.getByRole('button', { name: '更多操作' }).click();
+    const reuseToggle = page.locator('#tempExecToolbar input[data-temp-reuse-toggle]').first();
     await expect(reuseToggle).toBeVisible();
     await reuseToggle.check();
     const confirmDrawer = page.locator('#appConfirmDrawer');
@@ -418,6 +440,7 @@ test.describe('临时执行搜索功能', () => {
     await reuseRow.locator('[data-temp-reuse-add]').click();
     await expect(reuseRow.locator('[data-temp-reuse-remove]')).toHaveCount(1);
 
+    await page.getByRole('button', { name: '更多操作' }).click();
     await reuseToggle.uncheck();
     await expect(confirmDrawer).toHaveClass(/open/);
     await expect(page.locator('#appConfirmDrawerMessage')).toHaveText('关闭“用例复用”会删除所有复用测试项与预设子项，是否继续？');

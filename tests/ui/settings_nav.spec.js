@@ -43,33 +43,33 @@ async function setupRoutes(page) {
   });
 }
 
-async function waitForSettingsSectionTop(page, target) {
+async function waitForSettingsSectionActive(page, target) {
   await page.waitForFunction((id) => {
-    var el = document.querySelector('[data-settings-section="' + id + '"]');
-    if (!el) return false;
-    var rect = el.getBoundingClientRect();
-    return rect.top >= 0 && rect.top < 240;
+    var nav = document.querySelector('[data-settings-target="' + id + '"]');
+    return Boolean(nav && nav.getAttribute('aria-current') === 'page');
   }, target);
 }
 
-test.describe('设置页顶部导航', () => {
-  test('设置导航只展示保留设置并支持定位', async ({ page }) => {
+test.describe('设置页分类导航', () => {
+  test('设置分类栏展示保留设置并支持定位', async ({ page }) => {
     await setupRoutes(page);
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto(base + '/index.html');
     await waitForAppReady(page);
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
+    await waitForAppReady(page);
 
     await expect(page.locator('#flowNav')).toHaveCount(0);
     await expect(page.locator('#settingsHead')).toBeVisible();
     await expect(page.locator('#settingsNavFeishuBtn')).toHaveCount(0);
+    await expect(page.locator('#settingsHead [data-settings-target]')).toHaveCount(5);
 
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.click('#settingsNavColumnsBtn');
-    await waitForSettingsSectionTop(page, 'tempexec-columns');
+    await waitForSettingsSectionActive(page, 'tempexec-columns');
 
     await page.click('#settingsNavMiscBtn');
-    await waitForSettingsSectionTop(page, 'misc');
+    await waitForSettingsSectionActive(page, 'misc');
   });
 });

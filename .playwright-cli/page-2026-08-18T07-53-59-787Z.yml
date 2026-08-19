@@ -1,0 +1,70 @@
+- generic [ref=f4e2]:
+  - complementary [ref=f4e3]:
+    - heading "用例助手 TEST ASSISTANT" [level=1] [ref=f4e5]:
+      - generic [ref=f4e9]:
+        - generic [ref=f4e10]: 用例助手
+        - generic [ref=f4e11]: TEST ASSISTANT
+    - navigation [ref=f4e12]:
+      - generic [ref=f4e13]:
+        - heading "AI 功能" [level=2] [ref=f4e14]
+        - generic [ref=f4e16]:
+          - button "XMind 用例生成" [ref=f4e17] [cursor=pointer]
+          - button "功能指派" [ref=f4e23] [cursor=pointer]:
+            - text: 功能指派
+            - generic [ref=f4e30]: 未配置模型
+          - button "模型管理" [ref=f4e31] [cursor=pointer]:
+            - text: 模型管理
+            - generic [ref=f4e36]: 未配置模型
+      - generic [ref=f4e37]:
+        - heading "用例相关" [level=2] [ref=f4e38]
+        - generic [ref=f4e39]:
+          - button "用例执行" [ref=f4e40] [cursor=pointer]
+          - button "用例库" [ref=f4e45] [cursor=pointer]
+          - button "用例归档" [ref=f4e49] [cursor=pointer]
+          - button "执行总览" [ref=f4e54] [cursor=pointer]
+      - generic [ref=f4e58]:
+        - heading "管理" [level=2] [ref=f4e59]
+        - generic [ref=f4e60]:
+          - button "项目管理" [ref=f4e61] [cursor=pointer]
+          - button "人员管理" [ref=f4e66] [cursor=pointer]
+          - button "操作记录" [ref=f4e73] [cursor=pointer]
+      - generic [ref=f4e78]:
+        - heading "设置" [level=2] [ref=f4e79]
+        - button "通用设置" [ref=f4e81] [cursor=pointer]
+    - generic [ref=f4e86]:
+      - text: 个人工具
+      - generic "个人工具" [ref=f4e87]:
+        - button "XMind 生成进度" [ref=f4e88] [cursor=pointer]
+        - button "个人备忘" [ref=f4e95] [cursor=pointer]
+    - generic [ref=f4e100]:
+      - generic [ref=f4e101]: 当前用户
+      - button "用户菜单" [ref=f4e102] [cursor=pointer]:
+        - generic [ref=f4e103]: e
+      - strong [ref=f4e105]: e2e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f4e106]:
+    - heading "功能导航" [level=2] [ref=f4e108]
+    - navigation "执行操作" [ref=f4e109]:
+      - generic [ref=f4e111]:
+        - button "用例导入" [ref=f4e112] [cursor=pointer]
+        - button "选择用例执行" [ref=f4e118] [cursor=pointer]
+        - button "执行分配" [ref=f4e124] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f4e130] [cursor=pointer]
+  - generic [ref=f4e138]:
+    - banner [ref=f4e139]:
+      - heading "用例执行" [level=1] [ref=f4e140]
+    - main [ref=f4e141]:
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=f4e142]:
+        - heading "执行视图" [level=2] [ref=f4e143]
+        - generic [ref=f4e144]: 暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录
+      - option "请选择版本" [selected]

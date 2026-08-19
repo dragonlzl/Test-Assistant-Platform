@@ -204,6 +204,7 @@ test.describe('执行页复用开关同步到用例库', () => {
     await waitAppReady(page, 30000);
 
     await switchToTab(page, 'tempexec');
+    await page.getByRole('button', { name: '更多操作' }).click();
     const reuseToggle = page.locator('[data-temp-reuse-toggle]').first();
     await expect(reuseToggle).toBeVisible();
     await expect(reuseToggle).toBeChecked();

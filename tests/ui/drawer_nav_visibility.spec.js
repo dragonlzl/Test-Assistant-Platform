@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-test.describe('执行页抽屉遮罩不遮挡侧边栏/执行导航', () => {
+test.describe('执行页抽屉遮罩覆盖完整视口', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();
@@ -17,7 +17,7 @@ test.describe('执行页抽屉遮罩不遮挡侧边栏/执行导航', () => {
     await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 30000 });
   });
 
-  test('tempexec drawer keeps sidebar and tempexec nav visible with full mask', async ({ page }) => {
+  test('抽屉遮罩覆盖两级左侧导航并可从执行导航区域关闭', async ({ page }) => {
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('tempexec'); });
     await page.click('#openTempExecImportDrawerBtn');
 
@@ -35,6 +35,42 @@ test.describe('执行页抽屉遮罩不遮挡侧边栏/执行导航', () => {
     const box = await mask.boundingBox();
     expect(box && box.width).toBeGreaterThan(1000);
     expect(box && box.height).toBeGreaterThan(600);
+
+    const overlayCoverage = await page.evaluate(() => {
+      var maskElement = document.querySelector('#tempExecImportDrawer .drawer-mask');
+      var sidebarElement = document.querySelector('aside.sidebar');
+      var sectionNavElement = document.getElementById('tempexecSectionNav');
+
+      function probe(element, x, y) {
+        if (!element || !maskElement) return false;
+        var inlineValue = element.style.getPropertyValue('pointer-events');
+        var inlinePriority = element.style.getPropertyPriority('pointer-events');
+        element.style.setProperty('pointer-events', 'auto', 'important');
+        var target = document.elementFromPoint(x, y);
+        if (inlineValue) {
+          element.style.setProperty('pointer-events', inlineValue, inlinePriority);
+        } else {
+          element.style.removeProperty('pointer-events');
+        }
+        return target === maskElement;
+      }
+
+      var sidebarRect = sidebarElement.getBoundingClientRect();
+      var sectionRect = sectionNavElement.getBoundingClientRect();
+      return {
+        sidebarCovered: probe(sidebarElement, sidebarRect.left + 2, window.innerHeight / 2),
+        sectionNavCovered: probe(sectionNavElement, sectionRect.left + sectionRect.width / 2, window.innerHeight / 2),
+        sectionClickPoint: {
+          x: sectionRect.left + sectionRect.width / 2,
+          y: window.innerHeight / 2,
+        },
+      };
+    });
+    expect(overlayCoverage.sidebarCovered).toBeTruthy();
+    expect(overlayCoverage.sectionNavCovered).toBeTruthy();
+
+    await page.mouse.click(overlayCoverage.sectionClickPoint.x, overlayCoverage.sectionClickPoint.y);
+    await expect(drawer).not.toHaveClass(/open/);
   });
 
   test('tempexec drawer keeps nav visible after page has been scrolled', async ({ page }) => {
@@ -52,7 +88,7 @@ test.describe('执行页抽屉遮罩不遮挡侧边栏/执行导航', () => {
       document.documentElement.scrollTop = target;
       document.body.scrollTop = target;
     });
-    await page.locator('#openTempExecImportDrawerBtn').evaluate((btn) => btn.click());
+    await page.locator('#openTempExecImportDrawerBtn').click();
 
     const drawer = page.locator('#tempExecImportDrawer');
     await expect(drawer).toHaveClass(/open/);
@@ -89,11 +125,12 @@ test.describe('执行页抽屉遮罩不遮挡侧边栏/执行导航', () => {
       document.body.scrollTop = target;
     });
     await page.waitForFunction(() => Math.abs(window.scrollY - 1700) < 5, { timeout: 2000 });
+    await page.waitForFunction(() => window.app && window.app.tempExecApi);
     const beforeSidebarTop = await page.$eval('aside.sidebar', (el) => el.getBoundingClientRect().top);
     const beforeNavTop = await page.$eval('#tempexecFlowNav', (el) => el.getBoundingClientRect().top);
     const scrollBefore = await page.evaluate(() => window.scrollY);
 
-    await page.locator('#openTempExecImportDrawerBtn').evaluate((btn) => btn.click());
+    await page.locator('#openTempExecImportDrawerBtn').dispatchEvent('click');
     await page.waitForSelector('#tempExecImportDrawer.open');
     await page.waitForTimeout(180);
 

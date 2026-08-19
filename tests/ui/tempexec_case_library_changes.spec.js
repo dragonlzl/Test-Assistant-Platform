@@ -44,6 +44,13 @@ async function switchToTab(page, tabName) {
   }, tabName, { timeout: 8000 }).catch(() => {});
 }
 
+async function openTempExecMoreActions(page) {
+  const toggle = page.locator('#tempExecToolbar [data-temp-more-toggle]');
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await expect(page.locator('#tempExecMoreMenu')).toBeVisible();
+}
+
 async function ensureAuthed(page, token, user) {
   await page.waitForFunction(() => window.app && window.app.apiClient && window.app.state);
   await page.evaluate((payload) => {
@@ -203,26 +210,33 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('取消支付');
 
     const toolbarOrder = await page.evaluate(() => {
-      var actions = document.querySelector('#tempExecToolbar .toolbar-actions');
+      var actions = document.querySelector('#tempExecToolbar .toolbar-primary-row');
       if (!actions) return null;
       var blocks = Array.prototype.slice.call(actions.children).map(function(el) { return el.className || ''; });
-      var middle = actions.querySelector('.toolbar-middle');
-      var middleOrder = [];
-      if (middle) {
-        middleOrder = Array.prototype.slice.call(middle.children).map(function(el) { return el.className || ''; });
-      }
-      var exportSlot = actions.querySelector('#tempExecExportSlot');
+      var currentActions = actions.querySelector('.toolbar-current-actions');
+      var currentActionOrder = currentActions
+        ? Array.prototype.slice.call(currentActions.children).map(function(el) { return el.className || ''; })
+        : [];
+      var menu = actions.querySelector('[data-temp-more-menu]');
+      var menuOrder = menu
+        ? Array.prototype.slice.call(menu.children).map(function(el) { return el.className || ''; })
+        : [];
+      var exportSlot = menu ? menu.querySelector('#tempExecExportSlot') : null;
       var exportIds = exportSlot
         ? Array.prototype.slice.call(exportSlot.querySelectorAll('button')).map(function(btn) { return btn.id || ''; })
         : [];
-      return { blocks: blocks, middle: middleOrder, exportIds: exportIds };
+      return { blocks: blocks, currentActions: currentActionOrder, menu: menuOrder, exportIds: exportIds };
     });
     expect(toolbarOrder && toolbarOrder.blocks).toBeTruthy();
-    expect(toolbarOrder.blocks.length).toBe(3);
-    expect(toolbarOrder.blocks[1]).toContain('toolbar-middle');
-    expect(toolbarOrder.middle.join(' ')).toContain('toolbar-change-slot');
-    expect(toolbarOrder.middle.join(' ')).toContain('toolbar-nav');
-    expect(toolbarOrder.middle.join(' ')).toContain('toolbar-archive-wrap');
+    expect(toolbarOrder.blocks.join(' ')).toContain('toolbar-search');
+    expect(toolbarOrder.blocks.join(' ')).not.toContain('toolbar-file');
+    expect(toolbarOrder.blocks.join(' ')).toContain('toolbar-current-actions');
+    expect(toolbarOrder.currentActions[0]).toContain('toolbar-change-before-nav');
+    expect(toolbarOrder.currentActions[1]).toContain('toolbar-nav');
+    expect(toolbarOrder.currentActions.join(' ')).toContain('toolbar-nav');
+    expect(toolbarOrder.currentActions.join(' ')).toContain('toolbar-archive-wrap');
+    expect(toolbarOrder.currentActions.join(' ')).toContain('toolbar-more');
+    expect(toolbarOrder.menu.join(' ')).not.toContain('toolbar-change-slot');
     expect(toolbarOrder.exportIds).toContain('exportTempExecXmindBtn');
     expect(toolbarOrder.exportIds).toContain('exportTempExecCasesXmindBtn');
   });
@@ -922,6 +936,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     if (await diffDrawer.evaluate((el) => el.classList.contains('open'))) {
       await expect(diffDrawer).toHaveClass(/open/);
     } else {
+      await openTempExecMoreActions(page);
       await btn.click({ force: true });
       await expect(diffDrawer).toHaveClass(/open/);
     }
@@ -953,6 +968,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
       await expect(diffDrawer).not.toHaveClass(/open/);
     }
 
+    await openTempExecMoreActions(page);
     await btn.click({ force: true });
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(page.locator('#tempExecCaseLibraryDiffCaseName')).toContainText('用例A');
@@ -1066,6 +1082,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
     const btn = page.locator('#tempExecCaseLibraryChangesBtn');
     await expect(btn).toBeEnabled();
+    await openTempExecMoreActions(page);
     await btn.click();
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(page.locator('#tempExecCaseLibraryDiffUpdatedPill')).toContainText('改动 1');
@@ -1084,6 +1101,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
       return null;
     });
     await expect(btn).toBeEnabled();
+    await openTempExecMoreActions(page);
     await btn.click();
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(page.locator('#tempExecCaseLibraryDiffUpdatedPill')).toContainText('改动 1');
@@ -1220,6 +1238,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
     const btn = page.locator('#tempExecCaseLibraryChangesBtn');
     await expect(btn).toBeEnabled();
+    await openTempExecMoreActions(page);
     await btn.click();
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('旧标题');
@@ -1240,6 +1259,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     });
 
     await expect(btn).toBeEnabled();
+    await openTempExecMoreActions(page);
     await btn.click();
     await expect(diffDrawer).toHaveClass(/open/);
     await expect(page.locator('#tempExecCaseLibraryDiffBody')).toContainText('暂无变更');
@@ -1710,6 +1730,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
 
     const btn = page.locator('#tempExecCaseLibraryChangesBtn');
     await expect(btn).toBeEnabled();
+    await openTempExecMoreActions(page);
     await btn.click();
 
     const diffDrawer = page.locator('#tempExecCaseLibraryDiffDrawer');
@@ -1852,6 +1873,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
     await expect(btn).toBeEnabled();
     await expect(btn).not.toHaveClass(/has-new/);
 
+    await openTempExecMoreActions(page);
     await btn.click();
     await expect(diffDrawer).toHaveClass(/open/);
     const body = page.locator('#tempExecCaseLibraryDiffBody');
@@ -2162,6 +2184,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
       return null;
     });
 
+    await openTempExecMoreActions(page);
     await page.click('#tempExecCaseLibraryChangesBtn');
     const body = page.locator('#tempExecCaseLibraryDiffBody');
     await expect(body.locator('tr')).toHaveCount(2);
@@ -2354,6 +2377,7 @@ test.describe('执行页-用例库变更同步与diff抽屉', () => {
       });
     });
 
+    await openTempExecMoreActions(page);
     await btn.click({ force: true });
     var reopenedByBtn = await diffDrawer.evaluate(function(el) { return !!(el && el.classList && el.classList.contains('open')); });
     if (!reopenedByBtn) {

@@ -1,0 +1,77 @@
+- generic [ref=f3e2]:
+  - complementary [ref=f3e3]:
+    - heading "用例助手" [level=1] [ref=f3e5]:
+      - generic [ref=f3e6]: T
+    - navigation [ref=f3e8]:
+      - generic [ref=f3e9]:
+        - heading "AI 功能" [level=2] [ref=f3e10]
+        - generic [ref=f3e12]:
+          - button "用例生成" [ref=f3e13] [cursor=pointer]
+          - button "功能指派，未配置模型" [ref=f3e20] [cursor=pointer]:
+            - generic [ref=f3e27]: 功能指派
+            - generic [ref=f3e28]: 未配置模型
+          - button "模型管理，未配置模型" [ref=f3e29] [cursor=pointer]:
+            - generic [ref=f3e34]: 模型管理
+            - generic [ref=f3e35]: 未配置模型
+      - generic [ref=f3e36]:
+        - heading "用例相关" [level=2] [ref=f3e37]
+        - generic [ref=f3e38]:
+          - button "用例执行" [ref=f3e39] [cursor=pointer]
+          - button "用例库" [ref=f3e45] [cursor=pointer]
+          - button "用例归档" [ref=f3e50] [cursor=pointer]
+          - button "执行总览" [ref=f3e56] [cursor=pointer]
+      - generic [ref=f3e61]:
+        - heading "管理" [level=2] [ref=f3e62]
+        - generic [ref=f3e63]:
+          - button "项目管理" [ref=f3e64] [cursor=pointer]
+          - button "人员管理" [ref=f3e70] [cursor=pointer]
+          - button "操作记录" [ref=f3e78] [cursor=pointer]
+      - generic [ref=f3e84]:
+        - heading "设置" [level=2] [ref=f3e85]
+        - button "通用设置" [ref=f3e87] [cursor=pointer]
+    - generic "个人工具" [ref=f3e94]:
+      - button "生成进度" [ref=f3e95] [cursor=pointer]
+      - button "个人备忘" [ref=f3e102] [cursor=pointer]
+    - generic [ref=f3e107]:
+      - generic [ref=f3e108]: 当前用户
+      - button "用户菜单" [ref=f3e109] [cursor=pointer]:
+        - generic [ref=f3e110]: e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f3e111]:
+    - heading "用例执行" [level=2] [ref=f3e113]
+    - navigation "用例执行快捷入口" [ref=f3e114]:
+      - generic [ref=f3e115]:
+        - generic [ref=f3e116] [cursor=pointer]: 专注区
+        - generic [ref=f3e118]: 暂无专注用例
+      - generic [ref=f3e120]:
+        - button "用例导入" [ref=f3e121] [cursor=pointer]
+        - button "选择用例执行" [ref=f3e127] [cursor=pointer]
+        - button "执行分配" [ref=f3e133] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f3e139] [cursor=pointer]
+  - generic [ref=f3e147]:
+    - banner [ref=f3e148]:
+      - heading "项目 未选择 版本 未选择 用例 暂无执行用例" [level=1] [ref=f3e149]:
+        - generic [ref=f3e150]:
+          - generic [ref=f3e151]: 项目
+          - strong [ref=f3e152]: 未选择
+        - generic [ref=f3e153]: /
+        - generic [ref=f3e154]:
+          - generic [ref=f3e155]: 版本
+          - strong [ref=f3e156]: 未选择
+        - generic [ref=f3e157]: /
+        - generic [ref=f3e158]:
+          - generic [ref=f3e159]: 用例
+          - strong [ref=f3e160]: 暂无执行用例
+    - main [ref=f3e161]:
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=f3e162]: 暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录
+      - option "请选择版本" [selected]

@@ -1,0 +1,66 @@
+- generic [ref=f5e2]:
+  - complementary [ref=f5e3]:
+    - heading "用例助手" [level=1] [ref=f5e5]:
+      - generic [ref=f5e6]: T
+      - generic [ref=f5e8]:
+        - generic [ref=f5e9]: 用例助手
+        - generic [ref=f5e10]: TEST ASSISTANT
+    - navigation [ref=f5e11]:
+      - generic [ref=f5e12]:
+        - heading "AI 功能" [level=2] [ref=f5e13]
+        - generic [ref=f5e15]:
+          - button "用例生成" [ref=f5e16] [cursor=pointer]
+          - button "功能指派" [ref=f5e23] [cursor=pointer]
+          - button "模型管理" [ref=f5e31] [cursor=pointer]
+      - generic [ref=f5e37]:
+        - heading "用例相关" [level=2] [ref=f5e38]
+        - generic [ref=f5e39]:
+          - button "用例执行" [ref=f5e40] [cursor=pointer]
+          - button "用例库" [ref=f5e46] [cursor=pointer]
+          - button "用例归档" [ref=f5e51] [cursor=pointer]
+          - button "执行总览" [ref=f5e57] [cursor=pointer]
+      - generic [ref=f5e62]:
+        - heading "管理" [level=2] [ref=f5e63]
+        - generic [ref=f5e64]:
+          - button "项目管理" [ref=f5e65] [cursor=pointer]
+          - button "人员管理" [ref=f5e71] [cursor=pointer]
+          - button "操作记录" [ref=f5e79] [cursor=pointer]
+      - generic [ref=f5e85]:
+        - heading "设置" [level=2] [ref=f5e86]
+        - button "通用设置" [ref=f5e88] [cursor=pointer]
+    - generic "个人工具" [ref=f5e95]:
+      - button "生成进度" [ref=f5e96] [cursor=pointer]
+      - button "个人备忘" [ref=f5e103] [cursor=pointer]
+    - generic [ref=f5e108]:
+      - generic [ref=f5e109]: 当前用户
+      - button "用户菜单" [ref=f5e110] [cursor=pointer]:
+        - generic [ref=f5e111]: a
+      - strong [ref=f5e113]: admin
+      - menu:
+        - generic:
+          - generic: a
+          - generic:
+            - strong: admin
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f5e114]:
+    - heading "用例执行" [level=2] [ref=f5e116]
+    - navigation "执行操作" [ref=f5e117]:
+      - generic [ref=f5e119]:
+        - button "用例导入" [ref=f5e120] [cursor=pointer]
+        - button "选择用例执行" [ref=f5e126] [cursor=pointer]
+        - button "执行分配" [ref=f5e132] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f5e138] [cursor=pointer]
+  - generic [ref=f5e146]:
+    - banner [ref=f5e147]:
+      - heading "用例执行" [level=1] [ref=f5e148]
+    - generic [ref=f5e151]:
+      - generic [ref=f5e152]: 专注区：
+      - generic [ref=f5e154]: 暂无专注用例
+    - main [ref=f5e156]:
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=f5e157]: 暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录
+      - option "请选择版本" [selected]

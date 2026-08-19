@@ -38,13 +38,73 @@
     var applyGlobalAssignBtn = pick(dom.applyGlobalAssignBtn, 'applyGlobalAssignBtn');
     var globalAssignStatus = pick(dom.globalAssignStatus, 'globalAssignStatus');
     var assignSaveBar = pick(dom.assignSaveBar, 'assignSaveBar');
-    var saveAssignmentsBtn = pick(dom.saveAssignmentsBtn, 'saveAssignments');
+    var saveAssignmentsBtns = document.querySelectorAll('[data-save-assignments]');
     var testXmindCaseGenModelBtn = pick(dom.testXmindCaseGenModelBtn, 'testXmindCaseGenModel');
     var testCaseFilterModelBtn = pick(dom.testCaseFilterModelBtn, 'testCaseFilterModel');
     var testMissingReminderModelBtn = pick(dom.testMissingReminderModelBtn, 'testMissingReminderModel');
     var testCaseLibraryGenModelBtn = pick(dom.testCaseLibraryGenModelBtn, 'testCaseLibraryGenModel');
+    var assignmentHead = pick(dom.assignmentHead, 'assignmentHead');
+    var assignmentNavButtons = document.querySelectorAll('[data-assignment-target]');
     var assignmentIdKeys = ['xmindCaseGenId', 'caseFilterId', 'missingReminderId', 'caseLibraryGenId'];
     var reasoningTypes = ['xmindcasegen', 'casefilter', 'missingreminder', 'caselibrarygen'];
+
+    function decorateAssignmentNavigation() {
+      var icons = window.app && window.app.workspaceIcons ? window.app.workspaceIcons : null;
+      if (!icons || typeof icons.render !== 'function' || !assignmentNavButtons) return;
+      Array.prototype.forEach.call(assignmentNavButtons, function(button) {
+        var iconHost = button.querySelector('.nav-entry-icon');
+        var iconName = button.dataset ? button.dataset.assignmentIcon : '';
+        if (!iconHost || !iconName || iconHost.firstChild) return;
+        iconHost.innerHTML = icons.render(iconName, 'assignment-nav-icon');
+      });
+    }
+
+    function setActiveAssignmentNav(target) {
+      if (!assignmentNavButtons) return;
+      Array.prototype.forEach.call(assignmentNavButtons, function(button) {
+        var active = Boolean(button.dataset && button.dataset.assignmentTarget === target);
+        button.classList.toggle('is-active', active);
+        if (active) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      });
+    }
+
+    function scrollToAssignmentSection(target) {
+      if (!target) return;
+      var section = document.querySelector('[data-assignment-section="' + target + '"]');
+      if (!section) return;
+      setActiveAssignmentNav(target);
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function syncAssignmentLayout(tabName) {
+      if (!document.body || !document.body.classList) return;
+      var active = String(tabName || '') === 'assign';
+      if (!tabName && assignmentHead && assignmentHead.classList) {
+        active = !assignmentHead.classList.contains('hidden');
+      }
+      document.body.classList.toggle('assignment-layout-active', active);
+    }
+
+    function bindAssignmentNavigation() {
+      decorateAssignmentNavigation();
+      setActiveAssignmentNav('global');
+      if (assignmentNavButtons && typeof assignmentNavButtons.forEach === 'function') {
+        assignmentNavButtons.forEach(function(button) {
+          button.addEventListener('click', function() {
+            var target = button.dataset ? button.dataset.assignmentTarget : '';
+            scrollToAssignmentSection(target);
+          });
+        });
+      }
+      window.addEventListener('app-tab-activated', function(event) {
+        var tabName = event && event.detail ? event.detail.tab : '';
+        syncAssignmentLayout(tabName);
+      });
+      window.setTimeout(function() {
+        syncAssignmentLayout(state.activeTab || '');
+      }, 0);
+    }
 
     function setAssignmentId(key, value) {
       if (!state.assignments) state.assignments = {};
@@ -142,6 +202,7 @@
       setStatus(globalAssignStatus, '已统一指派并保存，刷新页面后仍会保持该配置', 'ok');
     }
 
+    bindAssignmentNavigation();
     bindModelSelect(caseFilterModelSelect, 'caseFilterId', 'casefilter', caseFilterAssignStatus);
     bindModelSelect(xmindCaseGenModelSelect, 'xmindCaseGenId', 'xmindcasegen', xmindCaseGenAssignStatus);
     bindModelSelect(missingReminderModelSelect, 'missingReminderId', 'missingreminder', missingReminderAssignStatus);
@@ -172,14 +233,14 @@
     }
     syncGlobalAssignSelection();
 
-    if (saveAssignmentsBtn) {
+    saveAssignmentsBtns.forEach(function(saveAssignmentsBtn) {
       saveAssignmentsBtn.addEventListener('click', function() {
         saveAssignments();
         renderAssignmentsSelect();
         updateAssignmentStatuses();
         showAssignmentSavedToast();
       });
-    }
+    });
 
     if (testXmindCaseGenModelBtn && testModel) testXmindCaseGenModelBtn.addEventListener('click', function() {
       testModel(xmindCaseGenModelSelect ? xmindCaseGenModelSelect.value : '', xmindCaseGenAssignStatus);

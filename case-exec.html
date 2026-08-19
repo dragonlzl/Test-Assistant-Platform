@@ -165,6 +165,8 @@
 </script>
 <link rel="stylesheet" href="./style.css"/>
 <link rel="stylesheet" href="./scripts/vendor/mind-elixir.css"/>
+<link rel="stylesheet" href="./styles/workspace-shell.css"/>
+<link rel="stylesheet" href="./styles/workspace-lists.css"/>
 </head>
 <body data-page="case-exec">
 <div class="app-layout">
@@ -218,28 +220,10 @@
 </nav>
 <div class="sidebar-tabs" id="sidebarTabs">
 <div class="sidebar-tab-bar" id="sidebarTabBar">
-<button class="sidebar-tab is-active" type="button" id="sidebarTabCasegen" data-sidebar-tab="casegen">
-xmind用例生成进度
-<span class="sidebar-tab-dot" id="caseGenProgressTabDot"></span>
-</button>
-<button class="sidebar-tab" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
+<button class="sidebar-tab is-active" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
 </div>
 <div class="sidebar-tab-panels" id="sidebarTabPanels">
-<div class="sidebar-tab-panel is-active" data-sidebar-panel="casegen">
-<div class="casegen-progress-panel" id="caseGenProgressPanel">
-<div class="panel-head">
-<div class="panel-title-row">
-<span class="title">xmind用例生成进度</span>
-<button class="panel-toggle" type="button" id="caseGenProgressToggle" aria-expanded="true" aria-controls="caseGenProgressList">收起</button>
-</div>
-<span class="meta">点击打开对应 XMind 生成页签</span>
-</div>
-<div class="casegen-progress-list" id="caseGenProgressList">
-<p class="hint">暂无 xmind 生成页签，点击打开 XMind 用例生成</p>
-</div>
-</div>
-</div>
-<div class="sidebar-tab-panel" data-sidebar-panel="memo">
+<div class="sidebar-tab-panel is-active" data-sidebar-panel="memo">
 <div class="memo-pad-panel" id="memoPadPanel">
 <div class="panel-head">
 <div class="panel-title-row">
@@ -260,8 +244,81 @@ xmind用例生成进度
 </div>
 </div>
 </aside>
+<aside class="case-exec-section-nav workspace-section-nav hidden" id="tempexecSectionNav" data-tab-section="tempexec" aria-label="用例执行页面导航">
+  <div class="case-exec-section-nav-header workspace-section-nav-header">
+    <h2>用例执行</h2>
+    <button class="case-exec-section-nav-toggle workspace-section-nav-toggle" id="caseExecSectionNavToggle" type="button" data-collapsed-host="caseExecSectionNavToggleHost" aria-controls="tempexecSectionNav" aria-expanded="true" aria-label="收起快捷导航" title="收起快捷导航"></button>
+  </div>
+  <nav class="flow case-exec-section-nav-list workspace-section-nav-list" id="tempexecFlowNav" aria-label="用例执行快捷入口">
+    <div class="temp-focus-block compact case-exec-section-focus" id="tempExecViewFocusBlock">
+      <div class="temp-focus-header">
+        <span class="temp-case-group-label">专注区</span>
+      </div>
+      <div class="temp-focus-zone" data-temp-focus-zone="exec-view">
+        <span class="hint">暂无专注用例</span>
+      </div>
+    </div>
+    <div class="nav-entry-grid">
+      <button class="nav-entry-card nav-entry-import" id="openTempExecImportDrawerBtn" type="button" aria-haspopup="dialog" aria-controls="tempExecImportDrawer">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M12 3v9"></path>
+            <path d="M9.5 9.5 12 12l2.5-2.5"></path>
+            <rect x="5" y="13" width="14" height="6" rx="2"></rect>
+            <path d="M9 16h6"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">用例导入</span>
+          <span class="nav-entry-desc">导入用例并确认入库</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-view" id="openTempExecCaseLibraryBtn" type="button" aria-haspopup="dialog" aria-controls="caseLibrarySelectExecDrawer">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M4 20h4"></path>
+            <path d="M13.5 6.5 17.5 10.5"></path>
+            <path d="M6 18 14.5 9.5l4 4L10 22H6z"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">选择用例执行</span>
+          <span class="nav-entry-desc">直接打开选择用例执行抽屉</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-view" id="openTempExecAssignDrawerBtn" type="button" aria-haspopup="dialog" aria-controls="tempExecAssignDrawer">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <path d="M16 11a4 4 0 1 0-8 0"></path>
+            <path d="M12 3v4"></path>
+            <path d="M4 21v-1a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v1"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">执行分配</span>
+          <span class="nav-entry-desc">项目/版本分组、专注区与执行人分配</span>
+        </span>
+      </button>
+      <button class="nav-entry-card nav-entry-overview" id="openTempExecOverviewNavBtn" type="button" aria-haspopup="dialog" aria-controls="tempExecOverviewDrawer">
+        <span class="nav-entry-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
+            <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
+            <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
+            <path d="M4.5 18.5h15"></path>
+          </svg>
+        </span>
+        <span class="nav-entry-text">
+          <span class="nav-entry-title">归档操作&amp;进度预览</span>
+          <span class="nav-entry-desc">预览进度并归档用例（可跳转归档详情）</span>
+        </span>
+      </button>
+    </div>
+  </nav>
+</aside>
+<div class="case-exec-main-stage workspace-main-stage">
 <div class="content-shell">
-	
+
 	<div class="tempexec-head hidden" data-tab-section="exec-overview" id="execOverviewHead">
 	  <div class="flow top-nav" id="execOverviewFlowNav" data-top-nav="exec-overview">
 	    <div class="flow-head">
@@ -287,97 +344,32 @@ xmind用例生成进度
 	    </div>
 	    </div>
 	  </div>
-	</div>
-  
-  
-  
-  
-		<div class="tempexec-head hidden" data-tab-section="tempexec">
-		  <div class="flow top-nav" id="tempexecFlowNav" data-top-nav="tempexec">
-		    <div class="flow-head">
-		      <div class="flow-title">功能导航</div>
-		      <button class="flow-toggle" type="button" data-flow-toggle="tempexec" aria-expanded="true">收起</button>
-		    </div>
-		    <div class="flow-body">
-		    <p class="hint" style="margin:0 0 6px;">用例执行相关入口汇总于此，点击卡片快速打开。</p>
-	    <div class="nav-entry-grid">
-	      <button class="nav-entry-card nav-entry-import" id="openTempExecImportDrawerBtn" type="button">
-	        <span class="nav-entry-icon" aria-hidden="true">
-	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-	            <path d="M12 3v9"></path>
-	            <path d="M9.5 9.5 12 12l2.5-2.5"></path>
-	            <rect x="5" y="13" width="14" height="6" rx="2"></rect>
-	            <path d="M9 16h6"></path>
-	          </svg>
-	        </span>
-	        <span class="nav-entry-text">
-	          <span class="nav-entry-title">用例导入</span>
-	          <span class="nav-entry-desc">导入用例并确认入库</span>
-	        </span>
-	      </button>
-      <button class="nav-entry-card nav-entry-view" id="openTempExecCaseLibraryBtn" type="button">
-        <span class="nav-entry-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-            <path d="M4 20h4"></path>
-            <path d="M13.5 6.5 17.5 10.5"></path>
-            <path d="M6 18 14.5 9.5l4 4L10 22H6z"></path>
-          </svg>
-        </span>
-        <span class="nav-entry-text">
-          <span class="nav-entry-title">选择用例执行</span>
-          <span class="nav-entry-desc">直接打开选择用例执行抽屉</span>
-        </span>
-      </button>
-      <button class="nav-entry-card nav-entry-view" id="openTempExecAssignDrawerBtn" type="button">
-        <span class="nav-entry-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-            <path d="M16 11a4 4 0 1 0-8 0"></path>
-            <path d="M12 3v4"></path>
-            <path d="M4 21v-1a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v1"></path>
-          </svg>
-        </span>
-        <span class="nav-entry-text">
-          <span class="nav-entry-title">执行分配</span>
-          <span class="nav-entry-desc">项目/版本分组、专注区与执行人分配</span>
-        </span>
-      </button>
-      <button class="nav-entry-card nav-entry-overview" id="openTempExecOverviewNavBtn" type="button">
-        <span class="nav-entry-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-            <rect class="fill" x="4.5" y="12.5" width="3.5" height="5" rx="1.2"></rect>
-            <rect class="fill" x="10.25" y="9" width="3.5" height="8.5" rx="1.2"></rect>
-            <rect class="fill" x="16" y="6" width="3.5" height="11.5" rx="1.2"></rect>
-            <path d="M4.5 18.5h15"></path>
-          </svg>
-	        </span>
-	        <span class="nav-entry-text">
-	          <span class="nav-entry-title">归档操作&进度预览</span>
-	          <span class="nav-entry-desc">预览进度并归档用例（可跳转归档详情）</span>
-	        </span>
-      </button>
-		  </div>
-		  </div>
 		</div>
-  <section class="card hidden temp-exec-toolbar-card" id="tempExecToolbarCard" data-tab-section="tempexec">
-    <div class="card-body">
-      <div class="temp-exec-toolbar" id="tempExecToolbar"></div>
-      <div class="temp-exec-toolbar-stash hidden" id="tempExecToolbarStash">
-        <button class="primary case-library-ai-gen-inline temp-exec-ai-gen-btn" disabled id="tempExecAiGenBtn">AI 用例生成</button>
-        <button class="secondary xmind-view-highlight-btn" disabled id="tempExecXmindViewBtn" type="button">XMind结构展示</button>
-        <button class="secondary case-library-changes-btn" disabled="" id="tempExecCaseLibraryChangesBtn">用例变更</button>
-        <button class="secondary" disabled="" id="exportTempExecXmindBtn">导出XMind</button>
-        <button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出XMind（无结果）</button>
-      </div>
-      <div class="temp-focus-block compact" id="tempExecViewFocusBlock">
-        <div class="temp-focus-header">
-          <span class="temp-case-group-label">专注区：</span>
-          <span class="temp-focus-desc">同步展示【执行分配】中的专注区用例。</span>
+
+  <div class="case-exec-sticky-header workspace-sticky-header" id="tempExecStickyHeader">
+    <header class="case-exec-content-header workspace-content-header hidden" data-tab-section="tempexec">
+      <span class="case-exec-section-nav-toggle-host workspace-section-nav-toggle-host" id="caseExecSectionNavToggleHost"></span>
+      <h1 id="tempExecContextTitle" aria-live="polite" aria-atomic="true">
+        <span class="case-exec-context-part project"><span class="label">项目</span> <strong class="value">未选择</strong></span>
+        <span class="case-exec-context-separator" aria-hidden="true"> / </span>
+        <span class="case-exec-context-part version"><span class="label">版本</span> <strong class="value">未选择</strong></span>
+        <span class="case-exec-context-separator" aria-hidden="true"> / </span>
+        <span class="case-exec-context-part case"><span class="label">用例</span> <strong class="value">暂无执行用例</strong></span>
+      </h1>
+    </header>
+    <section class="card hidden temp-exec-toolbar-card" id="tempExecToolbarCard" data-tab-section="tempexec">
+      <div class="card-body">
+        <div class="temp-exec-toolbar" id="tempExecToolbar"></div>
+        <div class="temp-exec-toolbar-stash hidden" id="tempExecToolbarStash">
+          <button class="primary case-library-ai-gen-inline temp-exec-ai-gen-btn" disabled id="tempExecAiGenBtn">AI 用例生成</button>
+          <button class="secondary xmind-view-highlight-btn" disabled id="tempExecXmindViewBtn" type="button">XMind结构展示</button>
+          <button class="secondary case-library-changes-btn" disabled="" id="tempExecCaseLibraryChangesBtn">用例变更</button>
+          <button class="secondary" disabled="" id="exportTempExecXmindBtn">导出XMind</button>
+          <button class="secondary" disabled="" id="exportTempExecCasesXmindBtn">导出XMind（无结果）</button>
         </div>
-        <div class="temp-focus-zone" data-temp-focus-zone="exec-view"></div>
       </div>
-    </div>
-  </section>
-</div>
+    </section>
+  </div>
 <main>
 
 
@@ -1174,8 +1166,12 @@ xmind用例生成进度
 </main>
 </div>
 </div>
+</div>
 <script src="./scripts/vendor/jszip.min.js" defer></script>
 <script src="./scripts/vendor/mind-elixir.iife.js" defer></script>
+<script src="./scripts/vendor/workspace-icons.js" defer></script>
+<script src="./scripts/base/workspaceShell.js" defer></script>
+<script src="./scripts/base/workspaceListPresentation.js" defer></script>
 <script src="./config/constants.js" defer></script>
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>

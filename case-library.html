@@ -165,6 +165,8 @@
 </script>
 <link rel="stylesheet" href="./style.css"/>
 <link rel="stylesheet" href="./scripts/vendor/mind-elixir.css"/>
+<link rel="stylesheet" href="./styles/workspace-shell.css"/>
+<link rel="stylesheet" href="./styles/workspace-lists.css"/>
 </head>
 <body data-page="case-library">
 <div class="app-layout">
@@ -218,28 +220,10 @@
 </nav>
 <div class="sidebar-tabs" id="sidebarTabs">
 <div class="sidebar-tab-bar" id="sidebarTabBar">
-<button class="sidebar-tab is-active" type="button" id="sidebarTabCasegen" data-sidebar-tab="casegen">
-xmind用例生成进度
-<span class="sidebar-tab-dot" id="caseGenProgressTabDot"></span>
-</button>
-<button class="sidebar-tab" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
+<button class="sidebar-tab is-active" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
 </div>
 <div class="sidebar-tab-panels" id="sidebarTabPanels">
-<div class="sidebar-tab-panel is-active" data-sidebar-panel="casegen">
-<div class="casegen-progress-panel" id="caseGenProgressPanel">
-<div class="panel-head">
-<div class="panel-title-row">
-<span class="title">xmind用例生成进度</span>
-<button class="panel-toggle" type="button" id="caseGenProgressToggle" aria-expanded="true" aria-controls="caseGenProgressList">收起</button>
-</div>
-<span class="meta">点击打开对应 XMind 生成页签</span>
-</div>
-<div class="casegen-progress-list" id="caseGenProgressList">
-<p class="hint">暂无 xmind 生成页签，点击打开 XMind 用例生成</p>
-</div>
-</div>
-</div>
-<div class="sidebar-tab-panel" data-sidebar-panel="memo">
+<div class="sidebar-tab-panel is-active" data-sidebar-panel="memo">
 <div class="memo-pad-panel" id="memoPadPanel">
 <div class="panel-head">
 <div class="panel-title-row">
@@ -260,19 +244,14 @@ xmind用例生成进度
 </div>
 </div>
 </aside>
-<div class="content-shell">
-	
-	
-  <div class="tempexec-head hidden" data-tab-section="case-library" id="caseLibraryHead">
-    <div class="flow top-nav" id="caseLibraryFlowNav" data-top-nav="case-library">
-      <div class="flow-head">
-        <div class="flow-title">用例库导航</div>
-        <button class="flow-toggle" type="button" data-flow-toggle="case-library" aria-expanded="true">收起</button>
-      </div>
-      <div class="flow-body">
-      <p class="hint" style="margin:0 0 6px;">用例库相关入口汇总于此，点击卡片快速打开。</p>
-      <div class="nav-entry-grid">
-        <button class="nav-entry-card nav-entry-write" id="openCaseLibraryWriterDrawerBtn" type="button">
+<aside class="case-exec-section-nav workspace-section-nav hidden" id="caseLibraryHead" data-tab-section="case-library" aria-label="用例库页面导航">
+  <div class="case-exec-section-nav-header workspace-section-nav-header">
+    <h2>用例库</h2>
+    <button class="case-exec-section-nav-toggle workspace-section-nav-toggle" id="caseLibrarySectionNavToggle" type="button" data-collapsed-host="caseLibrarySectionNavToggleHost" aria-controls="caseLibraryHead" aria-expanded="true" aria-label="收起快捷导航" title="收起快捷导航"></button>
+  </div>
+  <nav class="flow case-exec-section-nav-list workspace-section-nav-list" id="caseLibraryFlowNav" aria-label="用例库快捷入口">
+    <div class="nav-entry-grid">
+        <button class="nav-entry-card nav-entry-write" id="openCaseLibraryWriterDrawerBtn" type="button" aria-haspopup="dialog" aria-controls="xmindStructureDrawer">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
               <path d="M4 20h4"></path>
@@ -285,7 +264,7 @@ xmind用例生成进度
             <span class="nav-entry-desc">以XMind结构新建并入库</span>
           </span>
         </button>
-        <button class="nav-entry-card nav-entry-import" id="openCaseLibraryImportDrawerBtn" type="button">
+        <button class="nav-entry-card nav-entry-import" id="openCaseLibraryImportDrawerBtn" type="button" aria-haspopup="dialog" aria-controls="caseLibraryImportDrawer">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
               <path d="M12 3v9"></path>
@@ -299,7 +278,7 @@ xmind用例生成进度
             <span class="nav-entry-desc">选择文件并入库（需选项目/版本）</span>
           </span>
         </button>
-        <button class="nav-entry-card nav-entry-view" id="openCaseLibraryEditDrawerBtn" type="button">
+        <button class="nav-entry-card nav-entry-view" id="openCaseLibraryEditDrawerBtn" type="button" aria-haspopup="dialog" aria-controls="caseLibraryEditDrawer">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
               <path d="M4 20h4"></path>
@@ -312,7 +291,7 @@ xmind用例生成进度
             <span class="nav-entry-desc">查看并编辑用例库条目，支持搜索/导出/删除</span>
           </span>
         </button>
-        <button class="nav-entry-card nav-entry-missing" id="openCaseLibraryMissingDrawerBtn" type="button">
+        <button class="nav-entry-card nav-entry-missing" id="openCaseLibraryMissingDrawerBtn" type="button" aria-haspopup="dialog" aria-controls="caseLibraryMissingDrawer">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
               <path d="M12 3l9 16H3l9-16z"></path>
@@ -325,7 +304,7 @@ xmind用例生成进度
             <span class="nav-entry-desc">管理易漏模块并查看漏测条目</span>
           </span>
         </button>
-        <button class="nav-entry-card nav-entry-overview" id="openCaseLibrarySelectExecDrawerBtn" type="button">
+        <button class="nav-entry-card nav-entry-overview" id="openCaseLibrarySelectExecDrawerBtn" type="button" aria-haspopup="dialog" aria-controls="caseLibrarySelectExecDrawer">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
               <path d="M8 5h8"></path>
@@ -341,7 +320,7 @@ xmind用例生成进度
             <span class="nav-entry-desc">从用例库选择用例并转到执行页</span>
           </span>
         </button>
-        <button class="nav-entry-card nav-entry-backup" id="openCaseLibraryHistoryDrawerBtn" type="button">
+        <button class="nav-entry-card nav-entry-backup" id="openCaseLibraryHistoryDrawerBtn" type="button" aria-haspopup="dialog" aria-controls="caseLibraryHistoryDrawer">
           <span class="nav-entry-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="presentation" focusable="false">
               <circle cx="12" cy="12" r="9"></circle>
@@ -354,10 +333,11 @@ xmind用例生成进度
             <span class="nav-entry-desc">查看导入/编辑/删除产生的历史记录</span>
           </span>
         </button>
-      </div>
-      </div>
     </div>
-  </div>
+  </nav>
+</aside>
+<div class="case-exec-main-stage workspace-main-stage case-library-main-stage">
+<div class="content-shell">
   <div class="tempexec-head hidden" data-tab-section="case-archive" id="caseArchiveHead">
     <div class="flow top-nav" id="caseArchiveFlowNav" data-top-nav="case-archive">
       <div class="flow-head">
@@ -389,6 +369,48 @@ xmind用例生成进度
   
   
 		
+  <div class="case-exec-sticky-header workspace-sticky-header case-library-sticky-header" id="caseLibraryStickyHeader">
+    <header class="case-exec-content-header workspace-content-header case-library-content-header hidden" data-tab-section="case-library">
+      <span class="case-exec-section-nav-toggle-host workspace-section-nav-toggle-host" id="caseLibrarySectionNavToggleHost"></span>
+      <h1 id="caseLibraryContextTitle" aria-live="polite" aria-atomic="true">
+        <span class="case-library-context-part project"><span class="label">项目</span> <strong class="value" id="caseLibraryEditProject">未选择</strong></span>
+        <span class="case-library-context-separator" aria-hidden="true"> / </span>
+        <span class="case-library-context-part version"><span class="label">版本</span> <strong class="value" id="caseLibraryEditVersion">未选择</strong></span>
+        <span class="case-library-context-separator" aria-hidden="true"> / </span>
+        <span class="case-library-context-part case"><span class="label">用例名</span> <strong class="value" id="caseLibraryEditFileName">暂无用例</strong></span>
+      </h1>
+    </header>
+    <section class="card hidden case-library-toolbar-card" id="caseLibraryToolbarCard" data-tab-section="case-library" aria-label="用例库操作栏">
+      <div class="card-body">
+        <div class="case-library-workspace-toolbar">
+          <div class="case-library-search-group">
+            <div class="case-library-search">
+              <span class="case-library-search-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                  <circle cx="11" cy="11" r="7"></circle>
+                  <path d="M20 20l-3.5-3.5"></path>
+                </svg>
+              </span>
+              <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索用例关键字" disabled/>
+              <button class="case-library-search-clear" id="caseLibraryEditClearSearchBtn" type="button" aria-label="清空搜索" title="清空搜索" disabled>×</button>
+            </div>
+            <button class="primary case-library-ai-gen-inline" id="caseLibraryAiGenBtn" type="button" disabled>AI 用例生成</button>
+            <button class="secondary case-library-xmind-view-inline xmind-view-highlight-btn" id="caseLibraryXmindViewBtn" type="button" disabled>XMind结构展示</button>
+            <label class="case-library-missing-toggle">
+              <input id="caseLibraryMissingReminderToggle" type="checkbox" aria-label="显示易漏用例参考" disabled/>
+              <span>易漏用例参考</span>
+            </label>
+          </div>
+          <div class="case-library-drawer-actions">
+            <input class="case-library-count-input" id="caseLibraryEditBatchAddCountInput" type="text" inputmode="numeric" placeholder="1-10" value="5" autocomplete="off" maxlength="2" aria-label="批量新增数量" title="批量新增数量（1-10）" />
+            <button class="secondary" id="caseLibraryEditBatchAddBtn" type="button">批量新增</button>
+            <button class="secondary" id="caseLibraryEditBatchDeleteBtn" type="button" disabled>批量删除</button>
+            <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
 <main>
 
 
@@ -548,53 +570,14 @@ xmind用例生成进度
 </div>
 </div>
 </section>
-<section class="card hidden" data-tab-section="case-library">
-<h2>用例库</h2>
+<section class="card hidden case-library-workspace-section" data-tab-section="case-library">
 <div class="card-body">
 <div class="case-library" id="caseLibrary">
-  <p class="hint">提示：请使用顶部导航进行导入、查看&amp;编辑或选择用例转到执行。</p>
   <p class="status" id="caseLibraryStatus"></p>
 
   <div class="card hidden" id="caseLibraryEditCard">
-    <h3 id="caseLibraryEditCardTitle">用例编辑视图</h3>
     <div class="card-body">
-      <div class="case-library-drawer-meta">
-        <div class="meta-line">
-          <span class="label">项目</span>
-          <span class="value" id="caseLibraryEditProject">--</span>
-        </div>
-        <div class="meta-line">
-          <span class="label">版本</span>
-          <span class="value" id="caseLibraryEditVersion">--</span>
-        </div>
-        <div class="meta-line">
-          <span class="label">用例名</span>
-          <span class="value" id="caseLibraryEditFileName">--</span>
-        </div>
-      </div>
       <div class="missing-reminder-card hidden" id="caseLibraryMissingReminderTop"></div>
-      <div class="case-library-drawer-toolbar">
-        <div class="case-library-search-group">
-          <button class="secondary" id="caseLibraryEditClearSearchBtn" type="button">清空搜索</button>
-          <div class="case-library-search">
-            <span class="case-library-search-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-                <circle cx="11" cy="11" r="7"></circle>
-                <path d="M20 20l-3.5-3.5"></path>
-              </svg>
-            </span>
-            <input id="caseLibraryEditSearchInput" type="text" placeholder="搜索模块 / 用例标题 / 优先级 / 前提条件 / 操作步骤 / 预期结果"/>
-          </div>
-          <button class="primary case-library-ai-gen-inline" id="caseLibraryAiGenBtn" type="button" disabled>AI 用例生成</button>
-          <button class="secondary case-library-xmind-view-inline xmind-view-highlight-btn" id="caseLibraryXmindViewBtn" type="button" disabled>XMind结构展示</button>
-        </div>
-        <div class="case-library-drawer-actions">
-          <input class="case-library-count-input" id="caseLibraryEditBatchAddCountInput" type="text" inputmode="numeric" placeholder="1-10" value="5" autocomplete="off" maxlength="2" aria-label="批量新增数量" title="批量新增数量（1-10）" />
-          <button class="secondary" id="caseLibraryEditBatchAddBtn" type="button">批量新增</button>
-          <button class="secondary" id="caseLibraryEditBatchDeleteBtn" type="button" disabled>批量删除</button>
-          <button class="primary" id="caseLibraryEditToExecBtn" type="button">转到执行</button>
-        </div>
-      </div>
       <p class="status" id="caseLibraryEditStatus"></p>
       <div class="temp-case-view" id="caseLibraryEditView"></div>
       <div class="missing-reminder-card hidden" id="caseLibraryMissingReminderBottom"></div>
@@ -1674,8 +1657,12 @@ xmind用例生成进度
 </main>
 </div>
 </div>
+</div>
 <script src="./scripts/vendor/jszip.min.js" defer></script>
 <script src="./scripts/vendor/mind-elixir.iife.js" defer></script>
+<script src="./scripts/vendor/workspace-icons.js" defer></script>
+<script src="./scripts/base/workspaceShell.js" defer></script>
+<script src="./scripts/base/workspaceListPresentation.js" defer></script>
 <script src="./config/constants.js" defer></script>
 <script src="./config/domConfig.js" defer></script>
 <script src="./scripts/core/appInitHelpers.js" defer></script>

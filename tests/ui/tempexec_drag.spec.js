@@ -46,6 +46,13 @@ test.describe('执行视图导入导出与拖拽', () => {
     await page.click('#closeTempExecAssignDrawerBtn', { trial: false });
     await expect(drawer).not.toHaveClass(/open/);
   }
+
+  async function openTempExecMoreActions(page) {
+    const toggle = page.locator('#tempExecToolbar [data-temp-more-toggle]');
+    await expect(toggle).toBeVisible();
+    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+    await expect(page.locator('#tempExecMoreMenu')).toBeVisible();
+  }
   async function confirmDrawerInput(page, value) {
     const drawer = page.locator('#appConfirmDrawer');
     await drawer.waitFor({ state: 'attached' });
@@ -202,6 +209,7 @@ test.describe('执行视图导入导出与拖拽', () => {
       const hasXmind = api && typeof api.buildXmindPackageFromCases === 'function';
       return Boolean(hasZip && hasXmind);
     }, {}, { timeout: 60000 });
+    await openTempExecMoreActions(page);
     await expect(page.locator('#exportTempExecXmindBtn')).toBeEnabled();
     await expect(page.locator('#exportTempExecCasesXmindBtn')).toBeEnabled();
 
@@ -212,6 +220,7 @@ test.describe('执行视图导入导出与拖拽', () => {
     const resultName = await xmindDownload.suggestedFilename();
     expect(resultName).toMatch(new RegExp(`^${escapedBase}_result_\\d{14}\\.xmind$`));
 
+    await openTempExecMoreActions(page);
     const [plainXmindDownload] = await Promise.all([
       page.waitForEvent('download', { timeout: 20000 }),
       page.click('#exportTempExecCasesXmindBtn'),
@@ -273,8 +282,8 @@ test.describe('执行视图导入导出与拖拽', () => {
     const firstNavButton = page.locator('#tempExecNav button[data-temp-file]').first();
     const activeNavName = (await firstNavButton.locator('.name-text').textContent()) || '';
     await firstNavButton.click();
-    await expect(page.locator('#tempExecToolbar')).toContainText('当前文件');
-    await expect(page.locator('#tempExecToolbar')).toContainText(activeNavName.trim());
+    await expect(page.locator('#tempExecContextTitle')).toContainText(activeNavName.trim());
+    await expect(page.locator('#tempExecToolbar')).not.toContainText('当前文件');
     const resultSelect = page.locator('#tempExecView select[data-temp-result]').first();
     await resultSelect.selectOption('通过');
     const secondResultSelect = page.locator('#tempExecView select[data-temp-result]').nth(1);
@@ -409,6 +418,7 @@ test.describe('执行视图导入导出与拖拽', () => {
     await expect(page.locator('#tempExecStatus')).toContainText('已导入');
     await page.click('#closeTempExecAssignDrawerBtn');
 
+    await page.getByRole('button', { name: '更多操作' }).click();
     const reuseToggle = page.locator('[data-temp-reuse-toggle]').first();
     await reuseToggle.check();
 

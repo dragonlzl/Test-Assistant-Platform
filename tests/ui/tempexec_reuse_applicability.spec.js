@@ -188,14 +188,14 @@ test.describe('复用预设获取方式自动标记不适用', () => {
       return respond(404, { detail: 'not found' });
     });
 
-    await page.goto(base + '/index.html');
+    await page.goto(base + '/case-exec.html?tab=tempexec');
     await waitForAppReady(page);
-    await page.evaluate(() => window.app.switchTab('tempexec'));
     await page.evaluate(() => window.app.tempExecApi.loadTempExecState());
 
     const presetSelects = page.locator('#tempExecView .preset-applicability-select');
     await expect(presetSelects).toHaveCount(2);
-    await expect(page.locator('#tempExecView .preset-profile-label')).toHaveText('角色皮肤解锁方式');
+    await expect(page.locator('#tempExecView .preset-profile-label')).toHaveCount(0);
+    await expect(page.locator(`[data-temp-reuse-applicability-apply="${execSet.id}"]`)).toHaveText('快速执行');
 
     await presetSelects.nth(0).selectOption('paid');
     await presetSelects.nth(1).selectOption('fish');

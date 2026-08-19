@@ -222,10 +222,32 @@
       window.app.settingsReady = false;
     }
 
+    function decorateSettingsNavigation() {
+      var icons = window.app && window.app.workspaceIcons ? window.app.workspaceIcons : null;
+      if (!icons || typeof icons.render !== 'function' || !settingsNavButtons) return;
+      Array.prototype.forEach.call(settingsNavButtons, function(button) {
+        var iconHost = button.querySelector('.nav-entry-icon');
+        var iconName = button.dataset ? button.dataset.settingsIcon : '';
+        if (!iconHost || !iconName || iconHost.firstChild) return;
+        iconHost.innerHTML = icons.render(iconName, 'settings-nav-icon');
+      });
+    }
+
+    function setActiveSettingsNav(target) {
+      if (!settingsNavButtons) return;
+      Array.prototype.forEach.call(settingsNavButtons, function(button) {
+        var active = Boolean(button.dataset && button.dataset.settingsTarget === target);
+        button.classList.toggle('is-active', active);
+        if (active) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      });
+    }
+
     function scrollToSettingsSection(target) {
       if (!target) return;
       var section = document.querySelector('[data-settings-section="' + target + '"]');
       if (!section) return;
+      setActiveSettingsNav(target);
       if (section.classList && section.classList.contains('collapsed')) {
         section.classList.remove('collapsed');
       }
@@ -1760,7 +1782,9 @@
       }
     }
 
+    decorateSettingsNavigation();
     bindEvents();
+    setActiveSettingsNav('misc');
     loadSettings();
     renderSettingsUI();
     fetchSettingsFromServer();

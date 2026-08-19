@@ -1,0 +1,1265 @@
+- generic [ref=f7e2]:
+  - complementary [ref=f7e3]:
+    - heading "用例助手" [level=1] [ref=f7e5]:
+      - generic [ref=f7e6]: T
+    - navigation [ref=f7e8]:
+      - generic [ref=f7e9]:
+        - heading "AI 功能" [level=2] [ref=f7e10]
+        - generic [ref=f7e12]:
+          - button "用例生成" [ref=f7e13] [cursor=pointer]
+          - button "功能指派" [ref=f7e20] [cursor=pointer]
+          - button "模型管理" [ref=f7e28] [cursor=pointer]
+      - generic [ref=f7e34]:
+        - heading "用例相关" [level=2] [ref=f7e35]
+        - generic [ref=f7e36]:
+          - button "用例执行" [ref=f7e37] [cursor=pointer]
+          - button "用例库" [ref=f7e43] [cursor=pointer]
+          - button "用例归档" [ref=f7e48] [cursor=pointer]
+          - button "执行总览" [ref=f7e54] [cursor=pointer]
+      - generic [ref=f7e59]:
+        - heading "管理" [level=2] [ref=f7e60]
+        - generic [ref=f7e61]:
+          - button "项目管理" [ref=f7e62] [cursor=pointer]
+          - button "人员管理" [ref=f7e68] [cursor=pointer]
+          - button "操作记录" [ref=f7e76] [cursor=pointer]
+      - generic [ref=f7e82]:
+        - heading "设置" [level=2] [ref=f7e83]
+        - button "通用设置" [ref=f7e85] [cursor=pointer]
+    - generic "个人工具" [ref=f7e92]:
+      - button "生成进度" [ref=f7e93] [cursor=pointer]
+      - button "个人备忘" [ref=f7e100] [cursor=pointer]
+    - generic [ref=f7e105]:
+      - generic [ref=f7e106]: 当前用户
+      - button "用户菜单" [ref=f7e107] [cursor=pointer]:
+        - generic [ref=f7e108]: a
+      - menu:
+        - generic:
+          - generic: a
+          - generic:
+            - strong: admin
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f7e109]:
+    - heading "用例执行" [level=2] [ref=f7e111]
+    - navigation "执行操作" [ref=f7e112]:
+      - generic [ref=f7e114]:
+        - button "用例导入" [ref=f7e115] [cursor=pointer]
+        - button "选择用例执行" [ref=f7e121] [cursor=pointer]
+        - button "执行分配" [ref=f7e127] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f7e133] [cursor=pointer]
+  - generic [ref=f7e141]:
+    - banner [ref=f7e142]:
+      - heading "用例执行" [level=1] [ref=f7e143]
+    - generic [ref=f7e145]:
+      - generic [ref=f7e156]:
+        - generic [ref=f7e157]:
+          - textbox "搜索用例关键字" [ref=f7e159]
+          - generic "当前文件：2025年11月新皮肤" [ref=f7e160]:
+            - text: 当前文件：
+            - strong [ref=f7e161]: 2025年11月新皮肤
+          - generic [ref=f7e162] [cursor=pointer]:
+            - checkbox "显示易漏用例参考" [ref=f7e163]
+            - generic [ref=f7e164]: 易漏用例参考
+          - generic [ref=f7e165]:
+            - group "切换用例" [ref=f7e166]:
+              - generic [ref=f7e167]: 用例切换：
+              - button "上一份" [ref=f7e168] [cursor=pointer]
+              - button "下一份" [ref=f7e169] [cursor=pointer]
+            - button "归档" [ref=f7e171] [cursor=pointer]
+            - generic [ref=f7e172]:
+              - button "更多操作" [expanded] [active] [ref=f7e173] [cursor=pointer]
+              - menu "更多操作" [ref=f7e1504]:
+                - button "AI 用例生成" [ref=f7e1506] [cursor=pointer]
+                - button "XMind结构展示" [ref=f7e1508] [cursor=pointer]
+                - button "用例变更" [ref=f7e1510] [cursor=pointer]
+                - generic [ref=f7e1511]:
+                  - button "导出XMind" [ref=f7e1512] [cursor=pointer]
+                  - button "导出XMind（无结果）" [ref=f7e1513] [cursor=pointer]
+        - generic [ref=f7e176]:
+          - button "已执行 14" [ref=f7e177] [cursor=pointer]
+          - button "未执行 59" [ref=f7e178] [cursor=pointer]
+          - button "通过 0" [ref=f7e179] [cursor=pointer]
+          - button "失败 0" [ref=f7e180] [cursor=pointer]
+          - button "阻塞 0" [ref=f7e181] [cursor=pointer]
+          - button "不适用 14" [ref=f7e182] [cursor=pointer]
+      - generic [ref=f7e146]:
+        - generic [ref=f7e147]: 专注区：
+        - generic [ref=f7e149]: 暂无专注用例
+    - main [ref=f7e151]:
+      - option "请选择项目" [selected]
+      - option "元气骑士"
+      - option "元气骑士前传"
+      - option "测试999"
+      - option "autotest-1772268446008"
+      - option "opslog-missing-1768292538839"
+      - option "opslog-exec-1768292538751"
+      - option "opslog-proj-1768292538582"
+      - option "opslog-missing-1768292273386"
+      - option "opslog-exec-1768292273288"
+      - option "opslog-proj-1768292273101"
+      - option "autotest-exec-overview-1767926180210"
+      - option "请选择版本" [selected]
+      - generic [ref=f7e154]:
+        - generic [ref=f7e184]: 当前用例归属：项目 元气骑士 / 版本 912
+        - generic [ref=f7e185]:
+          - generic [ref=f7e186]:
+            - generic [ref=f7e187] [cursor=pointer]:
+              - checkbox "用例复用" [checked] [ref=f7e188]
+              - generic [ref=f7e189]: 用例复用
+            - generic [ref=f7e190]: 可为单条用例补充多条执行记录
+          - button "展开所有子项" [ref=f7e191] [cursor=pointer]
+        - generic [ref=f7e192]:
+          - button "＋ 预设子项" [ref=f7e193] [cursor=pointer]
+          - generic [ref=f7e194]: 角色皮肤解锁方式
+          - button "应用不适用" [ref=f7e195] [cursor=pointer]
+          - generic [ref=f7e196]:
+            - generic "点击编辑" [ref=f7e197] [cursor=pointer]: aaa
+            - combobox "获取/解锁方式" [ref=f7e198]:
+              - option "未设置"
+              - option "碎片"
+              - option "宝石" [selected]
+              - option "付费"
+              - option "小鱼干"
+              - option "赛季商店"
+              - option "老皮肤赠送"
+              - option "条件解锁"
+            - generic "删除预设子项" [ref=f7e199] [cursor=pointer]: ×
+          - generic [ref=f7e200]:
+            - generic "点击编辑" [ref=f7e201] [cursor=pointer]: bbb
+            - combobox "获取/解锁方式" [ref=f7e202]:
+              - option "未设置"
+              - option "碎片"
+              - option "宝石"
+              - option "付费" [selected]
+              - option "小鱼干"
+              - option "赛季商店"
+              - option "老皮肤赠送"
+              - option "条件解锁"
+            - generic "删除预设子项" [ref=f7e203] [cursor=pointer]: ×
+          - generic [ref=f7e204]:
+            - generic "点击编辑" [ref=f7e205] [cursor=pointer]: ccc
+            - combobox "获取/解锁方式" [ref=f7e206]:
+              - option "未设置"
+              - option "碎片" [selected]
+              - option "宝石"
+              - option "付费"
+              - option "小鱼干"
+              - option "赛季商店"
+              - option "老皮肤赠送"
+              - option "条件解锁"
+            - generic "删除预设子项" [ref=f7e207] [cursor=pointer]: ×
+        - generic [ref=f7e208]:
+          - generic [ref=f7e209]: 显示 1-50 / 73 条，每页 50 条
+          - generic [ref=f7e210]:
+            - button "上一页" [disabled] [ref=f7e211]
+            - generic [ref=f7e212]: 第 1 / 2 页
+            - button "下一页" [ref=f7e213] [cursor=pointer]
+            - generic [ref=f7e214]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f7e215]: "1"
+              - text: 页
+        - table [ref=f7e216]:
+          - rowgroup [ref=f7e230]:
+            - row [ref=f7e231]:
+              - columnheader [ref=f7e232]:
+                - checkbox [ref=f7e233]
+              - columnheader "编号" [ref=f7e234]
+              - columnheader "模块" [ref=f7e235]
+              - columnheader "用例标题" [ref=f7e236]
+              - columnheader "优先级" [ref=f7e237]
+              - columnheader "前提条件" [ref=f7e238]
+              - columnheader "操作步骤" [ref=f7e239]
+              - columnheader "预期结果" [ref=f7e240]
+              - columnheader "实际结果" [ref=f7e241]
+              - columnheader "备注" [ref=f7e242]
+              - columnheader "缺陷链接" [ref=f7e243]
+              - columnheader "增删" [ref=f7e244]
+          - rowgroup [ref=f7e245]:
+            - row [ref=f7e246]:
+              - cell [ref=f7e247]:
+                - checkbox [ref=f7e248]
+              - cell "1" [ref=f7e249]
+              - cell "碎片皮肤" [ref=f7e250]
+              - cell "碎片获取途径" [ref=f7e251]
+              - cell "P1" [ref=f7e253]
+              - cell "皮肤未解锁，碎片未满" [ref=f7e255]
+              - cell "前往设计台，并观察该皮肤" [ref=f7e257]
+              - cell "可以到设计台的提示关卡击杀指定boss/怪物获得碎片2" [ref=f7e259]
+              - cell [ref=f7e261]:
+                - button "未执行 1" [ref=f7e262] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e263]:
+                - button "备注" [ref=f7e264] [cursor=pointer]
+              - cell [ref=f7e265]:
+                - button "缺陷链接" [ref=f7e266] [cursor=pointer]
+              - cell [ref=f7e267]:
+                - generic [ref=f7e268]:
+                  - button "−" [ref=f7e269] [cursor=pointer]
+                  - button "＋" [ref=f7e270] [cursor=pointer]
+            - row [ref=f7e271]:
+              - cell [ref=f7e272]:
+                - checkbox [ref=f7e273]
+              - cell "2" [ref=f7e274]
+              - cell "碎片皮肤" [ref=f7e275]
+              - cell "任意角色获取碎片" [ref=f7e276]
+              - cell "P1" [ref=f7e278]
+              - cell "皮肤未解锁，碎片未满" [ref=f7e280]
+              - cell "使用非皮肤对应角色击杀指定关卡的怪物/boss尝试获取碎片" [ref=f7e282]
+              - cell "有一定概率获得碎片" [ref=f7e284]
+              - cell [ref=f7e286]:
+                - button "未执行 1" [ref=f7e287] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e288]:
+                - button "备注" [ref=f7e289] [cursor=pointer]
+              - cell [ref=f7e290]:
+                - button "缺陷链接" [ref=f7e291] [cursor=pointer]
+              - cell [ref=f7e292]:
+                - generic [ref=f7e293]:
+                  - button "−" [ref=f7e294] [cursor=pointer]
+                  - button "＋" [ref=f7e295] [cursor=pointer]
+            - row [ref=f7e296]:
+              - cell [ref=f7e297]:
+                - checkbox [ref=f7e298]
+              - cell "3" [ref=f7e299]
+              - cell "碎片皮肤" [ref=f7e300]
+              - cell "碎片不足时解锁" [ref=f7e301]
+              - cell "P1" [ref=f7e303]
+              - cell "拥有的皮肤碎片数量不足" [ref=f7e305]
+              - cell "尝试解锁皮肤" [ref=f7e307]
+              - cell "不可进行解锁操作，不会出现设计按钮4" [ref=f7e309]
+              - cell [ref=f7e311]:
+                - button "未执行 1" [ref=f7e312] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e313]:
+                - button "备注" [ref=f7e314] [cursor=pointer]
+              - cell [ref=f7e315]:
+                - button "缺陷链接" [ref=f7e316] [cursor=pointer]
+              - cell [ref=f7e317]:
+                - generic [ref=f7e318]:
+                  - button "−" [ref=f7e319] [cursor=pointer]
+                  - button "＋" [ref=f7e320] [cursor=pointer]
+            - row [ref=f7e321]:
+              - cell [ref=f7e322]:
+                - checkbox [ref=f7e323]
+              - cell "4" [ref=f7e324]
+              - cell "碎片皮肤" [ref=f7e325]
+              - cell "碎片足够时解锁" [ref=f7e326]
+              - cell "P1" [ref=f7e328]
+              - cell "拥有的皮肤碎片数量足够" [ref=f7e330]
+              - cell "尝试解锁皮肤" [ref=f7e332]
+              - cell "可点击设计按钮解锁对应皮肤，皮肤设计成功会弹脸提示5" [ref=f7e334]
+              - cell [ref=f7e336]:
+                - button "未执行 1" [ref=f7e337] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e338]:
+                - button "备注" [ref=f7e339] [cursor=pointer]
+              - cell [ref=f7e340]:
+                - button "缺陷链接" [ref=f7e341] [cursor=pointer]
+              - cell [ref=f7e342]:
+                - generic [ref=f7e343]:
+                  - button "−" [ref=f7e344] [cursor=pointer]
+                  - button "＋" [ref=f7e345] [cursor=pointer]
+            - row [ref=f7e346]:
+              - cell [ref=f7e347]:
+                - checkbox [ref=f7e348]
+              - cell "5" [ref=f7e349]
+              - cell "碎片皮肤" [ref=f7e350]
+              - cell "联机碎片掉落" [ref=f7e351]
+              - cell "P1" [ref=f7e353]
+              - cell "皮肤未解锁，碎片未满" [ref=f7e355]
+              - cell "联机下击杀指定怪物/boss观察是否会掉落碎片" [ref=f7e357]
+              - cell "可以正常通过击杀指定boss，概率获得碎片" [ref=f7e359]
+              - cell [ref=f7e361]:
+                - button "未执行 1" [ref=f7e362] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e363]:
+                - button "备注" [ref=f7e364] [cursor=pointer]
+              - cell [ref=f7e365]:
+                - button "缺陷链接" [ref=f7e366] [cursor=pointer]
+              - cell [ref=f7e367]:
+                - generic [ref=f7e368]:
+                  - button "−" [ref=f7e369] [cursor=pointer]
+                  - button "＋" [ref=f7e370] [cursor=pointer]
+            - row [ref=f7e371]:
+              - cell [ref=f7e372]:
+                - checkbox [ref=f7e373]
+              - cell "6" [ref=f7e374]
+              - cell "碎片皮肤" [ref=f7e375]
+              - cell "碎片已满继续获取" [ref=f7e376]
+              - cell "P1" [ref=f7e378]
+              - cell "皮肤未解锁，碎片已满" [ref=f7e380]
+              - cell "尝试继续击杀对应怪物和boss获取碎片" [ref=f7e382]
+              - cell "无法继续获得碎片" [ref=f7e384]
+              - cell [ref=f7e386]:
+                - button "未执行 1" [ref=f7e387] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e388]:
+                - button "备注" [ref=f7e389] [cursor=pointer]
+              - cell [ref=f7e390]:
+                - button "缺陷链接" [ref=f7e391] [cursor=pointer]
+              - cell [ref=f7e392]:
+                - generic [ref=f7e393]:
+                  - button "−" [ref=f7e394] [cursor=pointer]
+                  - button "＋" [ref=f7e395] [cursor=pointer]
+            - row [ref=f7e396]:
+              - cell [ref=f7e397]:
+                - checkbox [ref=f7e398]
+              - cell "7" [ref=f7e399]
+              - cell "碎片皮肤" [ref=f7e400]
+              - cell "解锁皮肤后继续获取碎片" [ref=f7e401]
+              - cell "P1" [ref=f7e403]
+              - cell "皮肤已解锁" [ref=f7e405]
+              - cell "尝试继续击杀对应怪物和boss获取碎片" [ref=f7e407]
+              - cell "无法继续获得碎片" [ref=f7e409]
+              - cell [ref=f7e411]:
+                - button "未执行 1" [ref=f7e412] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e413]:
+                - button "备注" [ref=f7e414] [cursor=pointer]
+              - cell [ref=f7e415]:
+                - button "缺陷链接" [ref=f7e416] [cursor=pointer]
+              - cell [ref=f7e417]:
+                - generic [ref=f7e418]:
+                  - button "−" [ref=f7e419] [cursor=pointer]
+                  - button "＋" [ref=f7e420] [cursor=pointer]
+            - row [ref=f7e421]:
+              - cell [ref=f7e422]:
+                - checkbox [ref=f7e423]
+              - cell "8" [ref=f7e424]
+              - cell "碎片皮肤" [ref=f7e425]
+              - cell "碎片获取时机" [ref=f7e426]
+              - cell "P1" [ref=f7e428]
+              - cell "皮肤未解锁，碎片未满" [ref=f7e430]
+              - cell "获得碎片后进入下一层前退出游戏，获得碎片后进入下一层后退出游戏" [ref=f7e432]
+              - cell "获得碎片后度需要进入一次传送门才会保存碎片，所以前一不会好获得碎片，后一可以获得碎片" [ref=f7e434]
+              - cell [ref=f7e436]:
+                - button "未执行 1" [ref=f7e437] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e438]:
+                - button "备注" [ref=f7e439] [cursor=pointer]
+              - cell [ref=f7e440]:
+                - button "缺陷链接" [ref=f7e441] [cursor=pointer]
+              - cell [ref=f7e442]:
+                - generic [ref=f7e443]:
+                  - button "−" [ref=f7e444] [cursor=pointer]
+                  - button "＋" [ref=f7e445] [cursor=pointer]
+            - row [ref=f7e446]:
+              - cell [ref=f7e447]:
+                - checkbox [ref=f7e448]
+              - cell "9" [ref=f7e449]
+              - cell "碎片皮肤" [ref=f7e450]
+              - cell "云存档下载" [ref=f7e451]
+              - cell "P1" [ref=f7e453]
+              - cell "云端（无碎片）覆盖本地（有碎片）" [ref=f7e455]
+              - cell "本地获取碎片，云端存档覆盖本地，进入游戏观察碎片" [ref=f7e457]
+              - cell "本地不会有碎片" [ref=f7e459]
+              - cell [ref=f7e461]:
+                - button "未执行 1" [ref=f7e462] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e463]:
+                - button "备注" [ref=f7e464] [cursor=pointer]
+              - cell [ref=f7e465]:
+                - button "缺陷链接" [ref=f7e466] [cursor=pointer]
+              - cell [ref=f7e467]:
+                - generic [ref=f7e468]:
+                  - button "−" [ref=f7e469] [cursor=pointer]
+                  - button "＋" [ref=f7e470] [cursor=pointer]
+            - row [ref=f7e471]:
+              - cell [ref=f7e472]:
+                - checkbox [ref=f7e473]
+              - cell "10" [ref=f7e474]
+              - cell "碎片皮肤" [ref=f7e475]
+              - cell "云端下载" [ref=f7e476]
+              - cell "P1" [ref=f7e478]
+              - cell "云端（有碎片）覆盖本地（无碎片）" [ref=f7e480]
+              - cell "卸载安装新包，把云端下载到本地，进入游戏观察碎片" [ref=f7e482]
+              - cell "本地碎片数量正常和云端一致" [ref=f7e484]
+              - cell [ref=f7e486]:
+                - button "未执行 1" [ref=f7e487] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e488]:
+                - button "备注" [ref=f7e489] [cursor=pointer]
+              - cell [ref=f7e490]:
+                - button "缺陷链接" [ref=f7e491] [cursor=pointer]
+              - cell [ref=f7e492]:
+                - generic [ref=f7e493]:
+                  - button "−" [ref=f7e494] [cursor=pointer]
+                  - button "＋" [ref=f7e495] [cursor=pointer]
+            - row [ref=f7e496]:
+              - cell [ref=f7e497]:
+                - checkbox [ref=f7e498]
+              - cell "11" [ref=f7e499]
+              - cell "宝石皮肤" [ref=f7e500]
+              - cell "解锁方式" [ref=f7e501]
+              - cell "P1" [ref=f7e503]
+              - cell "皮肤未解锁" [ref=f7e505]
+              - cell "点开角色选择界面，观察该皮肤的解锁条件" [ref=f7e507]
+              - cell "展示宝石解锁按钮，正确展示所需宝石数量" [ref=f7e509]
+              - cell [ref=f7e511]:
+                - button "未执行 1" [ref=f7e512] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e513]:
+                - button "备注" [ref=f7e514] [cursor=pointer]
+              - cell [ref=f7e515]:
+                - button "缺陷链接" [ref=f7e516] [cursor=pointer]
+              - cell [ref=f7e517]:
+                - generic [ref=f7e518]:
+                  - button "−" [ref=f7e519] [cursor=pointer]
+                  - button "＋" [ref=f7e520] [cursor=pointer]
+            - row [ref=f7e521]:
+              - cell [ref=f7e522]:
+                - checkbox [ref=f7e523]
+              - cell "12" [ref=f7e524]
+              - cell "宝石皮肤" [ref=f7e525]
+              - cell "宝石不足时解锁" [ref=f7e526]
+              - cell "P1" [ref=f7e528]
+              - cell "皮肤未解锁" [ref=f7e530]
+              - cell "尝试解锁皮肤" [ref=f7e532]
+              - cell "宝石不足不能解锁，弹出宝石商店界面" [ref=f7e534]
+              - cell [ref=f7e536]:
+                - button "未执行 1" [ref=f7e537] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e538]:
+                - button "备注" [ref=f7e539] [cursor=pointer]
+              - cell [ref=f7e540]:
+                - button "缺陷链接" [ref=f7e541] [cursor=pointer]
+              - cell [ref=f7e542]:
+                - generic [ref=f7e543]:
+                  - button "−" [ref=f7e544] [cursor=pointer]
+                  - button "＋" [ref=f7e545] [cursor=pointer]
+            - row [ref=f7e546]:
+              - cell [ref=f7e547]:
+                - checkbox [ref=f7e548]
+              - cell "13" [ref=f7e549]
+              - cell "宝石皮肤" [ref=f7e550]
+              - cell "宝石足够时解锁" [ref=f7e551]
+              - cell "P1" [ref=f7e553]
+              - cell "皮肤未解锁" [ref=f7e555]
+              - cell "尝试解锁皮肤" [ref=f7e557]
+              - cell "宝石扣除成功，解锁成功，弹脸的图和皮肤一致" [ref=f7e559]
+              - cell [ref=f7e561]:
+                - button "未执行 1" [ref=f7e562] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e563]:
+                - button "备注" [ref=f7e564] [cursor=pointer]
+              - cell [ref=f7e565]:
+                - button "缺陷链接" [ref=f7e566] [cursor=pointer]
+              - cell [ref=f7e567]:
+                - generic [ref=f7e568]:
+                  - button "−" [ref=f7e569] [cursor=pointer]
+                  - button "＋" [ref=f7e570] [cursor=pointer]
+            - row [ref=f7e571]:
+              - cell [ref=f7e572]:
+                - checkbox [ref=f7e573]
+              - cell "14" [ref=f7e574]
+              - cell "付费皮肤" [ref=f7e575]
+              - cell "解锁方式" [ref=f7e576]
+              - cell "P1" [ref=f7e578]
+              - cell "皮肤未解锁" [ref=f7e580]
+              - cell "点开角色选择界面，观察该皮肤的解锁条件" [ref=f7e582]
+              - cell "需要花钱付费解锁，正确展示价格，且在IOS/谷歌包体中也展示正确的价格" [ref=f7e584]
+              - cell [ref=f7e586]:
+                - button "未执行 1" [ref=f7e587] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e588]:
+                - button "备注" [ref=f7e589] [cursor=pointer]
+              - cell [ref=f7e590]:
+                - button "缺陷链接" [ref=f7e591] [cursor=pointer]
+              - cell [ref=f7e592]:
+                - generic [ref=f7e593]:
+                  - button "−" [ref=f7e594] [cursor=pointer]
+                  - button "＋" [ref=f7e595] [cursor=pointer]
+            - row [ref=f7e596]:
+              - cell [ref=f7e597]:
+                - checkbox [ref=f7e598]
+              - cell "15" [ref=f7e599]
+              - cell "付费皮肤" [ref=f7e600]
+              - cell "付费解锁" [ref=f7e601]
+              - cell "P1" [ref=f7e603]
+              - cell "皮肤未解锁" [ref=f7e605]
+              - cell "尝试解锁皮肤" [ref=f7e607]
+              - cell "扣费成功，解锁成功，弹脸的图和皮肤一致" [ref=f7e609]
+              - cell [ref=f7e611]:
+                - button "未执行 1" [ref=f7e612] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "1"
+              - cell [ref=f7e613]:
+                - button "备注" [ref=f7e614] [cursor=pointer]
+              - cell [ref=f7e615]:
+                - button "缺陷链接" [ref=f7e616] [cursor=pointer]
+              - cell [ref=f7e617]:
+                - generic [ref=f7e618]:
+                  - button "−" [ref=f7e619] [cursor=pointer]
+                  - button "＋" [ref=f7e620] [cursor=pointer]
+            - row [ref=f7e621]:
+              - cell [ref=f7e622]:
+                - checkbox [ref=f7e623]
+              - cell "16" [ref=f7e624]
+              - cell "小鱼干皮肤" [ref=f7e625]
+              - cell "解锁方式" [ref=f7e626]
+              - cell "P1" [ref=f7e628]
+              - cell "皮肤未解锁" [ref=f7e630]
+              - cell "点开角色选择界面，观察该皮肤的解锁条件" [ref=f7e632]
+              - cell "展示敬请期待" [ref=f7e634]
+              - cell [ref=f7e636]:
+                - button "不适用" [ref=f7e637] [cursor=pointer]
+              - cell [ref=f7e638]:
+                - button "备注" [ref=f7e639] [cursor=pointer]
+              - cell [ref=f7e640]:
+                - button "缺陷链接" [ref=f7e641] [cursor=pointer]
+              - cell [ref=f7e642]:
+                - generic [ref=f7e643]:
+                  - button "−" [ref=f7e644] [cursor=pointer]
+                  - button "＋" [ref=f7e645] [cursor=pointer]
+            - row [ref=f7e646]:
+              - cell [ref=f7e647]:
+                - checkbox [ref=f7e648]
+              - cell "17" [ref=f7e649]
+              - cell "小鱼干皮肤" [ref=f7e650]
+              - cell "小鱼干商店配置皮肤" [ref=f7e651]
+              - cell "P1" [ref=f7e653]
+              - cell "皮肤未解锁" [ref=f7e655]
+              - cell "尝试在小鱼干商店中配置皮肤，配置后在游戏内的小鱼干商店观察皮肤" [ref=f7e657]
+              - cell "配置可以正常生效，小鱼干商店内可以看到皮肤" [ref=f7e659]
+              - cell [ref=f7e661]:
+                - button "不适用" [ref=f7e662] [cursor=pointer]
+              - cell [ref=f7e663]:
+                - button "备注" [ref=f7e664] [cursor=pointer]
+              - cell [ref=f7e665]:
+                - button "缺陷链接" [ref=f7e666] [cursor=pointer]
+              - cell [ref=f7e667]:
+                - generic [ref=f7e668]:
+                  - button "−" [ref=f7e669] [cursor=pointer]
+                  - button "＋" [ref=f7e670] [cursor=pointer]
+            - row [ref=f7e671]:
+              - cell [ref=f7e672]:
+                - checkbox [ref=f7e673]
+              - cell "18" [ref=f7e674]
+              - cell "小鱼干皮肤" [ref=f7e675]
+              - cell "小鱼干不足时解锁" [ref=f7e676]
+              - cell "P1" [ref=f7e678]
+              - cell "皮肤未解锁，小鱼干商店已配置皮肤" [ref=f7e680]
+              - cell "尝试解锁皮肤" [ref=f7e682]
+              - cell "提示小鱼干不足不能解锁，自动跳转至小鱼干购买页面" [ref=f7e684]
+              - cell [ref=f7e686]:
+                - button "不适用" [ref=f7e687] [cursor=pointer]
+              - cell [ref=f7e688]:
+                - button "备注" [ref=f7e689] [cursor=pointer]
+              - cell [ref=f7e690]:
+                - button "缺陷链接" [ref=f7e691] [cursor=pointer]
+              - cell [ref=f7e692]:
+                - generic [ref=f7e693]:
+                  - button "−" [ref=f7e694] [cursor=pointer]
+                  - button "＋" [ref=f7e695] [cursor=pointer]
+            - row [ref=f7e696]:
+              - cell [ref=f7e697]:
+                - checkbox [ref=f7e698]
+              - cell "19" [ref=f7e699]
+              - cell "小鱼干皮肤" [ref=f7e700]
+              - cell "小鱼干足够时解锁" [ref=f7e701]
+              - cell "P1" [ref=f7e703]
+              - cell "皮肤未解锁，小鱼干商店已配置皮肤" [ref=f7e705]
+              - cell "尝试解锁皮肤" [ref=f7e707]
+              - cell "小鱼干扣除成功，解锁成功，弹脸的图和皮肤一致" [ref=f7e709]
+              - cell [ref=f7e711]:
+                - button "不适用" [ref=f7e712] [cursor=pointer]
+              - cell [ref=f7e713]:
+                - button "备注" [ref=f7e714] [cursor=pointer]
+              - cell [ref=f7e715]:
+                - button "缺陷链接" [ref=f7e716] [cursor=pointer]
+              - cell [ref=f7e717]:
+                - generic [ref=f7e718]:
+                  - button "−" [ref=f7e719] [cursor=pointer]
+                  - button "＋" [ref=f7e720] [cursor=pointer]
+            - row [ref=f7e721]:
+              - cell [ref=f7e722]:
+                - checkbox [ref=f7e723]
+              - cell "20" [ref=f7e724]
+              - cell "赛季币皮肤" [ref=f7e725]
+              - cell "解锁方式" [ref=f7e726]
+              - cell "P1" [ref=f7e728]
+              - cell "皮肤未解锁" [ref=f7e730]
+              - cell "点开角色选择界面，观察该皮肤的解锁条件" [ref=f7e732]
+              - cell "展示赛季商店解锁" [ref=f7e734]
+              - cell [ref=f7e736]:
+                - button "不适用" [ref=f7e737] [cursor=pointer]
+              - cell [ref=f7e738]:
+                - button "备注" [ref=f7e739] [cursor=pointer]
+              - cell [ref=f7e740]:
+                - button "缺陷链接" [ref=f7e741] [cursor=pointer]
+              - cell [ref=f7e742]:
+                - generic [ref=f7e743]:
+                  - button "−" [ref=f7e744] [cursor=pointer]
+                  - button "＋" [ref=f7e745] [cursor=pointer]
+            - row [ref=f7e746]:
+              - cell [ref=f7e747]:
+                - checkbox [ref=f7e748]
+              - cell "21" [ref=f7e749]
+              - cell "赛季币皮肤" [ref=f7e750]
+              - cell "赛季商店配置皮肤" [ref=f7e751]
+              - cell "P1" [ref=f7e753]
+              - cell "皮肤未解锁" [ref=f7e755]
+              - cell "尝试在赛季商店中配置皮肤，配置后在游戏内的商店观察皮肤" [ref=f7e757]
+              - cell "配置可以正常生效，商店内可以看到皮肤" [ref=f7e759]
+              - cell [ref=f7e761]:
+                - button "不适用" [ref=f7e762] [cursor=pointer]
+              - cell [ref=f7e763]:
+                - button "备注" [ref=f7e764] [cursor=pointer]
+              - cell [ref=f7e765]:
+                - button "缺陷链接" [ref=f7e766] [cursor=pointer]
+              - cell [ref=f7e767]:
+                - generic [ref=f7e768]:
+                  - button "−" [ref=f7e769] [cursor=pointer]
+                  - button "＋" [ref=f7e770] [cursor=pointer]
+            - row [ref=f7e771]:
+              - cell [ref=f7e772]:
+                - checkbox [ref=f7e773]
+              - cell "22" [ref=f7e774]
+              - cell "赛季币皮肤" [ref=f7e775]
+              - cell "赛季币不足时解锁" [ref=f7e776]
+              - cell "P1" [ref=f7e778]
+              - cell "皮肤未解锁，商店已配置皮肤" [ref=f7e780]
+              - cell "尝试解锁皮肤" [ref=f7e782]
+              - cell "提示赛季币不足不能解锁，自动跳转至赛季币购买页面" [ref=f7e784]
+              - cell [ref=f7e786]:
+                - button "不适用" [ref=f7e787] [cursor=pointer]
+              - cell [ref=f7e788]:
+                - button "备注" [ref=f7e789] [cursor=pointer]
+              - cell [ref=f7e790]:
+                - button "缺陷链接" [ref=f7e791] [cursor=pointer]
+              - cell [ref=f7e792]:
+                - generic [ref=f7e793]:
+                  - button "−" [ref=f7e794] [cursor=pointer]
+                  - button "＋" [ref=f7e795] [cursor=pointer]
+            - row [ref=f7e796]:
+              - cell [ref=f7e797]:
+                - checkbox [ref=f7e798]
+              - cell "23" [ref=f7e799]
+              - cell "赛季币皮肤" [ref=f7e800]
+              - cell "赛季币足够时解锁" [ref=f7e801]
+              - cell "P1" [ref=f7e803]
+              - cell "皮肤未解锁，商店已配置皮肤" [ref=f7e805]
+              - cell "尝试解锁皮肤" [ref=f7e807]
+              - cell "赛季币扣除成功，解锁成功，弹脸的图和皮肤一致" [ref=f7e809]
+              - cell [ref=f7e811]:
+                - button "不适用" [ref=f7e812] [cursor=pointer]
+              - cell [ref=f7e813]:
+                - button "备注" [ref=f7e814] [cursor=pointer]
+              - cell [ref=f7e815]:
+                - button "缺陷链接" [ref=f7e816] [cursor=pointer]
+              - cell [ref=f7e817]:
+                - generic [ref=f7e818]:
+                  - button "−" [ref=f7e819] [cursor=pointer]
+                  - button "＋" [ref=f7e820] [cursor=pointer]
+            - row [ref=f7e821]:
+              - cell [ref=f7e822]:
+                - checkbox [ref=f7e823]
+              - cell "24" [ref=f7e824]
+              - cell "通过购买老皮肤送的新皮肤" [ref=f7e825]
+              - cell "解锁方式" [ref=f7e826]
+              - cell "P1" [ref=f7e828]
+              - cell "老皮肤未解锁" [ref=f7e830]
+              - cell "点开角色选择界面，观察该皮肤的解锁条件" [ref=f7e832]
+              - cell "需要先购买老皮肤后才解锁" [ref=f7e834]
+              - cell [ref=f7e836]:
+                - button "不适用" [ref=f7e837] [cursor=pointer]
+              - cell [ref=f7e838]:
+                - button "备注" [ref=f7e839] [cursor=pointer]
+              - cell [ref=f7e840]:
+                - button "缺陷链接" [ref=f7e841] [cursor=pointer]
+              - cell [ref=f7e842]:
+                - generic [ref=f7e843]:
+                  - button "−" [ref=f7e844] [cursor=pointer]
+                  - button "＋" [ref=f7e845] [cursor=pointer]
+            - row [ref=f7e846]:
+              - cell [ref=f7e847]:
+                - checkbox [ref=f7e848]
+              - cell "25" [ref=f7e849]
+              - cell "通过购买老皮肤送的新皮肤" [ref=f7e850]
+              - cell "条件未完成时时解锁" [ref=f7e851]
+              - cell "P1" [ref=f7e853]
+              - cell "老皮肤未解锁" [ref=f7e855]
+              - cell "不购买老皮肤，以及对老皮肤取消支付" [ref=f7e857]
+              - cell "皮肤不可用" [ref=f7e859]
+              - cell [ref=f7e861]:
+                - button "不适用" [ref=f7e862] [cursor=pointer]
+              - cell [ref=f7e863]:
+                - button "备注" [ref=f7e864] [cursor=pointer]
+              - cell [ref=f7e865]:
+                - button "缺陷链接" [ref=f7e866] [cursor=pointer]
+              - cell [ref=f7e867]:
+                - generic [ref=f7e868]:
+                  - button "−" [ref=f7e869] [cursor=pointer]
+                  - button "＋" [ref=f7e870] [cursor=pointer]
+            - row [ref=f7e871]:
+              - cell [ref=f7e872]:
+                - checkbox [ref=f7e873]
+              - cell "26" [ref=f7e874]
+              - cell "通过购买老皮肤送的新皮肤" [ref=f7e875]
+              - cell "条件完成时时解锁" [ref=f7e876]
+              - cell "P1" [ref=f7e878]
+              - cell "老皮肤未解锁" [ref=f7e880]
+              - cell "购买老皮肤，观察皮肤可用状态" [ref=f7e882]
+              - cell "皮肤可用" [ref=f7e884]
+              - cell [ref=f7e886]:
+                - button "不适用" [ref=f7e887] [cursor=pointer]
+              - cell [ref=f7e888]:
+                - button "备注" [ref=f7e889] [cursor=pointer]
+              - cell [ref=f7e890]:
+                - button "缺陷链接" [ref=f7e891] [cursor=pointer]
+              - cell [ref=f7e892]:
+                - generic [ref=f7e893]:
+                  - button "−" [ref=f7e894] [cursor=pointer]
+                  - button "＋" [ref=f7e895] [cursor=pointer]
+            - row [ref=f7e896]:
+              - cell [ref=f7e897]:
+                - checkbox [ref=f7e898]
+              - cell "27" [ref=f7e899]
+              - cell "条件皮肤" [ref=f7e900]
+              - cell "解锁方式" [ref=f7e901]
+              - cell "P1" [ref=f7e903]
+              - cell "皮肤未解锁" [ref=f7e905]
+              - cell "点开角色选择界面，观察该皮肤的解锁条件" [ref=f7e907]
+              - cell "展示需要达成的条件" [ref=f7e909]
+              - cell [ref=f7e911]:
+                - button "不适用" [ref=f7e912] [cursor=pointer]
+              - cell [ref=f7e913]:
+                - button "备注" [ref=f7e914] [cursor=pointer]
+              - cell [ref=f7e915]:
+                - button "缺陷链接" [ref=f7e916] [cursor=pointer]
+              - cell [ref=f7e917]:
+                - generic [ref=f7e918]:
+                  - button "−" [ref=f7e919] [cursor=pointer]
+                  - button "＋" [ref=f7e920] [cursor=pointer]
+            - row [ref=f7e921]:
+              - cell [ref=f7e922]:
+                - checkbox [ref=f7e923]
+              - cell "28" [ref=f7e924]
+              - cell "条件皮肤" [ref=f7e925]
+              - cell "条件未完成时时解锁" [ref=f7e926]
+              - cell "P1" [ref=f7e928]
+              - cell "皮肤未解锁" [ref=f7e930]
+              - cell "观察皮肤可用状态" [ref=f7e932]
+              - cell "皮肤不可用" [ref=f7e934]
+              - cell [ref=f7e936]:
+                - button "不适用" [ref=f7e937] [cursor=pointer]
+              - cell [ref=f7e938]:
+                - button "备注" [ref=f7e939] [cursor=pointer]
+              - cell [ref=f7e940]:
+                - button "缺陷链接" [ref=f7e941] [cursor=pointer]
+              - cell [ref=f7e942]:
+                - generic [ref=f7e943]:
+                  - button "−" [ref=f7e944] [cursor=pointer]
+                  - button "＋" [ref=f7e945] [cursor=pointer]
+            - row [ref=f7e946]:
+              - cell [ref=f7e947]:
+                - checkbox [ref=f7e948]
+              - cell "29" [ref=f7e949]
+              - cell "条件皮肤" [ref=f7e950]
+              - cell "条件完成时时解锁" [ref=f7e951]
+              - cell "P1" [ref=f7e953]
+              - cell "皮肤未解锁" [ref=f7e955]
+              - cell "观察皮肤可用状态" [ref=f7e957]
+              - cell "皮肤可用" [ref=f7e959]
+              - cell [ref=f7e961]:
+                - button "不适用" [ref=f7e962] [cursor=pointer]
+              - cell [ref=f7e963]:
+                - button "备注" [ref=f7e964] [cursor=pointer]
+              - cell [ref=f7e965]:
+                - button "缺陷链接" [ref=f7e966] [cursor=pointer]
+              - cell [ref=f7e967]:
+                - generic [ref=f7e968]:
+                  - button "−" [ref=f7e969] [cursor=pointer]
+                  - button "＋" [ref=f7e970] [cursor=pointer]
+            - row [ref=f7e971]:
+              - cell [ref=f7e972]:
+                - checkbox [ref=f7e973]
+              - cell "30" [ref=f7e974]
+              - cell "通用" [ref=f7e975]
+              - cell "皮肤外形" [ref=f7e976]
+              - cell "P1" [ref=f7e978]
+              - cell "已添加该皮肤" [ref=f7e980]
+              - cell "观察皮肤在设计台和角色皮肤选择界面中的外形" [ref=f7e982]
+              - cell "皮肤外形和设计图一致" [ref=f7e984]
+              - cell [ref=f7e986]:
+                - button "未执行 3" [ref=f7e987] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e988]:
+                - button "备注" [ref=f7e989] [cursor=pointer]
+              - cell [ref=f7e990]:
+                - button "缺陷链接" [ref=f7e991] [cursor=pointer]
+              - cell [ref=f7e992]:
+                - generic [ref=f7e993]:
+                  - button "−" [ref=f7e994] [cursor=pointer]
+                  - button "＋" [ref=f7e995] [cursor=pointer]
+            - row [ref=f7e996]:
+              - cell [ref=f7e997]:
+                - checkbox [ref=f7e998]
+              - cell "31" [ref=f7e999]
+              - cell "通用" [ref=f7e1000]
+              - cell "皮肤初始武器外观" [ref=f7e1001]
+              - cell "P1" [ref=f7e1003]
+              - cell "已拥有皮肤，升级角色至满级" [ref=f7e1005]
+              - cell "选择角色并观察皮肤初始武器" [ref=f7e1007]
+              - cell "初始武器外观正确，符合设计" [ref=f7e1009]
+              - cell [ref=f7e1011]:
+                - button "未执行 3" [ref=f7e1012] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1013]:
+                - button "备注" [ref=f7e1014] [cursor=pointer]
+              - cell [ref=f7e1015]:
+                - button "缺陷链接" [ref=f7e1016] [cursor=pointer]
+              - cell [ref=f7e1017]:
+                - generic [ref=f7e1018]:
+                  - button "−" [ref=f7e1019] [cursor=pointer]
+                  - button "＋" [ref=f7e1020] [cursor=pointer]
+            - row [ref=f7e1021]:
+              - cell [ref=f7e1022]:
+                - checkbox [ref=f7e1023]
+              - cell "32" [ref=f7e1024]
+              - cell "通用" [ref=f7e1025]
+              - cell "皮肤初始武器特效" [ref=f7e1026]
+              - cell "P1" [ref=f7e1028]
+              - cell "已拥有皮肤，升级角色至满级" [ref=f7e1030]
+              - cell "使用初始武器，观察武器特效" [ref=f7e1032]
+              - cell "特效符合设计" [ref=f7e1034]
+              - cell [ref=f7e1036]:
+                - button "未执行 3" [ref=f7e1037] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1038]:
+                - button "备注" [ref=f7e1039] [cursor=pointer]
+              - cell [ref=f7e1040]:
+                - button "缺陷链接" [ref=f7e1041] [cursor=pointer]
+              - cell [ref=f7e1042]:
+                - generic [ref=f7e1043]:
+                  - button "−" [ref=f7e1044] [cursor=pointer]
+                  - button "＋" [ref=f7e1045] [cursor=pointer]
+            - row [ref=f7e1046]:
+              - cell [ref=f7e1047]:
+                - checkbox [ref=f7e1048]
+              - cell "33" [ref=f7e1049]
+              - cell "通用" [ref=f7e1050]
+              - cell "皮肤初始武器统计" [ref=f7e1051]
+              - cell "P1" [ref=f7e1053]
+              - cell "已拥有皮肤，升级角色至满级" [ref=f7e1055]
+              - cell "使用初始武器，观察武器是否会被统计入原皮初武德使用次数中" [ref=f7e1057]
+              - cell "会被统计" [ref=f7e1059]
+              - cell [ref=f7e1061]:
+                - button "未执行 3" [ref=f7e1062] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1063]:
+                - button "备注" [ref=f7e1064] [cursor=pointer]
+              - cell [ref=f7e1065]:
+                - button "缺陷链接" [ref=f7e1066] [cursor=pointer]
+              - cell [ref=f7e1067]:
+                - generic [ref=f7e1068]:
+                  - button "−" [ref=f7e1069] [cursor=pointer]
+                  - button "＋" [ref=f7e1070] [cursor=pointer]
+            - row [ref=f7e1071]:
+              - cell [ref=f7e1072]:
+                - checkbox [ref=f7e1073]
+              - cell "34" [ref=f7e1074]
+              - cell "通用" [ref=f7e1075]
+              - cell "初始武器因子影响" [ref=f7e1076]
+              - cell "P1" [ref=f7e1078]
+              - cell "已拥有皮肤，升级角色至满级" [ref=f7e1080]
+              - cell "分别拥有重铸因子和近战武器因子的两种情况下使用初始武器，观察因子效果是否生效" [ref=f7e1082]
+              - cell "因子效果正确，可以重铸武器" [ref=f7e1084]
+              - cell [ref=f7e1086]:
+                - button "未执行 3" [ref=f7e1087] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1088]:
+                - button "备注" [ref=f7e1089] [cursor=pointer]
+              - cell [ref=f7e1090]:
+                - button "缺陷链接" [ref=f7e1091] [cursor=pointer]
+              - cell [ref=f7e1092]:
+                - generic [ref=f7e1093]:
+                  - button "−" [ref=f7e1094] [cursor=pointer]
+                  - button "＋" [ref=f7e1095] [cursor=pointer]
+            - row [ref=f7e1096]:
+              - cell [ref=f7e1097]:
+                - checkbox [ref=f7e1098]
+              - cell "35" [ref=f7e1099]
+              - cell "通用" [ref=f7e1100]
+              - cell "皮肤1技能特效" [ref=f7e1101]
+              - cell "P1" [ref=f7e1103]
+              - cell "已拥有皮肤，升级角色至满级" [ref=f7e1105]
+              - cell "使用技能，观察技能特效" [ref=f7e1107]
+              - cell "技能特效符合设计，使用技能后皮肤状态依然正确" [ref=f7e1109]
+              - cell [ref=f7e1111]:
+                - button "未执行 3" [ref=f7e1112] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1113]:
+                - button "备注" [ref=f7e1114] [cursor=pointer]
+              - cell [ref=f7e1115]:
+                - button "缺陷链接" [ref=f7e1116] [cursor=pointer]
+              - cell [ref=f7e1117]:
+                - generic [ref=f7e1118]:
+                  - button "−" [ref=f7e1119] [cursor=pointer]
+                  - button "＋" [ref=f7e1120] [cursor=pointer]
+            - row [ref=f7e1121]:
+              - cell [ref=f7e1122]:
+                - checkbox [ref=f7e1123]
+              - cell "36" [ref=f7e1124]
+              - cell "通用" [ref=f7e1125]
+              - cell "皮肤2技能特效" [ref=f7e1126]
+              - cell "P1" [ref=f7e1128]
+              - cell "已拥有皮肤，升级角色至满级" [ref=f7e1130]
+              - cell "使用技能，观察技能特效" [ref=f7e1132]
+              - cell "技能特效符合设计，使用技能后皮肤状态依然正确" [ref=f7e1134]
+              - cell [ref=f7e1136]:
+                - button "未执行 3" [ref=f7e1137] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1138]:
+                - button "备注" [ref=f7e1139] [cursor=pointer]
+              - cell [ref=f7e1140]:
+                - button "缺陷链接" [ref=f7e1141] [cursor=pointer]
+              - cell [ref=f7e1142]:
+                - generic [ref=f7e1143]:
+                  - button "−" [ref=f7e1144] [cursor=pointer]
+                  - button "＋" [ref=f7e1145] [cursor=pointer]
+            - row [ref=f7e1146]:
+              - cell [ref=f7e1147]:
+                - checkbox [ref=f7e1148]
+              - cell "37" [ref=f7e1149]
+              - cell "通用" [ref=f7e1150]
+              - cell "皮肤3技能特效" [ref=f7e1151]
+              - cell "P1" [ref=f7e1153]
+              - cell "已拥有皮肤，升级角色至满级" [ref=f7e1155]
+              - cell "使用技能，观察技能特效" [ref=f7e1157]
+              - cell "技能特效符合设计，使用技能后皮肤状态依然正确" [ref=f7e1159]
+              - cell [ref=f7e1161]:
+                - button "未执行 3" [ref=f7e1162] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1163]:
+                - button "备注" [ref=f7e1164] [cursor=pointer]
+              - cell [ref=f7e1165]:
+                - button "缺陷链接" [ref=f7e1166] [cursor=pointer]
+              - cell [ref=f7e1167]:
+                - generic [ref=f7e1168]:
+                  - button "−" [ref=f7e1169] [cursor=pointer]
+                  - button "＋" [ref=f7e1170] [cursor=pointer]
+            - row [ref=f7e1171]:
+              - cell [ref=f7e1172]:
+                - checkbox [ref=f7e1173]
+              - cell "38" [ref=f7e1174]
+              - cell "通用" [ref=f7e1175]
+              - cell "死亡后皮肤展示和技能特效" [ref=f7e1176]
+              - cell "P1" [ref=f7e1178]
+              - cell "已拥有皮肤，升级角色至满级" [ref=f7e1180]
+              - cell "角色死亡复活后使用1/2/3技能，观察技能特效和皮肤状态" [ref=f7e1182]
+              - cell "全部技能的特效和皮肤状态均正确" [ref=f7e1184]
+              - cell [ref=f7e1186]:
+                - button "未执行 3" [ref=f7e1187] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1188]:
+                - button "备注" [ref=f7e1189] [cursor=pointer]
+              - cell [ref=f7e1190]:
+                - button "缺陷链接" [ref=f7e1191] [cursor=pointer]
+              - cell [ref=f7e1192]:
+                - generic [ref=f7e1193]:
+                  - button "−" [ref=f7e1194] [cursor=pointer]
+                  - button "＋" [ref=f7e1195] [cursor=pointer]
+            - row [ref=f7e1196]:
+              - cell [ref=f7e1197]:
+                - checkbox [ref=f7e1198]
+              - cell "39" [ref=f7e1199]
+              - cell "通用" [ref=f7e1200]
+              - cell "联机时的皮肤展示" [ref=f7e1201]
+              - cell "P1" [ref=f7e1203]
+              - cell "已拥有皮肤" [ref=f7e1205]
+              - cell "联机时，队友直接观察角色皮肤/联机房电视展示/选人前的队友信息面板" [ref=f7e1207]
+              - cell "皮肤展示在各种联机展示下均正确" [ref=f7e1209]
+              - cell [ref=f7e1211]:
+                - button "未执行 3" [ref=f7e1212] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1213]:
+                - button "备注" [ref=f7e1214] [cursor=pointer]
+              - cell [ref=f7e1215]:
+                - button "缺陷链接" [ref=f7e1216] [cursor=pointer]
+              - cell [ref=f7e1217]:
+                - generic [ref=f7e1218]:
+                  - button "−" [ref=f7e1219] [cursor=pointer]
+                  - button "＋" [ref=f7e1220] [cursor=pointer]
+            - row [ref=f7e1221]:
+              - cell [ref=f7e1222]:
+                - checkbox [ref=f7e1223]
+              - cell "40" [ref=f7e1224]
+              - cell "通用" [ref=f7e1225]
+              - cell "联机时的皮肤特效展示" [ref=f7e1226]
+              - cell "P1" [ref=f7e1228]
+              - cell "已拥有皮肤" [ref=f7e1230]
+              - cell "联机时，使用1/2/3技能，队友观察" [ref=f7e1232]
+              - cell "技能在联机下的效果和特效均正常同步" [ref=f7e1234]
+              - cell [ref=f7e1236]:
+                - button "未执行 3" [ref=f7e1237] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1238]:
+                - button "备注" [ref=f7e1239] [cursor=pointer]
+              - cell [ref=f7e1240]:
+                - button "缺陷链接" [ref=f7e1241] [cursor=pointer]
+              - cell [ref=f7e1242]:
+                - generic [ref=f7e1243]:
+                  - button "−" [ref=f7e1244] [cursor=pointer]
+                  - button "＋" [ref=f7e1245] [cursor=pointer]
+            - row [ref=f7e1246]:
+              - cell [ref=f7e1247]:
+                - checkbox [ref=f7e1248]
+              - cell "41" [ref=f7e1249]
+              - cell "通用" [ref=f7e1250]
+              - cell "皮肤武器搭配" [ref=f7e1251]
+              - cell "P1" [ref=f7e1253]
+              - cell "已拥有皮肤" [ref=f7e1255]
+              - cell "使用嘴炮或者痛苦面具，观察作为副手时，位置贴图是否正确" [ref=f7e1257]
+              - cell "位置展示正常" [ref=f7e1259]
+              - cell [ref=f7e1261]:
+                - button "未执行 3" [ref=f7e1262] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1263]:
+                - button "备注" [ref=f7e1264] [cursor=pointer]
+              - cell [ref=f7e1265]:
+                - button "缺陷链接" [ref=f7e1266] [cursor=pointer]
+              - cell [ref=f7e1267]:
+                - generic [ref=f7e1268]:
+                  - button "−" [ref=f7e1269] [cursor=pointer]
+                  - button "＋" [ref=f7e1270] [cursor=pointer]
+            - row [ref=f7e1271]:
+              - cell [ref=f7e1272]:
+                - checkbox [ref=f7e1273]
+              - cell "42" [ref=f7e1274]
+              - cell "通用" [ref=f7e1275]
+              - cell "通关后皮肤展示" [ref=f7e1276]
+              - cell "P1" [ref=f7e1278]
+              - cell "已拥有皮肤" [ref=f7e1280]
+              - cell "持有初始武器时，通关并观察通关证书" [ref=f7e1282]
+              - cell "角色皮肤贴图正确、初始武器外观名字均正确" [ref=f7e1284]
+              - cell [ref=f7e1286]:
+                - button "未执行 3" [ref=f7e1287] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1288]:
+                - button "备注" [ref=f7e1289] [cursor=pointer]
+              - cell [ref=f7e1290]:
+                - button "缺陷链接" [ref=f7e1291] [cursor=pointer]
+              - cell [ref=f7e1292]:
+                - generic [ref=f7e1293]:
+                  - button "−" [ref=f7e1294] [cursor=pointer]
+                  - button "＋" [ref=f7e1295] [cursor=pointer]
+            - row [ref=f7e1296]:
+              - cell [ref=f7e1297]:
+                - checkbox [ref=f7e1298]
+              - cell "43" [ref=f7e1299]
+              - cell "通用" [ref=f7e1300]
+              - cell "结算皮肤展示" [ref=f7e1301]
+              - cell "P1" [ref=f7e1303]
+              - cell "已拥有皮肤" [ref=f7e1305]
+              - cell "被击杀后结算时观察结算进度条的皮肤展示" [ref=f7e1307]
+              - cell "皮肤展示正确，倒下的贴图也正确" [ref=f7e1309]
+              - cell [ref=f7e1311]:
+                - button "未执行 3" [ref=f7e1312] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1313]:
+                - button "备注" [ref=f7e1314] [cursor=pointer]
+              - cell [ref=f7e1315]:
+                - button "缺陷链接" [ref=f7e1316] [cursor=pointer]
+              - cell [ref=f7e1317]:
+                - generic [ref=f7e1318]:
+                  - button "−" [ref=f7e1319] [cursor=pointer]
+                  - button "＋" [ref=f7e1320] [cursor=pointer]
+            - row [ref=f7e1321]:
+              - cell [ref=f7e1322]:
+                - checkbox [ref=f7e1323]
+              - cell "44" [ref=f7e1324]
+              - cell "通用" [ref=f7e1325]
+              - cell "皮肤名字" [ref=f7e1326]
+              - cell "P1" [ref=f7e1328]
+              - cell "已拥有皮肤" [ref=f7e1330]
+              - cell "观察皮肤在皮肤选择界面的名字展示" [ref=f7e1332]
+              - cell "展示正常" [ref=f7e1334]
+              - cell [ref=f7e1336]:
+                - button "未执行 3" [ref=f7e1337] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1338]:
+                - button "备注" [ref=f7e1339] [cursor=pointer]
+              - cell [ref=f7e1340]:
+                - button "缺陷链接" [ref=f7e1341] [cursor=pointer]
+              - cell [ref=f7e1342]:
+                - generic [ref=f7e1343]:
+                  - button "−" [ref=f7e1344] [cursor=pointer]
+                  - button "＋" [ref=f7e1345] [cursor=pointer]
+            - row [ref=f7e1346]:
+              - cell [ref=f7e1347]:
+                - checkbox [ref=f7e1348]
+              - cell "45" [ref=f7e1349]
+              - cell "通用" [ref=f7e1350]
+              - cell "皮肤地窖展示" [ref=f7e1351]
+              - cell "P1" [ref=f7e1353]
+              - cell "已拥有皮肤" [ref=f7e1355]
+              - cell "在地窖中观察皮肤展示" [ref=f7e1357]
+              - cell "展示正常" [ref=f7e1359]
+              - cell [ref=f7e1361]:
+                - button "未执行 3" [ref=f7e1362] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1363]:
+                - button "备注" [ref=f7e1364] [cursor=pointer]
+              - cell [ref=f7e1365]:
+                - button "缺陷链接" [ref=f7e1366] [cursor=pointer]
+              - cell [ref=f7e1367]:
+                - generic [ref=f7e1368]:
+                  - button "−" [ref=f7e1369] [cursor=pointer]
+                  - button "＋" [ref=f7e1370] [cursor=pointer]
+            - row [ref=f7e1371]:
+              - cell [ref=f7e1372]:
+                - checkbox [ref=f7e1373]
+              - cell "46" [ref=f7e1374]
+              - cell "通用" [ref=f7e1375]
+              - cell "暂停界面皮肤展示" [ref=f7e1376]
+              - cell "P1" [ref=f7e1378]
+              - cell "已拥有皮肤" [ref=f7e1380]
+              - cell "在暂停观察皮肤展示" [ref=f7e1382]
+              - cell "展示正常" [ref=f7e1384]
+              - cell [ref=f7e1386]:
+                - button "未执行 3" [ref=f7e1387] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1388]:
+                - button "备注" [ref=f7e1389] [cursor=pointer]
+              - cell [ref=f7e1390]:
+                - button "缺陷链接" [ref=f7e1391] [cursor=pointer]
+              - cell [ref=f7e1392]:
+                - generic [ref=f7e1393]:
+                  - button "−" [ref=f7e1394] [cursor=pointer]
+                  - button "＋" [ref=f7e1395] [cursor=pointer]
+            - row [ref=f7e1396]:
+              - cell [ref=f7e1397]:
+                - checkbox [ref=f7e1398]
+              - cell "47" [ref=f7e1399]
+              - cell "通用" [ref=f7e1400]
+              - cell "皮肤配坐骑机甲" [ref=f7e1401]
+              - cell "P1" [ref=f7e1403]
+              - cell "已拥有皮肤" [ref=f7e1405]
+              - cell "乘坐坐骑机甲前后观察皮肤贴图" [ref=f7e1407]
+              - cell "没有异常" [ref=f7e1409]
+              - cell [ref=f7e1411]:
+                - button "未执行 3" [ref=f7e1412] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1413]:
+                - button "备注" [ref=f7e1414] [cursor=pointer]
+              - cell [ref=f7e1415]:
+                - button "缺陷链接" [ref=f7e1416] [cursor=pointer]
+              - cell [ref=f7e1417]:
+                - generic [ref=f7e1418]:
+                  - button "−" [ref=f7e1419] [cursor=pointer]
+                  - button "＋" [ref=f7e1420] [cursor=pointer]
+            - row [ref=f7e1421]:
+              - cell [ref=f7e1422]:
+                - checkbox [ref=f7e1423]
+              - cell "48" [ref=f7e1424]
+              - cell "通用" [ref=f7e1425]
+              - cell "皮肤配雕像" [ref=f7e1426]
+              - cell "P1" [ref=f7e1428]
+              - cell "已拥有皮肤" [ref=f7e1430]
+              - cell "使用狂战士雕像效果后观察皮肤贴图" [ref=f7e1432]
+              - cell "没有异常" [ref=f7e1434]
+              - cell [ref=f7e1436]:
+                - button "未执行 3" [ref=f7e1437] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1438]:
+                - button "备注" [ref=f7e1439] [cursor=pointer]
+              - cell [ref=f7e1440]:
+                - button "缺陷链接" [ref=f7e1441] [cursor=pointer]
+              - cell [ref=f7e1442]:
+                - generic [ref=f7e1443]:
+                  - button "−" [ref=f7e1444] [cursor=pointer]
+                  - button "＋" [ref=f7e1445] [cursor=pointer]
+            - row [ref=f7e1446]:
+              - cell [ref=f7e1447]:
+                - checkbox [ref=f7e1448]
+              - cell "49" [ref=f7e1449]
+              - cell "通用" [ref=f7e1450]
+              - cell "沼泽boss剪影展示" [ref=f7e1451]
+              - cell "P1" [ref=f7e1453]
+              - cell "已拥有皮肤" [ref=f7e1455]
+              - cell "挑战E2-5沼泽关boss，boss半血后释放大招时观察剪影" [ref=f7e1457]
+              - cell "剪影和实际皮肤外形一致" [ref=f7e1459]
+              - cell [ref=f7e1461]:
+                - button "未执行 3" [ref=f7e1462] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1463]:
+                - button "备注" [ref=f7e1464] [cursor=pointer]
+              - cell [ref=f7e1465]:
+                - button "缺陷链接" [ref=f7e1466] [cursor=pointer]
+              - cell [ref=f7e1467]:
+                - generic [ref=f7e1468]:
+                  - button "−" [ref=f7e1469] [cursor=pointer]
+                  - button "＋" [ref=f7e1470] [cursor=pointer]
+            - row [ref=f7e1471]:
+              - cell [ref=f7e1472]:
+                - checkbox [ref=f7e1473]
+              - cell "50" [ref=f7e1474]
+              - cell "通用" [ref=f7e1475]
+              - cell "皮肤受到冰冻/毒/火buff影响" [ref=f7e1476]
+              - cell "P1" [ref=f7e1478]
+              - cell "已拥有皮肤" [ref=f7e1480]
+              - cell "观察被冰冻后/毒后/火烧后，皮肤状态和使用技能的特效是否正确" [ref=f7e1482]
+              - cell "一切正常" [ref=f7e1484]
+              - cell [ref=f7e1486]:
+                - button "未执行 3" [ref=f7e1487] [cursor=pointer]:
+                  - text: 未执行
+                  - generic: "3"
+              - cell [ref=f7e1488]:
+                - button "备注" [ref=f7e1489] [cursor=pointer]
+              - cell [ref=f7e1490]:
+                - button "缺陷链接" [ref=f7e1491] [cursor=pointer]
+              - cell [ref=f7e1492]:
+                - generic [ref=f7e1493]:
+                  - button "−" [ref=f7e1494] [cursor=pointer]
+                  - button "＋" [ref=f7e1495] [cursor=pointer]
+        - generic [ref=f7e1496]:
+          - generic [ref=f7e1497]: 显示 1-50 / 73 条，每页 50 条
+          - generic [ref=f7e1498]:
+            - button "上一页" [disabled] [ref=f7e1499]
+            - generic [ref=f7e1500]: 第 1 / 2 页
+            - button "下一页" [ref=f7e1501] [cursor=pointer]
+            - generic [ref=f7e1502]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=f7e1503]: "1"
+              - text: 页
+      - option "全部版本" [selected]
+      - option "900"
+      - option "912"
+      - option "请选择版本" [selected]
