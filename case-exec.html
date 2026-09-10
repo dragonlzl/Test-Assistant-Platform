@@ -316,36 +316,36 @@
     </div>
   </nav>
 </aside>
+<aside class="workspace-section-nav hidden" id="execOverviewHead" data-tab-section="exec-overview" aria-label="执行总览项目导航">
+  <div class="workspace-section-nav-header">
+    <h2>执行总览</h2>
+    <button class="workspace-section-nav-toggle" id="execOverviewSectionNavToggle" type="button" data-collapsed-host="execOverviewSectionNavToggleHost" aria-controls="execOverviewHead" aria-expanded="true" aria-label="收起快捷导航" title="收起快捷导航"></button>
+  </div>
+  <nav class="flow workspace-section-nav-list" id="execOverviewFlowNav" aria-label="选择项目">
+    <p class="exec-overview-nav-label">选择项目</p>
+    <div class="nav-entry-grid" id="execOverviewNavGrid">
+      <div class="exec-overview-nav-projects" id="execOverviewNavProjects"></div>
+    </div>
+    <button class="nav-entry-card nav-entry-import" id="execOverviewRefreshBtn" type="button">
+      <span class="nav-entry-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+          <path d="M20 12a8 8 0 1 1-2.3-5.7"></path>
+          <path d="M20 4v6h-6"></path>
+        </svg>
+      </span>
+      <span class="nav-entry-text">
+        <span class="nav-entry-title">刷新</span>
+        <span class="nav-entry-desc">重新拉取可访问项目与总览</span>
+      </span>
+    </button>
+  </nav>
+</aside>
 <div class="case-exec-main-stage workspace-main-stage">
 <div class="content-shell">
-
-	<div class="tempexec-head hidden" data-tab-section="exec-overview" id="execOverviewHead">
-	  <div class="flow top-nav" id="execOverviewFlowNav" data-top-nav="exec-overview">
-	    <div class="flow-head">
-	      <div class="flow-title">执行总览导航</div>
-	      <button class="flow-toggle" type="button" data-flow-toggle="exec-overview" aria-expanded="true">收起</button>
-	    </div>
-	    <div class="flow-body">
-	    <p class="hint" style="margin:0 0 6px;">按项目/版本查看各人员执行进度，点击卡片快速操作。</p>
-	    <div class="nav-entry-grid" id="execOverviewNavGrid">
-	      <div class="exec-overview-nav-projects" id="execOverviewNavProjects"></div>
-	      <button class="nav-entry-card nav-entry-import" id="execOverviewRefreshBtn" type="button">
-	        <span class="nav-entry-icon" aria-hidden="true">
-	          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
-	            <path d="M20 12a8 8 0 1 1-2.3-5.7"></path>
-	            <path d="M20 4v6h-6"></path>
-	          </svg>
-	        </span>
-	        <span class="nav-entry-text">
-	          <span class="nav-entry-title">刷新</span>
-	          <span class="nav-entry-desc">重新拉取可访问项目与总览</span>
-	        </span>
-	      </button>
-	    </div>
-	    </div>
-	  </div>
-		</div>
-
+  <header class="workspace-content-header exec-overview-content-header hidden" data-tab-section="exec-overview">
+    <span class="workspace-section-nav-toggle-host" id="execOverviewSectionNavToggleHost"></span>
+    <h1>执行总览</h1>
+  </header>
   <div class="case-exec-sticky-header workspace-sticky-header" id="tempExecStickyHeader">
     <header class="case-exec-content-header workspace-content-header hidden" data-tab-section="tempexec">
       <span class="case-exec-section-nav-toggle-host workspace-section-nav-toggle-host" id="caseExecSectionNavToggleHost"></span>
@@ -626,7 +626,10 @@
       <div class="actions case-library-ai-gen-actions hidden">
         <button class="primary" id="tempExecAiGenRunBtn" type="button" disabled>生成用例</button>
       </div>
-      <p class="status" id="tempExecAiGenStatus"></p>
+      <div class="case-library-ai-gen-status-row">
+        <p class="status" id="tempExecAiGenStatus"></p>
+        <button class="secondary hidden" id="tempExecAiGenCancelBtn" type="button">中断生成</button>
+      </div>
       <div class="case-library-ai-gen-result hidden" id="tempExecAiGenResult">
         <div class="case-library-ai-gen-toolbar">
           <div class="case-library-ai-gen-actions">
@@ -1090,13 +1093,13 @@
 
 
 	<section class="card hidden" data-tab-section="exec-overview">
-	<h2>执行总览</h2>
 	<div class="card-body" id="execOverview">
 	  <div class="toolbar exec-overview-toolbar">
 	    <span class="status" id="execOverviewStatus"></span>
 	  </div>
 	  <div class="exec-overview-project-grid" id="execOverviewProjects"></div>
 	  <p class="hint hidden" id="execOverviewEmptyProjects">暂无可用项目</p>
+    <p class="hint" id="execOverviewProjectPrompt">请在项目导航中选择项目，查看执行进度。</p>
   <div class="exec-overview-detail hidden" id="execOverviewDetail">
     <div class="exec-overview-detail-head">
       <h3 id="execOverviewProjectTitle">项目</h3>
@@ -1177,6 +1180,14 @@
 <script src="./scripts/core/appInitHelpers.js" defer></script>
 <script src="./scripts/core/appRuntime.js" defer></script>
 <script src="./scripts/core/retainedGenerationRuntime.js" defer></script>
+<script src="./scripts/core/retainedPreparationTask.js" defer></script>
+<script src="./scripts/core/xmindRequestSchedulerCore.js" defer></script>
+<script src="./scripts/core/xmindWorkspaceRecoveryCore.js" defer></script>
+<script src="./scripts/core/xmindGenerationPayloadCore.js" defer></script>
+<script src="./scripts/core/xmindGenerationTimingCore.js" defer></script>
+<script src="./scripts/core/xmindDedupeBatchCore.js" defer></script>
+<script src="./scripts/core/xmindCaseDedupeCore.js" defer></script>
+<script src="./scripts/core/xmindRequirementCoverageCore.js" defer></script>
 <script src="./scripts/core/casesCore.js" defer></script>
 <script src="./scripts/core/xmindCore.js" defer></script>
 <script src="./scripts/core/xmindRenderPolicyCore.js" defer></script>
@@ -1195,6 +1206,7 @@
 <script src="./services/storage.js" defer></script>
 <script src="./services/modelClient.js" defer></script>
 <script src="./services/apiClient.js" defer></script>
+<script src="./services/modelTaskClient.js" defer></script>
 <script src="./scripts/modules/settings.js" defer></script>
 <script src="./scripts/modules/models.js" defer></script>
 <script src="./scripts/handlers/assignHandlers.js" defer></script>
@@ -1204,6 +1216,7 @@
 <script src="./scripts/modules/xmindKnowledgeBase.js" defer></script>
 <script src="./scripts/modules/casePageAiGenPrep.js" defer></script>
 <script src="./scripts/handlers/layoutHandlers.js" defer></script>
+<script src="./scripts/modules/xmindCasegen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
 <script src="./scripts/modules/caseLibrary.js" defer></script>
 <script src="./scripts/modules/caseArchive.js" defer></script>

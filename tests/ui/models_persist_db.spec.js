@@ -6,7 +6,7 @@ test.describe('跨设备模型/指派/设置持久化', () => {
   const user = { id: '3001', username: 'persist_user', role: 'admin', level: 'leader' };
 
   function createApiHandler(serverState) {
-    let modelSeq = 1;
+    let modelSeq = Math.max(0, ...serverState.models.map((item) => Number(item && item.id) || 0)) + 1;
     let featureSeq = 1;
     let settingSeq = 1;
     return async function(route) {
@@ -70,6 +70,10 @@ test.describe('跨设备模型/指派/设置持久化', () => {
       if (path.match(/^\/api\/models\/\d+/) && method === 'PATCH') {
         const id = parseInt(path.split('/').pop(), 10);
         const body = route.request().postDataJSON() || {};
+        serverState.modelPatchCalls = (serverState.modelPatchCalls || []).concat([{ id, body }]);
+        if (Number(serverState.failModelPatchId) === id) {
+          return respond(400, { detail: serverState.failModelPatchDetail || '模型保存失败' });
+        }
         const model = serverState.models.find((m) => m.id === id);
         if (model) {
           if (body.name) model.name = body.name;
@@ -181,7 +185,6 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await pageA.fill('#modelBaseUrl', 'https://example.com/v1/chat');
     await pageA.fill('#modelApiKey', 'sk-test-a');
     await pageA.fill('#modelIdentifier', 'deepseek-test-a');
-    await pageA.fill('#modelMaxTokens', '2048');
     await pageA.click('#saveModelBtn');
     await expect(pageA.locator('#modelList')).toContainText('跨端模型A');
     await expect.poll(() => serverState.models.length).toBeGreaterThan(0);
@@ -195,10 +198,10 @@ test.describe('跨设备模型/指派/设置持久化', () => {
       'caseLibraryGenModelSelect',
     ];
     await Promise.all(selectIds.map((sel) => pageA.waitForSelector(`#${sel}`)));
-    await expect(pageA.locator('#xmindCaseGenModelSelect')).toHaveValue(remoteModelId);
-    await expect(pageA.locator('#caseLibraryGenModelSelect')).toHaveValue(remoteModelId);
-    await pageA.fill('#xmindCaseGenTemperature', '0.6');
-    await pageA.fill('#caseLibraryGenTemperature', '0.3');
+    await expect(pageA.locator('#xmindCaseGenModelSelect')).toHaveValue('');
+    await expect(pageA.locator('#caseLibraryGenModelSelect')).toHaveValue('');
+    await Promise.all(selectIds.map((sel) => pageA.selectOption(`#${sel}`, 'deepseek-chat')));
+    await expect(pageA.locator('input[id$="Temperature"]')).toHaveCount(0);
     await pageA.locator('.assignment-feature-actions [data-save-assignments]').first().click();
     await expect(pageA.locator('#xmindCaseGenAssignStatus')).toContainText('当前 XMind 用例生成模型');
     await expect.poll(() => serverState.features.length).toBe(1);
@@ -218,8 +221,9 @@ test.describe('跨设备模型/指派/设置持久化', () => {
       return cols && cols.value_json ? cols.value_json.priority : null;
     }, { timeout: 10000 }).toBe(false);
     expect(serverState.features[0].config_json.xmindCaseGenId).toBe(remoteModelId);
-    expect(serverState.features[0].config_json.xmindCaseGenTemperature).toBeCloseTo(0.6);
-    expect(serverState.features[0].config_json.caseLibraryGenTemperature).toBeCloseTo(0.3);
+    expect(serverState.features[0].config_json.xmindCaseGenModelId).toBe('deepseek-chat');
+    expect(Object.prototype.hasOwnProperty.call(serverState.features[0].config_json, 'xmindCaseGenTemperature')).toBeFalsy();
+    expect(Object.prototype.hasOwnProperty.call(serverState.features[0].config_json, 'caseLibraryGenTemperature')).toBeFalsy();
 
     await contextA.close();
 
@@ -228,10 +232,9 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
     await expect(pageB.locator('#modelList')).toContainText('跨端模型A');
     await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
-    await expect(pageB.locator('#xmindCaseGenModelSelect')).toHaveValue(remoteModelId);
-    await expect(pageB.locator('#caseLibraryGenModelSelect')).toHaveValue(remoteModelId);
-    await expect(pageB.locator('#xmindCaseGenTemperature')).toHaveValue(/0\.6/);
-    await expect(pageB.locator('#caseLibraryGenTemperature')).toHaveValue(/0\.3/);
+    await expect(pageB.locator('#xmindCaseGenModelSelect')).toHaveValue('deepseek-chat');
+    await expect(pageB.locator('#caseLibraryGenModelSelect')).toHaveValue('deepseek-chat');
+    await expect(pageB.locator('input[id$="Temperature"]')).toHaveCount(0);
     await pageB.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('settings'); });
     await expect(pageB.locator('#tempExecPageSizeInput')).toHaveValue('33', { timeout: 20000 });
     await expect(pageB.locator('#feishuWebhook')).toHaveCount(0);
@@ -239,6 +242,78 @@ test.describe('跨设备模型/指派/设置持久化', () => {
     await expect(priorityCheckboxB).not.toBeChecked();
 
     await contextB.close();
+  });
+
+  test('编辑模型只 PATCH 当前记录，远端失败时不覆盖本地旧配置', async ({ browser }) => {
+    const now = new Date().toISOString();
+    const serverState = {
+      models: [
+        {
+          id: 101,
+          owner_id: user.id,
+          name: '站点 A',
+          config_json: {
+            provider: 'custom',
+            baseUrl: 'https://a.example.com/v1',
+            apiKey: 'sk-a',
+            model: 'model-a',
+            maxTokens: 1024,
+            availableModels: [{ id: 'model-a', name: 'model-a' }],
+          },
+          is_active: true,
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          id: 102,
+          owner_id: user.id,
+          name: '站点 B',
+          config_json: {
+            provider: 'custom',
+            baseUrl: 'https://b.example.com/v1',
+            apiKey: 'sk-b',
+            model: 'model-b',
+            maxTokens: 2048,
+            availableModels: [{ id: 'model-b', name: 'model-b' }],
+          },
+          is_active: true,
+          created_at: now,
+          updated_at: now,
+        },
+      ],
+      features: [],
+      settings: [],
+    };
+    const apiHandler = createApiHandler(serverState);
+    const context = await browser.newContext();
+    const page = await setupPage(context, apiHandler);
+
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
+    await expect(page.locator('#modelList')).toContainText('站点 A');
+    await page.locator('#modelList .model-card[data-id="101"] [data-edit]').click();
+    await expect(page.locator('#modelMaxTokens')).toHaveCount(0);
+    await page.click('#saveModelBtn');
+    await expect(page.locator('#modelFormStatus')).toContainText('模型已更新');
+    expect((serverState.modelPatchCalls || []).map((item) => item.id)).toEqual([101]);
+    expect(Object.prototype.hasOwnProperty.call(serverState.models[0].config_json, 'maxTokens')).toBeFalsy();
+    expect(serverState.models[1].config_json.maxTokens).toBe(2048);
+
+    serverState.failModelPatchId = 101;
+    serverState.failModelPatchDetail = '模型名称已存在';
+    await page.locator('#modelList .model-card[data-id="101"] [data-edit]').click();
+    await page.click('#saveModelBtn');
+    await expect(page.locator('#modelFormWrapper')).toBeVisible();
+    await expect(page.locator('#modelFormStatus')).toContainText('保存失败：模型名称已存在');
+    const localHasMaxTokens = await page.evaluate(() => {
+      const list = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
+      const model = list.find((item) => String(item && item.id) === '101');
+      return Boolean(model && Object.prototype.hasOwnProperty.call(model, 'maxTokens'));
+    });
+    expect(localHasMaxTokens).toBeFalsy();
+    expect(Object.prototype.hasOwnProperty.call(serverState.models[0].config_json, 'maxTokens')).toBeFalsy();
+    expect((serverState.modelPatchCalls || []).map((item) => item.id)).toEqual([101, 101]);
+
+    await context.close();
   });
 
   test('旧设置可读取但不会展示或随保留设置重新写入', async ({ browser }) => {

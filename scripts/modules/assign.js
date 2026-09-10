@@ -30,11 +30,8 @@
     var caseFilterReasoningSelect = pick(dom.caseFilterReasoningSelect, 'caseFilterReasoning');
     var missingReminderReasoningSelect = pick(dom.missingReminderReasoningSelect, 'missingReminderReasoning');
     var caseLibraryGenReasoningSelect = pick(dom.caseLibraryGenReasoningSelect, 'caseLibraryGenReasoning');
-    var xmindCaseGenTemperatureEl = pick(dom.xmindCaseGenTemperatureEl, 'xmindCaseGenTemperature');
-    var caseFilterTemperatureEl = pick(dom.caseFilterTemperatureEl, 'caseFilterTemperature');
-    var missingReminderTemperatureEl = pick(dom.missingReminderTemperatureEl, 'missingReminderTemperature');
-    var caseLibraryGenTemperatureEl = pick(dom.caseLibraryGenTemperatureEl, 'caseLibraryGenTemperature');
     var globalAssignModelSelect = pick(dom.globalAssignModelSelect, 'globalAssignModelSelect');
+    var globalAssignReasoning = pick(dom.globalAssignReasoning, 'globalAssignReasoning');
     var applyGlobalAssignBtn = pick(dom.applyGlobalAssignBtn, 'applyGlobalAssignBtn');
     var globalAssignStatus = pick(dom.globalAssignStatus, 'globalAssignStatus');
     var assignSaveBar = pick(dom.assignSaveBar, 'assignSaveBar');
@@ -111,10 +108,25 @@
       state.assignments[key] = value;
     }
 
+    function readModelSelection(el) {
+      if (!el) return { siteId: '', modelId: '' };
+      var option = el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0] : null;
+      return {
+        modelId: el.value || '',
+        siteId: option ? (option.getAttribute('data-site-id') || '') : '',
+      };
+    }
+
+    function modelIdKeyFor(idKey) {
+      return String(idKey || '').replace(/Id$/, 'ModelId');
+    }
+
     function bindModelSelect(el, key, reasoningType, statusEl) {
       if (!el) return;
       el.addEventListener('change', function() {
-        setAssignmentId(key, el.value || '');
+        var pick = readModelSelection(el);
+        setAssignmentId(key, pick.siteId);
+        setAssignmentId(modelIdKeyFor(key), pick.modelId);
         syncGlobalAssignSelection();
         if (reasoningType) updateReasoningVisibility(reasoningType);
         // 模型下拉变更后立即保存，避免还需要手动点击“保存指派”。
@@ -139,63 +151,80 @@
       });
     }
 
-    function normalizeTemperature(value) {
-      if (value === undefined || value === null || value === '') return 0.2;
-      var num = Number(value);
-      if (!Number.isFinite(num)) return 0.2;
-      if (num < 0) return 0;
-      if (num > 1) return 1;
-      return Number(num.toFixed(2));
-    }
-
-    function bindTemperatureInput(el, key) {
-      if (!el) return;
-      el.addEventListener('input', function() {
-        state.assignments[key] = normalizeTemperature(el.value);
-      });
-    }
-
     function showAssignmentSavedToast() {
       showCenterToast('指派已保存', 'ok', 3000);
     }
 
+    function selectOptionBySiteModel(selectEl, siteId, modelId) {
+      if (!selectEl) return;
+      if (!siteId || !modelId) {
+        selectEl.value = '';
+        return;
+      }
+      var options = selectEl.querySelectorAll ? selectEl.querySelectorAll('option') : [];
+      for (var i = 0; i < options.length; i += 1) {
+        if (options[i].getAttribute('data-site-id') === siteId && options[i].value === modelId) {
+          selectEl.selectedIndex = i;
+          return;
+        }
+      }
+      selectEl.value = '';
+    }
+
     function syncGlobalAssignSelection() {
       if (!globalAssignModelSelect) return;
-      var candidate = '';
+      var unifiedSite = '';
+      var unifiedModel = '';
       var mismatch = false;
       assignmentIdKeys.forEach(function(key) {
-        var currentId = state.assignments && state.assignments[key] ? String(state.assignments[key]) : '';
-        if (!currentId) {
+        var siteId = state.assignments && state.assignments[key] ? String(state.assignments[key]) : '';
+        var modelId = state.assignments && state.assignments[modelIdKeyFor(key)] ? String(state.assignments[modelIdKeyFor(key)]) : '';
+        if (!siteId || !modelId) {
           mismatch = true;
           return;
         }
-        if (!candidate) {
-          candidate = currentId;
-        } else if (candidate !== currentId) {
+        if (!unifiedSite) {
+          unifiedSite = siteId;
+          unifiedModel = modelId;
+        } else if (unifiedSite !== siteId || unifiedModel !== modelId) {
           mismatch = true;
         }
       });
-      globalAssignModelSelect.value = mismatch ? '' : candidate;
+      if (mismatch) {
+        globalAssignModelSelect.value = '';
+        return;
+      }
+      selectOptionBySiteModel(globalAssignModelSelect, unifiedSite, unifiedModel);
+    }
+
+    function testSelectedModel(selectEl, statusEl) {
+      var selection = readModelSelection(selectEl);
+      testModel(selection.modelId, statusEl, selection.siteId);
     }
 
     function applyGlobalAssignment() {
-      var targetId = globalAssignModelSelect && globalAssignModelSelect.value ? String(globalAssignModelSelect.value) : '';
-      if (!targetId) {
+      var pick = readModelSelection(globalAssignModelSelect);
+      if (!pick.siteId || !pick.modelId) {
         setStatus(globalAssignStatus, '请先选择一个模型后再确认', 'warn');
         return;
       }
+      var reasoning = globalAssignReasoning ? (globalAssignReasoning.value || '') : '';
       assignmentIdKeys.forEach(function(key) {
-        setAssignmentId(key, targetId);
+        setAssignmentId(key, pick.siteId);
+        setAssignmentId(modelIdKeyFor(key), pick.modelId);
       });
-      if (xmindCaseGenModelSelect) xmindCaseGenModelSelect.value = targetId;
-      if (caseFilterModelSelect) caseFilterModelSelect.value = targetId;
-      if (missingReminderModelSelect) missingReminderModelSelect.value = targetId;
-      if (caseLibraryGenModelSelect) caseLibraryGenModelSelect.value = targetId;
+      var reasoningKeyByType = {
+        xmindcasegen: 'xmindCaseGenReasoning',
+        casefilter: 'caseFilterReasoning',
+        missingreminder: 'missingReminderReasoning',
+        caselibrarygen: 'caseLibraryGenReasoning',
+      };
       reasoningTypes.forEach(function(type) {
-        updateReasoningVisibility(type);
+        state.assignments[reasoningKeyByType[type]] = reasoning;
       });
-      saveAssignments();
+      // 重建下拉与推理等级，再统一保存。
       renderAssignmentsSelect();
+      saveAssignments();
       syncGlobalAssignSelection();
       if (assignSaveBar) assignSaveBar.classList.add('hidden');
       updateAssignmentStatuses();
@@ -217,10 +246,6 @@
     bindReasoningSelect(caseFilterReasoningSelect, 'caseFilterReasoning');
     bindReasoningSelect(missingReminderReasoningSelect, 'missingReminderReasoning');
     bindReasoningSelect(caseLibraryGenReasoningSelect, 'caseLibraryGenReasoning');
-    bindTemperatureInput(xmindCaseGenTemperatureEl, 'xmindCaseGenTemperature');
-    bindTemperatureInput(caseFilterTemperatureEl, 'caseFilterTemperature');
-    bindTemperatureInput(missingReminderTemperatureEl, 'missingReminderTemperature');
-    bindTemperatureInput(caseLibraryGenTemperatureEl, 'caseLibraryGenTemperature');
     if (globalAssignModelSelect) {
       globalAssignModelSelect.addEventListener('change', function() {
         setStatus(globalAssignStatus, '', '');
@@ -243,16 +268,16 @@
     });
 
     if (testXmindCaseGenModelBtn && testModel) testXmindCaseGenModelBtn.addEventListener('click', function() {
-      testModel(xmindCaseGenModelSelect ? xmindCaseGenModelSelect.value : '', xmindCaseGenAssignStatus);
+      testSelectedModel(xmindCaseGenModelSelect, xmindCaseGenAssignStatus);
     });
     if (testCaseFilterModelBtn && testModel) testCaseFilterModelBtn.addEventListener('click', function() {
-      testModel(caseFilterModelSelect ? caseFilterModelSelect.value : '', caseFilterAssignStatus);
+      testSelectedModel(caseFilterModelSelect, caseFilterAssignStatus);
     });
     if (testMissingReminderModelBtn && testModel) testMissingReminderModelBtn.addEventListener('click', function() {
-      testModel(missingReminderModelSelect ? missingReminderModelSelect.value : '', missingReminderAssignStatus);
+      testSelectedModel(missingReminderModelSelect, missingReminderAssignStatus);
     });
     if (testCaseLibraryGenModelBtn && testModel) testCaseLibraryGenModelBtn.addEventListener('click', function() {
-      testModel(caseLibraryGenModelSelect ? caseLibraryGenModelSelect.value : '', caseLibraryGenAssignStatus);
+      testSelectedModel(caseLibraryGenModelSelect, caseLibraryGenAssignStatus);
     });
 
     return {

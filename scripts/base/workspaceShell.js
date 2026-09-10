@@ -37,6 +37,15 @@
     settings: '通用设置'
   };
 
+  // 跨页面生成提示只读取现有任务快照；已查看记录仅用于控制提示红点。
+  var generationTaskStorageKey = 'tap-xmind-casegen-tasks';
+  var generationCaseTaskStoragePrefix = 'tap-case-library-ai-gen-task:';
+  var generationNoticeSeenStorageKey = 'tap-casegen-completion-seen-v1';
+  var generationStatusTimer = 0;
+  var generationStatusBound = false;
+  var generationMiniPanel = null;
+  var generationMiniExpanded = true;
+
   function getIcons() {
     return window.app && window.app.workspaceIcons ? window.app.workspaceIcons : null;
   }
@@ -52,6 +61,433 @@
     if (className) el.className = className;
     if (html !== undefined) el.innerHTML = html;
     return el;
+  }
+
+  function safeJsonParse(raw, fallback) {
+    if (!raw) return fallback;
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  function readGenerationStorage(key, fallback) {
+    if (typeof localStorage === 'undefined') return fallback;
+    try {
+      return safeJsonParse(localStorage.getItem(key) || '', fallback);
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  function isGenerationTaskRunning(task) {
+    var status = task && task.status ? String(task.status) : '';
+    return ['queued', 'running', 'postprocessing', 'cancel_requested'].indexOf(status) !== -1;
+  }
+
+  function isGenerationTaskDone(task) {
+    return Boolean(task && String(task.status || '') === 'done');
+  }
+
+  function normalizeGenerationPercent(value) {
+    var number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.max(0, Math.min(100, Math.round(number)));
+  }
+
+  function deriveGenerationTaskPercent(task, source) {
+    var item = task && typeof task === 'object' ? task : {};
+    var status = String(item.status || '');
+    if (status === 'done') return 100;
+    if (item.preparationPending === true || status === 'queued') return 5;
+
+    var batchTotal = Number(item.modelRequestBatchTotal || 0);
+    var batchDone = Number(item.modelRequestBatchCompleted || 0);
+    if (batchTotal > 0) {
+      return normalizeGenerationPercent(65 + (Math.min(batchDone, batchTotal) / batchTotal) * 30);
+    }
+
+    var stage = String(item.pipelineStage || item.pipelineStatus || item.stage || '').toLowerCase();
+    var moduleTotal = Number(item.pipelineModuleTotal || item.moduleTaskTotal || 0);
+    var moduleDone = Number(item.pipelineModuleDone || item.moduleTaskCompleted || 0);
+    if (stage.indexOf('discover') !== -1 || stage === 'discovery') return 20;
+    if (stage.indexOf('module') !== -1 || stage === 'modules') {
+      if (moduleTotal > 0) {
+        return normalizeGenerationPercent(35 + (Math.min(moduleDone, moduleTotal) / moduleTotal) * 50);
+      }
+      return 55;
+    }
+    if (stage.indexOf('dedupe') !== -1 || stage.indexOf('去重') !== -1 || item.scope === 'dedupe') return 92;
+    if (stage.indexOf('coverage') !== -1 || stage.indexOf('覆盖') !== -1 || item.scope === 'coverage') return 88;
+    if (source === 'xmind' && item.scope === 'root') return 35;
+    return 50;
+  }
+
+  function getGenerationTaskRequirementLabel(entry) {
+    var task = entry && entry.task && typeof entry.task === 'object' ? entry.task : {};
+    var restoreContext = task.restoreContext && typeof task.restoreContext === 'object'
+      ? task.restoreContext
+      : {};
+    var label = task.requirementLabel || task.requirementName || task.requirementTitle
+      || restoreContext.requirementLabel || task.importName || restoreContext.lastRawImportName;
+    return label ? String(label).trim() : '';
+  }
+
+  function getGenerationTaskLabel(entry, index) {
+    var requirementLabel = getGenerationTaskRequirementLabel(entry);
+    if (requirementLabel) return requirementLabel;
+    var task = entry && entry.task && typeof entry.task === 'object' ? entry.task : {};
+    var explicitLabel = task.taskLabel || task.label || task.title || task.name;
+    if (explicitLabel) return String(explicitLabel);
+    if (entry && entry.source === 'xmind') {
+      var scope = String(task.scope || '').toLowerCase();
+      if (scope === 'module' && task.moduleTitle) return '模块：' + String(task.moduleTitle);
+      if (scope === 'dedupe') return 'AI 用例去重';
+      if (scope === 'coverage') return '需求覆盖分析';
+      if (task.historyActionLabel || task.actionLabel) {
+        return String(task.historyActionLabel || task.actionLabel);
+      }
+      if (scope === 'root') return '根节点生成';
+      return 'XMind 生成任务 ' + String(index + 1);
+    }
+    if (entry && entry.scene === 'case-library') return '用例库生成';
+    if (entry && entry.scene === 'temp-exec') return '临时执行生成';
+    return '生成任务 ' + String(index + 1);
+  }
+
+  function getGenerationTaskGroupKey(entry) {
+    var task = entry && entry.task && typeof entry.task === 'object' ? entry.task : {};
+    var restoreContext = task.restoreContext && typeof task.restoreContext === 'object'
+      ? task.restoreContext
+      : {};
+    var tabId = task.workspaceId || task.tabId || task.pageId || restoreContext.workspaceId;
+    if (!tabId) tabId = task.rootPipelineId || task.generationId || task.rootPipelineActionId;
+    if (tabId) return String(entry && entry.source ? entry.source : 'generation') + ':tab:' + String(tabId);
+    if (entry && entry.scene) return String(entry.source || 'generation') + ':scene:' + String(entry.scene);
+    return String(entry && entry.source ? entry.source : 'generation') + ':task:' + String(task.id || 'unknown');
+  }
+
+  function groupGenerationTasks(entries) {
+    var groups = [];
+    var groupMap = {};
+    (Array.isArray(entries) ? entries : []).forEach(function(entry) {
+      var key = getGenerationTaskGroupKey(entry);
+      var group = groupMap[key];
+      if (!group) {
+        group = {
+          key: key,
+          entry: entry,
+          entries: [],
+        };
+        groupMap[key] = group;
+        groups.push(group);
+      }
+      group.entries.push(entry);
+    });
+    return groups;
+  }
+
+  function getGenerationGroupLabel(group, index) {
+    var entries = group && Array.isArray(group.entries) ? group.entries : [];
+    var requirementLabel = '';
+    entries.some(function(entry) {
+      requirementLabel = getGenerationTaskRequirementLabel(entry);
+      return Boolean(requirementLabel);
+    });
+    if (requirementLabel) return requirementLabel;
+    return getGenerationTaskLabel(group && group.entry ? group.entry : null, index);
+  }
+
+  function deriveGenerationGroupPercent(group) {
+    var entries = group && Array.isArray(group.entries) ? group.entries : [];
+    var total = entries.reduce(function(sum, entry) {
+      return sum + deriveGenerationTaskPercent(entry.task, entry.source);
+    }, 0);
+    return normalizeGenerationPercent(entries.length ? total / entries.length : 0);
+  }
+
+  function collectGenerationTasks() {
+    var entries = [];
+    var xmindTasks = readGenerationStorage(generationTaskStorageKey, []);
+    if (Array.isArray(xmindTasks)) {
+      xmindTasks.forEach(function(task) {
+        if (!task || !task.id) return;
+        entries.push({
+          source: 'xmind',
+          scene: 'xmind',
+          task: task,
+          token: 'xmind:xmind:' + String(task.id) + ':' + String(task.endedAt || task.updatedAt || ''),
+        });
+      });
+    }
+    ['case-library', 'temp-exec'].forEach(function(scene) {
+      var task = readGenerationStorage(generationCaseTaskStoragePrefix + scene, null);
+      if (!task || !task.id) return;
+      entries.push({
+        source: 'case-page',
+        scene: scene,
+        task: task,
+        token: 'case-page:' + scene + ':' + String(task.id) + ':' + String(task.endedAt || task.updatedAt || ''),
+      });
+    });
+    return entries;
+  }
+
+  function readGenerationNoticeSeen() {
+    var stored = readGenerationStorage(generationNoticeSeenStorageKey, {});
+    if (Array.isArray(stored)) {
+      var converted = {};
+      stored.forEach(function(token) {
+        if (token) converted[String(token)] = true;
+      });
+      return converted;
+    }
+    return stored && typeof stored === 'object' ? stored : {};
+  }
+
+  function writeGenerationNoticeSeen(seen) {
+    if (typeof localStorage === 'undefined') return;
+    var source = seen && typeof seen === 'object' ? seen : {};
+    var keys = Object.keys(source);
+    if (keys.length > 240) keys = keys.slice(keys.length - 240);
+    var next = {};
+    keys.forEach(function(key) { next[key] = true; });
+    try {
+      localStorage.setItem(generationNoticeSeenStorageKey, JSON.stringify(next));
+    } catch (err) {
+      // ignore storage quota and privacy errors
+    }
+  }
+
+  function markGenerationCompletionsSeen(entries) {
+    var seen = readGenerationNoticeSeen();
+    var changed = false;
+    (Array.isArray(entries) ? entries : []).forEach(function(entry) {
+      if (!entry || !isGenerationTaskDone(entry.task) || !entry.token || seen[entry.token]) return;
+      seen[entry.token] = true;
+      changed = true;
+    });
+    if (changed) writeGenerationNoticeSeen(seen);
+    return seen;
+  }
+
+  function getUnseenGenerationCompletions(entries, seen) {
+    var known = seen && typeof seen === 'object' ? seen : {};
+    return (Array.isArray(entries) ? entries : []).filter(function(entry) {
+      return Boolean(entry && isGenerationTaskDone(entry.task) && entry.token && !known[entry.token]);
+    });
+  }
+
+  function getUrlQueryTab() {
+    if (typeof window === 'undefined' || !window.location) return '';
+    var search = String(window.location.search || '').replace(/^\?/, '');
+    if (!search) return '';
+    var result = '';
+    search.split('&').some(function(pair) {
+      var parts = pair.split('=');
+      var key = '';
+      try { key = decodeURIComponent(parts.shift() || ''); } catch (err) { key = ''; }
+      if (key !== 'tab') return false;
+      try { result = decodeURIComponent(parts.join('=') || ''); } catch (err2) { result = ''; }
+      return true;
+    });
+    return result;
+  }
+
+  function isXmindCasegenHome() {
+    var body = document && document.body ? document.body : null;
+    var page = body && body.dataset ? String(body.dataset.page || '') : '';
+    if (page !== 'ai-workflow') return false;
+    var queryTab = getUrlQueryTab();
+    if (queryTab && queryTab !== 'casesgen' && queryTab !== 'xmind-casegen') return false;
+    var app = window.app || {};
+    var state = app.state || {};
+    if (app.__tapWorkflowReady === true && state.activeTab && String(state.activeTab) !== 'casesgen') {
+      return false;
+    }
+    return true;
+  }
+
+  function getGenerationNavButton() {
+    return document.querySelector('[data-tab-btn="casesgen"]');
+  }
+
+  function syncGenerationNavNotice(visible) {
+    var button = getGenerationNavButton();
+    if (!button || !button.classList) return false;
+    var nextVisible = visible === true;
+    var changed = button.classList.contains('has-generation-notice') !== nextVisible;
+    button.classList.toggle('has-generation-notice', nextVisible);
+    var label = navLabels.casesgen;
+    var accessible = nextVisible ? label + '，有新的生成结果' : label;
+    button.setAttribute('aria-label', accessible);
+    button.setAttribute('title', accessible);
+    return changed;
+  }
+
+  function navigateToGenerationHome() {
+    var entries = collectGenerationTasks();
+    markGenerationCompletionsSeen(entries);
+    syncGenerationNavNotice(false);
+    try {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('casesgen');
+        return;
+      }
+    } catch (err) {
+      // fall through to the direct page URL
+    }
+    try {
+      window.location.href = './ai-workflow.html?tab=casesgen';
+    } catch (err2) {
+      // ignore
+    }
+  }
+
+  function setGenerationMiniExpanded(expanded) {
+    generationMiniExpanded = expanded !== false;
+    if (!generationMiniPanel) return;
+    generationMiniPanel.classList.toggle('is-collapsed', generationMiniExpanded !== true);
+    var toggle = generationMiniPanel.querySelector('[data-generation-mini-toggle]');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', generationMiniExpanded ? 'true' : 'false');
+      toggle.setAttribute('aria-label', generationMiniExpanded ? '收起生成进度' : '展开生成进度');
+      toggle.setAttribute('title', generationMiniExpanded ? '收起' : '展开');
+      toggle.innerHTML = generationMiniExpanded ? '−' : '+';
+    }
+    var currentTitleEl = generationMiniPanel.querySelector('.workspace-generation-mini-title');
+    var currentTitle = currentTitleEl ? String(currentTitleEl.textContent || '') : '当前生成任务数量';
+    generationMiniPanel.setAttribute('aria-label', generationMiniExpanded
+      ? currentTitle
+      : '生成任务中...');
+  }
+
+  function ensureGenerationMiniPanel() {
+    if (generationMiniPanel && generationMiniPanel.parentNode) return generationMiniPanel;
+    var panel = document.createElement('section');
+    panel.id = 'workspaceGenerationMini';
+    panel.className = 'workspace-generation-mini is-collapsed';
+    panel.setAttribute('aria-label', '当前生成任务进度');
+    panel.innerHTML =
+      '<div class="workspace-generation-mini-head">' +
+        '<button type="button" class="workspace-generation-mini-main" data-generation-mini-main>' +
+          '<span class="workspace-generation-mini-title">当前生成任务数量：1</span>' +
+          '<span class="workspace-generation-mini-collapsed-label">生成任务中...</span>' +
+        '</button>' +
+        '<button type="button" class="workspace-generation-mini-toggle" data-generation-mini-toggle aria-expanded="false" aria-label="展开生成进度" title="展开">+</button>' +
+      '</div>' +
+      '<div class="workspace-generation-mini-body">' +
+        '<div class="workspace-generation-mini-list" data-generation-mini-list aria-live="polite"></div>' +
+      '</div>';
+    document.body.appendChild(panel);
+    generationMiniPanel = panel;
+    var main = panel.querySelector('[data-generation-mini-main]');
+    var toggle = panel.querySelector('[data-generation-mini-toggle]');
+    if (main) main.addEventListener('click', navigateToGenerationHome);
+    if (toggle) {
+      toggle.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        setGenerationMiniExpanded(!generationMiniExpanded);
+      });
+    }
+    setGenerationMiniExpanded(true);
+    return panel;
+  }
+
+  function renderGenerationStatus() {
+    var entries = collectGenerationTasks();
+    var running = entries.filter(function(entry) { return isGenerationTaskRunning(entry.task); });
+    var groups = groupGenerationTasks(running);
+    var onXmindHome = isXmindCasegenHome();
+    var seen = readGenerationNoticeSeen();
+    if (onXmindHome) {
+      seen = markGenerationCompletionsSeen(entries);
+    }
+    var hasNotice = !onXmindHome && getUnseenGenerationCompletions(entries, seen).length > 0;
+    syncGenerationNavNotice(hasNotice);
+
+    var panel = ensureGenerationMiniPanel();
+    var shouldShowMini = !onXmindHome && running.length > 0;
+    panel.classList.toggle('is-visible', shouldShowMini);
+    if (!shouldShowMini) return;
+    var titleEl = panel.querySelector('.workspace-generation-mini-title');
+    if (titleEl) titleEl.textContent = '当前生成任务数量：' + String(groups.length);
+    var listEl = panel.querySelector('[data-generation-mini-list]');
+    if (listEl) {
+      listEl.textContent = '';
+      groups.forEach(function(group, index) {
+        var taskPercent = deriveGenerationGroupPercent(group);
+        var taskId = String(group.entry && group.entry.task && group.entry.task.id ? group.entry.task.id : '');
+        var taskItem = createElement('div', 'workspace-generation-mini-task');
+        taskItem.setAttribute('data-generation-mini-task', '');
+        taskItem.setAttribute('data-generation-mini-group-key', group.key);
+        if (taskId) taskItem.setAttribute('data-generation-mini-task-id', taskId);
+        var taskHead = createElement('div', 'workspace-generation-mini-task-head');
+        var taskTitle = createElement('span', 'workspace-generation-mini-task-title');
+        taskTitle.textContent = getGenerationGroupLabel(group, index);
+        taskTitle.title = taskTitle.textContent;
+        var taskPercentEl = createElement('span', 'workspace-generation-mini-task-percent');
+        taskPercentEl.setAttribute('data-generation-mini-task-percent', '');
+        taskPercentEl.textContent = String(taskPercent) + '%';
+        taskHead.appendChild(taskTitle);
+        taskHead.appendChild(taskPercentEl);
+        var taskTrack = createElement('div', 'workspace-generation-mini-task-track');
+        taskTrack.setAttribute('role', 'progressbar');
+        taskTrack.setAttribute('aria-label', taskTitle.textContent + '进度');
+        taskTrack.setAttribute('aria-valuemin', '0');
+        taskTrack.setAttribute('aria-valuemax', '100');
+        taskTrack.setAttribute('aria-valuenow', String(taskPercent));
+        taskTrack.setAttribute('aria-valuetext', String(taskPercent) + '%');
+        taskTrack.setAttribute('data-generation-mini-task-track', '');
+        var taskFill = createElement('span');
+        taskFill.setAttribute('data-generation-mini-task-fill', '');
+        taskFill.style.width = String(taskPercent) + '%';
+        taskTrack.appendChild(taskFill);
+        taskItem.appendChild(taskHead);
+        taskItem.appendChild(taskTrack);
+        listEl.appendChild(taskItem);
+      });
+    }
+    panel.setAttribute('aria-label', generationMiniExpanded
+      ? '当前生成任务数量：' + String(groups.length)
+      : '生成任务中...');
+  }
+
+  function bindGenerationStatus() {
+    if (generationStatusBound) return;
+    generationStatusBound = true;
+    var refresh = function() { renderGenerationStatus(); };
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('storage', function(event) {
+        var key = event && event.key ? String(event.key) : '';
+        if (key === generationTaskStorageKey || key.indexOf(generationCaseTaskStoragePrefix) === 0 || key === generationNoticeSeenStorageKey) {
+          refresh();
+        }
+      });
+      window.addEventListener('xmind-casegen-task', refresh);
+      window.addEventListener('case-library-ai-gen-task', refresh);
+      window.addEventListener('app-tab-activated', refresh);
+      window.addEventListener('pageshow', refresh);
+      window.addEventListener('focus', refresh);
+      if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+        document.addEventListener('visibilitychange', function() {
+          if (document.visibilityState !== 'hidden') refresh();
+        });
+      }
+    }
+    var navButton = getGenerationNavButton();
+    if (navButton) {
+      navButton.addEventListener('click', function() {
+        markGenerationCompletionsSeen(collectGenerationTasks());
+        syncGenerationNavNotice(false);
+      });
+    }
+    renderGenerationStatus();
+    if (!generationStatusTimer && typeof window !== 'undefined' && typeof window.setInterval === 'function') {
+      generationStatusTimer = window.setInterval(refresh, 1000);
+    }
   }
 
   function blockCategoryActivation(event) {
@@ -483,6 +919,7 @@
     document.body.classList.add('workspace-shell-body');
     decorateBrand(sidebar);
     decorateNavigation(sidebar);
+    bindGenerationStatus();
     setupToolDrawer(sidebar);
     setupUserArea(sidebar);
     setupWorkspaceSectionNav();

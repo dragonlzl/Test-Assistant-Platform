@@ -518,16 +518,20 @@
       });
     }
 
-    async function callModelForJson(input, prompt, userText, parseErrorMessage) {
+    async function callModelForJson(input, prompt, userText, parseErrorMessage, stageKey) {
       if (!input || !input.model || typeof input.callModel !== 'function') {
         throw new Error('当前 XMind 生成模型不可用，已跳过知识库注入');
       }
+      var requestOptions = typeof input.buildRequestOptions === 'function'
+        ? input.buildRequestOptions(String(stageKey || 'knowledge-filter'))
+        : undefined;
       var rawText = await input.callModel(
         input.model,
         userText,
         prompt,
         input.reasoning || '',
-        input.temperature
+        input.temperature,
+        requestOptions
       );
       var extracted = extractJsonPayloadDetailed(rawText);
       if (!extracted.payload || typeof extracted.payload !== 'object') {
@@ -650,12 +654,13 @@
       return result.slice(0, MAX_SELECTED_SECTIONS);
     }
 
-    async function selectDocumentsOnce(input, queryContext, catalogItems) {
+    async function selectDocumentsOnce(input, queryContext, catalogItems, stageKey) {
       var parsed = await callModelForJson(
         input,
         buildCatalogSelectionPrompt(),
         buildCatalogSelectionUserText(queryContext, catalogItems),
-        'AI 目录检索返回结果无法解析为 JSON'
+        'AI 目录检索返回结果无法解析为 JSON',
+        stageKey || 'catalog-selection'
       );
       return mapSelectedDocuments(catalogItems, parsed);
     }
@@ -671,14 +676,19 @@
         serializedLength = 0;
       }
       if (serializedLength <= catalogCharLimit) {
-        return selectDocumentsOnce(input, queryContext, list);
+        return selectDocumentsOnce(input, queryContext, list, 'catalog-selection');
       }
       var batchSelections = [];
       var batchLookup = {};
       for (var offset = 0; offset < list.length; offset += CATALOG_BATCH_SIZE) {
         var batch = list.slice(offset, offset + CATALOG_BATCH_SIZE);
         if (!batch.length) continue;
-        var selected = await selectDocumentsOnce(input, queryContext, batch);
+        var selected = await selectDocumentsOnce(
+          input,
+          queryContext,
+          batch,
+          'catalog-batch-' + String(Math.floor(offset / CATALOG_BATCH_SIZE))
+        );
         selected.forEach(function(item) {
           if (!item || !item.docId || batchLookup[item.docId]) return;
           batchLookup[item.docId] = true;
@@ -686,7 +696,7 @@
         });
       }
       if (!batchSelections.length) return [];
-      return selectDocumentsOnce(input, queryContext, batchSelections);
+      return selectDocumentsOnce(input, queryContext, batchSelections, 'catalog-merge');
     }
 
     function buildInjectedContextResult(selectedSections) {
@@ -939,7 +949,8 @@
           input,
           buildSectionFilterPrompt(),
           buildSectionFilterUserText(queryContext, documentSections),
-          'AI 正文精筛返回结果无法解析为 JSON'
+          'AI 正文精筛返回结果无法解析为 JSON',
+          'section-selection'
         );
       } catch (err4) {
         return buildFailedState(

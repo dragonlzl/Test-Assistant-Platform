@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { installPersistentModelTaskRoute } = require('./helpers/persistent_model_task_mock');
 
 async function gotoExec(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -834,6 +835,116 @@ test.describe('执行页 AI 用例生成', () => {
     await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
   });
 
+  test('中断生成会取消执行页后端任务且不落下迟到结果', async ({ page }) => {
+    const fileId = 'temp-file-ai-cancel';
+    const modelId = '904';
+    const now = Date.now();
+    const model = {
+      id: modelId,
+      remoteId: 904,
+      name: '执行生成模型-中断',
+      provider: 'custom',
+      baseUrl: 'https://mock-model.local/v1/chat/completions',
+      apiKey: 'mock-key',
+      model: 'mock-model',
+      maxTokens: 512,
+    };
+    const payload = {
+      files: [{
+        id: fileId,
+        name: '用例中断',
+        requirement: '需求中断',
+        cases: [{
+          module: '支付',
+          title: '支付成功',
+          priority: 'P1',
+          preconditions: '',
+          steps: '完成支付',
+          expected: '支付成功',
+          actual: '未执行',
+          remark: '',
+        }],
+      }],
+      versions: [],
+      activeId: fileId,
+    };
+    const retainedTask = {
+      id: 'temp-exec-cancel-task',
+      scene: 'temp-exec',
+      status: 'running',
+      caseFileId: fileId,
+      contextSignature: 'temp-exec-cancel-signature',
+      model: model,
+      prompt: '生成执行页补充用例',
+      userText: JSON.stringify({ requirement_text: '需求：允许中断生成' }),
+      requestOwner: 'case-page-generation:temp-exec:temp-exec-cancel-task',
+      retryCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      runnerId: '',
+      heartbeatAt: 0,
+    };
+
+    await page.addInitScript((data) => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.removeItem('tap-auth-token'); } catch (_) {}
+      try { localStorage.setItem('usecase-temp-exec-v1', JSON.stringify(data.payload)); } catch (_) {}
+      try { localStorage.setItem('tempexec-focus-v1', JSON.stringify([])); } catch (_) {}
+      try { localStorage.setItem('cleaner-models-v1', JSON.stringify([data.model])); } catch (_) {}
+      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify({ caseLibraryGenId: data.model.id })); } catch (_) {}
+      try { localStorage.setItem('tap-case-library-ai-gen-task:temp-exec', JSON.stringify(data.task)); } catch (_) {}
+    }, { payload, model, task: retainedTask });
+    const routeCtl = await installPersistentModelTaskRoute(page, {
+      completeAfterMs: 1800,
+      responseText: JSON.stringify({
+        missing_modules: [],
+        existing_modules: [{
+          module: '支付',
+          coverage: 60,
+          cases: [{
+            module: '支付',
+            title: '不应落地的迟到结果',
+            priority: 'P1',
+            precondition: '',
+            steps: '执行迟到请求',
+            expected: '不应展示',
+          }],
+        }],
+      }),
+    });
+
+    await gotoExec(page);
+    await waitTempExecReady(page);
+    await page.evaluate((nextId) => {
+      if (window.app && window.app.tempExecApi && typeof window.app.tempExecApi.setTempExecActive === 'function') {
+        window.app.tempExecApi.setTempExecActive(nextId);
+      }
+    }, fileId);
+    await page.waitForFunction(() => {
+      const card = document.getElementById('tempExecToolbarCard');
+      return card && !card.classList.contains('hidden');
+    });
+    await expect.poll(() => routeCtl.getCreateCalls().length).toBeGreaterThanOrEqual(1);
+    await clickTempExecMoreAction(page, '#tempExecAiGenBtn');
+    await expect(page.locator('#tempExecAiGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#tempExecAiGenCancelBtn')).toBeVisible();
+    await page.click('#tempExecAiGenCancelBtn');
+    await expect.poll(() => routeCtl.getCancelCalls().length).toBeGreaterThanOrEqual(1);
+    expect(routeCtl.getTasks().some((task) => task.status === 'cancelled')).toBe(true);
+    await page.waitForTimeout(1900);
+    await expect(page.locator('#tempExecAiGenResultBody')).not.toContainText('不应落地的迟到结果');
+    const storedStatus = await page.evaluate(() => {
+      try {
+        const raw = localStorage.getItem('tap-case-library-ai-gen-task:temp-exec');
+        return raw ? String(JSON.parse(raw).status || '') : '';
+      } catch (_) {
+        return 'parse-error';
+      }
+    });
+    expect(storedStatus).toBe('cancelled');
+    expect(routeCtl.getProxyCallCount()).toBe(0);
+  });
+
   test('刷新后按钮保持生成中状态', async ({ page }) => {
     const fileId = 'temp-file-ai-refresh';
     const payload = {
@@ -856,9 +967,8 @@ test.describe('执行页 AI 用例生成', () => {
       activeId: fileId,
     };
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-    const modelId = 'temp-exec-ai-refresh-model';
+    const modelId = '902';
     const modelBaseUrl = base + '/mock-temp-exec-ai-refresh';
-    let callCount = 0;
 
     await page.addInitScript((data) => {
       try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
@@ -871,6 +981,7 @@ test.describe('执行页 AI 用例生成', () => {
       payload,
       models: [{
         id: modelId,
+        remoteId: 902,
         name: '执行生成模型-刷新',
         provider: 'custom',
         baseUrl: modelBaseUrl,
@@ -881,14 +992,9 @@ test.describe('执行页 AI 用例生成', () => {
       assignments: { caseLibraryGenId: modelId },
     });
 
-    await page.route('**/mock-temp-exec-ai-refresh', async (route) => {
-      const body = route.request().postDataJSON();
-      if (isSemanticDedupeRequest(body)) {
-        return fulfillTempExecSemanticDedupe(route, body);
-      }
-      callCount += 1;
-      await new Promise((resolve) => setTimeout(resolve, callCount === 1 ? 2000 : 500));
-      const payload = {
+    const routeCtl = await installPersistentModelTaskRoute(page, {
+      completeAfterMs: 2000,
+      responseText: JSON.stringify({
         missing_modules: [],
         existing_modules: [{
           module: '支付',
@@ -903,12 +1009,7 @@ test.describe('执行页 AI 用例生成', () => {
             remark: '',
           }],
         }],
-      };
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ choices: [{ message: { content: JSON.stringify(payload) } }] }),
-      });
+      }),
     });
 
     await gotoExec(page);
@@ -925,6 +1026,9 @@ test.describe('执行页 AI 用例生成', () => {
 
     await startTempExecAiGeneration(page, '需求：支付流程');
     await expect(page.locator('#tempExecAiGenBtn')).toContainText('正在生成');
+    await expect.poll(() => routeCtl.getCreateCalls().length).toBeGreaterThanOrEqual(1);
+    const firstBackendCall = routeCtl.getCreateCalls()[0];
+    const firstBackendTask = routeCtl.getTasks()[0];
 
     await page.reload();
     await waitTempExecReady(page);
@@ -938,6 +1042,11 @@ test.describe('执行页 AI 用例生成', () => {
       return card && !card.classList.contains('hidden');
     });
     await expect(page.locator('#tempExecAiGenBtn')).toContainText('正在生成');
+    await expect.poll(() => routeCtl.getCreateCalls().filter((item) => item.requestKey === firstBackendCall.requestKey).length).toBeGreaterThanOrEqual(2);
     await expect(page.locator('#tempExecAiGenStatus')).toContainText('生成完成');
+    const resumedCalls = routeCtl.getCreateCalls().filter((item) => item.requestKey === firstBackendCall.requestKey);
+    expect(resumedCalls.every((item) => item.existingTaskId === '' || item.existingTaskId === firstBackendTask.id)).toBe(true);
+    expect(routeCtl.getCancelCalls()).toHaveLength(0);
+    expect(routeCtl.getProxyCallCount()).toBe(0);
   });
 });

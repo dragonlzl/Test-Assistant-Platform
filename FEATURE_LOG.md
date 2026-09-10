@@ -19,6 +19,32 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：XMind 自定义提示词优先
+- 功能描述：配置了 XMind 自定义提示词时，仅使用自定义基础提示词；清空后才回退默认提示词。生成选项和 operation_contract 继续按当前操作追加。
+- 使用效果：避免默认规则与自定义规则同时进入请求，影响用户对模块拆分、用例风格等要求的控制。
+- 测试与验证：自定义优先、清空回退与操作约束保留 UI 回归通过；含图片的 GPT-5.6 请求回归通过。2026-09-08 使用用户提供 DOCX 的实际导入请求（正文与 9 张图片）验证，自定义提示词下模块发现返回 HTTP 200、5 个模块；加入上次选择的 8 个知识片段后返回 HTTP 200、6 个模块。验证范围为模块发现，未宣称完整逐模块用例生成或供应商稳定性已验证。
+
+- 功能名称：修复站点模型能力丢失
+- 功能描述：具体模型优先使用明确声明的能力；兼容旧版单模型能力，且不会将其复制给同站点其它模型。模型列表读取、编辑与保存保留能力声明，缺少声明时补齐 GPT-5 系列图片能力识别。
+- 使用效果：GPT-5.6 的 XMind 需求图片会进入模型请求；明确声明为纯文本的模型仍按其声明调用。
+- 测试与验证：模型能力优先级、功能指派、跨设备持久化与 XMind 需求图片请求回归；本修复不代表已解决供应商 HTTP 524，完整需求仍需同输入对照验证。
+
+- 功能名称：移除模型输出 Tokens 兜底
+- 功能描述：模型客户端不再使用 1024 的默认最大输出 Tokens，也不再向 Responses API 或 Chat Completions 请求体写入 `max_output_tokens` / `max_tokens`；输出上限交由上游模型或代理决定。
+- 使用效果：模型管理页不再提供最大输出 Tokens 输入框或卡片展示；历史 `maxTokens` 字段仅作兼容读取，不会写入新的模型配置或任务快照，后端异步任务和兼容代理在最后转发边界再次剔除两个请求参数，避免旧客户端或恢复任务带回限制。
+- 测试与验证：`node --check`、`git diff --check`、模型响应 UI 回归 13/13、后端模型任务 API 回归 1/1。
+
+- 功能名称：GPT 模型推理等级配置
+- 功能描述：模型管理支持为 GPT-5.x 等推理模型选择模型级推理等级，并在模型调用时按对应协议传递配置。
+- 操作方式：进入模型管理，新增或编辑 GPT-5.x 模型，在“推理等级”中选择默认、None、Low、Medium、High、XHigh 或 Max 后保存；DeepSeek-R1 继续使用 Low、Medium、High。
+- 使用效果：模型卡片展示已保存的推理等级；Responses API 使用 `reasoning.effort`，Chat Completions 使用 `reasoning_effort`。功能级推理参数仍可覆盖模型级配置。
+- 新增内容/接口/组件：新增模型级 `reasoningEffort` 配置、模型管理选择器、请求参数映射和异步任务模型快照兼容；未新增后端接口或数据库结构。
+- 复用说明：复用现有模型配置、功能指派和模型客户端；未改变原有非推理模型请求行为。
+- 测试与验证：
+  - `git diff --check`（通过）
+  - `node --check services/modelClient.js scripts/modules/models.js scripts/modules/app.js tests/ui/models_settings.spec.js tests/ui/model_response_strip.spec.js`（通过）
+  - `npm run test:ui -- tests/ui/models_settings.spec.js tests/ui/model_response_strip.spec.js`（通过，23/23）
+
 - 功能名称：AI 旧流程下线与 XMind 保留
 - 功能描述：下线一键执行、功能流程和旧版普通模块生成的菜单、页面、引导、通知、专用脚本与测试；XMind 用例生成成为唯一独立生成页。
 - 操作方式：从 AI 功能菜单进入 XMind 用例生成；也可在用例库或用例执行页面内发起生成并追加。

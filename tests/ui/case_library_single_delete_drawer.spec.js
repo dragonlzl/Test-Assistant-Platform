@@ -186,5 +186,19 @@ test.describe('用例库编辑视图单条删除确认抽屉', () => {
     await expect(page.locator('.temp-undo-toast')).toHaveCount(0);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
     expect(deleteCalls).toBe(0);
+
+    await page.click('#caseLibraryEditView button[data-case-lib-remove][data-index="0"]');
+    await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+    await page.click('#appConfirmDrawerConfirmBtn');
+    await page.waitForFunction(() => {
+      const el = document.getElementById('appConfirmDrawer');
+      return !el || (!el.classList.contains('open') && !el.classList.contains('closing'));
+    });
+    const immediateDeleteBtn = page.locator('.temp-undo-toast .temp-undo-immediate');
+    await expect(immediateDeleteBtn).toHaveText('马上删除');
+    await immediateDeleteBtn.click({ force: true });
+    await expect(page.locator('.temp-undo-toast')).toHaveCount(0);
+    await expect.poll(() => deleteCalls).toBe(1);
+    await expect(page.locator('#caseLibraryEditView')).not.toContainText('正常登录');
   });
 });

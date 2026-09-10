@@ -1,0 +1,114 @@
+- generic [ref=f3e2]:
+  - complementary:
+    - generic:
+      - generic: 当前用户
+      - strong: diagnostic
+      - generic: 管理员
+      - button "用户菜单": 个人
+      - generic:
+        - button "登出"
+    - generic:
+      - heading "用例助手" [level=1]
+      - generic:
+        - button "? 页面说明":
+          - generic: "?"
+          - generic: 页面说明
+        - button "G 功能引导":
+          - generic: G
+          - generic: 功能引导
+    - generic:
+      - generic: 页面路径
+      - generic:
+        - button "AI 功能"
+        - button "用例生成"
+    - navigation:
+      - generic:
+        - button "AI 功能 需先配置模型/指派":
+          - generic: AI 功能
+          - generic: 需先配置模型/指派
+        - text: ◆ ◆ ◆ ◆ ◆
+      - generic:
+        - button "用例相关"
+        - text: ◆ ◆ ◆ ◆
+      - generic:
+        - button "管理"
+        - text: ◆ ◆ ◆
+      - generic:
+        - button "设置"
+        - text: ◆
+    - button "回到顶部"
+    - button "跳到底部"
+    - generic:
+      - generic:
+        - button "xmind用例生成进度"
+        - button "个人备忘"
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: xmind用例生成进度
+                - button "收起" [expanded]
+              - generic: 点击打开对应 XMind 生成页签
+            - generic:
+              - paragraph: 暂无 xmind 生成页签，点击打开 XMind 用例生成
+  - generic [ref=f3e3]:
+    - generic:
+      - generic: 一键执行步骤
+      - generic:
+        - generic:
+          - generic: "1"
+          - generic: 导入
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "2"
+          - generic: 评审
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "3"
+          - generic: 清洗
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "4"
+          - generic: 对比完整性
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "5"
+          - generic: 拆分
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "6"
+          - generic: 用例导入
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "7"
+          - generic: 覆盖对比
+          - generic [aria-hidden]: ▶
+    - main [ref=f3e4]:
+      - generic [ref=f3e5]:
+        - heading "用例生成" [level=2] [ref=f3e6]
+        - generic [ref=f3e7]:
+          - paragraph [ref=f3e8]: 根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。
+          - generic [ref=f3e9]:
+            - tablist "用例生成功能页签" [ref=f3e10]:
+              - button "用例生成设置" [ref=f3e11] [cursor=pointer]
+              - button "一键执行生成模块" [ref=f3e12] [cursor=pointer]
+              - button "xmind生成模块" [ref=f3e13] [cursor=pointer]
+              - button "XMind用例生成" [expanded] [active] [ref=f3e14] [cursor=pointer]
+            - tabpanel "xmind生成模块" [ref=f3e203]:
+              - generic [ref=f3e204]:
+                - generic [ref=f3e205]:
+                  - generic [ref=f3e206]: XMind 模块区
+                  - generic [ref=f3e207]: 仅镜像展示 XMind 页签中的模块与用例结果，生成操作请在 XMind 用例生成页执行
+                - paragraph [ref=f3e210]: 当前还没有 XMind 生成页签，请先点击上方【XMind用例生成】开始生成。
+      - generic [ref=f3e213]:
+        - generic [ref=f3e214]:
+          - heading "XMind 用例生成" [level=3] [ref=f3e215]
+          - button "收起" [ref=f3e216] [cursor=pointer]
+        - generic [ref=f3e218]:
+          - button "新建 XMind 生成页签" [ref=f3e220] [cursor=pointer]: 新建生成
+          - generic [ref=f3e224]:
+            - heading "暂无生成页签" [level=4] [ref=f3e225]
+            - paragraph [ref=f3e226]: 先点击上方“新建生成”，再在该页签中完成前置准备并开始生成。
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]

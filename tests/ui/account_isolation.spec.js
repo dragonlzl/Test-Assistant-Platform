@@ -187,7 +187,6 @@ test.describe('账号配置隔离', () => {
     await page.fill('#modelBaseUrl', 'https://example.com/a');
     await page.fill('#modelApiKey', 'sk-a');
     await page.fill('#modelIdentifier', 'model-a');
-    await page.fill('#modelMaxTokens', '1024');
     await page.click('#saveModelBtn');
     await expect(page.locator('#modelList')).toContainText('A-model');
     await expect.poll(() => serverState.models.length).toBe(1);
@@ -231,7 +230,6 @@ test.describe('账号配置隔离', () => {
     await page.fill('#modelBaseUrl', 'https://example.com/b');
     await page.fill('#modelApiKey', 'sk-b');
     await page.fill('#modelIdentifier', 'model-b');
-    await page.fill('#modelMaxTokens', '1024');
     await page.click('#saveModelBtn');
     await expect(page.locator('#modelList')).toContainText('B-model');
 
@@ -268,4 +266,3 @@ test.describe('账号配置隔离', () => {
     await context.close();
   });
 });
-

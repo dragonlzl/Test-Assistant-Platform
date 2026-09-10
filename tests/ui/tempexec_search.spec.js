@@ -210,6 +210,11 @@ test.describe('临时执行搜索功能', () => {
     await page.click('#appConfirmDrawerConfirmBtn');
     await expect(confirmDrawer).not.toHaveClass(/open/);
     await expect(caseRows).toHaveCount(2, { timeout: 15000 });
+    const immediateDeleteBtn = page.locator('.temp-undo-toast .temp-undo-immediate');
+    await expect(immediateDeleteBtn).toHaveText('马上删除');
+    await immediateDeleteBtn.click({ force: true });
+    await expect(page.locator('.temp-undo-toast')).toHaveCount(0);
+    await expect(page.locator('#tempExecStatus')).toContainText('马上删除已完成');
   });
 
   test('执行视图删除待确认期间阻止连续删除', async ({ page }) => {
@@ -319,6 +324,11 @@ test.describe('临时执行搜索功能', () => {
     const confirmDrawer = page.locator('#appConfirmDrawer');
     await expect(confirmDrawer).not.toHaveClass(/open/);
     await expect(caseRows).toHaveCount(4, { timeout: 15000 });
+    const immediateAddBtn = page.locator('.temp-undo-toast .temp-undo-immediate');
+    await expect(immediateAddBtn).toHaveText('马上新增');
+    await immediateAddBtn.click({ force: true });
+    await expect(page.locator('.temp-undo-toast')).toHaveCount(0);
+    await expect(page.locator('#tempExecStatus')).toContainText('马上新增已完成');
   });
 
   test('复用子项与缺陷链接删除改为确认抽屉', async ({ page }) => {

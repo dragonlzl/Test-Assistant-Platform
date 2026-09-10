@@ -688,6 +688,60 @@ class ModelProxyRequest(BaseModel):
     timeout_sec: Optional[int] = 60
 
 
+class ModelProxyListingRequest(BaseModel):
+    base_url: str
+    api_key: Optional[str] = None
+    timeout_sec: Optional[int] = 60
+
+
+class ModelTaskCreate(BaseModel):
+    model_config_id: int
+    payload: Optional[Any] = None
+    timeout_sec: Optional[int] = 60
+    scene: str = "generation"
+    owner_key: str
+    idempotency_key: str
+    resume_only: bool = False
+
+
+class ModelTaskOut(BaseModel):
+    id: str
+    user_id: int
+    model_config_id: Optional[int]
+    scene: str
+    owner_key: str
+    idempotency_key: str
+    status: str
+    timeout_sec: int
+    configured_model: Optional[str] = None
+    request_model: Optional[str] = None
+    request_endpoint: Optional[str] = None
+    upstream_status: Optional[int] = None
+    response_content_type: Optional[str] = None
+    response_body: Optional[str] = None
+    response_status: Optional[str] = None
+    finish_reason: Optional[str] = None
+    incomplete_details: Optional[Any] = None
+    usage_json: Optional[Any] = None
+    error: Optional[str] = None
+    attempt_count: int = 0
+    cancel_requested_at: Optional[datetime] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ModelTaskCancelByOwner(BaseModel):
+    owner_key: str
+
+
+class ModelTaskCancelOut(BaseModel):
+    cancelled_count: int = 0
+    task_ids: List[str] = Field(default_factory=list)
+
+
 class KnowledgeBaseManifestSummary(BaseModel):
     generated_at: Optional[str] = None
     docs_dir: Optional[str] = None

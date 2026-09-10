@@ -13,6 +13,7 @@
 	    projectList: document.getElementById('execOverviewProjects'),
 	    detail: document.getElementById('execOverviewDetail'),
 	    projectTitle: document.getElementById('execOverviewProjectTitle'),
+      projectPrompt: document.getElementById('execOverviewProjectPrompt'),
 	    versionSelect: document.getElementById('execOverviewVersionSelect'),
       versionSummary: document.getElementById('execOverviewVersionSummary'),
       versionSummaryBody: document.getElementById('execOverviewVersionSummaryBody'),
@@ -682,9 +683,10 @@
 
 	  function renderProjects() {
 	    var list = Array.isArray(state.projects) ? state.projects : [];
+      if (dom.projectPrompt) dom.projectPrompt.classList.toggle('hidden', !list.length || Boolean(state.currentProject));
 	    if (!list.length) {
 	      if (dom.projectList) dom.projectList.innerHTML = '';
-	      if (dom.navProjects) dom.navProjects.innerHTML = '';
+	      if (dom.navProjects) dom.navProjects.innerHTML = '<p class="hint">暂无可选项目</p>';
 	      if (dom.emptyProjects) dom.emptyProjects.classList.remove('hidden');
 	      return;
 	    }
@@ -700,7 +702,7 @@
 	          return (
 	            '<button type="button" class="' + cls + '" data-project-id="' +
 	            escapeHtml(p.id) +
-	            '">' +
+	            '" title="' + escapeHtml(name) + '" aria-pressed="' + (isActive ? 'true' : 'false') + '">' +
 	            '<span class="nav-entry-icon" aria-hidden="true">' +
 	            '<svg viewBox="0 0 24 24" role="presentation" focusable="false">' +
 	            '<path d="M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"></path>' +
@@ -971,10 +973,11 @@
     var boxes = layoutEl.querySelectorAll('.exec-overview-version-box');
     var total = items.length;
     if (!total || !boxes.length) return;
-    var boxWidth = boxes[0].offsetWidth || 0;
+    // 保留分数像素，避免侧栏压缩内容区后漏加载末尾版本。
+    var boxWidth = boxes[0].getBoundingClientRect().width || boxes[0].offsetWidth || 0;
     var gap = getContainerGap(layoutEl, 'x');
     var unit = boxWidth + gap;
-    var startIndex = unit > 0 ? Math.floor(layoutEl.scrollLeft / unit) : 0;
+    var startIndex = unit > 0 ? Math.floor((layoutEl.scrollLeft + 1) / unit) : 0;
     startIndex = Math.max(0, startIndex - 1);
     var endIndex = Math.min(total - 1, startIndex + overviewLayoutWindowSize - 1);
     if (endIndex - startIndex + 1 < overviewLayoutWindowSize) {

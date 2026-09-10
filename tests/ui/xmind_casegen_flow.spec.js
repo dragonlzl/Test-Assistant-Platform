@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { test, expect } = require('@playwright/test');
+const { installPersistentModelTaskRoute } = require('./helpers/persistent_model_task_mock');
 
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+bB9sAAAAASUVORK5CYII=',
@@ -107,6 +108,9 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
   const modelName = opts.modelName || 'mock-model';
   const modelCapabilities = Array.isArray(opts.modelCapabilities) ? opts.modelCapabilities.slice() : [];
   const extraModels = Array.isArray(opts.extraModels) ? opts.extraModels.slice() : [];
+  const modelConfigs = Array.isArray(opts.modelConfigs) ? opts.modelConfigs.slice() : null;
+  const assignmentModelRemoteId = opts.assignmentModelRemoteId || modelRemoteId;
+  const assignmentModelId = opts.assignmentModelId || modelName;
   const modelId = String(modelRemoteId);
   const projects = Array.isArray(opts.projects) ? opts.projects : [];
   const versionsByProject = opts.versionsByProject && typeof opts.versionsByProject === 'object'
@@ -120,6 +124,7 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
     : {};
 
   await page.addInitScript((tk) => {
+    window.__APP_ALLOW_MODEL_TASK_FALLBACK = true;
     try { localStorage.setItem('tap-auth-token', tk); } catch (_) {}
   }, token);
 
@@ -178,7 +183,7 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
           capabilities: modelCapabilities,
         },
       };
-      return respond(200, [baseModel].concat(extraModels));
+      return respond(200, modelConfigs || [baseModel].concat(extraModels));
     }
     if (pathName === '/api/features' && method === 'GET') {
       return respond(200, [{
@@ -187,9 +192,10 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
         owner_id: user.id,
         scope: 'user',
         config_json: {
-          caseGenId: modelId,
+          caseGenId: String(assignmentModelRemoteId),
           caseGenPrompt: caseGenPrompt,
-          xmindCaseGenId: modelId,
+          xmindCaseGenId: String(assignmentModelRemoteId),
+          xmindCaseGenModelId: String(assignmentModelId),
           xmindCaseGenPrompt: xmindCaseGenPrompt,
           xmindCaseGenReasoning: '',
           xmindCaseGenTemperature: 0.2,
@@ -587,7 +593,7 @@ async function installXmindModelStub(page, delayMs) {
         prompt: promptText,
         user: userText,
         contract: contract,
-        temperature: Number(modelPayload.temperature),
+        hasTemperature: Object.prototype.hasOwnProperty.call(modelPayload, 'temperature'),
         responseModules: responseModules,
       });
 
@@ -3449,7 +3455,21 @@ test.describe('XMind 用例生成抽屉', () => {
     });
 
     await gotoCasesgenWorkflow(page);
-    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      if (!state) return;
+      state.models = (state.models || []).filter(function(item) {
+        return String(item && item.remoteId || '') !== '901';
+      });
+      state.assignments.xmindCaseGenId = '902';
+      state.assignments.xmindCaseGenModelId = 'gpt-5.6-sol';
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.render === 'function') api.render({ reason: 'ui-test-recreated-model', persist: false });
+    });
+    await page.waitForFunction(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      return Boolean(state && state.assignments && String(state.assignments.xmindCaseGenId || '') === '902');
+    }, {}, { timeout: 10000 });
     await installXmindProxyRoute(page, {
       delaysMs: [3200, 120],
       responseTexts: [responseText, responseText],
@@ -5476,6 +5496,80 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('.xmind-node-context-menu.is-open')).toHaveCount(0);
   });
 
+  test('XMind 自定义提示词优先，清空后回退默认并保留操作约束', async ({ page }) => {
+    const user = { id: 10302, username: 'custom_prompt_user', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'custom-prompt-token', user, {
+      xmindCaseGenPrompt: '自定义规则：父子模块合并，控制模块数量。',
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page);
+    await seedDocumentRequirement(page, { text: '需求：测试自定义提示词优先。' });
+    await seedPrepState(page, { completed: true });
+    await openXmindCaseGenDrawer(page);
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(1);
+    const prompt = await page.evaluate(() => window.__xmindProxyCalls[0].payload.messages[0].content);
+    expect(prompt).toContain('自定义规则：父子模块合并，控制模块数量。');
+    expect(prompt).not.toContain('你是资深测试设计专家，负责 XMind 用例生成页面');
+    expect(prompt).toContain('operation_contract(JSON)');
+
+    await expect.poll(() => page.evaluate(() => window.app.state.xmindCaseGen.root.running)).toBe(false);
+    await page.evaluate(() => {
+      window.app.state.assignments.xmindCaseGenPrompt = '';
+      window.app.apiClient.listFeatureAssignments = async function() { return []; };
+    });
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(2);
+    const defaultPrompt = await page.evaluate(() => window.__xmindProxyCalls[1].payload.messages[0].content);
+    expect(defaultPrompt).toContain('你是资深测试设计专家，负责 XMind 用例生成页面');
+    expect(defaultPrompt).toContain('operation_contract(JSON)');
+    expect(defaultPrompt).not.toContain('自定义规则：父子模块合并，控制模块数量。');
+  });
+
+  test('站点中的 GPT-5.6 生成请求携带需求图片', async ({ page }) => {
+    const user = { id: 10301, username: 'gpt56_image_user', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'gpt56-image-token', user, {
+      assignmentModelId: 'gpt-5.6-sol',
+      modelConfigs: [{
+        id: 901,
+        owner_id: user.id,
+        name: '多模型站点',
+        config_json: {
+          provider: 'custom',
+          baseUrl: 'https://mock-model.local/v1/responses',
+          apiKey: 'mock-key',
+          stream: false,
+          capabilities: [],
+          availableModels: [{ id: 'gpt-5.6-sol' }, { id: 'deepseek-chat' }],
+        },
+      }],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[]}]}',
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：依据正文与设计图片拆分登录模块。',
+      requirementLabel: 'GPT-5.6 图片回归',
+      imageCount: 1,
+      imageBytes: ONE_PIXEL_PNG,
+    });
+    await seedPrepState(page, { step: 3, requirementMode: 'document', caseImportMode: 'skip', completed: true });
+    await openXmindCaseGenDrawer(page);
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBeGreaterThan(0);
+    const payload = await page.evaluate(() => window.__xmindProxyCalls[0].payload);
+    expect(payload.model).toBe('gpt-5.6-sol');
+    expect(payload.stream).toBe(false);
+    expect(payload.input[0].content.filter(item => item.type === 'input_image')).toHaveLength(1);
+    expect(payload.input[0].content.filter(item => item.type === 'input_text')[0].text).toContain('依据正文与设计图片');
+  });
+
   test('重置前置准备后重新生成，真实 proxy 请求只携带当前一轮需求与图片上下文', async ({ page }) => {
     const token = 'token-xmind-prep-reset-proxy-context';
     const user = { id: 103, username: 'demo_user_103', role: 'user', level: 'member' };
@@ -5556,7 +5650,18 @@ test.describe('XMind 用例生成抽屉', () => {
 
     const proxyCalls = await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls : []);
     expect(proxyCalls.length).toBeGreaterThanOrEqual(2);
-    const lastCall = proxyCalls[proxyCalls.length - 1] || {};
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).some(call => {
+      const input = call.payload && call.payload.input;
+      const content = input && input[0] && input[0].content;
+      return Array.isArray(content) && content.some(item => item.type === 'input_text'
+        && String(item.text || '').includes('【需求正文】\n需求正文：第二次生成'));
+    }))).toBe(true);
+    const lastCall = await page.evaluate(() => (window.__xmindProxyCalls || []).find(call => {
+      const input = call.payload && call.payload.input;
+      const content = input && input[0] && input[0].content;
+      return Array.isArray(content) && content.some(item => item.type === 'input_text'
+        && String(item.text || '').includes('【需求正文】\n需求正文：第二次生成'));
+    }));
     const payload = lastCall && lastCall.payload ? lastCall.payload : {};
     const content = Array.isArray(payload.input) && payload.input[0] && Array.isArray(payload.input[0].content)
       ? payload.input[0].content
@@ -7044,7 +7149,7 @@ test.describe('XMind 用例生成抽屉', () => {
         contract: latest.contract || {},
         prompt: String(latest.prompt || ''),
         user: String(latest.user || ''),
-        temperature: Number(latest.temperature),
+        hasTemperature: latest.hasTemperature === true,
         modules: parseJsonText(extractSection(latest.user, '【需要去重精简的 AI 生成用例(JSON)】')) || [],
       } : null;
     });
@@ -7063,7 +7168,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(dedupeCall.contract.duplicate_detection_policy.prefer_same_module_dedupe).toBe(false);
     expect(dedupeCall.contract.duplicate_detection_policy.cross_module_dedupe).toBe(true);
     expect(dedupeCall.contract.duplicate_detection_policy.duplicate_when_same_test_purpose_and_point).toBe(true);
-    expect(dedupeCall.temperature).toBe(0.2);
+    expect(dedupeCall.hasTemperature).toBeFalsy();
     expect(dedupeCall.prompt).toContain('本次策略：去重并精简');
     expect(dedupeCall.prompt).toContain('所有输入模块下的用例视为一份完整用例集');
     expect(dedupeCall.prompt).toContain('跨模块也属于本次去重范围');
@@ -7209,14 +7314,14 @@ test.describe('XMind 用例生成抽屉', () => {
       return latest ? {
         count: matches.length,
         contract: latest.contract || {},
-        temperature: Number(latest.temperature),
+        hasTemperature: latest.hasTemperature === true,
       } : null;
     });
     expect(dedupeCall).toBeTruthy();
     expect(dedupeCall.count).toBe(1);
     expect(dedupeCall.contract.dedupe_mode).toBe('dedupe_only');
     expect(dedupeCall.contract.simplify).toBe(false);
-    expect(dedupeCall.temperature).toBe(0.2);
+    expect(dedupeCall.hasTemperature).toBeFalsy();
 
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
     const latestHistoryCard = page.locator('.xmind-casegen-history-card').nth(0);
@@ -7389,7 +7494,7 @@ test.describe('XMind 用例生成抽屉', () => {
         contract: latest.contract || {},
         prompt: String(latest.prompt || ''),
         user: String(latest.user || ''),
-        temperature: Number(latest.temperature),
+        hasTemperature: latest.hasTemperature === true,
         modules: parseJsonText(extractSection(latest.user, '【需要去重精简的 AI 生成用例(JSON)】')) || [],
       } : null;
     });
@@ -7407,7 +7512,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(requestInfo.contract.duplicate_detection_policy.prefer_same_module_dedupe).toBe(false);
     expect(requestInfo.contract.duplicate_detection_policy.cross_module_dedupe).toBe(true);
     expect(requestInfo.contract.duplicate_detection_policy.duplicate_when_same_test_purpose_and_point).toBe(true);
-    expect(requestInfo.temperature).toBe(0.2);
+    expect(requestInfo.hasTemperature).toBeFalsy();
     expect(requestInfo.prompt).toContain('本次策略：去重并精简');
     expect(requestInfo.prompt).toContain('所有输入模块下的用例视为一份完整用例集');
     expect(requestInfo.prompt).toContain('跨模块也属于本次去重范围');
@@ -7513,7 +7618,7 @@ test.describe('XMind 用例生成抽屉', () => {
       return latest ? {
         contract: latest.contract || {},
         prompt: String(latest.prompt || ''),
-        temperature: Number(latest.temperature),
+        hasTemperature: latest.hasTemperature === true,
       } : null;
     });
     expect(requestInfo).toBeTruthy();
@@ -7530,7 +7635,7 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(requestInfo.contract.duplicate_detection_policy.prefer_same_module_dedupe).toBe(false);
     expect(requestInfo.contract.duplicate_detection_policy.cross_module_dedupe).toBe(true);
     expect(requestInfo.contract.duplicate_detection_policy.duplicate_when_same_test_purpose_and_point).toBe(true);
-    expect(requestInfo.temperature).toBe(0.2);
+    expect(requestInfo.hasTemperature).toBeFalsy();
     expect(requestInfo.prompt).toContain('本次策略：仅去重');
     expect(requestInfo.prompt).toContain('所有输入模块下的用例视为一份完整用例集');
     expect(requestInfo.prompt).toContain('跨模块也属于本次去重范围');
@@ -8224,7 +8329,7 @@ test.describe('XMind 用例生成抽屉', () => {
     });
   });
 
-  test('右侧导出XMind按钮替换为模型选择框，并支持直接切换 XMind 模型', async ({ page }) => {
+  test('XMind 模型默认跟随功能指派，页面独立切换不会改写功能指派', async ({ page }) => {
     const token = 'token-xmind-inline-model-select';
     const user = { id: 211, username: 'demo_user_inline_model', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
@@ -8241,7 +8346,7 @@ test.describe('XMind 用例生成抽屉', () => {
           provider: 'custom',
           baseUrl: 'https://mock-model-b.local/v1/responses',
           apiKey: 'mock-key-b',
-          model: 'gpt-5.4-b',
+          model: 'gpt-5.4-a',
           maxTokens: 2048,
           capabilities: ['vision', 'reasoning', 'chat'],
         },
@@ -8269,16 +8374,55 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenMindContainer [data-mind-action="export-xmind"]')).toHaveClass(/xmind-casegen-default-export-hidden/);
     await expect(page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]')).toBeVisible();
 
-    const optionTexts = await page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select] option').allTextContents();
-    expect(optionTexts).toEqual(['MockXmindCaseGenModel', 'MockXmindCaseGenModel-B']);
+    const modelSelect = page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]');
+    const optionTexts = await modelSelect.locator('option').allTextContents();
+    expect(optionTexts).toEqual([
+      '跟随功能指派 · MockXmindCaseGenModel · gpt-5.4-a',
+      'MockXmindCaseGenModel · gpt-5.4-a',
+      'MockXmindCaseGenModel-B · gpt-5.4-a',
+    ]);
+    await expect(modelSelect.locator('option:checked')).toHaveText('跟随功能指派 · MockXmindCaseGenModel · gpt-5.4-a');
 
-    await page.selectOption('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]', '902');
+    await modelSelect.selectOption({ label: 'MockXmindCaseGenModel-B · gpt-5.4-a' });
     await expect.poll(async () => {
       return await page.evaluate(() => {
         var state = window.app && window.app.state ? window.app.state : null;
-        return state && state.assignments ? String(state.assignments.xmindCaseGenId || '') : '';
+        var modelOverride = state && state.xmindCaseGen ? state.xmindCaseGen.modelOverride : null;
+        return {
+          assignmentSiteId: state && state.assignments ? String(state.assignments.xmindCaseGenId || '') : '',
+          overrideSiteId: modelOverride ? String(modelOverride.siteId || '') : '',
+          overrideModelId: modelOverride ? String(modelOverride.modelId || '') : '',
+        };
       });
-    }).toBe('902');
+    }).toEqual({
+      assignmentSiteId: '901',
+      overrideSiteId: '902',
+      overrideModelId: 'gpt-5.4-a',
+    });
+
+    await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var model = state && Array.isArray(state.models)
+        ? state.models.find(function(item) { return String(item && item.remoteId || '') === '902'; })
+        : null;
+      if (model) model.baseUrl = 'https://mock-model-b-edited.local/v1/responses';
+      var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (client && typeof client.listModelConfigs === 'function') {
+        var originalListModelConfigs = client.listModelConfigs;
+        client.listModelConfigs = function(scope, ownerId) {
+          return originalListModelConfigs(scope, ownerId).then(function(list) {
+            return (Array.isArray(list) ? list : []).map(function(item) {
+              if (!item || String(item.id || '') !== '902') return item;
+              var next = Object.assign({}, item);
+              next.config_json = Object.assign({}, item.config_json || {}, {
+                baseUrl: 'https://mock-model-b-edited.local/v1/responses',
+              });
+              return next;
+            });
+          });
+        };
+      }
+    });
 
     await openRootContextMenu(page);
     await clickContextMenuAction(page, '生成全量模块');
@@ -8291,7 +8435,252 @@ test.describe('XMind 用例生成抽屉', () => {
       return calls.length ? calls[calls.length - 1] : null;
     });
     expect(lastCall).toBeTruthy();
+    expect(String(lastCall.base_url || '')).toBe('https://mock-model-b-edited.local/v1/responses');
+  });
+
+  test('XMind 页面独立模型被删除后会清除旧选择并回退最新功能指派', async ({ page }) => {
+    const token = 'token-xmind-inline-model-deleted';
+    const user = { id: 212, username: 'demo_user_inline_model_deleted', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      modelRemoteId: 901,
+      modelBaseUrl: 'https://mock-model-a.local/v1/responses',
+      modelName: 'gpt-5.4-a',
+      modelCapabilities: ['vision', 'reasoning', 'chat'],
+      extraModels: [{
+        id: 902,
+        name: 'MockXmindCaseGenModel-B',
+        owner_id: user.id,
+        scope: 'user',
+        config_json: {
+          provider: 'custom',
+          baseUrl: 'https://mock-model-b.local/v1/responses',
+          apiKey: 'mock-key-b',
+          model: 'gpt-5.4-b',
+          maxTokens: 2048,
+          capabilities: ['vision', 'reasoning', 'chat'],
+        },
+      }],
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[]}]}',
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：页面独立模型删除后应回退功能指派模型。',
+      requirementLabel: 'XMind模型删除回退需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind模型删除回退需求');
+    const modelSelect = page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]');
+    await modelSelect.selectOption({ label: 'MockXmindCaseGenModel-B · gpt-5.4-b' });
+
+    await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      if (state && Array.isArray(state.models)) {
+        state.models = state.models.filter(function(item) {
+          return String(item && item.remoteId || '') !== '902';
+        });
+      }
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.render === 'function') {
+        api.render({ reason: 'ui-test-model-deleted', persist: false });
+      }
+    });
+
+    await expect(modelSelect.locator('option:checked')).toHaveText('跟随功能指派 · MockXmindCaseGenModel · gpt-5.4-a');
+    const selectionState = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var modelOverride = state && state.xmindCaseGen ? state.xmindCaseGen.modelOverride : null;
+      return {
+        assignmentSiteId: state && state.assignments ? String(state.assignments.xmindCaseGenId || '') : '',
+        overrideSiteId: modelOverride ? String(modelOverride.siteId || '') : '',
+        overrideModelId: modelOverride ? String(modelOverride.modelId || '') : '',
+      };
+    });
+    expect(selectionState).toEqual({
+      assignmentSiteId: '901',
+      overrideSiteId: '',
+      overrideModelId: '',
+    });
+
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls.length : 0);
+    }).toBeGreaterThanOrEqual(1);
+    const lastCall = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls : [];
+      return calls.length ? calls[calls.length - 1] : null;
+    });
+    expect(lastCall).toBeTruthy();
+    expect(String(lastCall.base_url || '')).toBe('https://mock-model-a.local/v1/responses');
+  });
+
+  test('XMind 跟随模式会读取当前最新功能指派', async ({ page }) => {
+    const token = 'token-xmind-inline-model-assignment-sync';
+    const user = { id: 213, username: 'demo_user_inline_model_assignment_sync', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      modelRemoteId: 901,
+      modelBaseUrl: 'https://mock-model-a.local/v1/responses',
+      modelName: 'gpt-5.4-a',
+      modelCapabilities: ['vision', 'reasoning', 'chat'],
+      extraModels: [{
+        id: 902,
+        name: 'MockXmindCaseGenModel-B',
+        owner_id: user.id,
+        scope: 'user',
+        config_json: {
+          provider: 'custom',
+          baseUrl: 'https://mock-model-b.local/v1/responses',
+          apiKey: 'mock-key-b',
+          model: 'gpt-5.4-b',
+          maxTokens: 2048,
+          capabilities: ['vision', 'reasoning', 'chat'],
+        },
+      }],
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[]}]}',
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：跟随模式应读取功能指派刚刚保存的模型。',
+      requirementLabel: 'XMind功能指派同步需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind功能指派同步需求');
+    await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      if (!state) return;
+      state.assignments = state.assignments || {};
+      state.assignments.xmindCaseGenId = '902';
+      state.assignments.xmindCaseGenModelId = 'gpt-5.4-b';
+      var client = window.app && window.app.apiClient ? window.app.apiClient : null;
+      if (client) {
+        client.listFeatureAssignments = function() {
+          return Promise.resolve([{
+            id: 5001,
+            name: 'default',
+            owner_id: state.currentUser && state.currentUser.id,
+            scope: 'user',
+            config_json: {
+              xmindCaseGenId: '902',
+              xmindCaseGenModelId: 'gpt-5.4-b',
+              xmindCaseGenPrompt: '基础提示词-XMind页',
+              xmindCaseGenReasoning: '',
+            },
+          }]);
+        };
+      }
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.render === 'function') {
+        api.render({ reason: 'ui-test-assignment-updated', persist: false });
+      }
+    });
+
+    const modelSelect = page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]');
+    await expect(modelSelect.locator('option:checked')).toHaveText('跟随功能指派 · MockXmindCaseGenModel-B · gpt-5.4-b');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls.length : 0);
+    }).toBeGreaterThanOrEqual(1);
+    const lastCall = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls : [];
+      return calls.length ? calls[calls.length - 1] : null;
+    });
+    expect(lastCall).toBeTruthy();
     expect(String(lastCall.base_url || '')).toBe('https://mock-model-b.local/v1/responses');
+  });
+
+  test('同名模型删除后重新创建时 XMind 使用新记录和新 API URL', async ({ page }) => {
+    const token = 'token-xmind-recreated-same-model';
+    const user = { id: 214, username: 'demo_user_recreated_same_model', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      modelRemoteId: 901,
+      modelBaseUrl: 'https://old-model-endpoint.local/v1/responses',
+      modelName: 'gpt-5.6-sol',
+      assignmentModelRemoteId: 902,
+      assignmentModelId: 'gpt-5.6-sol',
+      extraModels: [{
+        id: 902,
+        name: 'MockXmindCaseGenModel',
+        owner_id: user.id,
+        scope: 'user',
+        config_json: {
+          provider: 'custom',
+          baseUrl: 'https://new-model-endpoint.local/v1/responses',
+          apiKey: 'mock-key-new',
+          model: 'gpt-5.6-sol',
+          maxTokens: 2048,
+          capabilities: ['vision', 'reasoning', 'chat'],
+        },
+      }],
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      if (!state) return;
+      state.models = (state.models || []).filter(function(item) {
+        return String(item && item.remoteId || '') !== '901';
+      });
+      state.assignments.xmindCaseGenId = '902';
+      state.assignments.xmindCaseGenModelId = 'gpt-5.6-sol';
+      var api = window.app && window.app.xmindCasegenApi ? window.app.xmindCasegenApi : null;
+      if (api && typeof api.render === 'function') api.render({ reason: 'ui-test-recreated-model', persist: false });
+    });
+    await page.waitForFunction(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      return Boolean(state && state.assignments && String(state.assignments.xmindCaseGenId || '') === '902');
+    }, {}, { timeout: 10000 });
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"登录模块","key_scenarios":["主流程"],"test_points":["账号密码校验"],"coupled_modules":[]}]}',
+    });
+    await seedDocumentRequirement(page, {
+      text: '需求：同名模型重新创建后只能使用新记录的接口地址。',
+      requirementLabel: 'XMind同名模型重建需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind同名模型重建需求');
+    const modelSelect = page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]');
+    await expect(modelSelect.locator('option:checked')).toHaveText('跟随功能指派 · MockXmindCaseGenModel · gpt-5.6-sol');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量模块');
+    await expect.poll(async () => {
+      return await page.evaluate(() => Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls.length : 0);
+    }).toBeGreaterThanOrEqual(1);
+    const lastCall = await page.evaluate(() => {
+      var calls = Array.isArray(window.__xmindProxyCalls) ? window.__xmindProxyCalls : [];
+      return calls.length ? calls[calls.length - 1] : null;
+    });
+    expect(lastCall).toBeTruthy();
+    expect(String(lastCall.base_url || '')).toBe('https://new-model-endpoint.local/v1/responses');
   });
 
   test('生成记录会展示重复模块场景下的通俗未新增原因', async ({ page }) => {
@@ -8391,6 +8780,76 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(latestCard).toContainText('返回格式：说明文字');
     await expect(latestCard).toContainText('模型返回片段：');
     await expect(latestCard).toContainText('我认为当前没有需要补充的模块，请直接沿用现有内容。');
+  });
+
+  test('合法 JSON 后仅多余闭合符号时仍会采用模型结果', async ({ page }) => {
+    const token = 'token-xmind-trailing-json';
+    const user = { id: 2401, username: 'demo_user_trailing_json', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+    const validOutput = JSON.stringify({
+      modules: [{
+        module: '尾部容错模块',
+        key_scenarios: ['主流程'],
+        test_points: ['结果解析'],
+        coupled_modules: [],
+        cases: [{
+          module: '尾部容错模块',
+          title: '尾部符号解析',
+          priority: 'P1',
+          preconditions: '已进入测试页面',
+          steps: ['1、执行生成操作', '2、查看生成结果'],
+          expected: '生成结果被正常识别',
+        }],
+      }],
+    }) + ']}';
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installRawXmindModelResponse(page, validOutput, 120);
+    await seedDocumentRequirement(page, {
+      text: '需求：验证模型返回合法 JSON 后多余闭合符号时仍可识别。',
+      requirementLabel: 'XMind尾部容错需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind尾部容错需求');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await waitForNodeText(page, '尾部容错模块');
+    await waitForNodeStatusAbsent(page, 'XMind尾部容错需求');
+
+    const result = await page.evaluate(() => {
+      var state = window.app && window.app.state ? window.app.state : null;
+      var modules = state && Array.isArray(state.caseGenModules) ? state.caseGenModules : [];
+      var module = modules.find(function(item) {
+        return item && String(item.title || '') === '尾部容错模块';
+      });
+      var rawCases = module && state && state.caseGenResults
+        ? String(state.caseGenResults[module.id] || '')
+        : '';
+      var cases = [];
+      try {
+        cases = rawCases ? JSON.parse(rawCases) : [];
+      } catch (err) {
+        cases = [];
+      }
+      return {
+        caseCount: Array.isArray(cases) ? cases.length : 0,
+        repair: window.app && window.app.__xmindCasegenDebug && window.app.__xmindCasegenDebug.lastModelOutputRepair
+          ? window.app.__xmindCasegenDebug.lastModelOutputRepair
+          : null,
+      };
+    });
+    expect(result.caseCount).toBeGreaterThan(0);
+    expect(result.repair).toBeTruthy();
+    expect(result.repair.parseMode).toBe('balanced-trailing-extra');
+    expect(result.repair.trailingExtraPreview).toBe(']}');
   });
 
   test('生成记录会把空模块数组显示为当前没有需要补充的新模块', async ({ page }) => {
@@ -9013,6 +9472,7 @@ test.describe('XMind 用例生成抽屉', () => {
         return false;
       }
     }, {}, { timeout: 10000 });
+    await expect(page.locator('#xmindCaseGenStatus')).toHaveText('');
 
     await page.reload();
     await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
@@ -9925,6 +10385,7 @@ test.describe('XMind 用例生成抽屉', () => {
     ]);
     await clickContextMenuAction(page, '重新生成全量用例');
     await waitForNodeStatus(page, '登录模块', '生成中');
+    await expect(page.locator('#xmindCaseGenStatus')).toHaveText('');
     await waitForNodeTextAbsent(page, '登录模块-完整-1');
     await waitForNodeText(page, '登录模块-完整-1');
     await waitForNodeStatusAbsent(page, '登录模块');
@@ -10879,8 +11340,8 @@ test.describe('XMind 用例生成抽屉', () => {
     const user = { id: 301, username: 'demo_user_background_refresh', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
     const workflowUrl = await gotoCasesgenWorkflow(page);
-    const routeCtl = await installXmindProxyRoute(page, {
-      delaysMs: [1500, 80],
+    const routeCtl = await installPersistentModelTaskRoute(page, {
+      completeAfterMs: 1500,
       responseText: JSON.stringify({
         modules: [{
           module: '登录模块',
@@ -10914,13 +11375,21 @@ test.describe('XMind 用例生成抽屉', () => {
     await openXmindCaseGenDrawer(page);
     await openRootContextMenu(page);
     await clickContextMenuAction(page, '生成全量用例');
-    await expect.poll(() => routeCtl.getCallCount()).toBeGreaterThanOrEqual(1);
+    await expect.poll(() => routeCtl.getCreateCalls().length).toBeGreaterThanOrEqual(1);
     await expect(page.locator('#xmindCaseGenInterruptBtn')).toBeEnabled();
+    const firstBackendCall = routeCtl.getCreateCalls()[0];
+    const firstBackendTask = routeCtl.getTasks()[0];
+    expect(firstBackendCall.requestKey).toBeTruthy();
+    expect(firstBackendTask.id).toBeTruthy();
 
     await page.reload();
     await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 20000 });
     await waitXmindModelAssigned(page, mockInfo.modelId);
-    await expect.poll(() => routeCtl.getCallCount()).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => routeCtl.getCreateCalls().filter((item) => item.requestKey === firstBackendCall.requestKey).length).toBeGreaterThanOrEqual(2);
+    const resumedBackendCalls = routeCtl.getCreateCalls().filter((item) => item.requestKey === firstBackendCall.requestKey);
+    expect(resumedBackendCalls.every((item) => item.existingTaskId === '' || item.existingTaskId === firstBackendTask.id)).toBe(true);
+    expect(routeCtl.getCancelCalls()).toHaveLength(0);
+    expect(routeCtl.getProxyCallCount()).toBe(0);
     await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
     await waitForNodeText(page, 'XMind后台恢复需求');
     await waitForNodeText(page, '登录模块');
@@ -11459,6 +11928,97 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenInterruptBtn')).toBeDisabled();
   });
 
+  test('切换到其他页面后仍会消费已完成子任务并推进后续生成', async ({ page }) => {
+    const token = 'token-xmind-background-cross-page-pipeline';
+    const user = { id: 309, username: 'demo_user_background_cross_page_pipeline', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user);
+    const responseText = JSON.stringify({
+      modules: [{
+        module: '跨页支付模块',
+        key_scenarios: ['支付主流程'],
+        test_points: ['支付成功'],
+        coupled_modules: [],
+        cases: [{
+          module: '跨页支付模块',
+          title: '跨页后台支付成功',
+          priority: 'P1',
+          preconditions: '订单已创建',
+          steps: ['1、进入支付页', '2、完成支付'],
+          expected: '支付成功',
+        }],
+      }],
+    });
+    const routeCtl = await installPersistentModelTaskRoute(page, {
+      completeAfterMs: 900,
+      responseTexts: [responseText, responseText],
+    });
+
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await seedDocumentRequirement(page, {
+      text: '需求：离开 XMind 页面后，完整生成流水线仍应继续推进。',
+      requirementLabel: 'XMind跨页流水线需求',
+    });
+    await seedPrepState(page, {
+      step: 3,
+      requirementMode: 'document',
+      caseImportMode: 'skip',
+      completed: true,
+    });
+
+    await openXmindCaseGenDrawer(page);
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(() => routeCtl.getCreateCalls().length).toBeGreaterThanOrEqual(1);
+    const firstRequestKey = routeCtl.getCreateCalls()[0].requestKey;
+
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('tempexec');
+      }
+    });
+    await expect(page.locator('[data-tab-btn="tempexec"]')).toHaveClass(/active/);
+    await expect.poll(() => page.evaluate(() => {
+      return Boolean(window.app && window.app.xmindCasegenApi);
+    })).toBe(true);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect.poll(() => page.evaluate(() => {
+      return Boolean(window.app && window.app._inited === true && window.app.xmindCasegenApi);
+    }), { timeout: 15000 }).toBe(true);
+    await expect.poll(() => {
+      const uniqueKeys = new Set(routeCtl.getCreateCalls().map((item) => item.requestKey));
+      return uniqueKeys.size;
+    }, { timeout: 15000 }).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => routeCtl.getTasks().filter((task) => task.status === 'succeeded').length, {
+      timeout: 15000,
+    }).toBeGreaterThanOrEqual(2);
+    await expect.poll(() => page.evaluate(() => {
+      try {
+        var raw = localStorage.getItem('tap-xmind-casegen-tasks') || '';
+        return raw ? JSON.parse(raw).length : 0;
+      } catch (err) {
+        return -1;
+      }
+    }), { timeout: 15000 }).toBe(0);
+
+    const backendState = routeCtl.getTasks();
+    expect(backendState).toHaveLength(3);
+    expect(routeCtl.getCreateCalls().filter((item) => item.requestKey === firstRequestKey)
+      .every((item) => !item.existingTaskId || item.existingTaskId === backendState[0].id)).toBe(true);
+
+    await page.evaluate(() => {
+      if (window.app && typeof window.app.switchTab === 'function') {
+        window.app.switchTab('casesgen');
+      }
+    });
+    await expect(page.locator('[data-tab-btn="casesgen"]')).toHaveClass(/active/);
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'XMind跨页流水线需求');
+    await waitForNodeText(page, '跨页支付模块');
+    await waitForNodeText(page, '跨页后台支付成功');
+    await expect(page.locator('#xmindCaseGenInterruptBtn')).toBeDisabled();
+  });
+
   test('关闭 XMind 抽屉后，后台完成会同步首页进度摘要', async ({ page }) => {
     const token = 'token-xmind-progress-board-after-close';
     const user = { id: 307, username: 'demo_user_progress_board_after_close', role: 'user', level: 'member' };
@@ -11743,7 +12303,8 @@ test.describe('XMind 用例生成抽屉', () => {
         && summary['后台摘要-A'].caseCount === 4
         && summary['后台摘要-A'].statusText === '未入库'
         && summary['后台摘要-B'].moduleCount === 2
-        && summary['后台摘要-B'].statusText === '生成中'
+        && summary['后台摘要-B'].statusText !== '未入库'
+        && summary['后台摘要-B'].statusText !== '失败'
       );
     }, {}, { timeout: 20000 });
     const taskStateAfterACompleted = await page.evaluate(() => {
@@ -11906,7 +12467,7 @@ test.describe('XMind 用例生成抽屉', () => {
         }
       }
 
-      return (Array.isArray(host.workspaceOrder) ? host.workspaceOrder : []).map(function(id) {
+      var result = (Array.isArray(host.workspaceOrder) ? host.workspaceOrder : []).map(function(id) {
         var record = host.workspaces[id];
         var snapshot = record && record.snapshot ? record.snapshot : {};
         var shared = snapshot && snapshot.shared ? snapshot.shared : {};
@@ -11922,6 +12483,7 @@ test.describe('XMind 用例生成抽屉', () => {
           }, []),
         };
       });
+      return result;
     });
     expect(workspaceSummary).toEqual([
       {
@@ -12088,17 +12650,21 @@ test.describe('XMind 用例生成抽屉', () => {
     await clickContextMenuAction(page, '生成全量用例');
 
     await page.waitForFunction(() => {
-      return Array.isArray(window.__xmindCoverageRetryCalls) && window.__xmindCoverageRetryCalls.length === 2;
+      var calls = Array.isArray(window.__xmindCoverageRetryCalls) ? window.__xmindCoverageRetryCalls : [];
+      return calls.filter(function(item) {
+        return String(item && item.user ? item.user : '').indexOf('"scope": "root"') !== -1;
+      }).length === 2;
     }, {}, { timeout: 15000 });
     await waitForNodeText(page, '功能解锁与可用条件');
     await waitForNodeText(page, '奖励次数与积分数值验证');
     await waitForNodeTextAbsent(page, '功能入口与基础流程');
 
     const retryCalls = await page.evaluate(() => window.__xmindCoverageRetryCalls || []);
-    expect(retryCalls).toHaveLength(2);
-    expect(String(retryCalls[1].user || '')).toContain('【首轮生成补强指令】');
-    expect(String(retryCalls[1].user || '')).toContain('功能使用条件');
-    expect(String(retryCalls[1].user || '')).toContain('数值验证');
+    const rootRetryCalls = retryCalls.filter((item) => String(item && item.user ? item.user : '').includes('"scope": "root"'));
+    expect(rootRetryCalls).toHaveLength(2);
+    expect(String(rootRetryCalls[1].user || '')).toContain('【首轮生成补强指令】');
+    expect(String(rootRetryCalls[1].user || '')).toContain('功能使用条件');
+    expect(String(rootRetryCalls[1].user || '')).toContain('数值验证');
 
     await clickElementById(page, 'xmindCaseGenHistoryBtn');
     const latestCard = page.locator('.xmind-casegen-history-card').nth(0);
@@ -12111,8 +12677,8 @@ test.describe('XMind 用例生成抽屉', () => {
     const token = 'token-xmind-background-cancel';
     const user = { id: 303, username: 'demo_user_background_cancel', role: 'user', level: 'member' };
     const mockInfo = await mockCaseGenApisWithModel(page, token, user);
-    const routeCtl = await installXmindProxyRoute(page, {
-      delayMs: 1500,
+    const routeCtl = await installPersistentModelTaskRoute(page, {
+      completeAfterMs: 1500,
       responseText: JSON.stringify({
         modules: [{
           module: '支付模块',
@@ -12147,11 +12713,14 @@ test.describe('XMind 用例生成抽屉', () => {
     await openXmindCaseGenDrawer(page);
     await openRootContextMenu(page);
     await clickContextMenuAction(page, '生成全量用例');
-    await expect.poll(() => routeCtl.getCallCount()).toBeGreaterThanOrEqual(1);
+    await expect.poll(() => routeCtl.getCreateCalls().length).toBeGreaterThanOrEqual(1);
     await expect(page.locator('#xmindCaseGenInterruptBtn')).toBeEnabled();
     await clickElementById(page, 'xmindCaseGenInterruptBtn');
     await expect(page.locator('.temp-center-toast').last()).toContainText('已中断 1 个生成任务');
     await expect(page.locator('#xmindCaseGenInterruptBtn')).toBeDisabled();
+    await expect.poll(() => routeCtl.getCancelCalls().length).toBeGreaterThanOrEqual(1);
+    expect(routeCtl.getTasks().some((task) => task.status === 'cancelled')).toBe(true);
+    expect(routeCtl.getProxyCallCount()).toBe(0);
     await page.waitForTimeout(1700);
     await waitForNodeTextAbsent(page, '支付模块');
 
@@ -12519,10 +13088,21 @@ test.describe('XMind 用例生成抽屉', () => {
         var userText = messages[1] && messages[1].content ? String(messages[1].content || '') : '';
         var taskKey = userText.indexOf('always-fail') !== -1
           ? 'always-fail'
-          : (userText.indexOf('gateway-520') !== -1 ? 'gateway-520' : 'eventual-success');
+          : (userText.indexOf('gateway-520') !== -1
+            ? 'gateway-520'
+            : (userText.indexOf('cloudfront-504') !== -1 ? 'cloudfront-504' : 'eventual-success'));
         window.__xmindRetryAttempts[taskKey] = Number(window.__xmindRetryAttempts[taskKey] || 0) + 1;
         var attempt = window.__xmindRetryAttempts[taskKey];
         var shouldFail = taskKey === 'always-fail' || attempt <= 2;
+        if (taskKey === 'cloudfront-504') {
+          return Promise.resolve({
+            ok: false,
+            status: 504,
+            text: function() {
+              return Promise.resolve('<!DOCTYPE html><html><head><title>ERROR</title></head><body>Generated by cloudfront</body></html>');
+            },
+          });
+        }
         if (taskKey === 'gateway-520' && shouldFail) {
           return Promise.resolve({
             ok: false,
@@ -12576,6 +13156,7 @@ test.describe('XMind 用例生成抽屉', () => {
         success: start('retry-test-success', 'eventual-success'),
         gateway: start('retry-test-gateway', 'gateway-520'),
         failure: start('retry-test-failure', 'always-fail'),
+        cloudfront: start('retry-test-cloudfront', 'cloudfront-504'),
       };
     });
 
@@ -12590,7 +13171,10 @@ test.describe('XMind 用例生成抽屉', () => {
       var failureDone = events.some(function(item) {
         return item.id === ids.failure && item.action === 'error' && item.status === 'error';
       });
-      return successDone && gatewayDone && failureDone;
+      var cloudfrontDone = events.some(function(item) {
+        return item.id === ids.cloudfront && item.action === 'error' && item.status === 'error';
+      });
+      return successDone && gatewayDone && failureDone && cloudfrontDone;
     }, taskIds, { timeout: 15000 });
 
     const retryResult = await page.evaluate((ids) => {
@@ -12609,17 +13193,21 @@ test.describe('XMind 用例生成抽屉', () => {
         successRunning: runningIds.indexOf(ids.success) !== -1,
         gatewayRunning: runningIds.indexOf(ids.gateway) !== -1,
         failureRunning: runningIds.indexOf(ids.failure) !== -1,
+        cloudfrontRunning: runningIds.indexOf(ids.cloudfront) !== -1,
       };
     }, taskIds);
 
     expect(retryResult.attempts['eventual-success']).toBe(3);
     expect(retryResult.attempts['gateway-520']).toBe(3);
     expect(retryResult.attempts['always-fail']).toBe(3);
+    expect(retryResult.attempts['cloudfront-504']).toBe(1);
     expect(retryResult.events.filter((item) => item.id === taskIds.success && item.action === 'retry')).toHaveLength(2);
     expect(retryResult.events.filter((item) => item.id === taskIds.gateway && item.action === 'retry')).toHaveLength(2);
     expect(retryResult.events.filter((item) => item.id === taskIds.failure && item.action === 'retry')).toHaveLength(2);
+    expect(retryResult.events.filter((item) => item.id === taskIds.cloudfront && item.action === 'retry')).toHaveLength(0);
     expect(retryResult.successRunning).toBe(false);
     expect(retryResult.gatewayRunning).toBe(false);
     expect(retryResult.failureRunning).toBe(false);
+    expect(retryResult.cloudfrontRunning).toBe(false);
   });
 });

@@ -433,10 +433,11 @@
       const versions = Array.isArray(p.versions) ? p.versions : [];
       const versionTags = versions.length
         ? versions.map(function(v) {
+            var versionName = window.app.utils.escapeHtml(v.name || '');
             var delBtn = canManageVersions
-              ? '<button class="ghost-btn slim" data-action="delete-version" data-project-id="' + p.id + '" data-version-id="' + v.id + '">删除</button>'
+              ? '<button type="button" class="ghost-btn slim version-delete-btn" data-action="delete-version" data-project-id="' + p.id + '" data-version-id="' + v.id + '" title="删除版本 ' + versionName + '" aria-label="删除版本 ' + versionName + '"><span aria-hidden="true">×</span></button>'
               : '';
-            return '<span class="version-chip"><span class="tag muted">' + v.name + '</span>' + delBtn + '</span>';
+            return '<span class="version-chip"><span class="version-name" title="' + versionName + '">' + versionName + '</span>' + delBtn + '</span>';
           }).join(' ')
         : '<span class="hint version-empty">暂无版本</span>';
       var actions = '<div class="actions">';
@@ -450,11 +451,13 @@
         actions += '<button class="danger ghost-btn" data-action="delete-project" data-id="' + p.id + '">删除</button>';
       }
       actions += '</div>';
+      var projectName = window.app.utils.escapeHtml(p.name || '');
+      var projectDescription = window.app.utils.escapeHtml(p.description || '—');
       return (
         '<tr data-project-id="' + p.id + '">' +
-        '<td class="project-name"><span class="project-name-text">' + (p.name || '') + '</span></td>' +
-        '<td class="project-desc"><span class="project-desc-text">' + (p.description || '—') + '</span></td>' +
-        '<td class="project-versions"><div class="version-list">' + versionTags + '</div></td>' +
+        '<td class="project-name"><span class="project-name-text" title="' + projectName + '">' + projectName + '</span></td>' +
+        '<td class="project-desc"><span class="project-desc-text" title="' + projectDescription + '">' + projectDescription + '</span></td>' +
+        '<td class="project-versions"><div class="version-list"' + (versions.length ? ' tabindex="0" role="group" aria-label="项目版本"' : '') + '>' + versionTags + '</div></td>' +
         '<td class="project-created"><span class="project-created-text">' + formatTime(p.created_at) + '</span></td>' +
         '<td>' + actions + '</td>' +
         '</tr>'

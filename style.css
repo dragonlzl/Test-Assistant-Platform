@@ -2529,18 +2529,25 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 }
 .temp-undo-toast {
   position: fixed;
-  right: 20px;
-  bottom: 24px;
+  left: 50%;
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  transform: translate(-50%, -50%);
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
+  flex-wrap: wrap;
   padding: 10px 14px;
   background: #0f172a;
   color: #f8fafc;
   border-radius: 12px;
   box-shadow: 0 16px 30px rgba(15,23,42,0.28);
-  z-index: 120;
+  z-index: 20000;
   font-size: 13px;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
 }
 .temp-undo-toast .pill.secondary {
   border-color: rgba(248,250,252,0.5);
@@ -5128,6 +5135,13 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
   height: 28px;
   line-height: 26px;
 }
+.xmind-casegen-reasoning-label {
+  margin-left: 6px;
+}
+.xmind-casegen-reasoning-select {
+  min-width: 96px;
+  max-width: 140px;
+}
 .xmind-casegen-canvas-shell {
   position: relative;
   padding: 10px;
@@ -6822,14 +6836,6 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
       line-height: 1.3;
       vertical-align: middle;
     }
-.token-hint {
-  margin-left: 6px;
-  color: #b91c1c;
-  font-weight: 700;
-  cursor: pointer;
-  text-decoration: underline;
-  text-decoration-style: dashed;
-}
 .drawer {
   position: fixed;
   inset: 0;
@@ -7674,29 +7680,79 @@ tr.import-invalid-locate-active td {
   margin: 0;
 }
 .project-versions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  justify-content: center;
-  align-items: flex-start;
-  min-height: 64px;
+  vertical-align: middle;
 }
 .version-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  min-height: 40px;
+  align-content: flex-start;
+  min-height: 28px;
+  max-height: 104px;
+  padding: 2px 0;
   width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.version-list:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.version-list::-webkit-scrollbar {
+  width: 6px;
+}
+.version-list::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--border);
+}
+.version-list::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }
 .version-chip {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
+  gap: 4px;
+  height: 28px;
+  max-width: 100%;
+  padding: 0 4px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   background: #f9fafb;
+  color: var(--text);
+}
+.version-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 20px;
+}
+#projectAdmin .version-chip .version-delete-btn {
+  display: inline-flex;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  box-shadow: none;
+  font-size: 18px;
+  line-height: 1;
+  transform: none;
+}
+#projectAdmin .version-chip .version-delete-btn:hover,
+#projectAdmin .version-chip .version-delete-btn:focus-visible {
+  color: var(--error);
+  background: rgba(239,68,68,0.1);
+  transform: none;
 }
 .version-add-btn {
   align-self: flex-start;
@@ -7706,8 +7762,8 @@ tr.import-invalid-locate-active td {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
-  padding: 6px 10px;
+  min-height: 24px;
+  padding: 0;
   line-height: 20px;
   margin: 0;
 }
@@ -7754,6 +7810,7 @@ tr.import-invalid-locate-active td {
 }
 #projectAdmin .admin-table {
   table-layout: fixed;
+  min-width: 1100px;
 }
 
 .admin-table th,
@@ -7786,8 +7843,9 @@ tr.import-invalid-locate-active td {
   flex-wrap: nowrap;
   gap: 8px;
   align-items: center;
-  height: 40px;
-  min-height: 40px;
+  height: 32px;
+  min-height: 32px;
+  margin: 0;
 }
 #projectAdmin .admin-table .actions button {
   height: 32px;
@@ -7805,32 +7863,18 @@ tr.import-invalid-locate-active td {
 #projectAdmin .project-name-text,
 #projectAdmin .project-desc-text,
 #projectAdmin .project-created-text {
-  display: inline-block;
+  display: block;
+  max-width: 100%;
   white-space: nowrap;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
   vertical-align: middle;
 }
-#projectAdmin .admin-table td.project-name {
-  width: 90px;
-  min-width: 90px;
-}
-#projectAdmin .admin-table td.project-desc {
-  width: 260px;
-  min-width: 260px;
-}
-#projectAdmin .admin-table td.project-created {
-  width: 200px;
-  min-width: 200px;
-}
-#projectAdmin .admin-table td.project-versions {
-  width: 360px;
-  min-width: 360px;
-}
-#projectAdmin .admin-table th:nth-child(1) { width: 90px; }
-#projectAdmin .admin-table th:nth-child(2) { width: 260px; }
-#projectAdmin .admin-table th:nth-child(3) { width: 360px; }
-#projectAdmin .admin-table th:nth-child(4) { width: 200px; }
+/* 固定末尾辅助列，将宽屏空间留给项目信息与版本列表。 */
+#projectAdmin .admin-table th:nth-child(1) { width: 18%; }
+#projectAdmin .admin-table th:nth-child(2) { width: 20%; }
+#projectAdmin .admin-table th:nth-child(4) { width: 180px; }
+#projectAdmin .admin-table th:nth-child(5) { width: 252px; }
 #projectAdmin .admin-table td.project-versions {
   border-bottom: 0;
 }
@@ -9998,6 +10042,34 @@ tr.import-invalid-locate-active td {
       border: 1px solid var(--border);
       padding: 4px 6px;
     }
+    body[data-page="case-library"] .temp-pagination,
+    body[data-page="case-exec"] .temp-pagination {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    }
+    body[data-page="case-library"] .temp-pagination-info,
+    body[data-page="case-exec"] .temp-pagination-info {
+      grid-column: 1;
+      min-width: 0;
+    }
+    body[data-page="case-library"] .temp-pagination-controls,
+    body[data-page="case-exec"] .temp-pagination-controls {
+      grid-column: 2;
+      justify-self: center;
+    }
+    @media (max-width: 640px) {
+      body[data-page="case-library"] .temp-pagination,
+      body[data-page="case-exec"] .temp-pagination {
+        grid-template-columns: 1fr;
+      }
+      body[data-page="case-library"] .temp-pagination-info,
+      body[data-page="case-exec"] .temp-pagination-info,
+      body[data-page="case-library"] .temp-pagination-controls,
+      body[data-page="case-exec"] .temp-pagination-controls {
+        grid-column: 1;
+        justify-self: center;
+      }
+    }
     .reuse-add {
       border: 1px dashed var(--primary);
       background: rgba(37,99,235,0.08);
@@ -11952,6 +12024,24 @@ tr.import-invalid-locate-active td {
 .case-library-ai-gen-section h4 {
   margin: 0 0 8px;
   font-size: 14px;
+}
+
+.case-library-ai-gen-status-row {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.case-library-ai-gen-status-row .status {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.case-library-ai-gen-status-row button {
+  flex: 0 0 auto;
 }
 
 .case-library-ai-gen-toolbar {
@@ -15714,4 +15804,58 @@ button.exec-overview-file-chip,
   border-color: rgba(251,146,60,0.34);
   background: rgba(124,45,18,0.32);
   color: #fed7aa;
+}
+
+.model-available-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 34px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.model-available-list .hint {
+  margin: 0;
+}
+.model-id-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.model-id-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--primary-weak);
+  color: var(--primary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.model-id-chip em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 11px;
+}
+.model-id-chip .model-id-chip-remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: none;
+}
+.model-id-chip .model-id-chip-remove:hover {
+  transform: none;
+  box-shadow: none;
+  color: var(--error);
+}
+:root[data-theme="dark"] .model-available-list {
+  background: var(--panel-strong, #202b3d);
 }

@@ -1,0 +1,187 @@
+- generic [ref=f2e2]:
+  - complementary [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - text: 当前用户
+      - strong [ref=f2e5]: 未登录
+      - button "用户菜单" [ref=f2e6]: 个人
+      - button "登出" [ref=f2e8]
+    - heading "用例助手" [level=1] [ref=f2e10]
+    - navigation [ref=f2e11]:
+      - generic [ref=f2e12]:
+        - button "AI 功能" [ref=f2e13]
+        - generic [ref=f2e14]:
+          - button "XMind 用例生成" [ref=f2e15]
+          - button "功能指派" [ref=f2e16]
+          - button "模型管理" [ref=f2e17]
+      - generic [ref=f2e18]:
+        - button "用例相关" [ref=f2e19]
+        - generic [ref=f2e20]:
+          - button "用例执行" [ref=f2e21]
+          - button "用例库" [ref=f2e22]
+          - button "用例归档" [ref=f2e23]
+          - button "执行总览" [ref=f2e24]
+      - generic [ref=f2e25]:
+        - button "管理" [ref=f2e26]
+        - generic [ref=f2e27]:
+          - button "项目管理" [ref=f2e28]
+          - button "人员管理" [ref=f2e29]
+          - button "操作记录" [ref=f2e30]
+      - generic [ref=f2e31]:
+        - button "设置" [ref=f2e32]
+        - button "通用设置" [ref=f2e34]
+    - generic [ref=f2e35]:
+      - button "个人备忘" [ref=f2e37]
+      - generic [ref=f2e40]:
+        - generic [ref=f2e42]:
+          - generic [ref=f2e43]: 个人备忘 0/0
+          - button "收起" [expanded] [ref=f2e44]
+        - button "新增备忘页" [ref=f2e46]: +
+  - main [ref=f2e48]:
+    - generic [ref=f2e50]:
+      - generic [ref=f2e51]:
+        - heading "XMind 用例生成" [level=2] [ref=f2e52]
+        - button "打开 XMind 用例生成" [ref=f2e53]
+      - region [ref=f2e54]:
+        - generic [ref=f2e55]:
+          - generic [ref=f2e56]:
+            - text: 任务概览
+            - heading "生成进度" [level=3] [ref=f2e57]
+          - generic [ref=f2e58]:
+            - strong [ref=f2e59]: 0%
+            - text: 整体进度
+        - generic [ref=f2e60]:
+          - progressbar "XMind 用例生成整体进度"
+          - generic [ref=f2e61]: 暂无生成任务
+        - generic [ref=f2e62]: 暂无生成任务
+    - generic [ref=f2e65]:
+      - generic [ref=f2e66]:
+        - heading "XMind 用例生成" [level=3] [ref=f2e67]
+        - button "收起" [ref=f2e68]
+      - generic [ref=f2e70]:
+        - button "新建 XMind 生成页签" [ref=f2e72]: 新建生成
+        - dialog [ref=f2e74]:
+          - generic [ref=f2e75]:
+            - generic [ref=f2e76]:
+              - strong [ref=f2e77]: 生成前置准备
+              - paragraph [ref=f2e78]: 按 3 步完成前置准备，确认后 step1 和 step2 会在本次生成中锁定。
+            - button [ref=f2e80]: 关闭
+    - generic [ref=f2e82]:
+      - generic [ref=f2e83]:
+        - heading "入库" [level=3] [ref=f2e84]
+        - button "收起" [ref=f2e85]
+      - generic [ref=f2e86]:
+        - paragraph [ref=f2e87]: 选择项目与版本后写入用例库；追加入库需额外选择目标用例。
+        - generic [ref=f2e88]:
+          - text: 用例名
+          - textbox "请输入确认入库的用例名" [ref=f2e89]
+          - text: .xmind
+        - generic [ref=f2e90]:
+          - text: 项目
+          - combobox [ref=f2e91]:
+            - option "请选择项目" [selected]
+          - text: 版本
+          - combobox [disabled] [ref=f2e92]:
+            - option "请选择版本" [selected]
+        - generic [ref=f2e93]:
+          - text: 用例
+          - combobox [disabled] [ref=f2e94]:
+            - option "请选择用例" [selected]
+        - button "确认入库" [disabled] [ref=f2e96]
+        - paragraph
+    - generic [ref=f2e98]:
+      - generic [ref=f2e99]:
+        - heading "同名用例差异对比" [level=3] [ref=f2e100]
+        - button "收起" [ref=f2e101]
+      - generic [ref=f2e102]:
+        - paragraph [ref=f2e103]: 同一列表展示导入与库中差异：绿色表示新增，红色表示差异或将被覆盖/移除。
+        - paragraph
+        - generic:
+          - paragraph
+        - table [ref=f2e105]:
+          - rowgroup [ref=f2e106]:
+            - row [ref=f2e107]:
+              - columnheader "#" [ref=f2e108]
+              - columnheader "模块" [ref=f2e109]
+              - columnheader "用例标题" [ref=f2e110]
+              - columnheader "优先级" [ref=f2e111]
+              - columnheader "前提条件" [ref=f2e112]
+              - columnheader "操作步骤" [ref=f2e113]
+              - columnheader "预期结果" [ref=f2e114]
+          - rowgroup [ref=f2e115]:
+            - row [ref=f2e116]:
+              - cell [ref=f2e117]:
+                - paragraph [ref=f2e118]: 暂无数据
+        - generic [ref=f2e119]:
+          - button "确认覆盖导入" [ref=f2e120]
+          - button "关闭" [ref=f2e121]
+    - generic [ref=f2e123]:
+      - generic [ref=f2e124]:
+        - heading "从用例库中选择" [level=3] [ref=f2e125]
+        - button "收起" [ref=f2e126]
+      - generic [ref=f2e127]:
+        - paragraph [ref=f2e128]: 选择项目与版本后查询，并将所选用例导入当前操作。
+        - generic [ref=f2e129]:
+          - generic [ref=f2e130]:
+            - text: 项目
+            - combobox "项目" [ref=f2e131]
+            - text: 版本
+            - combobox "版本" [disabled] [ref=f2e132]
+            - text: 用例名
+            - textbox "用例名" [ref=f2e133]:
+              - /placeholder: 搜索用例名
+          - generic [ref=f2e134]:
+            - button "查询" [ref=f2e135]
+            - button "批量导入" [disabled] [ref=f2e136]
+        - paragraph
+        - table [ref=f2e138]:
+          - rowgroup [ref=f2e139]:
+            - row [ref=f2e140]:
+              - columnheader [ref=f2e141]:
+                - checkbox "全选/全不选" [ref=f2e142]
+              - columnheader "所属项目" [ref=f2e143]
+              - columnheader "版本" [ref=f2e144]
+              - columnheader "用例名" [ref=f2e145]
+              - columnheader "复用类型" [ref=f2e146]
+              - columnheader "条目数" [ref=f2e147]
+              - columnheader "操作" [ref=f2e148]
+          - rowgroup [ref=f2e149]:
+            - row [ref=f2e150]:
+              - cell [ref=f2e151]:
+                - paragraph [ref=f2e152]: 请选择项目后点击“查询”。
+        - button "关闭" [ref=f2e154]
+    - generic [ref=f2e156]:
+      - generic [ref=f2e157]:
+        - heading "选择执行版本" [level=3] [ref=f2e158]
+        - button "收起" [ref=f2e159]
+      - generic [ref=f2e160]:
+        - paragraph [ref=f2e161]: 导入版本仅用于记录用例库归属；执行版本用于“用例执行”页面的版本分组、归档筛选等展示与统计。
+        - generic [ref=f2e162]:
+          - generic [ref=f2e163]: 项目 --
+          - generic [ref=f2e164]: 导入版本 --
+        - generic [ref=f2e165]:
+          - text: 执行版本
+          - combobox [disabled] [ref=f2e166]:
+            - option "加载中..." [selected]
+        - paragraph
+        - generic [ref=f2e167]:
+          - button "确认并继续" [disabled] [ref=f2e168]
+          - button "取消" [ref=f2e169]
+    - generic [ref=f2e171]:
+      - generic [ref=f2e172]:
+        - heading "确认操作" [level=3] [ref=f2e173]
+        - button "收起" [ref=f2e174]
+      - generic [ref=f2e175]:
+        - paragraph
+        - generic [ref=f2e177]:
+          - text: 输入内容
+          - textbox "输入内容" [ref=f2e178]:
+            - /placeholder: 请输入内容
+          - combobox [ref=f2e179]
+        - paragraph
+        - paragraph
+        - generic [ref=f2e180]:
+          - button "确认" [ref=f2e181]
+          - button "取消" [ref=f2e182]
+    - generic [ref=f2e185]:
+      - heading "XMind 用例结构" [level=3] [ref=f2e186]
+      - button "收起" [ref=f2e187]

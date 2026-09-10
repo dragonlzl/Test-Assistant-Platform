@@ -301,4 +301,124 @@ test.describe('共享工作台壳层', () => {
       expect(geometry.avatar).toBe('50%');
     }
   });
+
+  test('跨页面生成任务显示迷你进度窗并在完成后提示导航红点', async ({ page }) => {
+    await page.goto(base + '/case-library.html?tab=case-library');
+    await waitForShell(page);
+
+    await page.evaluate(() => {
+      localStorage.removeItem('tap-casegen-completion-seen-v1');
+      localStorage.setItem('tap-xmind-casegen-tasks', JSON.stringify([{
+        id: 'workspace-mini-running',
+        status: 'running',
+        pipelineStage: 'modules',
+        pipelineModuleTotal: 4,
+        pipelineModuleDone: 1,
+        updatedAt: Date.now(),
+      }]));
+      window.dispatchEvent(new CustomEvent('xmind-casegen-task'));
+    });
+
+    const mini = page.locator('#workspaceGenerationMini');
+    await expect(mini).toHaveClass(/is-visible/);
+    await expect(mini.locator('.workspace-generation-mini-title')).toHaveText('当前生成任务数量：1');
+    await expect(mini.locator('[data-generation-mini-percent]')).toHaveCount(0);
+    await expect(mini.locator('[data-generation-mini-track]')).toHaveCount(0);
+    await expect(mini.locator('[data-generation-mini-task]')).toHaveCount(1);
+    await expect(mini.locator('[data-generation-mini-task-percent]')).toHaveText('48%');
+
+    await page.evaluate(() => {
+      localStorage.setItem('tap-xmind-casegen-tasks', JSON.stringify([
+        {
+          id: 'workspace-mini-running-1',
+          status: 'running',
+          scope: 'module',
+          workspaceId: 'workspace-tab-1',
+          moduleTitle: '用户登录',
+          pipelineStage: 'modules',
+          pipelineModuleTotal: 4,
+          pipelineModuleDone: 1,
+          restoreContext: { requirementLabel: '用户登录需求' },
+          updatedAt: Date.now(),
+        },
+        {
+          id: 'workspace-mini-running-2',
+          status: 'running',
+          scope: 'module',
+          workspaceId: 'workspace-tab-1',
+          pipelineStage: 'discovery',
+          restoreContext: { requirementLabel: '用户登录需求' },
+          updatedAt: Date.now(),
+        },
+        {
+          id: 'workspace-mini-running-3',
+          status: 'running',
+          scope: 'root',
+          workspaceId: 'workspace-tab-2',
+          pipelineStage: 'discovery',
+          restoreContext: { requirementLabel: '订单支付需求' },
+          updatedAt: Date.now(),
+        },
+      ]));
+      window.dispatchEvent(new CustomEvent('xmind-casegen-task'));
+    });
+    await expect(mini.locator('.workspace-generation-mini-title')).toHaveText('当前生成任务数量：2');
+    await expect(mini.locator('[data-generation-mini-percent]')).toHaveCount(0);
+    await expect(mini.locator('[data-generation-mini-track]')).toHaveCount(0);
+    await expect(mini.locator('[data-generation-mini-task]')).toHaveCount(2);
+    await expect(mini.locator('[data-generation-mini-task-id="workspace-mini-running-1"] .workspace-generation-mini-task-title')).toHaveText('用户登录需求');
+    await expect(mini.locator('[data-generation-mini-task-id="workspace-mini-running-1"] [data-generation-mini-task-percent]')).toHaveText('34%');
+    await expect(mini.locator('[data-generation-mini-task-id="workspace-mini-running-3"] .workspace-generation-mini-task-title')).toHaveText('订单支付需求');
+    await expect(mini.locator('[data-generation-mini-task-id="workspace-mini-running-3"] [data-generation-mini-task-percent]')).toHaveText('20%');
+    await expect(mini.locator('[data-generation-mini-task-id="workspace-mini-running-2"]')).toHaveCount(0);
+
+    await mini.locator('[data-generation-mini-toggle]').click();
+    await expect(mini).toHaveClass(/is-collapsed/);
+    await expect(mini.locator('.workspace-generation-mini-collapsed-label')).toHaveText('生成任务中...');
+    await expect(mini.locator('.workspace-generation-mini-collapsed-label')).toBeVisible();
+    await expect(mini.locator('.workspace-generation-mini-title')).toBeHidden();
+    await expect(mini.locator('[data-generation-mini-percent]')).toBeHidden();
+    await expect.poll(() => mini.locator('.workspace-generation-mini-body').evaluate((element) => getComputedStyle(element).display))
+      .toBe('none');
+    await mini.locator('[data-generation-mini-toggle]').click();
+    await expect(mini).not.toHaveClass(/is-collapsed/);
+    await expect.poll(() => mini.locator('.workspace-generation-mini-body').evaluate((element) => getComputedStyle(element).display))
+      .toBe('block');
+
+    await Promise.all([
+      page.waitForURL(/ai-workflow\.html\?tab=casesgen/, { timeout: 20000 }),
+      mini.locator('[data-generation-mini-main]').click(),
+    ]);
+    await waitForShell(page);
+    await expect(page.locator('#workspaceGenerationMini')).not.toHaveClass(/is-visible/);
+
+    await page.goto(base + '/case-library.html?tab=case-library');
+    await waitForShell(page);
+    await page.evaluate(() => {
+      localStorage.removeItem('tap-casegen-completion-seen-v1');
+      localStorage.setItem('tap-xmind-casegen-tasks', JSON.stringify([{
+        id: 'workspace-mini-done',
+        status: 'done',
+        endedAt: Date.now(),
+        updatedAt: Date.now(),
+      }]));
+      window.dispatchEvent(new CustomEvent('xmind-casegen-task'));
+    });
+
+    const generationNav = page.locator('[data-tab-btn="casesgen"]');
+    await expect(generationNav).toHaveClass(/has-generation-notice/);
+    await expect.poll(() => generationNav.evaluate((button) => getComputedStyle(button, '::after').width))
+      .toBe('7px');
+    await generationNav.click();
+    await page.waitForFunction(() => {
+      return /ai-workflow\.html$/.test(window.location.pathname)
+        && new URLSearchParams(window.location.search).get('tab') === 'casesgen';
+    }, null, { timeout: 20000 });
+    await waitForShell(page);
+    await expect(page.locator('[data-tab-btn="casesgen"]')).not.toHaveClass(/has-generation-notice/);
+    await page.evaluate(() => {
+      localStorage.removeItem('tap-xmind-casegen-tasks');
+      localStorage.removeItem('tap-casegen-completion-seen-v1');
+    });
+  });
 });

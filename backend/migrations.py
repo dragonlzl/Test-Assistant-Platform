@@ -1022,3 +1022,75 @@ def apply_migrations(engine: Engine) -> None:
                         )
                     )
             mark_applied(25)
+
+        # v26: 模型生成迁移为按用户隔离、可恢复和可取消的后端异步任务。
+        if not _is_applied(conn, 26):
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS model_tasks (
+                      id VARCHAR(64) PRIMARY KEY,
+                      user_id INTEGER NOT NULL,
+                      model_config_id INTEGER,
+                      scene VARCHAR(64) NOT NULL DEFAULT 'generation',
+                      owner_key VARCHAR(255) NOT NULL,
+                      idempotency_key VARCHAR(255) NOT NULL,
+                      status VARCHAR(32) NOT NULL DEFAULT 'queued',
+                      request_json JSON NOT NULL DEFAULT '{}',
+                      timeout_sec INTEGER NOT NULL DEFAULT 60,
+                      upstream_status INTEGER,
+                      response_content_type VARCHAR(255),
+                      response_body TEXT,
+                      error TEXT,
+                      attempt_count INTEGER NOT NULL DEFAULT 0,
+                      worker_id VARCHAR(128),
+                      cancel_requested_at DATETIME,
+                      started_at DATETIME,
+                      completed_at DATETIME,
+                      created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                      updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+                      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+                      FOREIGN KEY(model_config_id) REFERENCES model_configs(id) ON DELETE SET NULL,
+                      CONSTRAINT uq_model_task_user_idempotency UNIQUE (user_id, idempotency_key)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_model_tasks_user_status "
+                    "ON model_tasks(user_id, status)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_model_tasks_owner_status "
+                    "ON model_tasks(owner_key, status)"
+                )
+            )
+            mark_applied(26)
+
+        # v27: 保存上游响应状态、截断原因和 token 用量，便于区分输出截断与 JSON 格式错误。
+        if not _is_applied(conn, 27):
+            if "model_tasks" in tables:
+                cols = set([c["name"] for c in insp.get_columns("model_tasks")])
+                if "response_status" not in cols:
+                    conn.execute(text("ALTER TABLE model_tasks ADD COLUMN response_status VARCHAR(64)"))
+                if "finish_reason" not in cols:
+                    conn.execute(text("ALTER TABLE model_tasks ADD COLUMN finish_reason VARCHAR(128)"))
+                if "incomplete_details" not in cols:
+                    conn.execute(text("ALTER TABLE model_tasks ADD COLUMN incomplete_details JSON"))
+                if "usage_json" not in cols:
+                    conn.execute(text("ALTER TABLE model_tasks ADD COLUMN usage_json JSON"))
+            mark_applied(27)
+
+        if not _is_applied(conn, 28):
+            if "model_tasks" in tables:
+                cols = set([c["name"] for c in insp.get_columns("model_tasks")])
+                if "configured_model" not in cols:
+                    conn.execute(text("ALTER TABLE model_tasks ADD COLUMN configured_model VARCHAR(128)"))
+                if "request_model" not in cols:
+                    conn.execute(text("ALTER TABLE model_tasks ADD COLUMN request_model VARCHAR(128)"))
+                if "request_endpoint" not in cols:
+                    conn.execute(text("ALTER TABLE model_tasks ADD COLUMN request_endpoint TEXT"))
+            mark_applied(28)

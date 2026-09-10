@@ -1,0 +1,204 @@
+- generic [ref=f3e2]:
+  - complementary:
+    - generic:
+      - generic: 当前用户
+      - strong: diagnostic
+      - generic: 管理员
+      - button "用户菜单": 个人
+      - generic:
+        - button "登出"
+    - generic:
+      - heading "用例助手" [level=1]
+      - generic:
+        - button "? 页面说明":
+          - generic: "?"
+          - generic: 页面说明
+        - button "G 功能引导":
+          - generic: G
+          - generic: 功能引导
+    - generic:
+      - generic: 页面路径
+      - generic:
+        - button "AI 功能"
+        - button "用例生成"
+    - navigation:
+      - generic:
+        - button "AI 功能 需先配置模型/指派":
+          - generic: AI 功能
+          - generic: 需先配置模型/指派
+        - text: ◆ ◆ ◆ ◆ ◆
+      - generic:
+        - button "用例相关"
+        - text: ◆ ◆ ◆ ◆
+      - generic:
+        - button "管理"
+        - text: ◆ ◆ ◆
+      - generic:
+        - button "设置"
+        - text: ◆
+    - button "回到顶部"
+    - button "跳到底部"
+    - generic:
+      - generic:
+        - button "xmind用例生成进度"
+        - button "个人备忘"
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: xmind用例生成进度
+                - button "收起" [expanded]
+              - generic: 点击打开对应 XMind 生成页签
+            - generic:
+              - button "生成1 0 模块 0 用例":
+                - generic:
+                  - generic:
+                    - generic: 生成1
+                    - generic:
+                      - generic [aria-hidden]: 待准备
+                      - generic: 0 模块
+                      - generic: 0 用例
+  - generic [ref=f3e3]:
+    - generic:
+      - generic: 一键执行步骤
+      - generic:
+        - generic:
+          - generic: "1"
+          - generic: 导入
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "2"
+          - generic: 评审
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "3"
+          - generic: 清洗
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "4"
+          - generic: 对比完整性
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "5"
+          - generic: 拆分
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "6"
+          - generic: 用例导入
+          - generic [aria-hidden]: ▶
+        - generic:
+          - generic: "7"
+          - generic: 覆盖对比
+          - generic [aria-hidden]: ▶
+    - main [ref=f3e4]:
+      - generic [ref=f3e5]:
+        - heading "用例生成" [level=2] [ref=f3e6]
+        - generic [ref=f3e7]:
+          - paragraph [ref=f3e8]: 根据测试模块拆分的结果生成结构化测试用例，每个模块可单独调用模型生成 JSON 格式用例。
+          - generic [ref=f3e9]:
+            - tablist "用例生成功能页签" [ref=f3e10]:
+              - button "用例生成设置" [ref=f3e11] [cursor=pointer]
+              - button "一键执行生成模块" [ref=f3e12] [cursor=pointer]
+              - button "xmind生成模块" [ref=f3e13] [cursor=pointer]
+              - button "XMind用例生成" [expanded] [ref=f3e14] [cursor=pointer]
+            - tabpanel "xmind生成模块" [ref=f3e203]:
+              - generic [ref=f3e204]:
+                - generic [ref=f3e205]:
+                  - generic [ref=f3e206]: XMind 模块区
+                  - generic [ref=f3e207]: 仅镜像展示 XMind 页签中的模块与用例结果，生成操作请在 XMind 用例生成页执行
+                - paragraph [ref=f3e210]: 当前还没有 XMind 生成页签，请先点击上方【XMind用例生成】开始生成。
+      - generic [ref=f3e213]:
+        - generic [ref=f3e214]:
+          - heading "XMind 用例生成" [level=3] [ref=f3e215]
+          - button "收起" [ref=f3e216] [cursor=pointer]
+        - generic [ref=f3e218]:
+          - generic [ref=f3e219]:
+            - generic "生成1" [ref=f3e228] [cursor=pointer]:
+              - generic [ref=f3e229]:
+                - generic [ref=f3e230]: 生成1
+                - generic [ref=f3e232]:
+                  - generic [aria-hidden] [ref=f3e233]: 待准备
+                  - generic [ref=f3e235]: 0 模块
+                  - generic [ref=f3e237]: 0 用例
+              - button "×" [ref=f3e238]
+            - button "新建 XMind 生成页签" [active] [ref=f3e220] [cursor=pointer]: 新建生成
+          - generic [ref=f3e222]:
+            - generic [ref=f3e239]:
+              - generic [ref=f3e241]:
+                - button "生成前置准备" [expanded] [ref=f3e242] [cursor=pointer]
+                - generic [ref=f3e243]:
+                  - generic "当前可继续发起生成、补全或删除操作" [ref=f3e244]: 当前没有生成任务
+                  - generic "当前画布展示的模块和用例总数会随生成、补全、删除实时刷新；去重为最近一次 AI 去重移除数量" [ref=f3e247]:
+                    - generic [ref=f3e248]:
+                      - strong [ref=f3e249]: "0"
+                      - generic [ref=f3e250]: 模块
+                    - generic [ref=f3e251]:
+                      - strong [ref=f3e252]: "0"
+                      - generic [ref=f3e253]: 用例
+              - generic [ref=f3e254]:
+                - generic [ref=f3e255]:
+                  - button "生成记录" [ref=f3e257] [cursor=pointer]
+                  - generic [ref=f3e258]:
+                    - button "知识检索：未启用" [ref=f3e259] [cursor=pointer]
+                    - button "AI筛选：未启用" [ref=f3e260] [cursor=pointer]
+                  - generic [ref=f3e261]:
+                    - button "AI用例去重" [disabled] [ref=f3e262]
+                    - button "需求覆盖" [disabled] [ref=f3e263]
+                    - button "保存入库" [ref=f3e264] [cursor=pointer]
+                    - button "导出当前XMind" [ref=f3e265] [cursor=pointer]
+                    - button "导出为Markdown" [ref=f3e266] [cursor=pointer]
+                  - generic [ref=f3e267]:
+                    - button "撤回删除" [disabled] [ref=f3e268]
+                    - button "恢复删除" [disabled] [ref=f3e269]
+                  - generic [ref=f3e270]:
+                    - paragraph [ref=f3e272]
+                    - button "中断生成" [disabled] [ref=f3e273]
+                - generic [ref=f3e274]:
+                  - searchbox "搜索节点内容" [ref=f3e275]
+                  - generic [ref=f3e276]: 0/0
+                  - button "↑" [ref=f3e277] [cursor=pointer]
+                  - button "↓" [ref=f3e278] [cursor=pointer]
+                  - button "清空" [ref=f3e279] [cursor=pointer]
+                - generic [ref=f3e281]:
+                  - button "-" [ref=f3e282] [cursor=pointer]
+                  - button "全览" [ref=f3e283] [cursor=pointer]
+                  - button "+" [ref=f3e284] [cursor=pointer]
+                  - button "全屏" [ref=f3e285] [cursor=pointer]
+                  - generic [ref=f3e286]:
+                    - generic [ref=f3e287]: 模型
+                    - combobox "XMind 用例生成模型" [ref=f3e288]:
+                      - option "Aigo diagnostic" [selected]
+              - button "收起 XMind 生成工具栏" [expanded] [ref=f3e289] [cursor=pointer]: 收起工具栏
+            - generic [ref=f3e290]: 当前需求
+          - dialog [ref=f3e297]:
+            - generic [ref=f3e298]:
+              - generic [ref=f3e299]:
+                - strong [ref=f3e300]: 生成前置准备
+                - paragraph [ref=f3e301]: 按 3 步完成前置准备，确认后 step1 和 step2 会在本次生成中锁定。
+              - button "关闭" [ref=f3e303] [cursor=pointer]
+            - generic [ref=f3e305]:
+              - generic [ref=f3e307]:
+                - generic "需求导入" [ref=f3e308]: step1
+                - generic "是否导入用例" [ref=f3e310]: step2
+                - generic "生成选项" [ref=f3e312]: step3
+              - generic [ref=f3e314]:
+                - generic [ref=f3e315]:
+                  - generic [ref=f3e316]:
+                    - generic [ref=f3e317]: step1
+                    - strong [ref=f3e318]: 需求导入
+                  - generic [ref=f3e319]: 待完成
+                - generic [ref=f3e320]:
+                  - generic [ref=f3e321] [cursor=pointer]:
+                    - radio "导入需求文档 复用现有需求导入链路，可补充说明。" [ref=f3e322]
+                    - generic [ref=f3e323]: 导入需求文档
+                    - generic [ref=f3e324]: 复用现有需求导入链路，可补充说明。
+                  - generic [ref=f3e325] [cursor=pointer]:
+                    - radio "填写需求描述 支持文本和图片。" [ref=f3e326]
+                    - generic [ref=f3e327]: 填写需求描述
+                    - generic [ref=f3e328]: 支持文本和图片。
+              - generic [ref=f3e329]:
+                - button "重置" [ref=f3e331] [cursor=pointer]
+                - button "下一步" [disabled] [ref=f3e334]
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]

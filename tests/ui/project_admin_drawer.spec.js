@@ -128,7 +128,7 @@ test.describe('项目管理列表与抽屉', () => {
     const versionOverflow = await page.$eval('#projectTableBody tr:first-child .version-list', function(el) {
       return window.getComputedStyle(el).overflowY;
     });
-    expect(versionOverflow).toBe('visible');
+    expect(versionOverflow).toBe('auto');
     const actionsHeight = await page.$eval('#projectTableBody tr:first-child .actions', function(el) {
       return el.getBoundingClientRect().height;
     });

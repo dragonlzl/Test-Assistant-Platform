@@ -12,6 +12,7 @@ from .config import BASE_DIR, settings
 from .db import Base, SessionLocal, engine
 from .initial_data import init_db
 from .migrations import apply_migrations
+from .model_task_service import model_task_executor
 
 logger = logging.getLogger("tap")
 
@@ -70,6 +71,12 @@ def _run_startup_tasks() -> None:
 @app.on_event("startup")
 def on_startup() -> None:
     _run_startup_tasks()
+    model_task_executor.recover_incomplete()
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    model_task_executor.shutdown()
 
 
 app.include_router(api_router)

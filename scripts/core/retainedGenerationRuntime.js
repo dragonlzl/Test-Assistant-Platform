@@ -21,16 +21,24 @@
       missingReminder: createManager(factories.missingReminder, {
         utils: ctx.utils || {},
         callModelWithConfig: clients.callModelWithConfig,
+        buildModelTaskRequestOptions: clients.buildModelTaskRequestOptions,
+        abortRequestsByOwner: clients.abortRequestsByOwner,
+        cancelTasksByOwner: clients.cancelTasksByOwner,
       }),
       casePageGeneration: createManager(factories.casePageGeneration, {
         utils: ctx.utils || {},
         callModelWithConfig: clients.callModelWithConfig,
+        buildModelTaskRequestOptions: clients.buildModelTaskRequestOptions,
+        abortRequestsByOwner: clients.abortRequestsByOwner,
+        cancelTasksByOwner: clients.cancelTasksByOwner,
       }),
       xmindGeneration: createManager(factories.xmindGeneration, {
         callModelWithConfig: clients.callModelWithConfig,
         callModelWithContent: clients.callModelWithContent,
         abortRequestsByOwner: clients.abortRequestsByOwner,
+        cancelTasksByOwner: clients.cancelTasksByOwner,
         getTimeoutSec: clients.getTimeoutSec,
+        buildModelTaskRequestOptions: clients.buildModelTaskRequestOptions,
         requestSchedulerCore: ctx.requestSchedulerCore || null,
       }),
     };
@@ -49,6 +57,10 @@
       var manager = managers.missingReminder;
       if (!manager || typeof manager.resumeTasks !== 'function') return;
       if (!shouldResumeMissingReminder()) {
+        if (typeof manager.cancelTask === 'function') {
+          manager.cancelTask('case-library', { reason: '已关闭易漏用例 AI 推荐' });
+          manager.cancelTask('temp-exec', { reason: '已关闭易漏用例 AI 推荐' });
+        }
         if (typeof manager.clearTask === 'function') {
           manager.clearTask('case-library');
           manager.clearTask('temp-exec');
@@ -100,6 +112,10 @@
           getAssignedModel: source.getAssignedModel,
           getReasoningForType: source.getReasoningForType,
           getTemperatureForType: source.getTemperatureForType,
+          resolveSiteModel: source.resolveSiteModel,
+          buildReasoningOptionsHtml: source.buildReasoningOptionsHtml,
+          refreshModels: source.refreshModels,
+          refreshAssignments: source.refreshAssignments,
           taskManager: managers.xmindGeneration,
           saveAssignments: source.saveAssignments,
           renderAssignmentsSelect: source.renderAssignmentsSelect,

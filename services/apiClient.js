@@ -817,6 +817,7 @@
     return fetch(url, {
       method: 'GET',
       headers: buildHeaders(),
+      cache: 'no-store',
     }).then(handleResponse);
   }
 
@@ -849,6 +850,65 @@
       }),
       signal: signal,
     });
+  }
+
+  function proxyModelListing(payload, signal) {
+    var body = payload && typeof payload === 'object' ? payload : {};
+    return fetch('/api/model-proxy/models', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({
+        base_url: body.base_url || body.baseUrl || '',
+        api_key: body.api_key || body.apiKey || '',
+        timeout_sec: body.timeout_sec || body.timeoutSec || 60,
+      }),
+      signal: signal,
+    });
+  }
+
+  function createModelTask(payload) {
+    return fetch('/api/model-tasks', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify(payload || {}),
+    }).then(handleResponse);
+  }
+
+  function getModelTask(taskId) {
+    return fetch('/api/model-tasks/' + encodeURIComponent(String(taskId || '')), {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function listModelTasks(options) {
+    var opts = options && typeof options === 'object' ? options : {};
+    var query = [];
+    if (opts.scene) query.push('scene=' + encodeURIComponent(String(opts.scene)));
+    if (opts.activeOnly === true) query.push('active_only=true');
+    if (opts.limit) query.push('limit=' + encodeURIComponent(String(opts.limit)));
+    var url = '/api/model-tasks';
+    if (query.length) url += '?' + query.join('&');
+    return fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(),
+    }).then(handleResponse);
+  }
+
+  function cancelModelTask(taskId) {
+    return fetch('/api/model-tasks/' + encodeURIComponent(String(taskId || '')) + '/cancel', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({}),
+    }).then(handleResponse);
+  }
+
+  function cancelModelTasksByOwner(ownerKey) {
+    return fetch('/api/model-tasks/cancel-by-owner', {
+      method: 'POST',
+      headers: buildHeaders(),
+      body: JSON.stringify({ owner_key: ownerKey || '' }),
+    }).then(handleResponse);
   }
 
   function validateKnowledgeBase(payload) {
@@ -892,6 +952,7 @@
     return fetch(url, {
       method: 'GET',
       headers: buildHeaders(),
+      cache: 'no-store',
     }).then(handleResponse);
   }
 
@@ -1074,6 +1135,12 @@
     createModelConfig: createModelConfig,
     updateModelConfig: updateModelConfig,
     proxyModelRequest: proxyModelRequest,
+    proxyModelListing: proxyModelListing,
+    createModelTask: createModelTask,
+    getModelTask: getModelTask,
+    listModelTasks: listModelTasks,
+    cancelModelTask: cancelModelTask,
+    cancelModelTasksByOwner: cancelModelTasksByOwner,
     validateKnowledgeBase: validateKnowledgeBase,
     catalogKnowledgeBase: catalogKnowledgeBase,
     getKnowledgeBaseDocuments: getKnowledgeBaseDocuments,

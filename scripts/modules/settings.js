@@ -1591,20 +1591,29 @@
       return null;
     }
 
-    function isModelUsable(model) {
+    function isModelUsable(model, requestedModelId) {
       if (!model || typeof model !== 'object') return false;
       var baseUrl = model.baseUrl ? String(model.baseUrl).trim() : '';
-      var modelId = model.model ? String(model.model).trim() : '';
+      var modelId = requestedModelId === undefined || requestedModelId === null
+        ? (model.model ? String(model.model).trim() : '')
+        : String(requestedModelId).trim();
       var apiKey = model.apiKey ? String(model.apiKey).trim() : '';
-      return Boolean(baseUrl && modelId && apiKey);
+      if (!baseUrl || !modelId || !apiKey) return false;
+      var available = Array.isArray(model.availableModels) ? model.availableModels : [];
+      if (!available.length) return Boolean(model.model && String(model.model).trim() === modelId);
+      return available.some(function(item) {
+        var id = item && typeof item === 'object' ? item.id || item.model : item;
+        return id !== undefined && id !== null && String(id).trim().toLowerCase() === modelId.toLowerCase();
+      });
     }
 
     function canEnableMissingReminderAi() {
       var assignments = state.assignments && typeof state.assignments === 'object' ? state.assignments : {};
       var targetId = assignments.missingReminderId || '';
-      if (!targetId) return false;
+      var targetModelId = assignments.missingReminderModelId || '';
+      if (!targetId || !targetModelId) return false;
       var model = findModelByAnyId(targetId);
-      return isModelUsable(model);
+      return isModelUsable(model, targetModelId);
     }
 
     function saveMissingReminderAiSetting() {

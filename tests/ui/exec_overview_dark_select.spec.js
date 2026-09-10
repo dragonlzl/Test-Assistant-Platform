@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
-  await page.goto(base + '/index.html');
+  await page.goto(base + '/case-exec.html?tab=exec-overview');
 }
 
 async function waitAppReady(page, timeoutMs) {

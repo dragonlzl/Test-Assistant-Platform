@@ -450,6 +450,47 @@ class ModelConfig(Base):
     )
 
 
+class ModelTask(Base):
+    __tablename__ = "model_tasks"
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="uq_model_task_user_idempotency"),
+        Index("ix_model_tasks_user_status", "user_id", "status"),
+        Index("ix_model_tasks_owner_status", "owner_key", "status"),
+    )
+
+    id = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    model_config_id = Column(
+        Integer, ForeignKey("model_configs.id", ondelete="SET NULL"), nullable=True
+    )
+    scene = Column(String(64), nullable=False, default="generation")
+    owner_key = Column(String(255), nullable=False)
+    idempotency_key = Column(String(255), nullable=False)
+    status = Column(String(32), nullable=False, default="queued")
+    request_json = Column(JSON, nullable=False, default=dict)
+    timeout_sec = Column(Integer, nullable=False, default=60)
+    configured_model = Column(String(128), nullable=True)
+    request_model = Column(String(128), nullable=True)
+    request_endpoint = Column(Text, nullable=True)
+    upstream_status = Column(Integer, nullable=True)
+    response_content_type = Column(String(255), nullable=True)
+    response_body = Column(Text, nullable=True)
+    response_status = Column(String(64), nullable=True)
+    finish_reason = Column(String(128), nullable=True)
+    incomplete_details = Column(JSON, nullable=True)
+    usage_json = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    worker_id = Column(String(128), nullable=True)
+    cancel_requested_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class FeatureAssignment(Base):
     __tablename__ = "feature_assignments"
     __table_args__ = (UniqueConstraint("owner_id", "name", name="uq_feature_assignment_name"),)

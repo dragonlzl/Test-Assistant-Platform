@@ -62,6 +62,8 @@
     var getAssignedModel = ctx.getAssignedModel || function() {};
     var getReasoningForType = ctx.getReasoningForType || function() { return ''; };
     var getTemperatureForType = ctx.getTemperatureForType || function() { return 0.2; };
+    var resolveSiteModel = ctx.resolveSiteModel || function() { return null; };
+    var buildReasoningOptionsHtml = ctx.buildReasoningOptionsHtml || function() { return '<option value="">默认</option>'; };
     var retainedGeneration = ctx.retainedGeneration || null;
     var missingReminderAiManager = ctx.missingReminderAiManager || null;
     var caseLibraryAiGenManager = ctx.caseLibraryAiGenManager || null;
@@ -1910,6 +1912,21 @@
     if (xmindKnowledgeBaseApi) {
       window.app.xmindKnowledgeBaseApi = xmindKnowledgeBaseApi;
     }
+    const casePageAiGenPrepApi = window.app.casePageAiGenPrep
+      && typeof window.app.casePageAiGenPrep.init === 'function'
+      ? window.app.casePageAiGenPrep.init({
+        state: state,
+        config: window.app.config,
+        core: core,
+        utils: appUtils,
+        apiClient: window.app.apiClient || null,
+        callModelWithConfig: callModelWithConfig,
+        xmindKnowledgeBaseApi: xmindKnowledgeBaseApi,
+      })
+      : null;
+    if (casePageAiGenPrepApi) {
+      window.app.casePageAiGenPrepApi = casePageAiGenPrepApi;
+    }
 
     const moduleContext = retainedGeneration && typeof retainedGeneration.buildXmindModuleContext === 'function'
       ? retainedGeneration.buildXmindModuleContext({
@@ -1922,6 +1939,10 @@
       getAssignedModel: getAssignedModel,
       getReasoningForType: getReasoningForType,
       getTemperatureForType: getTemperatureForType,
+      resolveSiteModel: resolveSiteModel,
+      buildReasoningOptionsHtml: buildReasoningOptionsHtml,
+      refreshModels: refreshModels,
+      refreshAssignments: refreshAssignments,
       saveAssignments: saveAssignments,
       renderAssignmentsSelect: renderAssignmentsSelect,
       updateAssignmentStatuses: updateAssignmentStatuses,
@@ -1935,14 +1956,32 @@
       mindElixirCoreApi: window.app.mindElixirCoreApi || null,
       casesCoreApi: window.app.casesCoreApi || null,
       xmindKnowledgeBaseApi: xmindKnowledgeBaseApi,
-      casePageAiGenPrepApi: null,
+      casePageAiGenPrepApi: casePageAiGenPrepApi,
     })
       : null;
     if (!moduleContext) {
       throw new Error('保留生成运行时未就绪');
     }
+    function shouldInitializeXmindCasegenModule() {
+      var pageKey = document && document.body && document.body.dataset
+        ? String(document.body.dataset.page || '')
+        : '';
+      if (pageKey === 'ai-workflow') return true;
+      if (typeof localStorage === 'undefined') return false;
+      try {
+        var raw = localStorage.getItem(xmindTaskStorageKey) || '';
+        if (!raw) return false;
+        var tasks = JSON.parse(raw);
+        return Array.isArray(tasks) && tasks.some(function(task) {
+          return Boolean(task && task.id);
+        });
+      } catch (err) {
+        return false;
+      }
+    }
     function ensureXmindCasegenModule() {
       if (xmindCasegenModule) return xmindCasegenModule;
+      if (!shouldInitializeXmindCasegenModule()) return null;
       if (!window.app.xmindCasegen || typeof window.app.xmindCasegen.init !== 'function') {
         return null;
       }

@@ -334,6 +334,19 @@
 <label for="globalAssignModelSelect">统一模型</label>
 <select id="globalAssignModelSelect"></select>
 </div>
+<div class="row">
+<label for="globalAssignReasoning">推理等级</label>
+<select id="globalAssignReasoning">
+<option value="">默认</option>
+<option value="none">None</option>
+<option value="low">Low</option>
+<option value="medium">Medium</option>
+<option value="high">High</option>
+<option value="xhigh">XHigh</option>
+<option value="max">Max</option>
+</select>
+<p class="hint" style="margin:0; flex:1 1 auto;">统一应用到各功能；单个模型不支持的等级会自动回退为默认。</p>
+</div>
 <p class="hint">选择模型后点击“确认”，将当前页面全部功能统一指派并立即保存为该模型。</p>
 <div class="actions assignment-feature-actions">
 <button class="primary" id="applyGlobalAssignBtn" type="button">确认</button>
@@ -354,20 +367,10 @@
 <label for="xmindCaseGenPrompt">提示词</label>
 <textarea class="small-textarea" id="xmindCaseGenPrompt" placeholder="为空则使用默认 XMind 用例生成提示词"></textarea>
 </div>
-<div class="row">
-<label for="xmindCaseGenTemperature">Temperature</label>
-<input id="xmindCaseGenTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
-<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
-</div>
-<div class="row hidden" data-reasoning="xmindcasegen">
-<label for="xmindCaseGenReasoning">Reasoning Effort</label>
-<select id="xmindCaseGenReasoning">
-<option value="">默认</option>
-<option value="low">Low</option>
-<option value="medium">Medium</option>
-<option value="high">High</option>
-</select>
-<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+<div class="row" data-reasoning="xmindcasegen">
+<label for="xmindCaseGenReasoning">推理等级</label>
+<select id="xmindCaseGenReasoning"><option value="">默认</option></select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">按所选模型动态提供可选等级。</p>
 </div>
 <div class="actions assignment-feature-actions">
 <button class="secondary" id="testXmindCaseGenModel">测试连通性</button>
@@ -388,20 +391,10 @@
 <label for="caseFilterPrompt">提示词</label>
 <textarea class="small-textarea" id="caseFilterPrompt" placeholder="为空则使用默认相似度对比提示词"></textarea>
 </div>
-<div class="row">
-<label for="caseFilterTemperature">Temperature</label>
-<input id="caseFilterTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
-<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
-</div>
-<div class="row hidden" data-reasoning="casefilter">
-<label for="caseFilterReasoning">Reasoning Effort</label>
-<select id="caseFilterReasoning">
-<option value="">默认</option>
-<option value="low">Low</option>
-<option value="medium">Medium</option>
-<option value="high">High</option>
-</select>
-<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+<div class="row" data-reasoning="casefilter">
+<label for="caseFilterReasoning">推理等级</label>
+<select id="caseFilterReasoning"><option value="">默认</option></select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">按所选模型动态提供可选等级。</p>
 </div>
 <div class="actions assignment-feature-actions">
 <button class="secondary" id="testCaseFilterModel">测试连通性</button>
@@ -422,20 +415,10 @@
 <label for="missingReminderPrompt">提示词</label>
 <textarea class="small-textarea" id="missingReminderPrompt" placeholder="为空则使用默认易漏用例推荐提示词"></textarea>
 </div>
-<div class="row">
-<label for="missingReminderTemperature">Temperature</label>
-<input id="missingReminderTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
-<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
-</div>
-<div class="row hidden" data-reasoning="missingreminder">
-<label for="missingReminderReasoning">Reasoning Effort</label>
-<select id="missingReminderReasoning">
-<option value="">默认</option>
-<option value="low">Low</option>
-<option value="medium">Medium</option>
-<option value="high">High</option>
-</select>
-<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+<div class="row" data-reasoning="missingreminder">
+<label for="missingReminderReasoning">推理等级</label>
+<select id="missingReminderReasoning"><option value="">默认</option></select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">按所选模型动态提供可选等级。</p>
 </div>
 <div class="actions assignment-feature-actions">
 <button class="secondary" id="testMissingReminderModel">测试连通性</button>
@@ -456,20 +439,10 @@
 <label for="caseLibraryGenPrompt">提示词</label>
 <textarea class="small-textarea" id="caseLibraryGenPrompt" placeholder="为空则使用默认用例库生成提示词"></textarea>
 </div>
-<div class="row">
-<label for="caseLibraryGenTemperature">Temperature</label>
-<input id="caseLibraryGenTemperature" max="1" min="0" step="0.1" style="width:120px;" type="number" placeholder="0.2"/>
-<p class="hint" style="margin:0; flex:1 1 auto;">0~1，默认 0.2</p>
-</div>
-<div class="row hidden" data-reasoning="caselibrarygen">
-<label for="caseLibraryGenReasoning">Reasoning Effort</label>
-<select id="caseLibraryGenReasoning">
-<option value="">默认</option>
-<option value="low">Low</option>
-<option value="medium">Medium</option>
-<option value="high">High</option>
-</select>
-<p class="hint" style="margin:0; flex: 1 1 auto;">仅 DeepSeek-R1 有效，用于控制推理力度。</p>
+<div class="row" data-reasoning="caselibrarygen">
+<label for="caseLibraryGenReasoning">推理等级</label>
+<select id="caseLibraryGenReasoning"><option value="">默认</option></select>
+<p class="hint" style="margin:0; flex: 1 1 auto;">按所选模型动态提供可选等级。</p>
 </div>
 <div class="actions assignment-feature-actions">
 <button class="secondary" id="testCaseLibraryGenModel">测试连通性</button>
@@ -498,7 +471,7 @@
     <h3>推荐配置</h3>
     <ul>
       <li>优先指派 <strong>DeepSeek-R1</strong>（模型 ID：<code>deepseek-reasoner</code>），输出质量更好。</li>
-      <li>请将 <code>Max Tokens</code> 设置为 <strong>16384</strong> 或更高，避免长回复被截断。<span class="token-hint hidden" id="deepseekTokenHint"></span></li>
+      <li>输出长度由模型服务和当前上下文动态决定，系统不再向模型请求体写入 <code>max_tokens</code> 或 <code>max_output_tokens</code>。</li>
       <li>为每个功能统一指派此模型，保持行为一致。</li>
     </ul>
   </div>
@@ -522,8 +495,8 @@
 <div class="model-card model-edit-panel hidden" id="modelFormWrapper">
 <h3 id="modelFormTitle">新增模型</h3>
 <div class="row">
-<label for="modelDisplayName">模型名称</label>
-<input id="modelDisplayName" placeholder="如：DeepSeek 用例模型 A"/>
+<label for="modelDisplayName">供应商名称</label>
+<input id="modelDisplayName" placeholder="如：DeepSeek / 我的中转站点"/>
 </div>
 <div class="row">
 <label for="modelProvider">模型类型</label>
@@ -535,20 +508,26 @@
 </select>
 </div>
 <div class="row">
-<label for="modelBaseUrl">接口地址</label>
-<input id="modelBaseUrl" placeholder="如：https://api.xxx.com/v1/chat/completions"/>
+<label for="modelBaseUrl">API 根地址（Base URL）</label>
+<input id="modelBaseUrl" placeholder="如：https://api.xxx.com/v1"/>
+<p class="hint" style="margin:0; flex:1 1 auto;">填中转/供应商的 Base URL 根地址即可，自动补 /chat/completions；Responses API 请以 /responses 结尾。</p>
 </div>
 <div class="row">
 <label for="modelApiKey">API Key</label>
 <input id="modelApiKey" placeholder="填写用于鉴权的 Key" type="password"/>
 </div>
 <div class="row">
-<label for="modelIdentifier">模型 ID</label>
-<input id="modelIdentifier" placeholder="如：deepseek-chat / k2 / 你的模型名"/>
+<label for="fetchModelListBtn">可用模型</label>
+<button class="secondary" id="fetchModelListBtn" type="button">获取可用模型</button>
+<p class="hint" id="fetchModelListHint" style="margin:0; flex:1 1 auto;">填写接口地址与 API Key 后，自动拉取该站点下全部模型；拉取不到的也可手工添加。</p>
 </div>
-<div class="row">
-<label for="modelMaxTokens">最大输出 Tokens</label>
-<input id="modelMaxTokens" min="256" placeholder="默认 1024" step="128" type="number"/>
+<p class="status" id="modelListFetchStatus"></p>
+<div class="row column">
+<div class="model-available-list" id="modelAvailableList"><p class="hint">尚未获取模型。</p></div>
+<div class="row" style="margin:8px 0 0;">
+<input id="modelIdentifier" placeholder="手工添加模型 ID（如：gpt-4o）" style="flex:1 1 200px;"/>
+<button class="secondary" id="addModelIdBtn" type="button">添加</button>
+</div>
 </div>
 <div class="row">
 <label for="modelStreamMode">调用方式</label>
@@ -556,14 +535,6 @@
 <option value="nonstream">非流式（默认）</option>
 <option value="stream">流式（使用packyapi请选择此选项）</option>
 </select>
-</div>
-<div class="row column">
-<label>模型能力标签（默认不勾选）</label>
-<div class="model-capability-options">
-<label class="capability-option"><input id="modelCapabilityVision" type="checkbox"/> 视觉</label>
-<label class="capability-option"><input id="modelCapabilityReasoning" type="checkbox"/> 推理</label>
-<label class="capability-option"><input id="modelCapabilityChat" type="checkbox"/> 聊天</label>
-</div>
 </div>
 <div class="actions">
 <button id="saveModelBtn">保存模型</button>
@@ -733,6 +704,14 @@
 <script src="./scripts/core/appInitHelpers.js" defer></script>
 <script src="./scripts/core/appRuntime.js" defer></script>
 <script src="./scripts/core/retainedGenerationRuntime.js" defer></script>
+<script src="./scripts/core/retainedPreparationTask.js" defer></script>
+<script src="./scripts/core/xmindRequestSchedulerCore.js" defer></script>
+<script src="./scripts/core/xmindWorkspaceRecoveryCore.js" defer></script>
+<script src="./scripts/core/xmindGenerationPayloadCore.js" defer></script>
+<script src="./scripts/core/xmindGenerationTimingCore.js" defer></script>
+<script src="./scripts/core/xmindDedupeBatchCore.js" defer></script>
+<script src="./scripts/core/xmindCaseDedupeCore.js" defer></script>
+<script src="./scripts/core/xmindRequirementCoverageCore.js" defer></script>
 <script src="./scripts/core/casesCore.js" defer></script>
 <script src="./scripts/core/xmindCore.js" defer></script>
 <script src="./scripts/core/xlsxCore.js" defer></script>
@@ -748,6 +727,7 @@
 <script src="./services/storage.js" defer></script>
 <script src="./services/modelClient.js" defer></script>
 <script src="./services/apiClient.js" defer></script>
+<script src="./services/modelTaskClient.js" defer></script>
 <script src="./scripts/modules/settings.js" defer></script>
 <script src="./scripts/modules/models.js" defer></script>
 <script src="./scripts/handlers/assignHandlers.js" defer></script>
@@ -757,6 +737,7 @@
 <script src="./scripts/modules/xmindKnowledgeBase.js" defer></script>
 <script src="./scripts/modules/casePageAiGenPrep.js" defer></script>
 <script src="./scripts/handlers/layoutHandlers.js" defer></script>
+<script src="./scripts/modules/xmindCasegen.js" defer></script>
 <script src="./scripts/modules/tempexec.js" defer></script>
 <script src="./scripts/modules/caseLibrary.js" defer></script>
 <script src="./scripts/modules/caseArchive.js" defer></script>

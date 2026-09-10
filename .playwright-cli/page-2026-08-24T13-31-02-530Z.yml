@@ -1,0 +1,85 @@
+- generic [ref=f4e2]:
+  - complementary [ref=f4e3]:
+    - heading "用例助手" [level=1] [ref=f4e5]:
+      - generic [ref=f4e6]: T
+    - navigation [ref=f4e8]:
+      - generic [ref=f4e9]:
+        - heading "AI 功能" [level=2] [ref=f4e10]
+        - generic [ref=f4e12]:
+          - button "用例生成" [ref=f4e13] [cursor=pointer]
+          - button "功能指派" [ref=f4e20] [cursor=pointer]
+          - button "模型管理" [ref=f4e28] [cursor=pointer]
+      - generic [ref=f4e34]:
+        - heading "用例相关" [level=2] [ref=f4e35]
+        - generic [ref=f4e36]:
+          - button "用例执行" [ref=f4e37] [cursor=pointer]
+          - button "用例库" [ref=f4e43] [cursor=pointer]
+          - button "用例归档" [ref=f4e48] [cursor=pointer]
+          - button "执行总览" [ref=f4e54] [cursor=pointer]
+      - generic [ref=f4e59]:
+        - heading "管理" [level=2] [ref=f4e60]
+        - generic [ref=f4e61]:
+          - button "项目管理" [ref=f4e62] [cursor=pointer]
+          - button "人员管理" [ref=f4e68] [cursor=pointer]
+          - button "操作记录" [ref=f4e76] [cursor=pointer]
+      - generic [ref=f4e82]:
+        - heading "设置" [level=2] [ref=f4e83]
+        - button "通用设置" [ref=f4e85] [cursor=pointer]
+    - generic "个人工具" [ref=f4e92]:
+      - button "个人备忘" [ref=f4e93] [cursor=pointer]
+    - generic [ref=f4e98]:
+      - generic [ref=f4e99]: 当前用户
+      - button "用户菜单" [ref=f4e100] [cursor=pointer]:
+        - generic [ref=f4e101]: a
+      - menu:
+        - generic:
+          - generic: a
+          - generic:
+            - strong: admin
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置"
+        - menuitem "退出登录"
+  - complementary "用例执行页面导航" [ref=f4e102]:
+    - generic [ref=f4e103]:
+      - heading "用例执行" [level=2] [ref=f4e104]
+      - button "收起快捷导航" [expanded] [ref=f4e105] [cursor=pointer]
+    - navigation "用例执行快捷入口" [ref=f4e109]:
+      - generic [ref=f4e110]:
+        - generic [ref=f4e111] [cursor=pointer]: 专注区
+        - generic [ref=f4e113]: 暂无专注用例
+      - generic [ref=f4e115]:
+        - button "用例导入" [ref=f4e116] [cursor=pointer]
+        - button "选择用例执行" [ref=f4e122] [cursor=pointer]
+        - button "执行分配" [ref=f4e128] [cursor=pointer]
+        - button "归档操作&进度预览" [ref=f4e134] [cursor=pointer]
+  - generic [ref=f4e142]:
+    - banner [ref=f4e144]:
+      - heading "项目 未选择 版本 未选择 用例 暂无执行用例" [level=1] [ref=f4e145]:
+        - generic [ref=f4e146]:
+          - generic [ref=f4e147]: 项目
+          - strong [ref=f4e148]: 未选择
+        - generic [ref=f4e149]: /
+        - generic [ref=f4e150]:
+          - generic [ref=f4e151]: 版本
+          - strong [ref=f4e152]: 未选择
+        - generic [ref=f4e153]: /
+        - generic [ref=f4e154]:
+          - generic [ref=f4e155]: 用例
+          - strong [ref=f4e156]: 暂无执行用例
+    - main [ref=f4e157]:
+      - option "请选择项目" [selected]
+      - option "元气骑士"
+      - option "元气骑士前传"
+      - option "测试999"
+      - option "autotest-1772268446008"
+      - option "opslog-missing-1768292538839"
+      - option "opslog-exec-1768292538751"
+      - option "opslog-proj-1768292538582"
+      - option "opslog-missing-1768292273386"
+      - option "opslog-exec-1768292273288"
+      - option "opslog-proj-1768292273101"
+      - option "autotest-exec-overview-1767926180210"
+      - option "请选择版本" [selected]
+      - generic [ref=f4e158]: 暂无执行用例，请通过“用例导入”抽屉导入，或在“执行分配”中选择历史记录
+      - option "请选择版本" [selected]

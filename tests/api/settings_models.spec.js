@@ -121,6 +121,12 @@ test.describe('settings/models/features + ops api', () => {
     expect(createUserModel.status()).toBe(201);
     const userModel = await createUserModel.json();
 
+    const duplicateActiveModel = await ctx.post(`${apiBase}/api/models`, {
+      headers: userHeaders,
+      data: { name: userModel.name, config_json: { key: 'duplicate-active' } },
+    });
+    expect(duplicateActiveModel.status()).toBe(400);
+
     const denyGlobalModel = await ctx.post(`${apiBase}/api/models`, {
       headers: userHeaders,
       data: { name: 'global-model-try', scope: 'global', config_json: {} },
@@ -149,6 +155,48 @@ test.describe('settings/models/features + ops api', () => {
     expect(updateUserModel.status()).toBe(200);
     const updatedUserModel = await updateUserModel.json();
     expect(updatedUserModel.is_active).toBeFalsy();
+
+    const recreateUserModel = await ctx.post(`${apiBase}/api/models`, {
+      headers: userHeaders,
+      data: { name: userModel.name, config_json: { key: 'recreated' } },
+    });
+    expect(recreateUserModel.status()).toBe(201);
+    const recreatedUserModel = await recreateUserModel.json();
+    expect(recreatedUserModel.name).toBe(userModel.name);
+    expect(recreatedUserModel.id).not.toBe(userModel.id);
+
+    const retiredRenameName = 'retired-model-' + Date.now();
+    const createRetiredRenameModel = await ctx.post(`${apiBase}/api/models`, {
+      headers: userHeaders,
+      data: { name: retiredRenameName, config_json: { key: 'retired' } },
+    });
+    expect(createRetiredRenameModel.status()).toBe(201);
+    const retiredRenameModel = await createRetiredRenameModel.json();
+    const disableRetiredRenameModel = await ctx.patch(`${apiBase}/api/models/${retiredRenameModel.id}`, {
+      headers: userHeaders,
+      data: { is_active: false },
+    });
+    expect(disableRetiredRenameModel.status()).toBe(200);
+
+    const createRenameSourceModel = await ctx.post(`${apiBase}/api/models`, {
+      headers: userHeaders,
+      data: { name: 'rename-source-' + Date.now(), config_json: { key: 'source' } },
+    });
+    expect(createRenameSourceModel.status()).toBe(201);
+    const renameSourceModel = await createRenameSourceModel.json();
+    const denyRenameToActiveName = await ctx.patch(`${apiBase}/api/models/${renameSourceModel.id}`, {
+      headers: userHeaders,
+      data: { name: recreatedUserModel.name },
+    });
+    expect(denyRenameToActiveName.status()).toBe(400);
+    const renameToRetiredName = await ctx.patch(`${apiBase}/api/models/${renameSourceModel.id}`, {
+      headers: userHeaders,
+      data: { name: retiredRenameName, config_json: { key: 'renamed' } },
+    });
+    expect(renameToRetiredName.status()).toBe(200);
+    const renamedModel = await renameToRetiredName.json();
+    expect(renamedModel.name).toBe(retiredRenameName);
+    expect(renamedModel.config_json.key).toBe('renamed');
 
     const denyUpdateGlobalModel = await ctx.patch(`${apiBase}/api/models/${globalModel.id}`, {
       headers: userHeaders,

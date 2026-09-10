@@ -1,0 +1,4 @@
+[      50ms] [VERBOSE] [DOM] Multiple forms should be contained in their own form elements; break up complex forms into ones that represent a single action: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:18930/login.html:0
+[  316467ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:18930/api/model-tasks:0
+[  316552ms] [INFO] [TAP][model-response] {owner: xmind-casegen:xmind-casegen-1788860997028-qpvrh4, scene: root, responseId: , errorCode: , upstreamStatus: 200} @ http://127.0.0.1:18930/services/modelClient.js:973
+[  316586ms] [WARNING] [XMindCaseGen][model-output-invalid] {taskId: xmind-casegen-1788860997028-qpvrh4, scope: root, actionId: root-full-cases, moduleId: , moduleTitle: } @ http://127.0.0.1:18930/scripts/modules/xmindCasegen.js:12099

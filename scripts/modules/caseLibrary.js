@@ -402,6 +402,7 @@
     aiGenRequirementInput: document.getElementById('caseLibraryAiGenRequirementInput'),
     aiGenClearRequirementBtn: document.getElementById('caseLibraryAiGenClearRequirement'),
     aiGenRunBtn: document.getElementById('caseLibraryAiGenRunBtn'),
+    aiGenCancelBtn: document.getElementById('caseLibraryAiGenCancelBtn'),
     aiGenStatus: document.getElementById('caseLibraryAiGenStatus'),
     aiGenResult: document.getElementById('caseLibraryAiGenResult'),
     aiGenResultBody: document.getElementById('caseLibraryAiGenResultBody'),
@@ -11298,8 +11299,15 @@
   }
 
   function syncCaseLibraryAiGenRunBtn() {
-    if (!dom.aiGenRunBtn) return;
     var ai = ensureCaseLibraryAiGenState();
+    if (dom.aiGenCancelBtn) {
+      dom.aiGenCancelBtn.disabled = ai.loading !== true;
+      if (dom.aiGenCancelBtn.classList) {
+        if (ai.loading === true) dom.aiGenCancelBtn.classList.remove('hidden');
+        else dom.aiGenCancelBtn.classList.add('hidden');
+      }
+    }
+    if (!dom.aiGenRunBtn) return;
     var requirementText = dom.aiGenRequirementInput ? dom.aiGenRequirementInput.value : ai.requirementText;
     var hasRequirement = Boolean(normalizeEditorText(requirementText || ''));
     var reason = resolveCaseLibraryAiGenDisabledReason();
@@ -11509,6 +11517,8 @@
     var snapshot = cloneCaseLibraryAiGenParsedForTask(parsed);
     if (!snapshot) return;
     manager.updateTask('case-library', {
+      status: 'done',
+      semanticDedupeRunning: false,
       semanticDedupeResult: snapshot,
       semanticDedupeCompletedAt: Date.now(),
       semanticDedupeError: errorText ? String(errorText || '') : '',
@@ -11555,7 +11565,7 @@
     ai.taskSignature = signature;
     ai.taskId = task.id || '';
     ai.caseFileId = task.caseFileId || ai.caseFileId;
-    ai.loading = task.status === 'running';
+    ai.loading = task.status === 'running' || task.status === 'postprocessing';
     ai.generated = task.status === 'done';
     ai.error = task.status === 'error' ? (task.error || '') : '';
     ai.generationMode = resolveCaseLibraryAiGenGenerationMode(task.prepContext);
@@ -11570,7 +11580,19 @@
       ai.requirementFileName = String(task.requirementFileName || '');
       if (dom.aiGenFileName) dom.aiGenFileName.textContent = ai.requirementFileName || '未选择文件';
     }
-    if (ai.loading) {
+    if (task.status === 'cancelled') {
+      ai.loading = false;
+      ai.generated = false;
+      ai.error = '';
+      ai.modules = [];
+      ai.selection = new Set();
+      setStatus(dom.aiGenStatus, task.error || '已中断本次生成', 'warn');
+      renderCaseLibraryAiGenResult();
+      syncCaseLibraryAiGenRunBtn();
+      syncCaseLibraryAiGenButton();
+      return true;
+    }
+    if (task.status === 'running') {
       setStatus(dom.aiGenStatus, '正在生成用例...', '');
       ai.modules = [];
       ai.selection = new Set();
@@ -11579,7 +11601,7 @@
       syncCaseLibraryAiGenButton();
       return true;
     }
-    if (ai.generated && task.resultRaw) {
+    if ((task.status === 'done' || task.status === 'postprocessing') && task.resultRaw) {
       var parsed = null;
       var resultToken = resolveCaseLibraryAiGenResultToken(task);
       if (resultToken) resetCaseLibraryAiGenAppendRecord(task.caseFileId, resultToken);
@@ -11602,20 +11624,35 @@
             return true;
           }
           if (caseLibraryAiDedupeTaskMap[task.id]) return true;
+          ai.loading = true;
+          ai.generated = false;
           setStatus(dom.aiGenStatus, '正在进行 AI 语义去重...', '');
           caseLibraryAiDedupeTaskMap[task.id] = true;
+          var manager = getCaseLibraryAiGenManager();
+          if (manager && typeof manager.updateTask === 'function' && task.status !== 'postprocessing') {
+            manager.updateTask('case-library', {
+              status: 'postprocessing',
+              semanticDedupeRunning: true,
+            }, 'semantic-dedupe-start');
+          }
+          syncCaseLibraryAiGenRunBtn();
           prepApi.applyAiDedupeToParsed(parsed, sourceCases, task.prepContext, {
             model: task.model,
             reasoning: task.reasoning || '',
             temperature: task.temperature,
             callModelWithConfig: coreApi.callModelWithConfig,
+            requestOptions: manager && typeof manager.buildRequestOptions === 'function'
+              ? manager.buildRequestOptions(task, 'semantic-dedupe')
+              : null,
           }).then(function(nextParsed) {
             var currentTask = getCurrentCaseLibraryAiGenTask();
-            if (!currentTask || currentTask.id !== task.id) return;
+            if (!currentTask || currentTask.id !== task.id || currentTask.status === 'cancelled') return;
             if (task.id) caseLibraryAiDedupeResultMap[task.id] = nextParsed;
             persistCaseLibraryAiGenSemanticDedupeResult(task, nextParsed, '');
             finishCaseLibraryAiGenParsedResult(ai, nextParsed, task, resultToken);
           }).catch(function() {
+            var currentTask = getCurrentCaseLibraryAiGenTask();
+            if (!currentTask || currentTask.id !== task.id || currentTask.status === 'cancelled') return;
             if (task.id) caseLibraryAiDedupeResultMap[task.id] = parsed;
             persistCaseLibraryAiGenSemanticDedupeResult(task, parsed, 'AI 语义去重失败');
             finishCaseLibraryAiGenParsedResult(ai, parsed, task, resultToken);
@@ -11680,6 +11717,32 @@
     var taskFileId = task.caseFileId ? String(task.caseFileId || '') : '';
     if (!currentFileId || !taskFileId || currentFileId !== taskFileId) return null;
     return task;
+  }
+
+  function interruptCaseLibraryAiGeneration() {
+    var manager = getCaseLibraryAiGenManager();
+    var task = getCurrentCaseLibraryAiGenTask();
+    if (!manager || typeof manager.cancelTask !== 'function' || !task) {
+      setStatus(dom.aiGenStatus, '当前没有可中断的生成任务', 'warn');
+      syncCaseLibraryAiGenRunBtn();
+      return false;
+    }
+    var cancelled = manager.cancelTask('case-library', {
+      force: true,
+      reason: '已中断本次生成',
+      abortReason: 'case-library-ai-generation-cancelled',
+    });
+    if (!cancelled) {
+      setStatus(dom.aiGenStatus, '当前没有可中断的生成任务', 'warn');
+      syncCaseLibraryAiGenRunBtn();
+      return false;
+    }
+    if (task.id) {
+      delete caseLibraryAiDedupeTaskMap[task.id];
+      delete caseLibraryAiDedupeResultMap[task.id];
+    }
+    showCenterToast('已中断本次 AI 用例生成', 'warn', 3000);
+    return true;
   }
 
   function shouldOpenCaseLibraryAiGenDrawerDirect() {
@@ -11917,7 +11980,7 @@
     var manager = getCaseLibraryAiGenManager();
     if (manager && typeof manager.getTask === 'function') {
       var activeTask = manager.getTask('case-library');
-      if (activeTask && activeTask.status === 'running') {
+      if (activeTask && (activeTask.status === 'running' || activeTask.status === 'postprocessing')) {
         var activeFileId = activeTask.caseFileId ? String(activeTask.caseFileId) : '';
         var currentFileId = state.editor && state.editor.caseFile ? String(state.editor.caseFile.id || '') : '';
         var activeName = activeTask.caseFileName ? String(activeTask.caseFileName) : '';
@@ -11976,6 +12039,7 @@
         ? window.app.config.defaultPrompts.caselibrarygen
         : '');
     prompt = appendCaseWritingGuidePrompt(prompt);
+    var preparationBasePrompt = prompt;
     var prepApi = getCasePageAiGenPrepApi();
     if (prepContext && prepApi && typeof prepApi.enrichPrompt === 'function') {
       prompt = prepApi.enrichPrompt(prompt, prepContext);
@@ -11986,19 +12050,21 @@
     var temperature = assignments && assignments.caseLibraryGenTemperature !== undefined
       ? assignments.caseLibraryGenTemperature
       : 0.2;
-    var userPayload = {
+    var preparationBaseUserPayload = {
       requirement_text: requirementText,
       module_list: moduleList,
       existing_cases: casePayload,
       coverage_threshold: threshold,
     };
+    var userPayload = preparationBaseUserPayload;
     if (prepContext && prepApi && typeof prepApi.enrichPayload === 'function') {
       userPayload = prepApi.enrichPayload(userPayload, prepContext);
     }
     var userText = JSON.stringify(userPayload, null, 2);
     var xmindPipeline = null;
+    var preparationPipelineInput = null;
     if (prepContext && prepApi && typeof prepApi.buildXmindEnhancedPipelineRequest === 'function') {
-      xmindPipeline = prepApi.buildXmindEnhancedPipelineRequest({
+      preparationPipelineInput = {
         scene: 'case-library',
         caseFileId: state.editor.caseFile ? state.editor.caseFile.id : '',
         displayName: state.editor.caseFile ? (state.editor.caseFile.file_name_clean || state.editor.caseFile.name || '') : '',
@@ -12008,7 +12074,8 @@
         moduleList: moduleList,
         existingCases: casePayload,
         coverageThreshold: threshold,
-      }, prepContext);
+      };
+      xmindPipeline = prepApi.buildXmindEnhancedPipelineRequest(preparationPipelineInput, prepContext);
       if (xmindPipeline && xmindPipeline.enabled === true && xmindPipeline.root) {
         prompt = xmindPipeline.root.prompt || prompt;
         userText = xmindPipeline.root.userText || userText;
@@ -12033,7 +12100,7 @@
 
     var manager = getCaseLibraryAiGenManager();
     if (manager && typeof manager.createTask === 'function' && typeof manager.startTask === 'function') {
-      var task = manager.createTask('case-library', {
+      var taskPayload = {
         contextSignature: signature,
         caseFileId: state.editor.caseFile ? state.editor.caseFile.id : null,
         caseFileName: state.editor.caseFile ? state.editor.caseFile.file_name_clean || '' : '',
@@ -12050,8 +12117,16 @@
         userText: userText,
         xmindPipeline: xmindPipeline && xmindPipeline.enabled === true ? xmindPipeline : null,
         prepContext: prepContext || null,
-      });
-      manager.startTask('case-library', task);
+        preparationBasePrompt: preparationBasePrompt,
+      };
+      var task = prepContext
+        && prepApi
+        && typeof prepApi.startManagedGenerationTask === 'function'
+        ? prepApi.startManagedGenerationTask('case-library', taskPayload)
+        : manager.createTask('case-library', taskPayload);
+      if (!task || task.preparationPending !== true) {
+        manager.startTask('case-library', task);
+      }
       applyCaseLibraryAiGenTaskState(task);
       return;
     }
@@ -12870,6 +12945,13 @@
     syncMissingBatchDeleteControls();
   }
 
+  function getPendingToastCommitLabel(op) {
+    if (!op || !op.type) return '';
+    if (op.type === 'remove' || op.type === 'remove_batch') return '马上删除';
+    if (op.type === 'insert' || op.type === 'insert_batch') return '马上新增';
+    return '';
+  }
+
   function startMissingPendingToast(message, options) {
     options = options || {};
     var anchorRect = options.anchorRect || null;
@@ -12882,6 +12964,10 @@
     var btn = document.createElement('button');
     btn.className = 'pill secondary';
     btn.textContent = '撤回';
+    var immediateBtn = document.createElement('button');
+    immediateBtn.className = 'pill secondary temp-undo-immediate';
+    immediateBtn.textContent = getPendingToastCommitLabel(mv.pendingOp);
+    immediateBtn.title = immediateBtn.textContent;
     function renderCountdown() {
       text.textContent = (message || '已暂存变更') + '（' + mv.pendingRemaining + 's）';
     }
@@ -12910,8 +12996,13 @@
       renderMissingViewTable();
     };
     btn.addEventListener('click', handleUndoClick);
+    immediateBtn.addEventListener('click', function() {
+      if (!mv.pendingOp) return;
+      commitMissingPendingOp();
+    });
     toast.appendChild(text);
     toast.appendChild(btn);
+    if (immediateBtn.textContent) toast.appendChild(immediateBtn);
     document.body.appendChild(toast);
     mv.pendingToast = toast;
     renderCountdown();
@@ -14904,6 +14995,10 @@
     var btn = document.createElement('button');
     btn.className = 'pill secondary';
     btn.textContent = '撤回';
+    var immediateBtn = document.createElement('button');
+    immediateBtn.className = 'pill secondary temp-undo-immediate';
+    immediateBtn.textContent = getPendingToastCommitLabel(ed.pendingOp);
+    immediateBtn.title = immediateBtn.textContent;
     function renderCountdown() {
       text.textContent = (message || '已暂存变更') + '（' + ed.pendingRemaining + 's）';
     }
@@ -14947,8 +15042,13 @@
       renderEditorTable();
     };
     btn.addEventListener('click', handleUndoClick);
+    immediateBtn.addEventListener('click', function() {
+      if (!ed.pendingOp) return;
+      commitPendingOp();
+    });
     toast.appendChild(text);
     toast.appendChild(btn);
+    if (immediateBtn.textContent) toast.appendChild(immediateBtn);
     document.body.appendChild(toast);
     ed.pendingToast = toast;
     renderCountdown();
@@ -18845,6 +18945,9 @@
     }
     if (dom.aiGenRunBtn) {
       dom.aiGenRunBtn.addEventListener('click', runCaseLibraryAiGen);
+    }
+    if (dom.aiGenCancelBtn) {
+      dom.aiGenCancelBtn.addEventListener('click', interruptCaseLibraryAiGeneration);
     }
     if (dom.aiGenSelectAllBtn) {
       dom.aiGenSelectAllBtn.addEventListener('click', selectAllCaseLibraryAiGenCases);

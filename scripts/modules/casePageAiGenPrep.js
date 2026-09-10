@@ -25,6 +25,55 @@
     var GENERATION_MODE_PRECISE = 'precise';
     var GENERATION_MODE_ENHANCED = 'enhanced';
     var dialogs = {};
+    var preparationCoordinators = {};
+
+    function getGenerationManager() {
+      return window.app && window.app.caseLibraryAiGen
+        ? window.app.caseLibraryAiGen
+        : null;
+    }
+
+    function getPreparationCoordinator(scene) {
+      var stableScene = String(scene || '');
+      if (!stableScene) return null;
+      if (preparationCoordinators[stableScene]) return preparationCoordinators[stableScene];
+      var manager = getGenerationManager();
+      var factory = window.app && window.app.retainedPreparationTask
+        ? window.app.retainedPreparationTask
+        : null;
+      if (!manager || !factory || typeof factory.init !== 'function') return null;
+      var adapter = {
+        createDeferredTask: function(payload) {
+          return manager.createDeferredTask(stableScene, payload);
+        },
+        getTask: function(taskId) {
+          var task = manager.getTask(stableScene);
+          if (!task || String(task.id || '') !== String(taskId || '')) return null;
+          return task;
+        },
+        activateTask: function(taskId, patch, options) {
+          return manager.activateTask(stableScene, taskId, patch, options);
+        },
+        failTask: function(taskId, options) {
+          return manager.failTask(stableScene, taskId, options);
+        },
+      };
+      preparationCoordinators[stableScene] = factory.init({
+        manager: adapter,
+        prepareTask: prepareManagedGenerationTask,
+        buildRequestOptions: function(task, stage) {
+          if (typeof manager.buildRequestOptions === 'function') {
+            return manager.buildRequestOptions(task, 'knowledge-' + String(stage || 'preparation'));
+          }
+          var owner = task && task.requestOwner ? String(task.requestOwner || '') : '';
+          return {
+            owner: owner,
+            requestKey: owner + ':knowledge-' + String(stage || 'preparation'),
+          };
+        },
+      });
+      return preparationCoordinators[stableScene];
+    }
 
     function escapeHtml(text) {
       if (text === null || text === undefined) return '';
@@ -1089,7 +1138,7 @@
       return normalizeGenerationMode(settings && settings.casePageGenerationMode ? settings.casePageGenerationMode : '');
     }
 
-    async function runKnowledgeBase(dialog, model, reasoning, temperature) {
+    async function runKnowledgeBase(dialog, model, reasoning, temperature, preparationContext) {
       var baseUrl = getKnowledgeBaseBaseUrl();
       if (!baseUrl) {
         return buildKnowledgeBaseSkipState('未配置共享知识库地址，本轮已跳过');
@@ -1123,6 +1172,10 @@
         reasoning: reasoning || '',
         temperature: temperature,
         callModel: callModelWithConfig,
+        buildRequestOptions: preparationContext
+          && typeof preparationContext.buildRequestOptions === 'function'
+          ? preparationContext.buildRequestOptions
+          : null,
         onStateChange: function(nextState) {
           dialog.knowledgeBaseState = nextState;
           renderDialog(dialog.scene);
@@ -1163,17 +1216,7 @@
       dialog.generationModeInvalid = false;
       renderDialog(scene);
       var settings = currentSettings;
-      var context = dialog.context || {};
-      var model = context.model || null;
-      var reasoning = context.reasoning || '';
-      var temperature = context.temperature;
-      var kbState = null;
-      try {
-        kbState = await runKnowledgeBase(dialog, model, reasoning, temperature);
-      } catch (err) {
-        kbState = buildKnowledgeBaseSkipState(err && err.message ? err.message : '知识库检索失败，本轮已跳过');
-      }
-      dialog.knowledgeBaseState = kbState || buildKnowledgeBaseSkipState('');
+      dialog.knowledgeBaseState = buildKnowledgeBaseSkipState('后台任务已创建，正在准备知识库上下文');
       var result = buildGenerationContext(dialog, settings, dialog.knowledgeBaseState);
       closeDialog(scene, { ok: true, value: result });
     }
@@ -1259,6 +1302,156 @@
         promptContext: promptContext,
         sourceCases: existingCases,
       };
+    }
+
+    async function prepareManagedGenerationTask(task, preparationContext) {
+      var basePrep = task && task.prepContext && typeof task.prepContext === 'object'
+        ? cloneJson(task.prepContext, {})
+        : {};
+      var xmindContext = basePrep.payloadExtra
+        && basePrep.payloadExtra.xmind_generation_context
+        && typeof basePrep.payloadExtra.xmind_generation_context === 'object'
+        ? basePrep.payloadExtra.xmind_generation_context
+        : {
+            requirement_mode: String(basePrep.requirementMode || 'manual'),
+          };
+      var dialog = {
+        scene: String(task && task.scene ? task.scene : ''),
+        context: {
+          scene: String(task && task.scene ? task.scene : ''),
+          displayName: task && task.caseFileName ? String(task.caseFileName || '') : '当前用例',
+          caseFileId: task && task.caseFileId ? String(task.caseFileId || '') : '',
+          projectId: task && task.projectId ? String(task.projectId || '') : '',
+          versionId: task && (task.versionId || task.versionIdAtRun)
+            ? String(task.versionId || task.versionIdAtRun || '')
+            : '',
+          cases: normalizeCaseList(basePrep.sourceCases || []),
+        },
+        allowRequirementDocument: String(xmindContext.requirement_mode || '') !== 'manual',
+        requirementMode: String(xmindContext.requirement_mode || 'manual'),
+        requirementText: task && task.requirementText
+          ? String(task.requirementText || '')
+          : String(basePrep.requirementText || ''),
+        requirementSupplement: String(basePrep.requirementSupplement || ''),
+        requirementFileName: String(basePrep.requirementFileName || ''),
+        knowledgeBaseState: buildKnowledgeBaseSkipState('正在恢复知识库生成准备'),
+        loading: false,
+        open: false,
+      };
+      var kbState = null;
+      try {
+        kbState = await runKnowledgeBase(
+          dialog,
+          task && task.model ? task.model : null,
+          task && task.reasoning ? task.reasoning : '',
+          task ? task.temperature : 0.2,
+          preparationContext
+        );
+      } catch (err) {
+        kbState = buildKnowledgeBaseSkipState(
+          err && err.message ? err.message : '知识库检索失败，本轮已跳过'
+        );
+      }
+      var finalPrep = buildGenerationContext(
+        dialog,
+        basePrep.settings && typeof basePrep.settings === 'object' ? basePrep.settings : snapshotSettings(),
+        kbState || buildKnowledgeBaseSkipState('')
+      );
+      var basePrompt = task && task.preparationBasePrompt !== undefined
+        ? String(task.preparationBasePrompt || '')
+        : String(task && task.prompt ? task.prompt || '' : '');
+      var baseUserPayload = task && task.preparationBaseUserPayload
+        && typeof task.preparationBaseUserPayload === 'object'
+        ? cloneJson(task.preparationBaseUserPayload, {})
+        : {
+            requirement_text: task && task.requirementText ? String(task.requirementText || '') : '',
+            module_list: cloneJson(task && task.moduleList, []),
+            existing_cases: cloneJson(basePrep.sourceCases, []),
+            coverage_threshold: Number(task && task.coverageThreshold),
+          };
+      var prompt = enrichPrompt(basePrompt, finalPrep);
+      var userPayload = enrichPayload(baseUserPayload, finalPrep);
+      var userText = JSON.stringify(userPayload, null, 2);
+      var xmindPipeline = null;
+      var pipelineInput = task
+        && task.preparationPipelineInput
+        && typeof task.preparationPipelineInput === 'object'
+        ? task.preparationPipelineInput
+        : {
+            scene: String(task && task.scene ? task.scene : ''),
+            caseFileId: task && task.caseFileId ? task.caseFileId : '',
+            displayName: task && task.caseFileName ? task.caseFileName : '',
+            projectId: task && task.projectId ? task.projectId : '',
+            versionId: task && (task.versionId || task.versionIdAtRun)
+              ? (task.versionId || task.versionIdAtRun)
+              : '',
+            requirementText: task && task.requirementText ? task.requirementText : '',
+            moduleList: cloneJson(task && task.moduleList, []),
+            existingCases: cloneJson(basePrep.sourceCases, []),
+            coverageThreshold: Number(task && task.coverageThreshold),
+          };
+      if (pipelineInput && typeof pipelineInput === 'object') {
+        xmindPipeline = buildXmindEnhancedPipelineRequest(
+          pipelineInput,
+          finalPrep
+        );
+        if (xmindPipeline && xmindPipeline.enabled === true && xmindPipeline.root) {
+          prompt = xmindPipeline.root.prompt || prompt;
+          userText = xmindPipeline.root.userText || userText;
+        }
+      }
+      return {
+        prompt: prompt,
+        userText: userText,
+        xmindPipeline: xmindPipeline && xmindPipeline.enabled === true ? xmindPipeline : null,
+        prepContext: finalPrep,
+        preparationBasePrompt: undefined,
+        preparationBaseUserPayload: undefined,
+        preparationPipelineInput: undefined,
+      };
+    }
+
+    function startManagedGenerationTask(scene, taskPayload) {
+      var coordinator = getPreparationCoordinator(scene);
+      if (!coordinator || typeof coordinator.createAndStart !== 'function') {
+        throw new Error('页面生成准备任务能力未就绪');
+      }
+      var deferredPayload = Object.assign({}, taskPayload || {}, {
+        userText: '',
+        xmindPipeline: null,
+      });
+      var prep = deferredPayload.prepContext && typeof deferredPayload.prepContext === 'object'
+        ? deferredPayload.prepContext
+        : {};
+      var prepXmindContext = prep.payloadExtra
+        && prep.payloadExtra.xmind_generation_context
+        && typeof prep.payloadExtra.xmind_generation_context === 'object'
+        ? prep.payloadExtra.xmind_generation_context
+        : {};
+      deferredPayload.prepContext = {
+        requirementText: String(prep.requirementText || deferredPayload.requirementText || ''),
+        requirementSupplement: String(prep.requirementSupplement || ''),
+        requirementFileName: String(prep.requirementFileName || ''),
+        requirementMode: String(prepXmindContext.requirement_mode || 'manual'),
+        settings: cloneJson(prep.settings, {}),
+        sourceCases: cloneJson(prep.sourceCases, []),
+      };
+      delete deferredPayload.preparationBaseUserPayload;
+      delete deferredPayload.preparationPipelineInput;
+      return coordinator.createAndStart(deferredPayload).task;
+    }
+
+    function resumeManagedPreparations() {
+      var manager = getGenerationManager();
+      if (!manager || typeof manager.getTask !== 'function') return 0;
+      var resumed = 0;
+      ['case-library', 'temp-exec'].forEach(function(scene) {
+        var task = manager.getTask(scene);
+        var coordinator = getPreparationCoordinator(scene);
+        if (!task || !coordinator || typeof coordinator.resumePendingTasks !== 'function') return;
+        resumed += coordinator.resumePendingTasks([task]);
+      });
+      return resumed;
     }
 
     function enrichPayload(basePayload, prep) {
@@ -1373,7 +1566,8 @@
           request.userText,
           request.prompt,
           modelOptions.reasoning || '',
-          modelOptions.temperature
+          modelOptions.temperature,
+          modelOptions.requestOptions || null
         );
       } catch (err) {
         data.ai_dedupe_error = err && err.message ? err.message : 'AI 语义去重失败，已保留原始生成结果';
@@ -1401,17 +1595,23 @@
       return data;
     }
 
-    return {
+    var api = {
       open: openDialog,
       enrichPayload: enrichPayload,
       enrichPrompt: enrichPrompt,
       isEnhancedGenerationContext: isEnhancedGenerationContext,
       buildXmindEnhancedPipelineRequest: buildXmindEnhancedPipelineRequest,
       applyAiDedupeToParsed: applyAiDedupeToParsed,
+      startManagedGenerationTask: startManagedGenerationTask,
+      resumeManagedPreparations: resumeManagedPreparations,
       normalizeCaseList: normalizeCaseList,
       buildModuleList: buildModuleList,
       groupCasesByModule: groupCasesByModule,
     };
+    setTimeout(function() {
+      api.resumeManagedPreparations();
+    }, 0);
+    return api;
   }
 
   window.app = window.app || {};

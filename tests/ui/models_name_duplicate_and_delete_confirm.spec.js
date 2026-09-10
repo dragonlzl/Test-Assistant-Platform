@@ -46,7 +46,6 @@ test.describe('模型管理：同名校验与删除二次确认', () => {
     await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
     await page.fill('#modelApiKey', 'sk-test-' + (modelIdSuffix || 'x'));
     await page.fill('#modelIdentifier', 'deepseek-test-' + (modelIdSuffix || 'x'));
-    await page.fill('#modelMaxTokens', '2048');
     await page.click('#saveModelBtn');
   }
 
@@ -61,7 +60,6 @@ test.describe('模型管理：同名校验与删除二次确认', () => {
     await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
     await page.fill('#modelApiKey', 'sk-test-b');
     await page.fill('#modelIdentifier', 'deepseek-test-b');
-    await page.fill('#modelMaxTokens', '2048');
     await page.click('#saveModelBtn');
 
     await expect(page.locator('#modelFormWrapper')).toBeVisible();

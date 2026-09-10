@@ -9040,10 +9040,10 @@
     }
 
     function commitTempExecUndoToDb() {
-      if (!isDbMode()) return;
+      if (!isDbMode()) return Promise.resolve();
       var client = getApiClient();
-      if (!client || typeof client.createExecCase !== 'function' || typeof client.deleteExecCase !== 'function') return;
-      if (!Array.isArray(state.tempExecUndoStack) || !state.tempExecUndoStack.length) return;
+      if (!client || typeof client.createExecCase !== 'function' || typeof client.deleteExecCase !== 'function') return Promise.resolve();
+      if (!Array.isArray(state.tempExecUndoStack) || !state.tempExecUndoStack.length) return Promise.resolve();
 
       var stack = state.tempExecUndoStack.slice();
       var chain = Promise.resolve();
@@ -9121,7 +9121,7 @@
           return;
         });
       });
-      chain.catch(function() {});
+      return chain.catch(function() {});
     }
 
     function cleanupTempExecUndoUI() {
@@ -9137,6 +9137,21 @@
         tempExecUndoEl.parentNode.removeChild(tempExecUndoEl);
       }
       tempExecUndoEl = null;
+    }
+
+    function getTempExecUndoCommitLabel(stack) {
+      if (!Array.isArray(stack) || !stack.length) return '';
+      var hasInsert = false;
+      var hasRemove = false;
+      stack.forEach(function(entry) {
+        var payload = entry && entry.data ? entry.data : null;
+        if (!payload || !payload.type) return;
+        if (payload.type === 'insert') hasInsert = true;
+        if (payload.type === 'remove') hasRemove = true;
+      });
+      if (hasRemove && !hasInsert) return '马上删除';
+      if (hasInsert && !hasRemove) return '马上新增';
+      return '马上完成';
     }
 
     var tempExecBlockHintEl = null;
@@ -9238,6 +9253,10 @@
       var btn = document.createElement('button');
       btn.className = 'pill secondary';
       btn.textContent = '撤销';
+      var immediateBtn = document.createElement('button');
+      immediateBtn.className = 'pill secondary temp-undo-immediate';
+      immediateBtn.textContent = getTempExecUndoCommitLabel(state.tempExecUndoStack);
+      immediateBtn.title = immediateBtn.textContent;
       var renderCountdown = function() {
         var count = Array.isArray(state.tempExecUndoStack) ? state.tempExecUndoStack.length : 0;
         var suffix = count > 1 ? '，可撤销 ' + count + ' 条' : '';
@@ -9258,8 +9277,18 @@
         }
       };
       btn.addEventListener('click', handleUndoClick);
+      immediateBtn.addEventListener('click', function() {
+        if (!Array.isArray(state.tempExecUndoStack) || !state.tempExecUndoStack.length) return;
+        var commitPromise = commitTempExecUndoToDb();
+        clearTempExecUndo();
+        cleanupTempExecUndoUI();
+        Promise.resolve(commitPromise).then(function() {
+          if (tempExecStatus) setStatus(tempExecStatus, immediateBtn.textContent + '已完成', 'ok');
+        });
+      });
       tempExecUndoEl.appendChild(text);
       tempExecUndoEl.appendChild(btn);
+      if (immediateBtn.textContent) tempExecUndoEl.appendChild(immediateBtn);
       document.body.appendChild(tempExecUndoEl);
       renderCountdown();
       tempExecUndoInterval = setInterval(function() {

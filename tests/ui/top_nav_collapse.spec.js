@@ -36,7 +36,7 @@ test.describe('顶部导航收起展开', () => {
     await setupPage(page);
   });
 
-  test('页面内导航常驻且执行总览收起状态独立持久化', async ({ page }) => {
+  test('执行总览项目侧栏与用例执行侧栏可独立收起和切换', async ({ page }) => {
     const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
     await page.goto(base + '/case-exec.html');
     await waitForAppReady(page);
@@ -51,13 +51,41 @@ test.describe('顶部导航收起展开', () => {
         window.app.switchTab('exec-overview');
       }
     });
-    const execOverviewNav = page.locator('#execOverviewFlowNav');
-    const execOverviewToggle = page.locator('#execOverviewFlowNav [data-flow-toggle]');
+    const execOverviewNav = page.locator('#execOverviewHead');
+    const execOverviewToggle = page.locator('#execOverviewSectionNavToggle');
     await execOverviewNav.waitFor({ state: 'visible', timeout: 10000 });
     await expect(execOverviewNav).not.toHaveClass(/is-collapsed/);
+    await expect(page.locator('#tempexecSectionNav')).toBeHidden();
+    const stage = page.locator('.workspace-main-stage');
+    await expect(stage).toHaveCSS('grid-column-start', '3');
+    const sideBox = await page.locator('aside.sidebar').boundingBox();
+    const navBox = await execOverviewNav.boundingBox();
+    const stageBox = await stage.boundingBox();
+    expect(navBox.x).toBeGreaterThanOrEqual(sideBox.x + sideBox.width - 1);
+    expect(stageBox.x).toBeGreaterThanOrEqual(navBox.x + navBox.width - 1);
+    expect(Math.abs(navBox.y - stageBox.y)).toBeLessThan(2);
     await execOverviewToggle.click();
     await expect(execOverviewNav).toHaveClass(/is-collapsed/);
-    await expect(execOverviewToggle).toHaveText('展开');
+    await expect(execOverviewNav).toBeHidden();
+    await expect(execOverviewToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#execOverviewSectionNavToggleHost button')).toBeVisible();
+    await expect(stage).toHaveCSS('grid-column-start', '2');
+
+    await page.evaluate(() => window.app.switchTab('tempexec'));
+    await expect(page.locator('#tempexecSectionNav')).toBeVisible();
+    await expect(stage).toHaveCSS('grid-column-start', '3');
+    await page.locator('#caseExecSectionNavToggle').click();
+    await expect(stage).toHaveCSS('grid-column-start', '2');
+    await page.evaluate(() => window.app.switchTab('exec-overview'));
+    await execOverviewToggle.click();
+    await expect(execOverviewNav).toBeVisible();
+    await expect(execOverviewToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(stage).toHaveCSS('grid-column-start', '3');
+
+    await page.setViewportSize({ width: 800, height: 900 });
+    await expect(execOverviewNav).toBeVisible();
+    await expect(page.locator('#tempexecSectionNav')).toBeHidden();
+    await expect(stage).toHaveCSS('grid-column-start', '1');
 
     await page.reload();
     await waitForAppReady(page);
@@ -67,7 +95,7 @@ test.describe('顶部导航收起展开', () => {
       }
     });
     await execOverviewNav.waitFor({ state: 'visible', timeout: 10000 });
-    await expect(execOverviewNav).toHaveClass(/is-collapsed/);
+    await expect(execOverviewNav).not.toHaveClass(/is-collapsed/);
   });
 
   test('用例库入口使用可收起的页面内侧栏', async ({ page }) => {

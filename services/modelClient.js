@@ -95,7 +95,6 @@
 
   function createModelClient(options) {
     var defaultPrompts = options && options.defaultPrompts ? options.defaultPrompts : {};
-    var defaultMaxTokens = options && options.defaultMaxTokens ? options.defaultMaxTokens : 1024;
     var clampTimeoutSeconds = typeof options.clampTimeoutSeconds === 'function'
       ? options.clampTimeoutSeconds
       : function clampTimeoutSeconds(value) {
@@ -127,6 +126,7 @@
           var name = model.model ? String(model.model).toLowerCase() : '';
           return name.indexOf('deepseek') !== -1;
         };
+    var reasoningEffortValues = ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
     var proxyModelRequest = options && typeof options.proxyModelRequest === 'function'
       ? options.proxyModelRequest
       : null;
@@ -138,6 +138,25 @@
         return window.app.apiClient.proxyModelRequest;
       }
       return null;
+    }
+
+    function resolveModelTaskClient() {
+      return window.app && window.app.services && window.app.services.modelTaskClient
+        ? window.app.services.modelTaskClient
+        : null;
+    }
+
+    function isModelTaskFallbackEnabled() {
+      try {
+        if (window.__APP_ALLOW_MODEL_TASK_FALLBACK === true) return true;
+        if (typeof localStorage !== 'undefined') {
+          var e2eFlag = localStorage.getItem('tap-e2e-skip-auth');
+          if (e2eFlag === '1' || e2eFlag === 'true') return true;
+        }
+      } catch (err) {
+        // ignore
+      }
+      return false;
     }
 
     function registerActiveController(controller, owner) {
@@ -221,8 +240,43 @@
     function getEffectiveModelBaseUrl(model) {
       var baseUrl = model && model.baseUrl ? String(model.baseUrl) : '';
       if (!baseUrl) return '';
-      if (!modelNeedsChatCompletionsCompat(model)) return baseUrl;
-      return baseUrl.replace(/\/responses(\?|$)/i, '/chat/completions$1');
+      if (modelNeedsChatCompletionsCompat(model)) {
+        baseUrl = baseUrl.replace(/\/responses(\?|$)/i, '/chat/completions$1');
+      }
+      return normalizeModelEndpointUrl(baseUrl, model);
+    }
+
+    // 把用户填的「接口地址」规约成实际请求地址：既接受完整端点
+    // （/chat/completions、/responses、/completions、/chat、/models），也接受
+    // 裸的 API Base URL（如 https://x.com、https://x.com/v1、https://x.com/v1/）。
+    // 裸 Base URL 按模型协议补默认端点；GPT-5 推理模型使用 Responses API。
+    function normalizeModelEndpointUrl(rawUrl, model) {
+      var url = String(rawUrl || '').trim();
+      if (!url) return url;
+      var hashIndex = url.indexOf('#');
+      if (hashIndex !== -1) url = url.slice(0, hashIndex);
+      var query = '';
+      var qIndex = url.indexOf('?');
+      if (qIndex !== -1) {
+        query = url.slice(qIndex);
+        url = url.slice(0, qIndex);
+      }
+      url = url.replace(/\/+$/, '');
+      var isFullEndpoint = /\/chat\/completions$/i.test(url)
+        || /\/completions$/i.test(url)
+        || /\/responses$/i.test(url)
+        || /\/chat$/i.test(url)
+        || /\/models$/i.test(url);
+      if (!isFullEndpoint) {
+        if (url) {
+          if (modelPrefersResponsesEndpoint(model)) {
+            url += /\/v1$/i.test(url) ? '/responses' : '/v1/responses';
+          } else {
+            url += '/chat/completions';
+          }
+        }
+      }
+      return url + query;
     }
 
     function getModelForRequest(model) {
@@ -259,6 +313,53 @@
       return baseUrl.indexOf('packyapi.com') !== -1;
     }
 
+    function normalizeReasoningEffort(value) {
+      var raw = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
+      return reasoningEffortValues.indexOf(raw) !== -1 ? raw : '';
+    }
+
+    function modelHasReasoningCapability(model) {
+      if (!model || typeof model !== 'object') return false;
+      var raw = model.capabilities || model.modelCapabilities || model.tags || model.multiModalTags || model.multimodalTags;
+      if (Array.isArray(raw)) {
+        return raw.some(function(item) { return String(item || '').trim().toLowerCase() === 'reasoning'; });
+      }
+      if (typeof raw === 'string') {
+        return raw.split(/[,|/、\s]+/).some(function(item) {
+          return String(item || '').trim().toLowerCase() === 'reasoning';
+        });
+      }
+      if (raw && typeof raw === 'object') return Boolean(raw.reasoning || raw.推理);
+      return false;
+    }
+
+    function isDeepseekR1Model(model) {
+      var id = model && model.model ? String(model.model).trim().toLowerCase() : '';
+      return id.indexOf('deepseek-r1') !== -1 || id.indexOf('deepseek-reasoner') !== -1;
+    }
+
+    function isGptReasoningModel(model) {
+      var id = model && model.model ? String(model.model).trim().toLowerCase() : '';
+      return id.indexOf('gpt-5') === 0 && id.indexOf('chat') === -1;
+    }
+
+    function modelPrefersResponsesEndpoint(model) {
+      return isGptReasoningModel(model);
+    }
+
+    function modelSupportsReasoning(model) {
+      return modelIsR1(model) || isDeepseekR1Model(model) || isGptReasoningModel(model) || modelHasReasoningCapability(model);
+    }
+
+    function resolveReasoningEffort(model, requested) {
+      if (!modelSupportsReasoning(model)) return '';
+      var explicit = normalizeReasoningEffort(requested);
+      if (explicit) return explicit;
+      return normalizeReasoningEffort(
+        model && model.reasoningEffort !== undefined ? model.reasoningEffort : model && model.reasoning_effort
+      );
+    }
+
     function buildPromptPrefixedText(systemPrompt, userText) {
       var prompt = systemPrompt === undefined || systemPrompt === null ? '' : String(systemPrompt).trim();
       var text = userText === undefined || userText === null ? '' : String(userText);
@@ -266,9 +367,10 @@
       return prompt + '\n\n用户输入：\n' + text;
     }
 
-    function buildModelRequestBody(model, systemPrompt, userText, safeTemperature, maxTokens, reasoningEffort, deepseekJsonMode) {
+    function buildModelRequestBody(model, systemPrompt, userText, reasoningEffort, deepseekJsonMode) {
       var useStream = modelUsesStreaming(model);
       var usePackyStreamCompat = modelNeedsPackyResponsesStreamCompat(model);
+      var effectiveReasoningEffort = resolveReasoningEffort(model, reasoningEffort);
       if (modelUsesResponsesApi(model)) {
         var safeText = usePackyStreamCompat
           ? buildPromptPrefixedText(systemPrompt, userText)
@@ -284,11 +386,10 @@
               ],
             }
           ],
-          max_output_tokens: maxTokens,
         };
-        if (!usePackyStreamCompat) {
-          responseBody.temperature = safeTemperature;
-          if (systemPrompt) responseBody.instructions = systemPrompt;
+        if (!usePackyStreamCompat && systemPrompt) responseBody.instructions = systemPrompt;
+        if (effectiveReasoningEffort && (isGptReasoningModel(model) || modelHasReasoningCapability(model))) {
+          responseBody.reasoning = { effort: effectiveReasoningEffort };
         }
         return responseBody;
       }
@@ -299,11 +400,9 @@
           { role: 'user', content: userText }
         ],
         stream: useStream,
-        temperature: safeTemperature,
-        max_tokens: maxTokens,
       };
-      if (reasoningEffort && modelIsR1(model)) {
-        chatBody.reasoning_effort = reasoningEffort;
+      if (effectiveReasoningEffort && (modelIsR1(model) || isDeepseekR1Model(model) || isGptReasoningModel(model) || modelHasReasoningCapability(model))) {
+        chatBody.reasoning_effort = effectiveReasoningEffort;
       }
       if (deepseekJsonMode) {
         chatBody.response_format = { type: 'json_object' };
@@ -332,10 +431,7 @@
 
     function buildMultimodalRequestBody(model, contentBlocks, promptText, options) {
       var opts = options && typeof options === 'object' ? options : {};
-      var maxTokens = opts.maxTokens || model.maxTokens || defaultMaxTokens;
-      var tempValue = Number(opts.temperature);
-      var safeTemperature = Number.isFinite(tempValue) ? Math.min(1, Math.max(0, tempValue)) : 0.2;
-      var reasoningEffort = opts.reasoningEffort || '';
+      var reasoningEffort = resolveReasoningEffort(model, opts.reasoningEffort || '');
       var systemPrompt = promptText && String(promptText).trim() ? String(promptText).trim() : '';
       var useStream = modelUsesStreaming(model);
       var usePackyStreamCompat = modelNeedsPackyResponsesStreamCompat(model);
@@ -371,11 +467,10 @@
               content: responseContent,
             }
           ],
-          max_output_tokens: maxTokens,
         };
-        if (!usePackyStreamCompat) {
-          responseBody.temperature = safeTemperature;
-          if (systemPrompt) responseBody.instructions = systemPrompt;
+        if (!usePackyStreamCompat && systemPrompt) responseBody.instructions = systemPrompt;
+        if (reasoningEffort && (isGptReasoningModel(model) || modelHasReasoningCapability(model))) {
+          responseBody.reasoning = { effort: reasoningEffort };
         }
         return responseBody;
       }
@@ -404,10 +499,8 @@
         model: model.model,
         messages: messages,
         stream: useStream,
-        temperature: safeTemperature,
-        max_tokens: maxTokens,
       };
-      if (reasoningEffort && modelIsR1(model)) {
+      if (reasoningEffort && (modelIsR1(model) || isDeepseekR1Model(model) || isGptReasoningModel(model) || modelHasReasoningCapability(model))) {
         chatBody.reasoning_effort = reasoningEffort;
       }
       return chatBody;
@@ -517,6 +610,12 @@
     function normalizeHttpErrorBody(rawBody) {
       var text = rawBody === undefined || rawBody === null ? '' : String(rawBody).trim();
       if (!text) return '';
+      if (looksLikeHtmlDocument(text)) {
+        var htmlTitle = extractHtmlTitle(text);
+        return htmlTitle
+          ? '上游返回 HTML 错误页（页面标题：' + htmlTitle + '）'
+          : '上游返回 HTML 错误页';
+      }
       try {
         var parsed = JSON.parse(text);
         var detail = normalizeModelError(parsed && parsed.error ? parsed.error : '')
@@ -686,6 +785,7 @@
       var deltaParts = [];
       var contentParts = [];
       var completedContent = '';
+      var metadata = {};
       var sawDelta = false;
       for (var i = 0; i < events.length; i += 1) {
         var evt = events[i];
@@ -698,8 +798,9 @@
           parsed = dataText;
         }
         var extracted = extractSsePayloadContent(parsed, evt && evt.event ? String(evt.event) : '');
+        metadata = mergeResponseMetadata(metadata, parsed);
         if (extracted.error) {
-          return { detected: true, content: '', error: extracted.error };
+          return { detected: true, content: '', error: extracted.error, metadata: metadata };
         }
         if (extracted.delta) {
           sawDelta = true;
@@ -718,7 +819,165 @@
         content = completedContent;
       }
       content = content ? stripCodeFence(normalizeResponseContent(content)) : '';
-      return { detected: true, content: content, error: '' };
+      return { detected: true, content: content, error: '', metadata: metadata };
+    }
+
+    function mergeResponseMetadata(previous, data) {
+      var base = previous && typeof previous === 'object' ? previous : {};
+      var source = data && typeof data === 'object' ? data : {};
+      var nested = source.response && typeof source.response === 'object' ? source.response : null;
+      var candidate = nested || source;
+      var choices = Array.isArray(candidate.choices) ? candidate.choices : [];
+      var choice = choices.length && choices[0] && typeof choices[0] === 'object' ? choices[0] : {};
+      var incomplete = candidate.incomplete_details && typeof candidate.incomplete_details === 'object'
+        ? candidate.incomplete_details
+        : (source.incomplete_details && typeof source.incomplete_details === 'object' ? source.incomplete_details : null);
+      var usage = candidate.usage && typeof candidate.usage === 'object'
+        ? candidate.usage
+        : (source.usage && typeof source.usage === 'object' ? source.usage : null);
+      var next = {
+        responseId: candidate.id || base.responseId || '',
+        responseError: candidate.error || source.error || base.responseError || null,
+        responseStatus: candidate.status || source.status || base.responseStatus || '',
+        finishReason: choice.finish_reason || candidate.finish_reason || source.finish_reason || base.finishReason || '',
+        incompleteDetails: incomplete || base.incompleteDetails || null,
+        usage: usage || base.usage || null,
+        upstreamStatus: candidate.upstream_status || candidate.upstreamStatus || source.upstream_status || source.upstreamStatus || base.upstreamStatus || 0,
+      };
+      return next;
+    }
+
+    function buildModelResponseError(parsedRaw, metadata) {
+      var info = metadata || {};
+      var message = parsedRaw && parsedRaw.error
+        ? parsedRaw.error
+        : normalizeModelError(info.responseError);
+      if (!message && String(info.responseStatus || '').toLowerCase() === 'failed') {
+        message = '上游模型生成失败（response.failed）';
+      }
+      if (!message) return null;
+      var error = new Error(message);
+      error.code = info.responseError && info.responseError.code
+        ? String(info.responseError.code)
+        : 'MODEL_RESPONSE_FAILED';
+      error.responseMetadata = info;
+      return error;
+    }
+
+    function isOutputTokenLimitMetadata(metadata) {
+      var info = metadata && typeof metadata === 'object' ? metadata : {};
+      var status = String(info.responseStatus || '').toLowerCase();
+      var finishReason = String(info.finishReason || '').toLowerCase();
+      var incomplete = info.incompleteDetails && typeof info.incompleteDetails === 'object'
+        ? info.incompleteDetails
+        : {};
+      var incompleteReason = String(incomplete.reason || '').toLowerCase();
+      return (status === 'incomplete' && (!incompleteReason || incompleteReason.indexOf('token') !== -1))
+        || finishReason === 'length'
+        || finishReason === 'max_tokens'
+        || incompleteReason === 'max_output_tokens'
+        || incompleteReason === 'max_tokens'
+        || incompleteReason.indexOf('token') !== -1;
+    }
+
+    function formatUsageSummary(metadata) {
+      var usage = metadata && metadata.usage && typeof metadata.usage === 'object' ? metadata.usage : null;
+      if (!usage) return '';
+      var input = Number(usage.input_tokens !== undefined ? usage.input_tokens : usage.prompt_tokens);
+      var output = Number(usage.output_tokens !== undefined ? usage.output_tokens : usage.completion_tokens);
+      var total = Number(usage.total_tokens);
+      var reasoningDetails = usage.output_tokens_details && typeof usage.output_tokens_details === 'object'
+        ? usage.output_tokens_details
+        : {};
+      var reasoning = Number(reasoningDetails.reasoning_tokens);
+      var parts = [];
+      if (Number.isFinite(input) && input >= 0) parts.push('输入 ' + String(input));
+      if (Number.isFinite(output) && output >= 0) parts.push('输出 ' + String(output));
+      if (Number.isFinite(reasoning) && reasoning >= 0) parts.push('推理 ' + String(reasoning));
+      if (Number.isFinite(total) && total >= 0) parts.push('合计 ' + String(total));
+      return parts.join('，');
+    }
+
+    function buildOutputTokenLimitError(metadata) {
+      var usageText = formatUsageSummary(metadata);
+      var message = '模型输出达到 token 上限（由上游模型或代理决定），返回的 JSON 可能已被截断。';
+      if (usageText) message += '上游用量：' + usageText + '。';
+      message += '请缩小单次生成范围，或确认代理对该模型开放了足够的输出上限。';
+      var error = new Error(message);
+      error.code = 'MODEL_OUTPUT_TOKEN_LIMIT';
+      error.responseMetadata = metadata || {};
+      return error;
+    }
+
+    function summarizeResponsePreview(text, maxLength, fromTail) {
+      var value = text === null || text === undefined ? '' : String(text);
+      var limit = Number(maxLength);
+      if (!Number.isFinite(limit) || limit <= 0) limit = 160;
+      value = value.replace(/\s+/g, ' ').trim();
+      if (!value) return '';
+      if (value.length <= limit) return value;
+      return fromTail === true
+        ? '…' + value.slice(-limit).trim()
+        : value.slice(0, limit).trim() + '…';
+    }
+
+    function reportModelResponseDiagnostics(requestOptions, metadata, rawBody, parsedRaw, content) {
+      var opts = requestOptions && typeof requestOptions === 'object' ? requestOptions : {};
+      var responseInfo = metadata && typeof metadata === 'object' ? metadata : {};
+      var incomplete = responseInfo.incompleteDetails && typeof responseInfo.incompleteDetails === 'object'
+        ? responseInfo.incompleteDetails
+        : {};
+      var rawText = rawBody === null || rawBody === undefined ? '' : String(rawBody);
+      var contentText = content === null || content === undefined ? '' : String(content);
+      var info = {
+        responseId: String(responseInfo.responseId || ''),
+        errorCode: responseInfo.responseError && responseInfo.responseError.code
+          ? String(responseInfo.responseError.code)
+          : '',
+        upstreamStatus: Number(responseInfo.upstreamStatus || 0) || 0,
+        responseStatus: String(responseInfo.responseStatus || ''),
+        finishReason: String(responseInfo.finishReason || ''),
+        incompleteReason: String(incomplete.reason || ''),
+        usage: responseInfo.usage && typeof responseInfo.usage === 'object'
+          ? responseInfo.usage
+          : null,
+        rawLength: rawText.length,
+        rawTailPreview: summarizeResponsePreview(rawText, 160, true),
+        contentLength: contentText.length,
+        contentTailPreview: summarizeResponsePreview(contentText, 160, true),
+        isSse: Boolean(parsedRaw && parsedRaw.isSse),
+        isHtml: Boolean(parsedRaw && parsedRaw.isHtml),
+        hasParsedData: Boolean(parsedRaw && parsedRaw.data),
+      };
+      if (typeof opts.onResponseDiagnostics === 'function') {
+        try {
+          opts.onResponseDiagnostics(info);
+        } catch (callbackErr) {
+        }
+      }
+      var owner = opts.owner ? String(opts.owner || '') : '';
+      var scene = opts.scene ? String(opts.scene || '') : '';
+      var shouldLog = opts.logModelResponse === true
+        || owner.indexOf('xmind-casegen') === 0
+        || scene === 'root'
+        || scene === 'module';
+      var incompleteReason = String(info.incompleteReason || '').toLowerCase();
+      var finishReason = String(info.finishReason || '').toLowerCase();
+      var responseLimited = String(info.responseStatus || '').toLowerCase() === 'incomplete'
+        || finishReason === 'length'
+        || finishReason === 'max_tokens'
+        || incompleteReason.indexOf('token') !== -1;
+      if (shouldLog && typeof console !== 'undefined' && console) {
+        var logMethod = responseLimited ? console.warn : console.info;
+        if (typeof logMethod !== 'function') logMethod = console.warn;
+        if (typeof logMethod === 'function') {
+          logMethod.call(console, '[TAP][model-response]', Object.assign({
+            owner: owner,
+            scene: scene,
+          }, info));
+        }
+      }
+      return info;
     }
 
     function parseModelRawBody(rawBody) {
@@ -740,14 +999,37 @@
       }
       var sseResult = extractContentFromSse(trimmed);
       if (sseResult.detected) {
-        if (sseResult.error) throw new Error(sseResult.error);
-        return { data: null, content: sseResult.content || '', isSse: true, isHtml: false };
+        return {
+          data: null,
+          content: sseResult.content || '',
+          error: sseResult.error || '',
+          isSse: true,
+          isHtml: false,
+          metadata: sseResult.metadata || {},
+        };
       }
       var sanitizedRaw = stripCodeFence(trimmed);
       return { data: null, content: sanitizedRaw || trimmed, isSse: false, isHtml: false };
     }
 
-    async function sendModelRequest(model, headers, body, timeoutSec, signal) {
+    async function sendModelRequest(model, headers, body, timeoutSec, signal, requestOptions) {
+      var asyncTaskClient = resolveModelTaskClient();
+      var opts = requestOptions && typeof requestOptions === 'object' ? requestOptions : {};
+      if (asyncTaskClient && typeof asyncTaskClient.runModelRequest === 'function') {
+        var asyncResponse = await asyncTaskClient.runModelRequest({
+          model: model,
+          payload: body,
+          timeoutSec: timeoutSec,
+          owner: opts.owner || '',
+          requestKey: opts.requestKey || '',
+          scene: opts.scene || 'generation',
+          resumeOnly: opts.resumeOnly === true,
+        }, signal);
+        if (asyncResponse) return asyncResponse;
+      }
+      if (!isModelTaskFallbackEnabled()) {
+        throw new Error('后端异步生成服务不可用，无法保证刷新后继续生成，请重启后端并刷新页面后重试');
+      }
       var proxyFn = resolveProxyModelRequest();
       var requestUrl = getEffectiveModelBaseUrl(model);
       var proxyFallbackResponse = null;
@@ -886,11 +1168,8 @@
         jsonShape = detectDeepseekJsonShape(prompt);
       }
       var systemPrompt = deepseekJsonMode ? appendDeepseekJsonHint(prompt, jsonShape) : prompt;
-      var maxTokens = model.maxTokens || defaultMaxTokens;
-      var tempValue = Number(temperature);
-      var safeTemperature = Number.isFinite(tempValue) ? Math.min(1, Math.max(0, tempValue)) : 0.2;
       var requestModel = getModelForRequest(model);
-      var body = buildModelRequestBody(requestModel, systemPrompt, userText, safeTemperature, maxTokens, reasoningEffort, deepseekJsonMode);
+      var body = buildModelRequestBody(requestModel, systemPrompt, userText, reasoningEffort, deepseekJsonMode);
       var headers = Object.assign({ 'Content-Type': 'application/json' }, getAuthHeader(model.apiKey));
       var timeoutSec = clampTimeoutSeconds(getTimeoutSec());
       var timeoutMs = timeoutSec * 1000;
@@ -907,20 +1186,44 @@
       }
       var res;
       var rawBody = '';
+      var responseTaskMetadata = null;
       try {
         res = await sendModelRequest(
           requestModel,
           headers,
           body,
           timeoutSec,
-          controller ? controller.signal : undefined
+          controller ? controller.signal : undefined,
+          requestOptions
         );
+        responseTaskMetadata = res && res.modelTaskMetadata ? res.modelTaskMetadata : null;
         if (!res || !res.ok) {
           try {
             rawBody = res && typeof res.text === 'function' ? await res.text() : '';
           } catch (err2) {
             rawBody = '';
           }
+          var errorParsedRaw = null;
+          try {
+            errorParsedRaw = parseModelRawBody(rawBody);
+          } catch (parseError) {
+            errorParsedRaw = { data: null, content: '', isSse: false, isHtml: false };
+          }
+          var errorResponseMetadata = mergeResponseMetadata(
+            errorParsedRaw && errorParsedRaw.metadata,
+            errorParsedRaw && errorParsedRaw.data
+          );
+          errorResponseMetadata.upstreamStatus = Number(res && res.status || 0) || 0;
+          if (responseTaskMetadata) {
+            errorResponseMetadata = mergeResponseMetadata(errorResponseMetadata, {
+              upstreamStatus: responseTaskMetadata.upstreamStatus,
+              status: responseTaskMetadata.responseStatus,
+              finish_reason: responseTaskMetadata.finishReason,
+              incomplete_details: responseTaskMetadata.incompleteDetails,
+              usage: responseTaskMetadata.usage,
+            });
+          }
+          reportModelResponseDiagnostics(requestOptions, errorResponseMetadata, rawBody, errorParsedRaw, '');
           var normalizedErr = normalizeHttpErrorBody(rawBody);
           var errText = normalizedErr ? ('：' + normalizedErr.slice(0, 200)) : '';
           throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
@@ -937,27 +1240,49 @@
         if (controller) unregisterActiveController(controller);
       }
       var parsedRaw = parseModelRawBody(rawBody);
+      parsedRaw.modelTaskMetadata = responseTaskMetadata;
       if (parsedRaw.isHtml) {
         throw buildHtmlResponseError(rawBody);
       }
       var data = parsedRaw.data;
-      if (!data && parsedRaw.content) return parsedRaw.content;
+      var responseMetadata = mergeResponseMetadata(parsedRaw.metadata, data);
+      responseMetadata.upstreamStatus = Number(res && res.status || 0) || 0;
+      if (parsedRaw.modelTaskMetadata) responseMetadata = mergeResponseMetadata(responseMetadata, {
+        upstreamStatus: parsedRaw.modelTaskMetadata.upstreamStatus,
+        status: parsedRaw.modelTaskMetadata.responseStatus,
+        finish_reason: parsedRaw.modelTaskMetadata.finishReason,
+        incomplete_details: parsedRaw.modelTaskMetadata.incompleteDetails,
+        usage: parsedRaw.modelTaskMetadata.usage,
+      });
+      var responseError = buildModelResponseError(parsedRaw, responseMetadata);
+      if (responseError) {
+        reportModelResponseDiagnostics(requestOptions, responseMetadata, rawBody, parsedRaw, '');
+        throw responseError;
+      }
+      if (isOutputTokenLimitMetadata(responseMetadata)) {
+        reportModelResponseDiagnostics(requestOptions, responseMetadata, rawBody, parsedRaw, '');
+        throw buildOutputTokenLimitError(responseMetadata);
+      }
+      if (!data && parsedRaw.content) {
+        reportModelResponseDiagnostics(requestOptions, responseMetadata, rawBody, parsedRaw, parsedRaw.content);
+        return parsedRaw.content;
+      }
       if (!data && parsedRaw.isSse) {
+        reportModelResponseDiagnostics(requestOptions, responseMetadata, rawBody, parsedRaw, '');
         throw new Error('流式响应未解析到有效内容');
       }
       if (!data) {
+        reportModelResponseDiagnostics(requestOptions, responseMetadata, rawBody, parsedRaw, '');
         throw new Error('模型响应为空');
-      }
-      if (data && data.error) {
-        var errMsg = normalizeModelError(data.error);
-        throw new Error(errMsg);
       }
       var content = extractContentFromParsedData(data);
       if (!content) {
+        reportModelResponseDiagnostics(requestOptions, responseMetadata, rawBody, parsedRaw, '');
         var preview = rawBody ? (rawBody.length > 400 ? rawBody.slice(0, 400) + '...' : rawBody) : '';
         var extra = preview ? '（响应片段：' + preview + '）' : '';
         throw new Error('未找到模型返回内容' + extra);
       }
+      reportModelResponseDiagnostics(requestOptions, responseMetadata, rawBody, parsedRaw, content);
       if (deepseekJsonMode && jsonShape === 'array') {
         return enforceJsonArrayOutput(content);
       }
@@ -994,20 +1319,44 @@
       }
       var res;
       var rawBody = '';
+      var responseTaskMetadata = null;
       try {
         res = await sendModelRequest(
           requestModel,
           headers,
           body,
           timeoutSec,
-          controller ? controller.signal : undefined
+          controller ? controller.signal : undefined,
+          opts
         );
+        responseTaskMetadata = res && res.modelTaskMetadata ? res.modelTaskMetadata : null;
         if (!res || !res.ok) {
           try {
             rawBody = res && typeof res.text === 'function' ? await res.text() : '';
           } catch (err2) {
             rawBody = '';
           }
+          var errorParsedRaw = null;
+          try {
+            errorParsedRaw = parseModelRawBody(rawBody);
+          } catch (parseError) {
+            errorParsedRaw = { data: null, content: '', isSse: false, isHtml: false };
+          }
+          var errorResponseMetadata = mergeResponseMetadata(
+            errorParsedRaw && errorParsedRaw.metadata,
+            errorParsedRaw && errorParsedRaw.data
+          );
+          errorResponseMetadata.upstreamStatus = Number(res && res.status || 0) || 0;
+          if (responseTaskMetadata) {
+            errorResponseMetadata = mergeResponseMetadata(errorResponseMetadata, {
+              upstreamStatus: responseTaskMetadata.upstreamStatus,
+              status: responseTaskMetadata.responseStatus,
+              finish_reason: responseTaskMetadata.finishReason,
+              incomplete_details: responseTaskMetadata.incompleteDetails,
+              usage: responseTaskMetadata.usage,
+            });
+          }
+          reportModelResponseDiagnostics(opts, errorResponseMetadata, rawBody, errorParsedRaw, '');
           var normalizedErr = normalizeHttpErrorBody(rawBody);
           var errText = normalizedErr ? ('：' + normalizedErr.slice(0, 200)) : '';
           throw new Error('HTTP ' + (res ? res.status : '未知') + errText);
@@ -1024,27 +1373,49 @@
         if (controller) unregisterActiveController(controller);
       }
       var parsedRaw = parseModelRawBody(rawBody);
+      parsedRaw.modelTaskMetadata = responseTaskMetadata;
       if (parsedRaw.isHtml) {
         throw buildHtmlResponseError(rawBody);
       }
       var data = parsedRaw.data;
-      if (!data && parsedRaw.content) return parsedRaw.content;
+      var responseMetadata = mergeResponseMetadata(parsedRaw.metadata, data);
+      responseMetadata.upstreamStatus = Number(res && res.status || 0) || 0;
+      if (parsedRaw.modelTaskMetadata) responseMetadata = mergeResponseMetadata(responseMetadata, {
+        upstreamStatus: parsedRaw.modelTaskMetadata.upstreamStatus,
+        status: parsedRaw.modelTaskMetadata.responseStatus,
+        finish_reason: parsedRaw.modelTaskMetadata.finishReason,
+        incomplete_details: parsedRaw.modelTaskMetadata.incompleteDetails,
+        usage: parsedRaw.modelTaskMetadata.usage,
+      });
+      var responseError = buildModelResponseError(parsedRaw, responseMetadata);
+      if (responseError) {
+        reportModelResponseDiagnostics(opts, responseMetadata, rawBody, parsedRaw, '');
+        throw responseError;
+      }
+      if (isOutputTokenLimitMetadata(responseMetadata)) {
+        reportModelResponseDiagnostics(opts, responseMetadata, rawBody, parsedRaw, '');
+        throw buildOutputTokenLimitError(responseMetadata);
+      }
+      if (!data && parsedRaw.content) {
+        reportModelResponseDiagnostics(opts, responseMetadata, rawBody, parsedRaw, parsedRaw.content);
+        return parsedRaw.content;
+      }
       if (!data && parsedRaw.isSse) {
+        reportModelResponseDiagnostics(opts, responseMetadata, rawBody, parsedRaw, '');
         throw new Error('流式响应未解析到有效内容');
       }
       if (!data) {
+        reportModelResponseDiagnostics(opts, responseMetadata, rawBody, parsedRaw, '');
         throw new Error('模型响应为空');
-      }
-      if (data && data.error) {
-        var errMsg = normalizeModelError(data.error);
-        throw new Error(errMsg);
       }
       var content = extractContentFromParsedData(data);
       if (!content) {
+        reportModelResponseDiagnostics(opts, responseMetadata, rawBody, parsedRaw, '');
         var preview = rawBody ? (rawBody.length > 400 ? rawBody.slice(0, 400) + '...' : rawBody) : '';
         var extra = preview ? '（响应片段：' + preview + '）' : '';
         throw new Error('未找到模型返回内容' + extra);
       }
+      reportModelResponseDiagnostics(opts, responseMetadata, rawBody, parsedRaw, content);
       return content;
     }
 

@@ -47,7 +47,7 @@ test.describe('模型管理与保留设置', () => {
     await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
     await page.fill('#modelApiKey', 'sk-test');
     await page.fill('#modelIdentifier', 'deepseek-test');
-    await page.fill('#modelMaxTokens', '2048');
+    await expect(page.locator('#modelMaxTokens')).toHaveCount(0);
     await page.selectOption('#modelStreamMode', 'stream');
     await page.click('#saveModelBtn');
     await expect(page.locator('#modelFormStatus')).toContainText('模型已保存');
@@ -65,6 +65,34 @@ test.describe('模型管理与保留设置', () => {
     await page.fill('#modelDisplayName', '表单重置模型');
     await page.click('#resetModelForm');
     await expect(formWrapper).toHaveClass(/hidden/);
+  });
+
+  test('GPT-5.6 模型可在模型管理中设置推理等级并持久化', async ({ page }) => {
+    await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('models'); });
+    await page.click('#createModelBtn');
+    await page.selectOption('#modelProvider', 'custom');
+    await page.fill('#modelDisplayName', 'GPT-5.6 推理模型');
+    await page.fill('#modelBaseUrl', 'https://example.com/v1/responses');
+    await page.fill('#modelApiKey', 'sk-test');
+    await page.fill('#modelIdentifier', 'gpt-5.6-sol');
+
+    await expect(page.locator('#modelReasoningRow')).not.toHaveClass(/hidden/);
+    const options = await page.locator('#modelReasoningEffort option').evaluateAll((items) => items.map((item) => item.value));
+    expect(options).toEqual(['', 'none', 'low', 'medium', 'high', 'xhigh', 'max']);
+
+    await page.selectOption('#modelReasoningEffort', 'high');
+    await page.click('#saveModelBtn');
+    await expect(page.locator('#modelFormStatus')).toContainText('模型已保存');
+
+    const storedModel = await page.evaluate(() => {
+      const list = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
+      return list[0] || null;
+    });
+    expect(storedModel && storedModel.reasoningEffort).toBe('high');
+    await expect(page.locator('#modelList')).toContainText('推理：High');
+
+    await page.locator('#modelList [data-edit]').click();
+    await expect(page.locator('#modelReasoningEffort')).toHaveValue('high');
   });
 
   test('编辑模型时表单在对应模型下方原地展开', async ({ page }) => {
@@ -140,7 +168,7 @@ test.describe('模型管理与保留设置', () => {
     await expect(page.locator('#tempExecPageSizeStatus')).toContainText(/已更新|分页设置已是每页/);
   });
 
-  test('模型缺失提示与 deepseek token 推荐提醒', async ({ page }) => {
+  test('模型缺失提示且不展示最大输出 Tokens 配置', async ({ page }) => {
     const modelsTab = page.locator('[data-tab-btn="models"]');
     const assignTab = page.locator('[data-tab-btn="assign"]');
     await expect(modelsTab.locator('.tab-notice')).toContainText('未配置模型');
@@ -152,27 +180,16 @@ test.describe('模型管理与保留设置', () => {
     await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
     await page.fill('#modelApiKey', 'sk-test');
     await page.fill('#modelIdentifier', 'deepseek-reasoner');
-    await page.fill('#modelMaxTokens', '1024');
+    await expect(page.locator('#modelMaxTokens')).toHaveCount(0);
     await page.click('#saveModelBtn');
     await expect(page.locator('#modelFormStatus')).toContainText('模型已保存');
     await expect(modelsTab.locator('.tab-notice')).toHaveCount(0);
     await expect(assignTab.locator('.tab-notice')).toContainText('未保存指派模型');
 
-    const tokenHint = page.locator('#deepseekTokenHint');
-    await expect(tokenHint).toBeVisible();
-    await expect(tokenHint).toContainText('1024');
-    await tokenHint.click();
-    await expect(page.locator('#modelFormWrapper')).not.toHaveClass(/hidden/);
-    await expect(page.locator('#modelIdentifier')).toHaveValue(/deepseek-reasoner/);
-    await page.fill('#modelMaxTokens', '20000');
-    await page.click('#saveModelBtn');
-    await expect(tokenHint).toHaveClass(/hidden/);
+    await expect(page.locator('#deepseekTokenHint')).toHaveCount(0);
 
     await page.evaluate(() => { if (window.app && window.app.switchTab) window.app.switchTab('assign'); });
-    await expect(page.locator('#xmindCaseGenTemperature')).toHaveValue('0.2');
-    await expect(page.locator('#caseLibraryGenTemperature')).toHaveValue('0.2');
-    await page.fill('#xmindCaseGenTemperature', '0.6');
-    await page.fill('#caseLibraryGenTemperature', '0.3');
+    await expect(page.locator('input[id$="Temperature"]')).toHaveCount(0);
     const modelId = await page.evaluate(() => {
       const models = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');
       return models[0] && models[0].id ? models[0].id : '';
@@ -184,8 +201,8 @@ test.describe('模型管理与保留设置', () => {
     await page.locator('.assignment-feature-actions [data-save-assignments]').first().click();
     await expect(assignTab.locator('.tab-notice')).toHaveCount(0);
     const assignment = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
-    expect(assignment.xmindCaseGenTemperature).toBeCloseTo(0.6);
-    expect(assignment.caseLibraryGenTemperature).toBeCloseTo(0.3);
+    expect(Object.prototype.hasOwnProperty.call(assignment, 'xmindCaseGenTemperature')).toBeFalsy();
+    expect(Object.prototype.hasOwnProperty.call(assignment, 'caseLibraryGenTemperature')).toBeFalsy();
 
   });
 
@@ -211,7 +228,6 @@ test.describe('模型管理与保留设置', () => {
     await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
     await page.fill('#modelApiKey', 'sk-test');
     await page.fill('#modelIdentifier', 'deepseek-chat');
-    await page.fill('#modelMaxTokens', '1024');
     await page.click('#saveModelBtn');
 
     const modelId = await page.evaluate(() => {
@@ -305,13 +321,12 @@ test.describe('模型管理与保留设置', () => {
     }
 
     await page.fill('#xmindCaseGenPrompt', '来自卡片按钮的全量保存');
-    await page.fill('#caseLibraryGenTemperature', '0.7');
     await featureCards.nth(2).locator('[data-save-assignments]').click();
     await expect(page.locator('.temp-center-toast.ok', { hasText: '指派已保存' })).toBeVisible();
 
     const assignment = await page.evaluate(() => JSON.parse(window.localStorage.getItem('cleaner-assignment-v1') || '{}'));
     expect(assignment.xmindCaseGenPrompt).toBe('来自卡片按钮的全量保存');
-    expect(assignment.caseLibraryGenTemperature).toBeCloseTo(0.7);
+    expect(Object.prototype.hasOwnProperty.call(assignment, 'caseLibraryGenTemperature')).toBeFalsy();
   });
 
   test('未指派提示点击页签自动定位到保存按钮', async ({ page }) => {
@@ -322,7 +337,6 @@ test.describe('模型管理与保留设置', () => {
     await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
     await page.fill('#modelApiKey', 'sk-test');
     await page.fill('#modelIdentifier', 'deepseek-chat');
-    await page.fill('#modelMaxTokens', '1024');
     await page.click('#saveModelBtn');
     await expect(assignTab.locator('.tab-notice')).toContainText('未保存指派模型');
 
@@ -344,7 +358,6 @@ test.describe('模型管理与保留设置', () => {
     await page.fill('#modelBaseUrl', 'https://example.com/v1/chat');
     await page.fill('#modelApiKey', 'sk-test');
     await page.fill('#modelIdentifier', 'deepseek-chat');
-    await page.fill('#modelMaxTokens', '2048');
     await page.click('#saveModelBtn');
     const modelId = await page.evaluate(() => {
       const models = JSON.parse(window.localStorage.getItem('cleaner-models-v1') || '[]');

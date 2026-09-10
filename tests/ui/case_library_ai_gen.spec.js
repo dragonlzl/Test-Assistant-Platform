@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { installPersistentModelTaskRoute } = require('./helpers/persistent_model_task_mock');
 
 async function gotoIndex(page) {
   const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
@@ -245,6 +246,10 @@ function buildCaseLibraryRoutes(page, options) {
     modelProxyHandler,
   } = options;
   let nextId = 9000;
+
+  page.addInitScript(() => {
+    window.__APP_ALLOW_MODEL_TASK_FALLBACK = true;
+  });
 
   return page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -890,5 +895,249 @@ test.describe('用例库 AI 用例生成', () => {
     await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#caseLibraryAiGenStatus')).toContainText('生成完成');
     await expect(page.locator('#caseLibraryAiGenResultBody')).toContainText('支付成功');
+  });
+
+  test('中断生成会取消用例库后端任务且不落下迟到结果', async ({ page }) => {
+    const token = 'token-case-library-ai-cancel';
+    const user = { id: 13, username: 'case_library_cancel', role: 'admin', level: 'leader' };
+    const project = { id: 16, name: '项目AI-中断' };
+    const versions = [{ id: 26, name: 'v6' }];
+    const now = new Date().toISOString();
+    const caseFileId = 306;
+    const modelId = '905';
+    const model = {
+      id: modelId,
+      remoteId: 905,
+      name: '用例库生成模型-中断',
+      provider: 'custom',
+      baseUrl: 'https://mock-model.local/v1/chat/completions',
+      apiKey: 'mock-key',
+      model: 'mock-model',
+      maxTokens: 512,
+    };
+    const caseFiles = [{
+      id: caseFileId,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: '用例库AI中断',
+      reuse_enabled: false,
+      item_count: 1,
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    }];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFileId] = [{
+      id: 6601,
+      case_file_id: caseFileId,
+      module: '支付',
+      title: '支付成功',
+      priority: 'P1',
+      precondition: '订单已创建',
+      steps: '完成支付',
+      expected: '支付成功',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }];
+    const retainedTask = {
+      id: 'case-library-cancel-task',
+      scene: 'case-library',
+      status: 'running',
+      caseFileId: caseFileId,
+      contextSignature: 'case-library-cancel-signature',
+      model: model,
+      prompt: '生成用例库补充用例',
+      userText: JSON.stringify({ requirement_text: '需求：允许中断生成' }),
+      requestOwner: 'case-page-generation:case-library:case-library-cancel-task',
+      retryCount: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      runnerId: '',
+      heartbeatAt: 0,
+    };
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('cleaner-models-v1', JSON.stringify([payload.model])); } catch (_) {}
+      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify({ caseLibraryGenId: payload.model.id })); } catch (_) {}
+      try { localStorage.setItem('tap-case-library-ai-gen-task:case-library', JSON.stringify(payload.task)); } catch (_) {}
+    }, { token, model, task: retainedTask });
+    await buildCaseLibraryRoutes(page, {
+      token,
+      user,
+      project,
+      versions,
+      caseFiles,
+      caseItemsByFileId,
+    });
+    const routeCtl = await installPersistentModelTaskRoute(page, {
+      completeAfterMs: 1800,
+      responseText: JSON.stringify({
+        missing_modules: [],
+        existing_modules: [{
+          module: '支付',
+          coverage: 60,
+          cases: [{
+            module: '支付',
+            title: '不应落地的迟到结果',
+            priority: 'P1',
+            precondition: '订单已创建',
+            steps: '执行迟到请求',
+            expected: '不应展示',
+          }],
+        }],
+      }),
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await switchToTab(page, 'case-library');
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await expect(page.locator(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`)).toBeVisible();
+    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await expect(page.locator('#caseLibraryEditView')).toContainText('支付成功');
+    await expect.poll(() => routeCtl.getCreateCalls().length).toBeGreaterThanOrEqual(1);
+
+    await page.click('#caseLibraryAiGenBtn');
+    await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#caseLibraryAiGenCancelBtn')).toBeVisible();
+    await page.click('#caseLibraryAiGenCancelBtn');
+    await expect.poll(() => routeCtl.getCancelCalls().length).toBeGreaterThanOrEqual(1);
+    expect(routeCtl.getTasks().some((task) => task.status === 'cancelled')).toBe(true);
+    await page.waitForTimeout(1900);
+    await expect(page.locator('#caseLibraryAiGenResultBody')).not.toContainText('不应落地的迟到结果');
+    const storedStatus = await page.evaluate(() => {
+      try {
+        const raw = localStorage.getItem('tap-case-library-ai-gen-task:case-library');
+        return raw ? String(JSON.parse(raw).status || '') : '';
+      } catch (_) {
+        return 'parse-error';
+      }
+    });
+    expect(storedStatus).toBe('cancelled');
+    expect(routeCtl.getProxyCallCount()).toBe(0);
+  });
+
+  test('刷新后复用同一个后端任务并继续完成生成', async ({ page }) => {
+    const token = 'token-case-library-ai-refresh';
+    const user = { id: 12, username: 'case_library_refresh', role: 'admin', level: 'leader' };
+    const project = { id: 15, name: '项目AI-刷新' };
+    const versions = [{ id: 25, name: 'v5' }];
+    const now = new Date().toISOString();
+    const caseFileId = 305;
+    const caseFiles = [{
+      id: caseFileId,
+      project_id: project.id,
+      version_id: versions[0].id,
+      file_name_clean: '用例库AI刷新',
+      reuse_enabled: false,
+      item_count: 1,
+      importer_id: user.id,
+      importer_name: user.username,
+      imported_at: now,
+      updated_at: now,
+      last_updated_by: user.id,
+      last_updated_by_name: user.username,
+    }];
+    const caseItemsByFileId = {};
+    caseItemsByFileId[caseFileId] = [{
+      id: 6501,
+      case_file_id: caseFileId,
+      module: '支付',
+      title: '支付成功',
+      priority: 'P1',
+      precondition: '订单已创建',
+      steps: '完成支付',
+      expected: '支付成功',
+      remark: '',
+      created_at: now,
+      updated_at: now,
+    }];
+    const modelId = '903';
+
+    await page.addInitScript((payload) => {
+      try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
+      try { localStorage.setItem('cleaner-models-v1', JSON.stringify(payload.models)); } catch (_) {}
+      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify(payload.assignments)); } catch (_) {}
+    }, {
+      token,
+      models: [{
+        id: modelId,
+        remoteId: 903,
+        name: '用例库生成模型-刷新',
+        provider: 'custom',
+        baseUrl: 'https://mock-model.local/v1/chat/completions',
+        apiKey: 'mock-key',
+        model: 'mock-model',
+        maxTokens: 512,
+      }],
+      assignments: { caseLibraryGenId: modelId },
+    });
+
+    await buildCaseLibraryRoutes(page, {
+      token,
+      user,
+      project,
+      versions,
+      caseFiles,
+      caseItemsByFileId,
+    });
+    const routeCtl = await installPersistentModelTaskRoute(page, {
+      completeAfterMs: 2000,
+      responseText: JSON.stringify({
+        missing_modules: [],
+        existing_modules: [{
+          module: '支付',
+          coverage: 60,
+          cases: [{
+            module: '支付',
+            title: '支付失败-余额不足',
+            priority: 'P1',
+            precondition: '订单已创建',
+            steps: '余额不足时提交支付',
+            expected: '提示余额不足',
+            remark: '',
+          }],
+        }],
+      }),
+    });
+
+    await gotoIndex(page);
+    await waitCaseLibraryReady(page, 30000);
+    await switchToTab(page, 'case-library');
+    await openDrawer(page, '#openCaseLibraryEditDrawerBtn', '#caseLibraryEditDrawer');
+    await page.selectOption('#caseLibraryEditProjectSelect', String(project.id));
+    await expect(page.locator(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`)).toBeVisible();
+    await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
+    await expect(page.locator('#caseLibraryEditView')).toContainText('支付成功');
+
+    await startCaseLibraryAiGeneration(page, '需求：刷新后继续补充支付异常用例');
+    await expect.poll(() => routeCtl.getCreateCalls().length).toBeGreaterThanOrEqual(1);
+    const firstBackendCall = routeCtl.getCreateCalls()[0];
+    const firstBackendTask = routeCtl.getTasks()[0];
+
+    await page.reload();
+    await waitCaseLibraryReady(page, 30000);
+    await expect.poll(() => routeCtl.getCreateCalls().filter((item) => item.requestKey === firstBackendCall.requestKey).length).toBeGreaterThanOrEqual(2);
+    await page.waitForFunction(() => {
+      const raw = localStorage.getItem('tap-case-library-ai-gen-task:case-library');
+      if (!raw) return false;
+      try {
+        const task = JSON.parse(raw);
+        return task && task.status === 'done';
+      } catch (_) {
+        return false;
+      }
+    }, null, { timeout: 10000 });
+
+    const resumedCalls = routeCtl.getCreateCalls().filter((item) => item.requestKey === firstBackendCall.requestKey);
+    expect(resumedCalls.every((item) => item.existingTaskId === '' || item.existingTaskId === firstBackendTask.id)).toBe(true);
+    expect(routeCtl.getCancelCalls()).toHaveLength(0);
+    expect(routeCtl.getProxyCallCount()).toBe(0);
   });
 });

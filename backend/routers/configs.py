@@ -8,12 +8,14 @@ from urllib import request as urllib_request
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from sqlalchemy import and_, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
 from ..audit import log_operation
 from ..db import get_db
 from ..dependencies import get_current_user
+from ..model_gateway import strip_output_token_limits
 
 
 router = APIRouter(tags=["settings"])
@@ -66,6 +68,61 @@ def _validate_model_url(raw_url: Optional[str]) -> str:
             status_code=status.HTTP_400_BAD_REQUEST, detail="模型地址格式不正确"
         )
     return url
+
+
+def _normalize_model_config_name(raw_name: Optional[str]) -> str:
+    name = (raw_name or "").strip()
+    if not name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="模型名称不能为空"
+        )
+    return name
+
+
+def _find_model_name_conflict(
+    db: Session,
+    owner_id: Optional[int],
+    name: str,
+    exclude_id: Optional[int] = None,
+) -> Optional[models.ModelConfig]:
+    query = db.query(models.ModelConfig).filter(
+        models.ModelConfig.owner_id == owner_id,
+        models.ModelConfig.name == name,
+    )
+    if exclude_id is not None:
+        query = query.filter(models.ModelConfig.id != exclude_id)
+    return query.first()
+
+
+def _release_inactive_model_name(db: Session, config: models.ModelConfig) -> None:
+    suffix = f" [已停用-{config.id}]"
+    base = (config.name or "未命名模型")[: max(1, 128 - len(suffix))]
+    candidate = base + suffix
+    counter = 1
+    while _find_model_name_conflict(db, config.owner_id, candidate, config.id):
+        extra = f"-{counter}"
+        candidate = base[: max(1, 128 - len(suffix) - len(extra))] + suffix + extra
+        counter += 1
+    config.name = candidate
+    config.updated_at = datetime.now(timezone.utc)
+    db.add(config)
+    db.flush()
+
+
+def _prepare_available_model_name(
+    db: Session,
+    owner_id: Optional[int],
+    name: str,
+    exclude_id: Optional[int] = None,
+) -> None:
+    conflict = _find_model_name_conflict(db, owner_id, name, exclude_id)
+    if not conflict:
+        return
+    if conflict.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="模型名称已存在"
+        )
+    _release_inactive_model_name(db, conflict)
 
 
 @router.get("/settings", response_model=List[schemas.SettingOut])
@@ -195,30 +252,37 @@ def create_model_config(
     if scope_norm == "global" and user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅管理员可创建全局模型配置")
     owner_id = _resolve_owner_id(scope_norm, user)
-    existing = (
-        db.query(models.ModelConfig)
-        .filter(models.ModelConfig.owner_id == owner_id, models.ModelConfig.name == payload.name)
-        .first()
-    )
-    if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="模型名称已存在")
+    name = _normalize_model_config_name(payload.name)
+    _prepare_available_model_name(db, owner_id, name)
     config = models.ModelConfig(
         owner_id=owner_id,
-        name=payload.name,
+        name=name,
         config_json=payload.config_json,
         is_active=True if payload.is_active is None else payload.is_active,
     )
     db.add(config)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="模型名称已存在"
+        ) from exc
     log_operation(
         db=db,
         user_id=user.id,
         action="create_model_config",
         target_type="model_config",
         target_id=config.id,
-        detail={"scope": scope_norm, "name": payload.name},
+        detail={"scope": scope_norm, "name": name},
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="模型名称已存在"
+        ) from exc
     db.refresh(config)
     return config
 
@@ -237,19 +301,13 @@ def update_model_config(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="仅管理员可修改全局配置")
     if config.owner_id is not None and config.owner_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权限修改该配置")
-    if payload.name and payload.name != config.name:
-        exists = (
-            db.query(models.ModelConfig)
-            .filter(
-                models.ModelConfig.owner_id == config.owner_id,
-                models.ModelConfig.name == payload.name,
-                models.ModelConfig.id != config.id,
-            )
-            .first()
-        )
-        if exists:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="模型名称已存在")
-        config.name = payload.name
+    target_name = config.name
+    if payload.name is not None:
+        target_name = _normalize_model_config_name(payload.name)
+    if target_name != config.name or (payload.is_active is True and not config.is_active):
+        _prepare_available_model_name(db, config.owner_id, target_name, config.id)
+    if target_name != config.name:
+        config.name = target_name
     if payload.config_json is not None:
         config.config_json = payload.config_json
     if payload.is_active is not None:
@@ -263,7 +321,13 @@ def update_model_config(
         target_type="model_config",
         target_id=config.id,
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="模型名称已存在"
+        ) from exc
     db.refresh(config)
     return config
 
@@ -275,7 +339,7 @@ def proxy_model_request(
 ):
     target_url = _validate_model_url(payload.base_url)
     timeout_sec = _normalize_timeout_sec(payload.timeout_sec)
-    request_payload = payload.payload if payload.payload is not None else {}
+    request_payload = strip_output_token_limits(payload.payload if payload.payload is not None else {})
     try:
         body_bytes = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
     except Exception as exc:
@@ -355,6 +419,92 @@ def proxy_model_request(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=f"模型代理请求失败：{exc}"
+        ) from exc
+
+
+@router.post("/model-proxy/models")
+def proxy_model_listing(
+    payload: schemas.ModelProxyListingRequest,
+    _: models.User = Depends(get_current_user),
+):
+    """代理转发一次 GET 请求，用于读取 OpenAI 兼容端点的模型列表。
+
+    与 ``proxy_model_request`` 一样只做纯转发：API Key 只随出站请求头
+    发送，不落库、不回显。目标地址是调用方拼好的 ``.../models`` 列表地址。
+    """
+    target_url = _validate_model_url(payload.base_url)
+    timeout_sec = _normalize_timeout_sec(payload.timeout_sec)
+
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "tap-model-proxy/1.0",
+    }
+    api_key = (payload.api_key or "").strip()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    request_obj = urllib_request.Request(
+        url=target_url,
+        headers=headers,
+        method="GET",
+    )
+
+    opener = urllib_request.build_opener(_NoRedirectHandler())
+
+    try:
+        with opener.open(request_obj, timeout=timeout_sec) as upstream_resp:
+            raw = upstream_resp.read()
+            content_type = upstream_resp.headers.get("Content-Type", "application/json")
+            return Response(
+                content=raw,
+                status_code=int(upstream_resp.status),
+                headers={"Content-Type": content_type},
+            )
+    except urllib_error.HTTPError as exc:
+        status_code = int(exc.code or 502)
+        if 300 <= status_code < 400:
+            location = ""
+            if exc.headers:
+                location = str(exc.headers.get("Location", "") or "").strip()
+            detail = "模型列表接口发生重定向"
+            if location:
+                detail += f"：{location}"
+            detail += "，请检查接口地址或网关配置，当前返回的可能不是实际模型 API"
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=detail,
+            ) from exc
+        raw = b""
+        try:
+            raw = exc.read() or b""
+        except Exception:
+            raw = b""
+        content_type = (
+            exc.headers.get("Content-Type", "text/plain; charset=utf-8")
+            if exc.headers
+            else "text/plain; charset=utf-8"
+        )
+        if not raw:
+            reason = str(exc.reason or "upstream error")
+            raw = reason.encode("utf-8")
+        return Response(
+            content=raw,
+            status_code=status_code,
+            headers={"Content-Type": content_type},
+        )
+    except urllib_error.URLError as exc:
+        reason = getattr(exc, "reason", None)
+        msg = str(reason or exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"连接模型服务失败：{msg}"
+        ) from exc
+    except TimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="模型服务连接超时"
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"模型列表代理请求失败：{exc}"
         ) from exc
 
 

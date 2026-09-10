@@ -26,15 +26,15 @@
 
   var providerDefaults = {
     deepseek: {
-      baseUrl: 'https://api.deepseek.com/chat/completions',
+      baseUrl: 'https://api.deepseek.com',
       model: 'deepseek-chat',
     },
     kimi: {
-      baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
+      baseUrl: 'https://api.moonshot.cn/v1',
       model: 'k2',
     },
     claude: {
-      baseUrl: 'https://www.packyapi.com/v1/chat/completions',
+      baseUrl: 'https://www.packyapi.com/v1',
       model: 'claude-sonnet-4-6',
     },
   };
@@ -116,7 +116,6 @@
     defaultPrompts: defaultPrompts,
     caseWritingStyleGuidePrompt: caseWritingStyleGuidePrompt,
     defaultPromptsKey: 'usecase-default-prompts',
-    defaultMaxTokens: 1024,
     providerDefaults: providerDefaults,
     modelsKey: 'cleaner-models-v1',
     assignmentKey: 'cleaner-assignment-v1',

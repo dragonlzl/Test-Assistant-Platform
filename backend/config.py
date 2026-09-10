@@ -82,6 +82,7 @@ class Settings:
     # 兼容现有文档/测试：未设置时使用默认值；生产环境建议通过环境变量或 config_local 覆盖。
     default_admin_password = os.getenv("ADMIN_PASS", "chillytest_admin")
     default_user_password = os.getenv("DEFAULT_USER_PASS", "12345678")
+    model_task_workers = max(1, min(20, int(os.getenv("MODEL_TASK_WORKERS", "5"))))
     token_ttl_minutes = None
 
     @property

@@ -1,0 +1,150 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - complementary:
+      - generic:
+        - heading "用例助手" [level=1]:
+          - generic [aria-hidden]:
+            - generic: T
+      - navigation:
+        - generic:
+          - heading "AI 功能" [level=2]
+          - generic:
+            - button "用例生成"
+            - button "功能指派，未保存指派模型":
+              - generic: 功能指派
+              - generic [aria-hidden]: 未保存指派模型
+            - button "模型管理"
+        - generic:
+          - heading "用例相关" [level=2]
+          - generic:
+            - button "用例执行"
+            - button "用例库"
+            - button "用例归档"
+            - button "执行总览"
+        - generic:
+          - heading "管理" [level=2]
+          - generic:
+            - button "项目管理"
+            - button "人员管理"
+            - button "操作记录"
+        - generic:
+          - heading "设置" [level=2]
+          - generic:
+            - button "通用设置"
+      - generic:
+        - generic "个人工具":
+          - button "个人备忘"
+      - generic:
+        - generic: 当前用户
+        - button "用户菜单":
+          - generic: d
+        - menu:
+          - generic:
+            - generic: d
+            - generic:
+              - strong: diagnostic
+              - generic: 角色
+              - generic: 管理员
+          - menuitem "通用设置"
+          - menuitem "退出登录"
+    - main [ref=f2e104]:
+      - generic [ref=f2e106]:
+        - generic [ref=f2e107]:
+          - heading "XMind 用例生成" [level=2] [ref=f2e108]
+          - button "XMind用例生成" [expanded] [ref=f2e109] [cursor=pointer]: 打开 XMind 用例生成
+        - region [ref=f2e110]:
+          - generic [ref=f2e111]:
+            - generic [ref=f2e112]:
+              - generic [ref=f2e113]: 任务概览
+              - heading "生成进度" [level=3] [ref=f2e114]
+            - generic [ref=f2e115]:
+              - strong [ref=f2e116]: 20%
+              - generic [ref=f2e117]: 整体进度
+          - generic [ref=f2e118]:
+            - progressbar "XMind 用例生成整体进度" [ref=f2e119]
+            - generic [ref=f2e120]: 1 个任务 · 0 个模块 · 0 条用例
+          - button "【设计_需求】超界者二技能 准备完成 · 0 模块 · 0 用例 20% 20" [ref=f2e632] [cursor=pointer]:
+            - generic [ref=f2e633]:
+              - generic [ref=f2e635]:
+                - strong [ref=f2e636]: 【设计_需求】超界者二技能
+                - generic [ref=f2e637]: 准备完成 · 0 模块 · 0 用例
+              - generic [ref=f2e638]: 20%
+            - progressbar "【设计_需求】超界者二技能生成进度" [ref=f2e639]
+      - generic [ref=f2e126]:
+        - generic [ref=f2e127]:
+          - heading "XMind 用例生成" [level=3] [ref=f2e128]
+          - button "收起" [ref=f2e129] [cursor=pointer]
+        - generic [ref=f2e131]:
+          - generic [ref=f2e132]:
+            - generic "【设计_需求】超界者二技能" [ref=f2e641] [cursor=pointer]:
+              - generic [ref=f2e642]:
+                - generic [ref=f2e643]: 【设计_需求】超界者二技能
+                - generic [ref=f2e645]:
+                  - generic [aria-hidden] [ref=f2e646]: 已准备
+                  - generic [ref=f2e648]: 0 模块
+                  - generic [ref=f2e650]: 0 用例
+              - button "×" [ref=f2e651]
+            - button "新建 XMind 生成页签" [ref=f2e133] [cursor=pointer]: 新建生成
+          - generic [ref=f2e135]:
+            - generic [ref=f2e434]:
+              - generic [ref=f2e436]:
+                - button "生成前置准备" [ref=f2e163] [cursor=pointer]
+                - generic [ref=f2e437]:
+                  - generic "当前可继续发起生成、补全或删除操作" [ref=f2e438]: 当前没有生成任务
+                  - generic "当前画布展示的模块和用例总数会随生成、补全、删除实时刷新；去重为最近一次 AI 去重移除数量" [ref=f2e441]:
+                    - generic [ref=f2e442]:
+                      - strong [ref=f2e443]: "0"
+                      - generic [ref=f2e444]: 模块
+                    - generic [ref=f2e445]:
+                      - strong [ref=f2e446]: "0"
+                      - generic [ref=f2e447]: 用例
+              - generic [ref=f2e448]:
+                - generic [ref=f2e449]:
+                  - button "生成记录" [ref=f2e178] [cursor=pointer]
+                  - generic [ref=f2e451]:
+                    - button "知识检索：未启用" [ref=f2e180] [cursor=pointer]
+                    - button "AI筛选：未启用" [ref=f2e181] [cursor=pointer]
+                  - generic [ref=f2e452]:
+                    - button "AI用例去重" [disabled] [ref=f2e183]
+                    - button "需求覆盖" [disabled] [ref=f2e184]
+                    - button "保存入库" [ref=f2e185] [cursor=pointer]
+                    - button "导出当前XMind" [ref=f2e186] [cursor=pointer]
+                    - button "导出为Markdown" [ref=f2e187] [cursor=pointer]
+                  - generic [ref=f2e453]:
+                    - button "撤回删除" [disabled] [ref=f2e189]
+                    - button "恢复删除" [disabled] [ref=f2e190]
+                  - generic [ref=f2e454]:
+                    - paragraph [ref=f2e193]
+                    - button "中断生成" [disabled] [ref=f2e194]
+                - generic [ref=f2e456]:
+                  - searchbox "搜索节点内容" [ref=f2e457]
+                  - generic [ref=f2e458]: 0/0
+                  - button "↑" [ref=f2e459] [cursor=pointer]
+                  - button "↓" [ref=f2e460] [cursor=pointer]
+                  - button "清空" [ref=f2e461] [cursor=pointer]
+                - generic [ref=f2e463]:
+                  - button "-" [ref=f2e464] [cursor=pointer]
+                  - button "全览" [ref=f2e465] [cursor=pointer]
+                  - button "+" [ref=f2e466] [cursor=pointer]
+                  - button "全屏" [ref=f2e467] [cursor=pointer]
+                  - generic [ref=f2e468]:
+                    - generic [ref=f2e469]: 模型
+                    - combobox "XMind 用例生成模型" [ref=f2e470]:
+                      - option "跟随功能指派 · Aigo diagnostic · gpt-5.6-sol" [selected]
+                      - option "Aigo diagnostic · gpt-5.6-sol"
+                    - generic [ref=f2e471]: 推理
+                    - combobox "推理等级" [ref=f2e472]:
+                      - option "默认"
+                      - option "None（不启用推理）"
+                      - option "Low"
+                      - option "Medium（默认）" [selected]
+                      - option "High"
+                      - option "XHigh"
+                      - option "Max"
+              - button "收起 XMind 生成工具栏" [expanded] [ref=f2e473] [cursor=pointer]: 收起工具栏
+            - generic [active] [ref=f2e475]: 【设计_需求】超界者二技能
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+  - generic [ref=f2e652]:
+    - button "生成全量用例" [ref=f2e653] [cursor=pointer]
+    - button "生成全量模块" [ref=f2e654] [cursor=pointer]

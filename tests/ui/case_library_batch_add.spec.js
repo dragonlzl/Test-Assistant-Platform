@@ -233,6 +233,14 @@ test.describe('用例库编辑视图批量新增', () => {
     expect(createCalls).toBe(5);
     expect(caseItemsByFileId[caseFileId].slice(-5).every((item) => item.priority === 'P1')).toBeTruthy();
     await expect(page.locator('#caseLibraryEditStatus')).toContainText('批量新增已入库');
+
+    await page.click('#caseLibraryEditBatchAddBtn');
+    const immediateAddBtn = page.locator('.temp-undo-toast .temp-undo-immediate');
+    await expect(immediateAddBtn).toHaveText('马上新增');
+    await immediateAddBtn.click({ force: true });
+    await expect(page.locator('.temp-undo-toast')).toHaveCount(0);
+    await expect.poll(() => createCalls).toBe(10);
+    await expect(page.locator('#caseLibraryEditStatus')).toContainText('批量新增已入库');
   });
 
   test('刷新后：完整用例且模块已存在时归位到对应模块末尾', async ({ page }) => {

@@ -191,10 +191,14 @@
     var storeValidationClearTimer = 0;
     var xmindTaskListenerBound = false;
     var xmindTaskProcessingMap = {};
+    var xmindPreparationCoordinator = null;
+    var xmindModelRefreshPromise = null;
     var rootPipelinePumpMap = {};
     var pendingManagedTaskReconcileTimer = 0;
     var dedupeTerminalVisualTimer = 0;
     var workspaceContextQueue = Promise.resolve();
+    var workspaceContextActiveId = '';
+    var workspaceContextActiveDepth = 0;
     var workspaceShadowDepth = 0;
     var workspaceUiMutedDepth = 0;
     var shadowWorkspaceSharedState = null;
@@ -272,6 +276,26 @@
     var DEDUPE_MIN_VISIBLE_MS = 260;
     var DEDUPE_TERMINAL_GRACE_MS = 1200;
     var DEDUPE_TERMINAL_VISUAL_MS = 3200;
+    var XMIND_MODEL_USE_ASSIGNMENT_VALUE = '__tap_use_assignment__';
+
+    function createDefaultModelOverride() {
+      return {
+        siteId: '',
+        modelId: '',
+        reasoning: '',
+        updatedAt: 0,
+      };
+    }
+
+    function normalizeModelOverride(value) {
+      var source = value && typeof value === 'object' ? value : {};
+      return {
+        siteId: String(source.siteId || ''),
+        modelId: String(source.modelId || ''),
+        reasoning: String(source.reasoning || ''),
+        updatedAt: Number(source.updatedAt || 0) || 0,
+      };
+    }
 
     function createDefaultPrepState() {
       return {
@@ -1262,6 +1286,34 @@
       return window.app && window.app.xmindCaseGenTaskManager ? window.app.xmindCaseGenTaskManager : null;
     }
 
+    function getXmindPreparationCoordinator() {
+      if (xmindPreparationCoordinator) return xmindPreparationCoordinator;
+      var manager = getXmindTaskManager();
+      var factory = window.app && window.app.retainedPreparationTask
+        ? window.app.retainedPreparationTask
+        : null;
+      if (!manager || !factory || typeof factory.init !== 'function') return null;
+      var modelTaskClient = window.app && window.app.services
+        ? window.app.services.modelTaskClient
+        : null;
+      xmindPreparationCoordinator = factory.init({
+        manager: manager,
+        prepareTask: prepareDeferredXmindTask,
+        buildRequestOptions: function(task, stage) {
+          var stableStage = 'knowledge-' + String(stage || 'preparation');
+          if (modelTaskClient && typeof modelTaskClient.buildRequestOptions === 'function') {
+            return modelTaskClient.buildRequestOptions(task, stableStage);
+          }
+          var owner = task && task.requestOwner ? String(task.requestOwner || '') : '';
+          return {
+            owner: owner,
+            requestKey: owner + ':' + stableStage,
+          };
+        },
+      });
+      return xmindPreparationCoordinator;
+    }
+
     function isDrawerOpen() {
       var el = drawerInstance && drawerInstance.element ? drawerInstance.element : drawerEl;
       return Boolean(el && el.classList && el.classList.contains('open'));
@@ -1443,59 +1495,237 @@
       return host;
     }
 
-    function getAvailableXmindModels() {
-      return (Array.isArray(state && state.models) ? state.models : []).filter(function(item) {
-        return Boolean(item && item.id);
+    function getSiteStableId(site) {
+      if (!site) return '';
+      if (site.remoteId !== undefined && site.remoteId !== null) return String(site.remoteId);
+      if (site.id !== undefined && site.id !== null) return String(site.id);
+      return '';
+    }
+
+    function buildXmindModelOptionValue(siteId, modelId) {
+      return String(siteId || '') + '::' + String(modelId || '');
+    }
+
+    function enumerateXmindSiteModels() {
+      var groups = [];
+      (Array.isArray(state && state.models) ? state.models : []).forEach(function(site) {
+        if (!site) return;
+        var siteId = getSiteStableId(site);
+        var models = [];
+        if (Array.isArray(site.availableModels) && site.availableModels.length) {
+          site.availableModels.forEach(function(item) {
+            var id = item && (item.id || item.model) ? String(item.id || item.model).trim() : '';
+            if (id && models.indexOf(id) === -1) models.push(id);
+          });
+        } else if (site.model) {
+          models.push(String(site.model));
+        }
+        if (siteId && models.length) {
+          groups.push({ siteId: siteId, name: site.name || '未命名站点', models: models });
+        }
       });
+      return groups;
+    }
+
+    function findXmindModelReference(groups, siteId, modelId) {
+      var stableSiteId = String(siteId || '');
+      var stableModelId = String(modelId || '');
+      if (!stableSiteId) return null;
+      var group = (Array.isArray(groups) ? groups : []).find(function(item) {
+        return item && String(item.siteId || '') === stableSiteId;
+      });
+      if (!group || !Array.isArray(group.models) || !group.models.length) return null;
+      var matchedModelId = '';
+      if (stableModelId) {
+        var lowerModelId = stableModelId.toLowerCase();
+        matchedModelId = group.models.find(function(item) {
+          return String(item || '').toLowerCase() === lowerModelId;
+        }) || '';
+      }
+      if (!matchedModelId) return null;
+      return {
+        siteId: stableSiteId,
+        modelId: matchedModelId,
+        siteName: String(group.name || '未命名站点'),
+      };
+    }
+
+    function getAssignedXmindModelReference(groups) {
+      var assignments = state && state.assignments ? state.assignments : {};
+      var reference = findXmindModelReference(
+        groups,
+        assignments.xmindCaseGenId,
+        assignments.xmindCaseGenModelId
+      );
+      if (!reference) return null;
+      reference.reasoning = String(assignments.xmindCaseGenReasoning || '');
+      return reference;
+    }
+
+    function resolveEffectiveXmindModelSelection(options) {
+      var opts = options || {};
+      var groups = enumerateXmindSiteModels();
+      var xmindState = ensureState();
+      var modelOverride = normalizeModelOverride(xmindState.modelOverride);
+      var overrideRequested = Boolean(modelOverride.siteId || modelOverride.modelId);
+      var reference = overrideRequested
+        ? findXmindModelReference(groups, modelOverride.siteId, modelOverride.modelId)
+        : null;
+      var overrideInvalidated = overrideRequested && !reference;
+      if (overrideInvalidated && opts.clearInvalidOverride !== false) {
+        xmindState.modelOverride = createDefaultModelOverride();
+        modelOverride = xmindState.modelOverride;
+      }
+      var source = reference ? 'override' : 'assignment';
+      if (!reference) reference = getAssignedXmindModelReference(groups);
+      if (!reference) {
+        return {
+          source: source,
+          reference: null,
+          model: null,
+          reasoning: '',
+          overrideInvalidated: overrideInvalidated,
+        };
+      }
+      var resolvedModel = xmindGenApi && typeof xmindGenApi.resolveSiteModel === 'function'
+        ? xmindGenApi.resolveSiteModel(reference.siteId, reference.modelId)
+        : null;
+      if (!resolvedModel || !resolvedModel.model || !resolvedModel.baseUrl) resolvedModel = null;
+      return {
+        source: source,
+        reference: reference,
+        model: resolvedModel,
+        reasoning: source === 'override'
+          ? String(modelOverride.reasoning || '')
+          : String(reference.reasoning || ''),
+        overrideInvalidated: overrideInvalidated,
+      };
+    }
+
+    function requireEffectiveXmindModelSelection() {
+      var selected = resolveEffectiveXmindModelSelection();
+      if (!selected.model) {
+        throw new Error('未找到 XMind 用例生成模型，请先在功能指派中选择，或在当前页面独立选择');
+      }
+      return selected;
+    }
+
+    function refreshLatestXmindModelConfiguration() {
+      if (xmindModelRefreshPromise) return xmindModelRefreshPromise;
+      var refreshModels = xmindGenApi && typeof xmindGenApi.refreshModels === 'function'
+        ? xmindGenApi.refreshModels
+        : null;
+      var refreshAssignments = xmindGenApi && typeof xmindGenApi.refreshAssignments === 'function'
+        ? xmindGenApi.refreshAssignments
+        : null;
+      if (!refreshModels && !refreshAssignments) return Promise.resolve();
+      xmindModelRefreshPromise = Promise.resolve()
+        .then(function() {
+          return refreshModels ? refreshModels() : null;
+        })
+        .then(function() {
+          return refreshAssignments ? refreshAssignments() : null;
+        })
+        .catch(function() {
+          return null;
+        })
+        .then(function(result) {
+          xmindModelRefreshPromise = null;
+          return result;
+        });
+      return xmindModelRefreshPromise;
     }
 
     function syncInlineModelPicker() {
       var host = getInlineModelHost();
       if (!host) return false;
-      var modelList = getAvailableXmindModels();
-      var assignedId = state && state.assignments && state.assignments.xmindCaseGenId
-        ? String(state.assignments.xmindCaseGenId || '')
-        : '';
-      var hasAssigned = false;
-      var optionsHtml = modelList.map(function(item) {
-        var id = String(item.id || '');
-        var selected = id === assignedId;
-        if (selected) hasAssigned = true;
-        return '<option value="' + escapeHtml(id) + '"' + (selected ? ' selected' : '') + '>'
-          + escapeHtml(item.name || id)
-          + '</option>';
+      var groups = enumerateXmindSiteModels();
+      var selected = resolveEffectiveXmindModelSelection();
+      var selectedReference = selected.reference;
+      var assignedReference = getAssignedXmindModelReference(groups);
+      var siteId = selectedReference ? String(selectedReference.siteId || '') : '';
+      var modelId = selectedReference ? String(selectedReference.modelId || '') : '';
+      var reasoning = String(selected.reasoning || '');
+      var assignmentLabel = assignedReference
+        ? ('跟随功能指派 · ' + assignedReference.siteName + ' · ' + assignedReference.modelId)
+        : '跟随功能指派（当前未配置）';
+
+      var modelOptionsHtml = groups.map(function(group) {
+        var inner = group.models.map(function(id) {
+          var optionSelected = selected.source === 'override' && id === modelId && group.siteId === siteId;
+          return '<option value="' + escapeHtml(buildXmindModelOptionValue(group.siteId, id)) + '" data-site-id="' + escapeHtml(group.siteId) + '" data-model-id="' + escapeHtml(id) + '"'
+            + (optionSelected ? ' selected' : '') + '>' + escapeHtml(group.name + ' · ' + id) + '</option>';
+        }).join('');
+        return '<optgroup label="' + escapeHtml(group.name) + '">' + inner + '</optgroup>';
       }).join('');
-      if (!hasAssigned) {
-        optionsHtml = '<option value="" selected>请选择模型</option>' + optionsHtml;
+      modelOptionsHtml = '<option value="' + XMIND_MODEL_USE_ASSIGNMENT_VALUE + '"'
+        + (selected.source === 'override' ? '' : ' selected') + '>' + escapeHtml(assignmentLabel) + '</option>'
+        + modelOptionsHtml;
+
+      var reasoningHtml = '<option value="">默认</option>';
+      if (xmindGenApi && typeof xmindGenApi.buildReasoningOptionsHtml === 'function') {
+        reasoningHtml = xmindGenApi.buildReasoningOptionsHtml(siteId, modelId, reasoning);
       }
+
       host.innerHTML = '<span class="xmind-casegen-model-label">模型</span>'
         + '<select class="xmind-casegen-model-select" data-xmind-casegen-model-select aria-label="XMind 用例生成模型"'
-        + (modelList.length ? '' : ' disabled')
-        + '>'
-        + optionsHtml
-        + '</select>';
+        + (groups.length ? '' : ' disabled')
+        + '>' + modelOptionsHtml + '</select>'
+        + '<span class="xmind-casegen-model-label xmind-casegen-reasoning-label">推理</span>'
+        + '<select class="xmind-casegen-model-select xmind-casegen-reasoning-select" data-xmind-casegen-reasoning-select aria-label="推理等级">'
+        + reasoningHtml + '</select>';
+
       var selectEl = host.querySelector('[data-xmind-casegen-model-select]');
+      var reasoningEl = host.querySelector('[data-xmind-casegen-reasoning-select]');
       if (!selectEl) return false;
+
       selectEl.addEventListener('change', function() {
-        var nextId = selectEl.value ? String(selectEl.value || '') : '';
-        var prevId = state && state.assignments && state.assignments.xmindCaseGenId
-          ? String(state.assignments.xmindCaseGenId || '')
-          : '';
-        if (nextId === prevId) return;
-        state.assignments = state.assignments || {};
-        state.assignments.xmindCaseGenId = nextId;
-        if (xmindGenApi && typeof xmindGenApi.renderAssignmentsSelect === 'function') {
-          xmindGenApi.renderAssignmentsSelect();
+        if (selectEl.value === XMIND_MODEL_USE_ASSIGNMENT_VALUE) {
+          ensureState().modelOverride = createDefaultModelOverride();
+          persistXmindState(true);
+          syncInlineModelPicker();
+          notifySuccessToast('已跟随最新功能指派', 2200);
+          return;
         }
-        if (xmindGenApi && typeof xmindGenApi.saveAssignments === 'function') {
-          xmindGenApi.saveAssignments();
+        var option = selectEl.selectedOptions && selectEl.selectedOptions[0] ? selectEl.selectedOptions[0] : null;
+        var nextSite = option ? (option.getAttribute('data-site-id') || '') : '';
+        var nextModel = option ? (option.getAttribute('data-model-id') || '') : '';
+        var currentOverride = normalizeModelOverride(ensureState().modelOverride);
+        var prevSite = currentOverride.siteId;
+        var prevModel = currentOverride.modelId;
+        if (nextSite === prevSite && nextModel === prevModel) return;
+        ensureState().modelOverride = {
+          siteId: nextSite,
+          modelId: nextModel,
+          reasoning: '',
+          updatedAt: Date.now(),
+        };
+        if (reasoningEl && xmindGenApi && typeof xmindGenApi.buildReasoningOptionsHtml === 'function') {
+          reasoningEl.innerHTML = xmindGenApi.buildReasoningOptionsHtml(nextSite, nextModel, '');
         }
-        if (xmindGenApi && typeof xmindGenApi.updateAssignmentStatuses === 'function') {
-          xmindGenApi.updateAssignmentStatuses();
-        }
-        persistWorkflowStateNow();
+        persistXmindState(true);
         notifySuccessToast('已切换 XMind 模型', 2200);
       });
+
+      if (reasoningEl) {
+        reasoningEl.addEventListener('change', function() {
+          var next = reasoningEl.value || '';
+          var effective = resolveEffectiveXmindModelSelection();
+          if (!effective.reference) return;
+          var prev = String(effective.reasoning || '');
+          if (next === prev) return;
+          ensureState().modelOverride = {
+            siteId: effective.reference.siteId,
+            modelId: effective.reference.modelId,
+            reasoning: next,
+            updatedAt: Date.now(),
+          };
+          persistXmindState(true);
+          syncInlineModelPicker();
+          notifySuccessToast('已更新推理等级', 2200);
+        });
+      }
+
       return true;
     }
 
@@ -2350,6 +2580,7 @@
           hasImportedBaseline: false,
           openButtonDotVisible: false,
           historyUnread: false,
+          modelOverride: createDefaultModelOverride(),
           knowledgeBase: createDefaultKnowledgeBaseState(),
           dedupe: createDefaultDedupeState(),
           coverage: createDefaultCoverageState(),
@@ -2390,6 +2621,7 @@
       if (!Array.isArray(state.xmindCaseGen.deleteUndoStack)) state.xmindCaseGen.deleteUndoStack = [];
       if (!Array.isArray(state.xmindCaseGen.deleteRedoStack)) state.xmindCaseGen.deleteRedoStack = [];
       if (!Array.isArray(state.xmindCaseGen.snapshots)) state.xmindCaseGen.snapshots = [];
+      state.xmindCaseGen.modelOverride = normalizeModelOverride(state.xmindCaseGen.modelOverride);
       if (!state.xmindCaseGen.modules || typeof state.xmindCaseGen.modules !== 'object') {
         state.xmindCaseGen.modules = {};
       }
@@ -3339,6 +3571,7 @@
         inlineStatusType: '',
         openButtonDotVisible: false,
         historyUnread: false,
+        modelOverride: createDefaultModelOverride(),
         knowledgeBase: createDefaultKnowledgeBaseState(),
         dedupe: createDefaultDedupeState(),
         coverage: createDefaultCoverageState(),
@@ -3361,8 +3594,26 @@
       };
     }
 
+    function filterWorkspaceCaseGenResults(modules, results) {
+      var moduleList = Array.isArray(modules) ? modules : [];
+      var source = results && typeof results === 'object' ? results : {};
+      if (!moduleList.length) return {};
+      var moduleIds = {};
+      moduleList.forEach(function(module) {
+        if (!module || !module.id) return;
+        moduleIds[String(module.id || '')] = true;
+      });
+      if (!Object.keys(moduleIds).length) return {};
+      var filtered = {};
+      Object.keys(source).forEach(function(moduleId) {
+        if (moduleIds[String(moduleId || '')]) filtered[moduleId] = source[moduleId];
+      });
+      return filtered;
+    }
+
     function normalizeWorkspaceSharedState(snapshot) {
       var source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+      var caseGenModules = cloneJson(source.caseGenModules, []);
       return {
         requirementLabel: normalizePersistedRequirementLabel(source.requirementLabel),
         requirementLabelSource: String(source.requirementLabelSource || ''),
@@ -3370,9 +3621,9 @@
         rawText: String(source.rawText || ''),
         caseText: String(source.caseText || ''),
         importedCases: cloneJson(source.importedCases, []),
-        caseGenModules: cloneJson(source.caseGenModules, []),
+        caseGenModules: caseGenModules,
         caseGenSource: String(source.caseGenSource || ''),
-        caseGenResults: cloneJson(source.caseGenResults, {}),
+        caseGenResults: filterWorkspaceCaseGenResults(caseGenModules, source.caseGenResults),
         caseSelections: cloneSelectionMap(source.caseSelections),
         caseGenSuggestions: cloneJson(source.caseGenSuggestions, {}),
         caseGenModuleStatus: cloneJson(source.caseGenModuleStatus, {}),
@@ -7349,7 +7600,7 @@
       lines.push('本轮必须直接覆盖：' + enabledLabels.join('、') + '。');
       if (isRootFullGenerationContract(contract)) {
         if (contract && String(contract.mode || '') === 'full_cases') {
-          lines.push('当前是根节点全量用例生成的模块拆分阶段：先返回不重复的模块清单，每个模块必须代表独立测试范围，模块名不得重复或近义重复。');
+          lines.push('当前是根节点全量用例第一阶段（模块拆分阶段）：先返回不重复的模块清单，每个模块必须代表独立测试范围，模块名不得重复或近义重复。');
           lines.push('模块拆分阶段可以提供候选 cases 作为后续模块生成兜底，但后续仍会逐模块执行用例生成；不得把跨模块去重视为模块生成完成。');
         } else {
           lines.push('当前是根节点首轮全量/重生成动作，首次输出必须直接覆盖上述要求，不允许把相关覆盖留到后续补全或追加。');
@@ -9843,11 +10094,23 @@
     function createModelOutputDiagnostics() {
       return {
         rawHasText: false,
+        rawLength: 0,
         rawPreview: '',
+        rawTailPreview: '',
         parseStatus: '',
         parseMode: '',
+        parseError: '',
+        hasTrailingExtraData: false,
+        trailingExtraPreview: '',
+        likelyTruncated: false,
         payloadKind: '',
         sourceKind: '',
+        responseStatus: '',
+        finishReason: '',
+        incompleteReason: '',
+        responseRawLength: 0,
+        responseContentLength: 0,
+        usage: null,
         missingModulesArray: false,
         emptyModulesArray: false,
         moduleCandidateCount: 0,
@@ -9859,11 +10122,116 @@
       };
     }
 
+    function applyModelResponseDiagnostics(outputDiagnostics, responseDiagnostics) {
+      var target = outputDiagnostics && typeof outputDiagnostics === 'object'
+        ? outputDiagnostics
+        : createModelOutputDiagnostics();
+      var source = responseDiagnostics && typeof responseDiagnostics === 'object'
+        ? responseDiagnostics
+        : null;
+      if (!source) return target;
+      target.taskId = String(source.taskId || '');
+      target.scope = String(source.scope || '');
+      target.actionId = String(source.actionId || '');
+      target.moduleId = String(source.moduleId || '');
+      target.moduleTitle = String(source.moduleTitle || '');
+      target.rootPipelineId = String(source.rootPipelineId || '');
+      target.responseStatus = String(source.responseStatus || '');
+      target.finishReason = String(source.finishReason || '');
+      target.incompleteReason = String(source.incompleteReason || '');
+      target.upstreamStatus = Number(source.upstreamStatus || 0) || 0;
+      target.responseRawLength = Number(source.rawLength || 0);
+      if (!Number.isFinite(target.responseRawLength) || target.responseRawLength < 0) target.responseRawLength = 0;
+      target.responseContentLength = Number(source.contentLength || 0);
+      if (!Number.isFinite(target.responseContentLength) || target.responseContentLength < 0) target.responseContentLength = 0;
+      target.usage = source.usage && typeof source.usage === 'object' ? cloneJson(source.usage, null) : null;
+      return target;
+    }
+
+    function captureModelParseError(diagnostics, error, mode) {
+      if (!diagnostics) return;
+      var message = error && error.message ? String(error.message || '') : String(error || '');
+      if (message) diagnostics.parseError = summarizeModelOutputText(message, 180);
+      if (/after JSON|non-whitespace character|非空白字符/i.test(message)) {
+        diagnostics.hasTrailingExtraData = true;
+      }
+      diagnostics.parseMode = mode || diagnostics.parseMode || '';
+    }
+
+    function findBalancedJsonEnd(raw, startIndex) {
+      var source = String(raw || '');
+      var start = Number(startIndex);
+      if (!Number.isFinite(start) || start < 0 || start >= source.length) return -1;
+      var stack = [];
+      var inString = false;
+      var escaped = false;
+      for (var index = start; index < source.length; index += 1) {
+        var character = source.charAt(index);
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (character === '\\') {
+            escaped = true;
+          } else if (character === '"') {
+            inString = false;
+          }
+          continue;
+        }
+        if (character === '"') {
+          inString = true;
+          continue;
+        }
+        if (character === '{' || character === '[') {
+          stack.push(character);
+          continue;
+        }
+        if (character !== '}' && character !== ']') continue;
+        var expected = character === '}' ? '{' : '[';
+        if (!stack.length || stack[stack.length - 1] !== expected) return -1;
+        stack.pop();
+        if (!stack.length) return index;
+      }
+      return -1;
+    }
+
+    function extractBalancedJsonPayload(raw, diagnostics) {
+      var source = String(raw || '');
+      var starts = [source.indexOf('{'), source.indexOf('[')].filter(function(index) {
+        return index >= 0;
+      }).sort(function(left, right) {
+        return left - right;
+      });
+      for (var i = 0; i < starts.length; i += 1) {
+        var start = starts[i];
+        var end = findBalancedJsonEnd(source, start);
+        if (end <= start) continue;
+        var candidate = source.slice(start, end + 1);
+        var payload = null;
+        try {
+          payload = JSON.parse(candidate);
+        } catch (err) {
+          continue;
+        }
+        var trailing = source.slice(end + 1).trim();
+        if (trailing && !/^[\]\}]+$/.test(trailing)) continue;
+        if (diagnostics) {
+          diagnostics.parseStatus = 'json';
+          diagnostics.parseMode = trailing ? 'balanced-trailing-extra' : 'balanced-slice';
+          diagnostics.hasTrailingExtraData = Boolean(trailing);
+          diagnostics.trailingExtraPreview = trailing ? summarizeModelOutputText(trailing, 80) : '';
+        }
+        return payload;
+      }
+      return null;
+    }
+
     function extractJsonPayloadDetailed(text) {
       var raw = stripCodeFence(text || '');
       var diagnostics = createModelOutputDiagnostics();
       diagnostics.rawHasText = Boolean(raw);
+      diagnostics.rawLength = raw.length;
       diagnostics.rawPreview = summarizeModelOutputText(raw, 120);
+      diagnostics.rawTailPreview = summarizeModelOutputText(raw.slice(-180), 180);
       if (!raw) {
         diagnostics.parseStatus = 'empty';
         return {
@@ -9878,7 +10246,16 @@
           payload: JSON.parse(raw),
           diagnostics: diagnostics,
         };
-      } catch (err) {}
+      } catch (err) {
+        captureModelParseError(diagnostics, err, 'direct');
+      }
+      var balancedPayload = extractBalancedJsonPayload(raw, diagnostics);
+      if (balancedPayload !== null) {
+        return {
+          payload: balancedPayload,
+          diagnostics: diagnostics,
+        };
+      }
       var start = raw.indexOf('{');
       var end = raw.lastIndexOf('}');
       if (start >= 0 && end > start) {
@@ -9889,7 +10266,9 @@
             payload: JSON.parse(raw.slice(start, end + 1)),
             diagnostics: diagnostics,
           };
-        } catch (err2) {}
+        } catch (err2) {
+          captureModelParseError(diagnostics, err2, 'object-slice');
+        }
       }
       var arrStart = raw.indexOf('[');
       var arrEnd = raw.lastIndexOf(']');
@@ -9901,19 +10280,26 @@
             payload: JSON.parse(raw.slice(arrStart, arrEnd + 1)),
             diagnostics: diagnostics,
           };
-        } catch (err3) {}
+        } catch (err3) {
+          captureModelParseError(diagnostics, err3, 'array-slice');
+        }
       }
       diagnostics.parseStatus = /[\{\[]/.test(raw) ? 'invalid-json' : 'plain-text';
+      diagnostics.likelyTruncated = diagnostics.parseStatus === 'invalid-json'
+        && Boolean(diagnostics.parseError)
+        && /unexpected end|unterminated|end of json/i.test(diagnostics.parseError);
       return {
         payload: null,
         diagnostics: diagnostics,
       };
     }
 
-    function normalizeModelModulesOutputDetailed(content) {
+    function normalizeModelModulesOutputDetailed(content, responseDiagnostics) {
       var extracted = extractJsonPayloadDetailed(content);
       var payload = extracted.payload;
       var diagnostics = extracted.diagnostics || createModelOutputDiagnostics();
+      applyModelResponseDiagnostics(diagnostics, responseDiagnostics);
+      logModelOutputRepair(diagnostics);
       var arr = [];
       if (Array.isArray(payload)) {
         arr = payload;
@@ -10195,6 +10581,7 @@
           mode: 'full_cases',
           targetModule: '',
           allowNewModules: true,
+          discoveryThenModuleCases: true,
           generateCasesForNewModules: false,
           generateCasesForExistingModules: false,
           dedupeAgainstVisibleModules: false,
@@ -10407,10 +10794,8 @@
         ? String(defaultPrompts.xmindcasegen || '').trim()
         : '';
       var parts = [];
-      if (defaultPrompt) parts.push(defaultPrompt);
-      if (assignedPrompt && assignedPrompt !== defaultPrompt) {
-        parts.push(assignedPrompt);
-      }
+      var selectedPrompt = assignedPrompt || defaultPrompt;
+      if (selectedPrompt) parts.push(selectedPrompt);
       if (casesGenApi && typeof casesGenApi.getCaseGenPromptComponents === 'function') {
         var extraParts = casesGenApi.getCaseGenPromptComponents(getCaseGenSettingsSnapshot()) || [];
         extraParts.forEach(function(item) {
@@ -10661,7 +11046,7 @@
       return normalizeKnowledgeBaseState(cached.state);
     }
 
-    function callKnowledgeBaseFilterModel(model, userText, prompt, reasoning, temperature) {
+    function callKnowledgeBaseFilterModel(model, userText, prompt, reasoning, temperature, requestOptions) {
       if (!xmindGenApi || typeof xmindGenApi.callModelWithConfig !== 'function') {
         return Promise.reject(new Error('当前 XMind 生成模型不可用，无法执行知识库 AI 筛选'));
       }
@@ -10671,12 +11056,13 @@
           userText,
           prompt,
           reasoning || '',
-          temperature
+          temperature,
+          requestOptions
         );
       });
     }
 
-    async function runKnowledgeBasePipelineForGeneration(contract, visibleContext, moduleEntry, model, reasoning, temperature, workspaceId, actionKey) {
+    async function runKnowledgeBasePipelineForGeneration(contract, visibleContext, moduleEntry, model, reasoning, temperature, workspaceId, actionKey, preparationContext) {
       var stableWorkspaceId = String(workspaceId || getActiveWorkspaceId() || '');
       if (!stableWorkspaceId) return null;
       var stableActionKey = String(actionKey || '');
@@ -10757,6 +11143,10 @@
         reasoning: reasoning,
         temperature: temperature,
         callModel: callKnowledgeBaseFilterModel,
+        buildRequestOptions: preparationContext
+          && typeof preparationContext.buildRequestOptions === 'function'
+          ? preparationContext.buildRequestOptions
+          : null,
         onStateChange: function(nextState) {
           setWorkspaceKnowledgeBaseState(stableWorkspaceId, nextState);
         },
@@ -11074,27 +11464,62 @@
       );
     }
 
-    async function buildXmindGenerationTaskInput(contract, visibleContext, moduleEntry, options) {
-      var opts = options || {};
-      var prompt = buildXmindPrompt(contract);
-      var payload = await buildRequirementPayload(contract, visibleContext, moduleEntry, {
-        visibleModulesSnapshot: opts.visibleModulesSnapshot,
-      });
-      var model = xmindGenApi && typeof xmindGenApi.getAssignedModel === 'function'
-        ? xmindGenApi.getAssignedModel('xmindcasegen')
-        : null;
-      var reasoning = xmindGenApi && typeof xmindGenApi.getReasoningForType === 'function'
-        ? xmindGenApi.getReasoningForType('xmindcasegen')
-        : '';
+    function buildXmindGenerationTaskSeed(contract) {
+      var selected = requireEffectiveXmindModelSelection();
       var temperature = xmindGenApi && typeof xmindGenApi.getTemperatureForType === 'function'
         ? xmindGenApi.getTemperatureForType('xmindcasegen')
         : 0.2;
+      return {
+        prompt: buildXmindPrompt(contract),
+        requestMode: 'text',
+        requestText: '',
+        contentBlocks: [],
+        degradedToTextOnly: false,
+        model: cloneJson(selected.model, null),
+        reasoning: selected.reasoning,
+        temperature: temperature,
+      };
+    }
+
+    function resolveLatestXmindTaskModel(taskModel) {
+      var source = taskModel && typeof taskModel === 'object' ? taskModel : null;
+      if (source && xmindGenApi && typeof xmindGenApi.resolveSiteModel === 'function') {
+        var siteId = source.remoteId !== undefined && source.remoteId !== null
+          ? source.remoteId
+          : source.id;
+        var resolved = xmindGenApi.resolveSiteModel(siteId, source.model);
+        if (resolved && resolved.model && resolved.baseUrl) return resolved;
+      }
+      var selected = resolveEffectiveXmindModelSelection();
+      return selected && selected.model ? selected.model : null;
+    }
+
+    async function buildXmindGenerationTaskInput(task, preparationContext) {
+      await refreshLatestXmindModelConfiguration();
+      var contract = task && task.contract && typeof task.contract === 'object'
+        ? cloneJson(task.contract, {})
+        : {};
+      var visibleContext = ensureVisibleModuleContext(buildVisibleModuleContext());
+      var moduleEntry = task && task.scope === 'module'
+        ? resolveTaskModuleEntry(task, visibleContext)
+        : null;
+      var payload = await buildRequirementPayload(contract, visibleContext, moduleEntry, {
+        visibleModulesSnapshot: task && Array.isArray(task.preparationVisibleModulesSnapshot)
+          ? task.preparationVisibleModulesSnapshot
+          : null,
+      });
+      var model = resolveLatestXmindTaskModel(task && task.model)
+        || (task && task.model ? cloneJson(task.model, null) : null);
+      var prompt = task && task.prompt ? String(task.prompt || '') : buildXmindPrompt(contract);
+      var reasoning = task && task.reasoning ? String(task.reasoning || '') : '';
+      var temperature = Number(task && task.temperature);
+      if (!Number.isFinite(temperature)) temperature = 0.2;
       var modelCanSeeImages = modelSupportsVision(model);
       var requestMode = 'text';
       var requestText = payload.text;
       var contentBlocks = [];
       var degradedToTextOnly = false;
-      var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
+      var taskWorkspaceId = String(task && task.workspaceId ? task.workspaceId : (getActiveWorkspaceId() || ''));
       var requestPayloadLimit = getXmindRequestPayloadLimit();
 
       if (payload.images && payload.images.length) {
@@ -11121,7 +11546,8 @@
         reasoning,
         temperature,
         taskWorkspaceId,
-        opts.knowledgeBaseActionKey
+        task && task.knowledgeBaseActionKey ? String(task.knowledgeBaseActionKey || '') : '',
+        preparationContext
       );
       if (kbState && kbState.injectedContextText) {
         requestText = String(requestText || '').trim()
@@ -11144,7 +11570,29 @@
         model: cloneJson(model, null),
         reasoning: reasoning,
         temperature: temperature,
+        preparationVisibleModulesSnapshot: undefined,
+        requestPayloadCompacted: false,
       };
+    }
+
+    function prepareDeferredXmindTask(task, preparationContext) {
+      var workspaceId = getTaskWorkspaceId(task);
+      return runInWorkspaceContext(workspaceId, function() {
+        return buildXmindGenerationTaskInput(task, preparationContext);
+      }).then(function(result) {
+        if (!result || typeof result !== 'object') {
+          throw new Error('无法恢复 XMind 生成准备上下文');
+        }
+        return result;
+      });
+    }
+
+    function startPreparedManagedXmindTask(taskPayload) {
+      var coordinator = getXmindPreparationCoordinator();
+      if (!coordinator || typeof coordinator.createAndStart !== 'function') {
+        throw new Error('XMind 生成准备任务能力未就绪，请刷新页面后重试');
+      }
+      return coordinator.createAndStart(taskPayload).task;
     }
 
     function buildDedupeRequirementSource() {
@@ -11165,12 +11613,8 @@
       if (!dedupeCoreApi || typeof dedupeCoreApi.buildDedupeRequest !== 'function') {
         throw new Error('AI 用例去重能力未就绪，请刷新后重试');
       }
-      var model = xmindGenApi && typeof xmindGenApi.getAssignedModel === 'function'
-        ? xmindGenApi.getAssignedModel('xmindcasegen')
-        : null;
-      if (!model || !model.baseUrl || !model.model) {
-        throw new Error('未找到 XMind 用例生成模型');
-      }
+      var selected = requireEffectiveXmindModelSelection();
+      var model = selected.model;
       var requirement = buildDedupeRequirementSource();
       var dedupeMode = normalizeDedupeMode(opts.dedupeMode || getDedupeModeFromSettings());
       var built = dedupeCoreApi.buildDedupeRequest({
@@ -11198,9 +11642,7 @@
         contentBlocks: [],
         degradedToTextOnly: false,
         model: cloneJson(model, null),
-        reasoning: xmindGenApi && typeof xmindGenApi.getReasoningForType === 'function'
-          ? xmindGenApi.getReasoningForType('xmindcasegen')
-          : '',
+        reasoning: selected.reasoning,
         temperature: xmindGenApi && typeof xmindGenApi.getTemperatureForType === 'function'
           ? xmindGenApi.getTemperatureForType('xmindcasegen')
           : 0.2,
@@ -11313,12 +11755,8 @@
 
     function buildXmindCoverageTaskInput(request) {
       var sourceRequest = request || buildCoverageSourceRequest();
-      var model = xmindGenApi && typeof xmindGenApi.getAssignedModel === 'function'
-        ? xmindGenApi.getAssignedModel('xmindcasegen')
-        : null;
-      if (!model || !model.baseUrl || !model.model) {
-        throw new Error('未找到 XMind 用例生成模型');
-      }
+      var selected = requireEffectiveXmindModelSelection();
+      var model = selected.model;
       var requestText = String(sourceRequest && sourceRequest.requestText ? sourceRequest.requestText : '');
       var payloadLimit = getXmindRequestPayloadLimit();
       if (requestText.length > payloadLimit) {
@@ -11331,9 +11769,7 @@
         contentBlocks: [],
         degradedToTextOnly: false,
         model: cloneJson(model, null),
-        reasoning: xmindGenApi && typeof xmindGenApi.getReasoningForType === 'function'
-          ? xmindGenApi.getReasoningForType('xmindcasegen')
-          : '',
+        reasoning: selected.reasoning,
         temperature: xmindGenApi && typeof xmindGenApi.getTemperatureForType === 'function'
           ? xmindGenApi.getTemperatureForType('xmindcasegen')
           : 0.2,
@@ -11539,12 +11975,16 @@
       var reasonText = '模型调用出错，请稍后重试。';
       if (/XMind 请求体超出当前上限/.test(rawMessage)) {
         reasonText = rawMessage;
+      } else if (/MODEL_OUTPUT_TOKEN_LIMIT|输出达到 token 上限|输出.*token.*截断/i.test(rawMessage)) {
+        reasonText = '模型输出达到 token 上限，JSON 可能已被截断。请缩小单次生成范围，或确认代理对当前模型开放了足够的输出上限。';
       } else if (
         /context length|maximum context|context window|maximum context length|max context|too many tokens|token limit|prompt too long|input is too long|request too large|payload too large|context_length_exceeded|maximum token|超出.*上下文|上下文.*超限|输入.*过长/i.test(rawMessage)
       ) {
         reasonText = '模型上下文超限，请在设置中提高知识库注入上限、目录送模上限或 XMind 请求体上限后重试。';
       } else if (/超时/.test(rawMessage)) {
         reasonText = '模型响应超时，请稍后重试。';
+      } else if (/HTTP\s*504\b|Gateway Timeout|cloudfront/i.test(rawMessage)) {
+        reasonText = '上游网关或代理超时（HTTP 504），本次没有返回模型结果。已停止自动重试并保留其他已完成模块，可重试该模块或拆分生成范围。';
       } else if (/503|service unavailable/i.test(rawMessage)) {
         reasonText = '模型服务暂时不可用，请稍后重试。';
       } else if (/network|fetch|failed to fetch|网络/i.test(rawMessage)) {
@@ -11556,6 +11996,179 @@
         diagnostics: detailText ? ['错误信息：' + detailText] : [],
         previewText: '',
       };
+    }
+
+    function isModelGatewayTimeoutError(message) {
+      var text = message === null || message === undefined ? '' : String(message);
+      return /HTTP\s*504\b|Gateway Timeout|cloudfront/i.test(text);
+    }
+
+    function buildModelResponseDiagnosticItems(modelDiagnostics) {
+      var info = modelDiagnostics && typeof modelDiagnostics === 'object' ? modelDiagnostics : null;
+      if (!info) return [];
+      var items = [];
+      if (info.taskId) {
+        items.push('模型任务 ID：' + String(info.taskId));
+      }
+      var outputLength = Number(info.rawLength || 0);
+      var responseLength = Number(info.responseRawLength || 0);
+      var contentLength = Number(info.responseContentLength || 0);
+      if (Number.isFinite(outputLength) && outputLength > 0) {
+        items.push('模型输出长度：' + String(outputLength) + ' 字符');
+      }
+      if (Number.isFinite(responseLength) && responseLength > 0 && responseLength !== outputLength) {
+        items.push('接口响应长度：' + String(responseLength) + ' 字符');
+      }
+      if (Number.isFinite(contentLength) && contentLength > 0 && contentLength !== outputLength) {
+        items.push('模型内容长度：' + String(contentLength) + ' 字符');
+      }
+      var tailPreview = info.contentTailPreview || info.rawTailPreview || '';
+      if (tailPreview) {
+        items.push('模型返回末尾：' + String(tailPreview));
+      }
+      if (info.isHtml === true) {
+        items.push('上游返回 HTML 错误页');
+      }
+      if (info.parseError) {
+        items.push('JSON 解析错误：' + String(info.parseError));
+      }
+      if (info.hasTrailingExtraData === true) {
+        items.push('疑似 JSON 尾部存在多余字符');
+      }
+      if (info.likelyTruncated === true) {
+        items.push('疑似响应被截断：JSON 末尾未正常闭合');
+      }
+      if (info.responseStatus) {
+        items.push('上游响应状态：' + String(info.responseStatus));
+      }
+      if (Number(info.upstreamStatus || 0) > 0) {
+        items.push('上游 HTTP 状态：' + String(Number(info.upstreamStatus || 0)));
+      }
+      if (info.finishReason) {
+        items.push('上游 finish_reason：' + String(info.finishReason));
+      }
+      if (info.incompleteReason) {
+        items.push('上游 incomplete_details.reason：' + String(info.incompleteReason));
+      }
+      var usage = info.usage && typeof info.usage === 'object' ? info.usage : null;
+      if (usage) {
+        var inputTokens = Number(usage.input_tokens !== undefined ? usage.input_tokens : usage.prompt_tokens);
+        var outputTokens = Number(usage.output_tokens !== undefined ? usage.output_tokens : usage.completion_tokens);
+        var totalTokens = Number(usage.total_tokens);
+        var usageParts = [];
+        if (Number.isFinite(inputTokens) && inputTokens >= 0) usageParts.push('输入 ' + String(inputTokens));
+        if (Number.isFinite(outputTokens) && outputTokens >= 0) usageParts.push('输出 ' + String(outputTokens));
+        if (Number.isFinite(totalTokens) && totalTokens >= 0) usageParts.push('合计 ' + String(totalTokens));
+        if (usageParts.length) items.push('上游 token 用量：' + usageParts.join('，'));
+      }
+      return items;
+    }
+
+    function logModelOutputIssue(scope, actionId, modelDiagnostics) {
+      var info = modelDiagnostics && typeof modelDiagnostics === 'object' ? modelDiagnostics : null;
+      if (!info) return;
+      var payload = {
+        taskId: String(info.taskId || ''),
+        scope: String(scope || ''),
+        actionId: String(actionId || ''),
+        moduleId: String(info.moduleId || ''),
+        moduleTitle: String(info.moduleTitle || ''),
+        rootPipelineId: String(info.rootPipelineId || ''),
+        parseStatus: String(info.parseStatus || ''),
+        parseMode: String(info.parseMode || ''),
+        parseError: String(info.parseError || ''),
+        hasTrailingExtraData: info.hasTrailingExtraData === true,
+        likelyTruncated: info.likelyTruncated === true,
+        rawLength: Number(info.rawLength || 0) || 0,
+        rawTailPreview: String(info.rawTailPreview || ''),
+        contentTailPreview: String(info.contentTailPreview || ''),
+        upstreamStatus: Number(info.upstreamStatus || 0) || 0,
+        responseStatus: String(info.responseStatus || ''),
+        finishReason: String(info.finishReason || ''),
+        incompleteReason: String(info.incompleteReason || ''),
+        responseRawLength: Number(info.responseRawLength || 0) || 0,
+        responseContentLength: Number(info.responseContentLength || 0) || 0,
+        usage: info.usage && typeof info.usage === 'object' ? info.usage : null,
+      };
+      if (typeof setDebugState === 'function') {
+        setDebugState({
+          lastModelOutputIssue: payload,
+          lastModelOutputIssueAt: Date.now(),
+        });
+      }
+      if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+        console.warn('[XMindCaseGen][model-output-invalid]', payload);
+      }
+    }
+
+    function logModelOutputRepair(modelDiagnostics) {
+      var info = modelDiagnostics && typeof modelDiagnostics === 'object' ? modelDiagnostics : null;
+      if (!info || info.hasTrailingExtraData !== true) return;
+      var payload = {
+        taskId: String(info.taskId || ''),
+        moduleId: String(info.moduleId || ''),
+        moduleTitle: String(info.moduleTitle || ''),
+        parseMode: String(info.parseMode || ''),
+        rawLength: Number(info.rawLength || 0) || 0,
+        trailingExtraPreview: String(info.trailingExtraPreview || ''),
+        rawTailPreview: String(info.rawTailPreview || ''),
+      };
+      if (typeof setDebugState === 'function') {
+        setDebugState({
+          lastModelOutputRepair: payload,
+          lastModelOutputRepairAt: Date.now(),
+        });
+      }
+      if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+        console.warn('[XMindCaseGen][model-output-repaired]', payload);
+      }
+    }
+
+    function logModuleNoChangeDiagnostics(actionId, modelDiagnostics, filterDiagnostics, targetOutput, mergeDiagnostics) {
+      var modelInfo = modelDiagnostics && typeof modelDiagnostics === 'object' ? modelDiagnostics : {};
+      var filterInfo = filterDiagnostics && typeof filterDiagnostics === 'object' ? filterDiagnostics : {};
+      var mergeInfo = mergeDiagnostics && typeof mergeDiagnostics === 'object' ? mergeDiagnostics : {};
+      var targetCases = targetOutput && Array.isArray(targetOutput.cases) ? targetOutput.cases.length : 0;
+      var payload = {
+        taskId: String(modelInfo.taskId || ''),
+        moduleId: String(modelInfo.moduleId || ''),
+        moduleTitle: String(modelInfo.moduleTitle || (targetOutput && targetOutput.module) || ''),
+        actionId: String(actionId || ''),
+        parseStatus: String(modelInfo.parseStatus || ''),
+        parseMode: String(modelInfo.parseMode || ''),
+        parseError: String(modelInfo.parseError || ''),
+        hasTrailingExtraData: modelInfo.hasTrailingExtraData === true,
+        likelyTruncated: modelInfo.likelyTruncated === true,
+        rawLength: Number(modelInfo.rawLength || 0) || 0,
+        contentTailPreview: String(modelInfo.contentTailPreview || ''),
+        responseRawLength: Number(modelInfo.responseRawLength || 0) || 0,
+        responseContentLength: Number(modelInfo.responseContentLength || 0) || 0,
+        upstreamStatus: Number(modelInfo.upstreamStatus || 0) || 0,
+        moduleCandidateCount: Number(modelInfo.moduleCandidateCount || 0) || 0,
+        caseCandidateCount: Number(modelInfo.caseCandidateCount || 0) || 0,
+        normalizedModuleCount: Number(modelInfo.normalizedModuleCount || 0) || 0,
+        normalizedCaseCount: Number(modelInfo.normalizedCaseCount || 0) || 0,
+        filteredModuleCount: Number(filterInfo.outputModuleCount || 0) || 0,
+        filteredCaseCount: Number(filterInfo.outputCaseCount || 0) || 0,
+        targetCaseCount: targetCases,
+        duplicateAgainstExisting: Number(mergeInfo.duplicateAgainstExisting || 0) || 0,
+        duplicateWithinAdded: Number(mergeInfo.duplicateWithinAdded || 0) || 0,
+        skippedTargetMismatchModules: Number(filterInfo.skippedTargetMismatchModules || 0) || 0,
+        skippedNewModulesNotAllowed: Number(filterInfo.skippedNewModulesNotAllowed || 0) || 0,
+        responseStatus: String(modelInfo.responseStatus || ''),
+        finishReason: String(modelInfo.finishReason || ''),
+        incompleteReason: String(modelInfo.incompleteReason || ''),
+        usage: modelInfo.usage && typeof modelInfo.usage === 'object' ? modelInfo.usage : null,
+      };
+      if (typeof setDebugState === 'function') {
+        setDebugState({
+          lastModuleNoChangeDiagnostics: payload,
+          lastModuleNoChangeDiagnosticsAt: Date.now(),
+        });
+      }
+      if (typeof console !== 'undefined' && console && typeof console.warn === 'function') {
+        console.warn('[XMindCaseGen][module-no-change]', payload);
+      }
     }
 
     function buildModelOutputNoChangeInfo(scope, actionId, modelDiagnostics) {
@@ -11590,6 +12203,9 @@
       } else {
         return null;
       }
+
+      diagnostics = diagnostics.concat(buildModelResponseDiagnosticItems(modelDiagnostics));
+      logModelOutputIssue(scope, actionId, modelDiagnostics);
 
       return {
         resultKind: 'no-change',
@@ -11684,6 +12300,7 @@
       if (rawModuleCount <= 0 && rawCaseCount <= 0) {
         var modelOutputIssue = buildModelOutputNoChangeInfo('module', actionId, modelDiagnostics);
         if (modelOutputIssue) {
+          logModuleNoChangeDiagnostics(actionId, modelDiagnostics, filterDiagnostics, targetOutput, mergeDiagnostics);
           return modelOutputIssue;
         }
         reasonText = '这次没有拿到可用的生成结果。';
@@ -11709,6 +12326,12 @@
       } else {
         reasonText = '这次没有生成出新的用例。';
       }
+
+      appendDiagnosticMetric(diagnostics, '模型返回模块', getDiagnosticsMetric(modelDiagnostics, 'moduleCandidateCount'), '个');
+      appendDiagnosticMetric(diagnostics, '模型返回用例', getDiagnosticsMetric(modelDiagnostics, 'caseCandidateCount'), '条');
+      appendDiagnosticMetric(diagnostics, '命中当前模块', getDiagnosticsMetric(filterDiagnostics, 'outputModuleCount'), '个');
+      appendDiagnosticMetric(diagnostics, '命中可用用例', getDiagnosticsMetric(filterDiagnostics, 'outputCaseCount'), '条');
+      logModuleNoChangeDiagnostics(actionId, modelDiagnostics, filterDiagnostics, targetOutput, mergeDiagnostics);
 
       return {
         resultKind: 'no-change',
@@ -14560,6 +15183,10 @@
         reasoning: String(taskInput && taskInput.reasoning ? taskInput.reasoning : ''),
         temperature: Number(taskInput && taskInput.temperature),
         restoreContext: restoreContext,
+        knowledgeBaseActionKey: String(opts.knowledgeBaseActionKey || ''),
+        preparationVisibleModulesSnapshot: Array.isArray(opts.visibleModulesSnapshot)
+          ? cloneJson(opts.visibleModulesSnapshot, [])
+          : undefined,
         rootPipelineId: String(opts.rootPipelineId || ''),
         rootPipelineActionId: String(opts.rootPipelineActionId || ''),
         pipelineStage: String(opts.pipelineStage || ''),
@@ -14598,6 +15225,10 @@
         temperature: Number(taskInput && taskInput.temperature),
         fallbackCases: normalizeFallbackCaseList(opts.fallbackCases, opts.moduleTitle || (moduleEntry && moduleEntry.title) || ''),
         restoreContext: restoreContext,
+        knowledgeBaseActionKey: String(opts.knowledgeBaseActionKey || ''),
+        preparationVisibleModulesSnapshot: Array.isArray(opts.visibleModulesSnapshot)
+          ? cloneJson(opts.visibleModulesSnapshot, [])
+          : undefined,
         rootPipelineId: String(opts.rootPipelineId || ''),
         rootPipelineActionId: String(opts.rootPipelineActionId || ''),
         rootPipelineNewModule: opts.rootPipelineNewModule === true,
@@ -16015,7 +16646,10 @@
         : buildVisibleModuleContext();
       visibleContext = ensureVisibleModuleContext(visibleContext);
       var visibleMap = visibleContext.map || {};
-      var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
+      var normalizedOutput = normalizeModelModulesOutputDetailed(
+        task && task.resultRaw ? task.resultRaw : '',
+        task && task.modelResponseDiagnostics
+      );
       var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
       var modules = filtered.list;
       var fullCaseOutputModules = [];
@@ -16201,6 +16835,7 @@
       }
       var opts = options || {};
       var anchorNodeId = getManagedTaskAnchorNodeId(task, null);
+      var responseDiagnostics = buildModelResponseDiagnosticItems(task && task.modelResponseDiagnostics);
       var errorInfo = opts.resultKind === 'cancelled'
         ? buildGenerationCancelledInfo(task)
         : buildGenerationErrorInfo(new Error(getTaskErrorMessage(task, err)));
@@ -16216,7 +16851,7 @@
         appendRootPipelineDiagnostics(current, (opts.resultKind === 'cancelled'
           ? ['发现阶段已中断：' + errorInfo.reasonText]
           : ['发现阶段失败：' + errorInfo.reasonText]
-        ).concat(errorInfo.diagnostics || []));
+        ).concat(errorInfo.diagnostics || [], responseDiagnostics));
       });
       if (isDrawerOpen()) {
         queueTerminalMindRender({ reason: opts.renderReason || 'root-pipeline-discovery-error', persist: false, anchorNodeId: anchorNodeId });
@@ -16243,7 +16878,10 @@
       var moduleId = resolvedEntry && resolvedEntry.aiModuleId ? resolvedEntry.aiModuleId : (task && task.moduleId ? task.moduleId : '');
       var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
       var contract = task && task.contract ? task.contract : createOperationContract(actionId, resolvedEntry);
-      var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
+      var normalizedOutput = normalizeModelModulesOutputDetailed(
+        task && task.resultRaw ? task.resultRaw : '',
+        task && task.modelResponseDiagnostics
+      );
       var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
       var modules = filtered.list;
       var targetKey = normalizeModuleKey(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : historyModuleTitle);
@@ -16298,7 +16936,11 @@
             removeAiModuleRecord(moduleId);
           }
           updateRootPipelineState(function(current) {
-            appendRootPipelineDiagnostics(current, '模块「' + historyModuleTitle + '」未新增用例：' + appendNoChangeInfo.reasonText);
+            appendRootPipelineDiagnostics(
+              current,
+              ['模块「' + historyModuleTitle + '」未新增用例：' + appendNoChangeInfo.reasonText]
+                .concat(appendNoChangeInfo.diagnostics || [])
+            );
           });
         }
       } else {
@@ -16335,7 +16977,11 @@
               removeAiModuleRecord(moduleId);
             }
             updateRootPipelineState(function(current) {
-              appendRootPipelineDiagnostics(current, '模块「' + historyModuleTitle + '」未新增用例：' + fullNoChangeInfo.reasonText);
+              appendRootPipelineDiagnostics(
+                current,
+                ['模块「' + historyModuleTitle + '」未新增用例：' + fullNoChangeInfo.reasonText]
+                  .concat(fullNoChangeInfo.diagnostics || [])
+              );
             });
           }
         }
@@ -16410,7 +17056,7 @@
       var fallbackCases = normalizeFallbackCaseList(task && task.fallbackCases, moduleTitle);
       var canUseTimeoutFallback = opts.resultKind !== 'cancelled'
         && String(task && task.rootPipelineActionId ? task.rootPipelineActionId : '') === ROOT_ACTIONS.FULL_CASES
-        && taskErrorText.indexOf('模型调用超时') !== -1
+        && (taskErrorText.indexOf('模型调用超时') !== -1 || isModelGatewayTimeoutError(taskErrorText))
         && moduleId
         && fallbackCases.length > 0;
       if (canUseTimeoutFallback) {
@@ -16457,7 +17103,10 @@
                 + '，已采用首轮备用用例继续流程'
             );
           } else {
-            appendRootPipelineDiagnostics(current, '模块「' + moduleTitle + '」模型调用超时，已采用首轮备用用例继续流程');
+            var fallbackReason = isModelGatewayTimeoutError(taskErrorText)
+              ? '上游网关超时（HTTP 504）'
+              : '模型调用超时';
+            appendRootPipelineDiagnostics(current, '模块「' + moduleTitle + '」' + fallbackReason + '，已采用首轮备用用例继续流程');
           }
         });
         markRootPipelineModuleTaskCompleted(task);
@@ -16485,6 +17134,7 @@
       var errorInfo = opts.resultKind === 'cancelled'
         ? buildGenerationCancelledInfo(task)
         : buildGenerationErrorInfo(new Error(moduleState && moduleState.error ? moduleState.error : getTaskErrorMessage(task, err)));
+      var responseDiagnostics = buildModelResponseDiagnosticItems(task && task.modelResponseDiagnostics);
       updateRootPipelineState(function(current) {
         appendRootPipelineModuleDetail(current, moduleTitle, 0, getTaskModelRequestDurationMs(task));
         if (opts.resultKind === 'cancelled') {
@@ -16496,7 +17146,7 @@
         appendRootPipelineDiagnostics(current, (opts.resultKind === 'cancelled'
           ? ['模块「' + (moduleTitle || '当前模块') + '」已中断：' + errorInfo.reasonText]
           : ['模块「' + (moduleTitle || '当前模块') + '」失败：' + errorInfo.reasonText]
-        ).concat(errorInfo.diagnostics || []));
+        ).concat(errorInfo.diagnostics || [], responseDiagnostics));
       });
       markRootPipelineModuleTaskCompleted(task);
       if (isDrawerOpen()) {
@@ -16516,7 +17166,10 @@
       var rootState = ensureRootUiState();
       var contract = task && task.contract ? task.contract : createOperationContract(actionId, null);
       var visibleContext = buildVisibleModuleContext();
-      var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
+      var normalizedOutput = normalizeModelModulesOutputDetailed(
+        task && task.resultRaw ? task.resultRaw : '',
+        task && task.modelResponseDiagnostics
+      );
       var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
       var modules = filtered.list;
       var coverageGapInfo = evaluateRootCoverageGaps(task, modules, contract);
@@ -16614,6 +17267,7 @@
       var errorInfo = opts.resultKind === 'cancelled'
         ? buildGenerationCancelledInfo(task)
         : buildGenerationErrorInfo(new Error(rootState.error));
+      var responseDiagnostics = buildModelResponseDiagnosticItems(task && task.modelResponseDiagnostics);
       var retryHistoryDiagnostics = buildCoverageRetryHistoryDiagnostics(task);
       var failureLabel = opts.resultKind === 'cancelled'
         ? '已中断'
@@ -16630,7 +17284,7 @@
         details: [],
         resultKind: errorInfo.resultKind,
         reasonText: errorInfo.reasonText,
-        diagnostics: (errorInfo.diagnostics || []).concat(retryHistoryDiagnostics),
+        diagnostics: (errorInfo.diagnostics || []).concat(responseDiagnostics, retryHistoryDiagnostics),
         previewText: errorInfo.previewText,
       });
       if (opts.resultKind === 'cancelled') {
@@ -16661,7 +17315,10 @@
       var moduleId = resolvedEntry && resolvedEntry.aiModuleId ? resolvedEntry.aiModuleId : (task && task.moduleId ? task.moduleId : '');
       var moduleState = moduleId ? ensureModuleUiState(moduleId) : null;
       var contract = task && task.contract ? task.contract : createOperationContract(actionId, resolvedEntry);
-      var normalizedOutput = normalizeModelModulesOutputDetailed(task && task.resultRaw ? task.resultRaw : '');
+      var normalizedOutput = normalizeModelModulesOutputDetailed(
+        task && task.resultRaw ? task.resultRaw : '',
+        task && task.modelResponseDiagnostics
+      );
       var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
       var modules = filtered.list;
       var targetKey = normalizeModuleKey(resolvedEntry && resolvedEntry.title ? resolvedEntry.title : historyModuleTitle);
@@ -16843,6 +17500,7 @@
       var errorInfo = opts.resultKind === 'cancelled'
         ? buildGenerationCancelledInfo(task)
         : buildGenerationErrorInfo(new Error(moduleState && moduleState.error ? moduleState.error : getTaskErrorMessage(task, err)));
+      var responseDiagnostics = buildModelResponseDiagnosticItems(task && task.modelResponseDiagnostics);
       var failureLabel = opts.resultKind === 'cancelled'
         ? '已中断'
         : getGenerationFailureLabel('module', actionId, {
@@ -16862,7 +17520,7 @@
         }],
         resultKind: errorInfo.resultKind,
         reasonText: errorInfo.reasonText,
-        diagnostics: errorInfo.diagnostics,
+        diagnostics: (errorInfo.diagnostics || []).concat(responseDiagnostics),
         previewText: errorInfo.previewText,
       });
       if (opts.resultKind === 'cancelled') {
@@ -17298,10 +17956,26 @@
 
     function runInWorkspaceContext(workspaceId, handler) {
       var targetId = String(workspaceId || '');
+      if (workspaceContextActiveDepth > 0 && targetId === workspaceContextActiveId) {
+        return Promise.resolve().then(function() {
+          return handler(workspaceShadowDepth > 0);
+        });
+      }
       var queued = workspaceContextQueue.catch(function() {
         return null;
       }).then(function() {
-        return runInWorkspaceContextNow(targetId, handler);
+        var previousId = workspaceContextActiveId;
+        var previousDepth = workspaceContextActiveDepth;
+        workspaceContextActiveId = targetId;
+        workspaceContextActiveDepth = previousDepth + 1;
+        return Promise.resolve()
+          .then(function() {
+            return runInWorkspaceContextNow(targetId, handler);
+          })
+          .finally(function() {
+            workspaceContextActiveId = previousId;
+            workspaceContextActiveDepth = previousDepth;
+          });
       });
       workspaceContextQueue = queued.then(function() {
         return null;
@@ -17436,6 +18110,12 @@
         clearInvalidTasks: true,
       });
       tasks = listManagedXmindTasks();
+      if (opts.resume !== false) {
+        var preparationCoordinator = getXmindPreparationCoordinator();
+        if (preparationCoordinator && typeof preparationCoordinator.resumePendingTasks === 'function') {
+          preparationCoordinator.resumePendingTasks(tasks);
+        }
+      }
       if (opts.resume !== false && typeof manager.resumeTasks === 'function') {
         manager.resumeTasks({ force: true });
         tasks = listManagedXmindTasks();
@@ -17593,6 +18273,14 @@
       xmindTaskListenerBound = true;
     }
 
+    function bindModelUpdates() {
+      if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+      window.addEventListener('app-models-updated', function() {
+        if (!isDrawerOpen()) return;
+        syncInlineModelPicker();
+      });
+    }
+
     function interruptRunningXmindTasks() {
       var manager = getXmindTaskManager();
       if (!manager || typeof manager.cancelTask !== 'function') {
@@ -17714,6 +18402,7 @@
       moduleState.hideResults = hadAiCasesBeforeAction;
       clearModuleTopupHighlight(moduleState);
       clearDedupeOverviewSummary({ clearTerminalVisual: true });
+      notifyInlineStatus('', '');
       if (options.rootPendingActionId) {
         setModuleRootPendingAction(moduleState, options.rootPendingActionId);
       }
@@ -17776,20 +18465,23 @@
         var knowledgeBaseActionKey = options.knowledgeBaseActionKey
           ? String(options.knowledgeBaseActionKey || '')
           : String(options.rootPipelineId || '');
-        var moduleTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, resolvedEntry, {
-          workspaceId: taskWorkspaceId,
-          knowledgeBaseActionKey: knowledgeBaseActionKey,
-          visibleModulesSnapshot: options.visibleModulesSnapshot,
+        moduleTaskMeta.knowledgeBaseActionKey = knowledgeBaseActionKey;
+        moduleTaskMeta.visibleModulesSnapshot = options.visibleModulesSnapshot;
+        var moduleTaskInput = buildXmindGenerationTaskSeed(contract);
+        return await runInWorkspaceContext(taskWorkspaceId, function() {
+          var activeModuleState = ensureModuleUiState(moduleEntry.aiModuleId);
+          var moduleTask = startPreparedManagedXmindTask(
+            buildModuleTaskPayload(resolvedEntry, actionId, moduleTaskInput, moduleTaskMeta)
+          );
+          activeModuleState.taskId = String(moduleTask && moduleTask.id ? moduleTask.id : '');
+          activeModuleState.updatedAt = Date.now();
+          persistXmindState(true);
+          return {
+            task: moduleTask,
+            moduleEntry: resolvedEntry,
+            moduleState: activeModuleState,
+          };
         });
-        var moduleTask = startManagedXmindTask(buildModuleTaskPayload(resolvedEntry, actionId, moduleTaskInput, moduleTaskMeta));
-        moduleState.taskId = String(moduleTask && moduleTask.id ? moduleTask.id : '');
-        moduleState.updatedAt = Date.now();
-        persistXmindState(true);
-        return {
-          task: moduleTask,
-          moduleEntry: resolvedEntry,
-          moduleState: moduleState,
-        };
       } catch (err) {
         completeModuleTaskError(moduleTaskMeta, err, { renderReason: 'module-start-error' });
         return null;
@@ -17920,31 +18612,32 @@
       var contract = rootTaskMeta && rootTaskMeta.contract
         ? cloneJson(rootTaskMeta.contract, {})
         : createOperationContract(actionId, null);
-      var rootTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, null, {
-        workspaceId: taskWorkspaceId,
-        knowledgeBaseActionKey: String(pipeline && pipeline.id ? pipeline.id : ''),
+      var rootTaskInput = buildXmindGenerationTaskSeed(contract);
+      return await runInWorkspaceContext(taskWorkspaceId, function() {
+        var activeRootState = ensureRootUiState();
+        var rootTask = startPreparedManagedXmindTask(buildRootTaskPayload(actionId, rootTaskInput, {
+          workspaceId: taskWorkspaceId,
+          scope: 'root',
+          actionId: actionId,
+          snapshotId: rootTaskMeta && rootTaskMeta.snapshotId ? String(rootTaskMeta.snapshotId || '') : '',
+          contract: cloneJson(contract, {}),
+          historyActionLabel: rootTaskMeta && rootTaskMeta.historyActionLabel ? String(rootTaskMeta.historyActionLabel || '') : '',
+          hadAiContentBeforeAction: rootTaskMeta && rootTaskMeta.hadAiContentBeforeAction === true,
+          hadAiLayerBeforeAction: rootTaskMeta && rootTaskMeta.hadAiLayerBeforeAction === true,
+          hadAiCasesBeforeAction: rootTaskMeta && rootTaskMeta.hadAiCasesBeforeAction === true,
+          knowledgeBaseActionKey: String(pipeline && pipeline.id ? pipeline.id : ''),
+          rootPipelineId: pipeline.id,
+          rootPipelineActionId: actionId,
+          pipelineStage: 'discovery',
+          historySuppressed: true,
+          notifySuppressed: true,
+          skipCoverageRetry: actionId !== ROOT_ACTIONS.FULL_CASES,
+        }));
+        activeRootState.taskId = String(rootTask && rootTask.id ? rootTask.id : '');
+        activeRootState.updatedAt = Date.now();
+        persistXmindState(true);
+        return true;
       });
-      var rootTask = startManagedXmindTask(buildRootTaskPayload(actionId, rootTaskInput, {
-        workspaceId: taskWorkspaceId,
-        scope: 'root',
-        actionId: actionId,
-        snapshotId: rootTaskMeta && rootTaskMeta.snapshotId ? String(rootTaskMeta.snapshotId || '') : '',
-        contract: cloneJson(contract, {}),
-        historyActionLabel: rootTaskMeta && rootTaskMeta.historyActionLabel ? String(rootTaskMeta.historyActionLabel || '') : '',
-        hadAiContentBeforeAction: rootTaskMeta && rootTaskMeta.hadAiContentBeforeAction === true,
-        hadAiLayerBeforeAction: rootTaskMeta && rootTaskMeta.hadAiLayerBeforeAction === true,
-        hadAiCasesBeforeAction: rootTaskMeta && rootTaskMeta.hadAiCasesBeforeAction === true,
-        rootPipelineId: pipeline.id,
-        rootPipelineActionId: actionId,
-        pipelineStage: 'discovery',
-        historySuppressed: true,
-        notifySuppressed: true,
-        skipCoverageRetry: actionId !== ROOT_ACTIONS.FULL_CASES,
-      }));
-      rootState.taskId = String(rootTask && rootTask.id ? rootTask.id : '');
-      rootState.updatedAt = Date.now();
-      persistXmindState(true);
-      return true;
     }
 
     async function runRootAction(actionId, options) {
@@ -18005,6 +18698,7 @@
       rootState.updatedAt = Date.now();
       clearAllTopupHighlights();
       clearDedupeOverviewSummary({ clearTerminalVisual: true });
+      notifyInlineStatus('', '');
       if (actionId === ROOT_ACTIONS.EXISTING_CASES) {
         markRootPendingModules(visibleContext.list, actionId);
       }
@@ -18040,15 +18734,18 @@
         if (shouldUseRootPipeline(actionId)) {
           return await startRootPipeline(actionId, rootTaskMeta, visibleContext);
         }
-        var rootTaskInput = await buildXmindGenerationTaskInput(contract, visibleContext, null, {
-          workspaceId: taskWorkspaceId,
-          knowledgeBaseActionKey: knowledgeBaseActionKey,
+        rootTaskMeta.knowledgeBaseActionKey = knowledgeBaseActionKey;
+        var rootTaskInput = buildXmindGenerationTaskSeed(contract);
+        return await runInWorkspaceContext(taskWorkspaceId, function() {
+          var activeRootState = ensureRootUiState();
+          var rootTask = startPreparedManagedXmindTask(
+            buildRootTaskPayload(actionId, rootTaskInput, rootTaskMeta)
+          );
+          activeRootState.taskId = String(rootTask && rootTask.id ? rootTask.id : '');
+          activeRootState.updatedAt = Date.now();
+          persistXmindState(true);
+          return true;
         });
-        var rootTask = startManagedXmindTask(buildRootTaskPayload(actionId, rootTaskInput, rootTaskMeta));
-        rootState.taskId = String(rootTask && rootTask.id ? rootTask.id : '');
-        rootState.updatedAt = Date.now();
-        persistXmindState(true);
-        return true;
       } catch (err) {
         clearRootPipelineState();
         return completeRootTaskError(rootTaskMeta, err, { renderReason: 'root-start-error' });
@@ -19500,6 +20197,7 @@
     bindViewStatePersistenceLifecycle();
     bindButtons();
     bindManagedXmindTasks();
+    bindModelUpdates();
     bindRenderListeners();
     updateSummary();
 
