@@ -13210,4 +13210,151 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(retryResult.failureRunning).toBe(false);
     expect(retryResult.cloudfrontRunning).toBe(false);
   });
+
+  test('关闭 XMind 页签必须立即从本地缓存移除，刷新后不会复活草稿', async ({ browser }) => {
+    const token = 'token-xmind-close-persist-now';
+    const user = { id: 918, username: 'close_persist_now', role: 'user', level: 'member' };
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const mockInfo = await mockCaseGenApisWithModel(page, token, user, {
+      projects: [{ id: 1, name: '项目A' }],
+      versionsByProject: { '1': [{ id: 11, name: 'v1.0.0' }] },
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await createXmindWorkspaceByManualPrep(page, '保留草稿甲', '甲：保留的草稿。', {});
+    await createXmindWorkspaceByManualPrep(page, '待关闭草稿乙', '乙：随入库关闭。', {});
+
+    // 走与「入库并关闭页签」完全相同的内部路径
+    const closeResult = await page.evaluate(() => {
+      var host = window.app.state.xmindCaseGen;
+      var targetId = '';
+      (host.workspaceOrder || []).forEach(function(id) {
+        var record = host.workspaces[id];
+        if (record && String(record.name || '') === '待关闭草稿乙') targetId = String(id);
+      });
+      var api = window.app.xmindCasegenApi;
+      var ok = api.resetAfterStoreSuccess({ workspaceId: targetId, closeWorkspace: true, showToast: false });
+      var raw = localStorage.getItem('usecase-workflow-state-v1') || '';
+      var saved = raw ? JSON.parse(raw) : null;
+      var xmind = saved && saved.data && saved.data.xmindCaseGen ? saved.data.xmindCaseGen : null;
+      var storedNames = [];
+      if (xmind && xmind.workspaces) {
+        Object.keys(xmind.workspaces).forEach(function(id) { storedNames.push(String(xmind.workspaces[id].name || '')); });
+      }
+      var memoryNames = (host.workspaceOrder || []).map(function(id) {
+        return String(host.workspaces[id] && host.workspaces[id].name || '');
+      });
+      return { ok: ok === true, targetId: targetId, storedNames: storedNames, memoryNames: memoryNames };
+    });
+    expect(closeResult.targetId).toBeTruthy();
+    expect(closeResult.ok).toBe(true);
+    expect(closeResult.memoryNames).not.toContain('待关闭草稿乙');
+    // 不等待防抖与后续副作用：关闭返回时本地缓存里就不能再存在该页签
+    expect(closeResult.storedNames).not.toContain('待关闭草稿乙');
+
+    await page.waitForTimeout(400);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 25000 });
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    const afterReload = await page.evaluate(() => {
+      var host = window.app.state.xmindCaseGen || {};
+      return {
+        names: (host.workspaceOrder || []).map(function(id) {
+          return String(host.workspaces[id] && host.workspaces[id].name || '');
+        }),
+      };
+    });
+    expect(afterReload.names).not.toContain('待关闭草稿乙');
+    expect(afterReload.names).toContain('保留草稿甲');
+    await context.close();
+  });
+
+
+  test('其它窗口持有旧状态时，已关闭的 XMind 页签不会在刷新后复活', async ({ browser }) => {
+    const token = 'token-xmind-closed-tombstone';
+    const user = { id: 920, username: 'closed_tombstone', role: 'user', level: 'member' };
+    const context = await browser.newContext();
+    const page1 = await context.newPage();
+    const mockInfo = await mockCaseGenApisWithModel(page1, token, user, {
+      projects: [{ id: 1, name: '项目A' }],
+      versionsByProject: { '1': [{ id: 11, name: 'v1.0.0' }] },
+    });
+    await gotoCasesgenWorkflow(page1);
+    await waitXmindModelAssigned(page1, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page1);
+    await createXmindWorkspaceByManualPrep(page1, '保留草稿甲', '甲：保留的草稿。', {});
+    await createXmindWorkspaceByManualPrep(page1, '待关闭草稿乙', '乙：随入库关闭。', {});
+    await page1.waitForTimeout(500);
+
+    // 另一个窗口在关闭之前加载，内存里持有「待关闭草稿乙」
+    const page2 = await context.newPage();
+    await mockCaseGenApisWithModel(page2, token, user, {
+      projects: [{ id: 1, name: '项目A' }],
+      versionsByProject: { '1': [{ id: 11, name: 'v1.0.0' }] },
+    });
+    await gotoCasesgenWorkflow(page2, { resetWorkflowStorage: false });
+    const page2Names = await page2.evaluate(() => {
+      var host = window.app.state.xmindCaseGen || {};
+      return (host.workspaceOrder || []).map(function(id) {
+        return String(host.workspaces[id] && host.workspaces[id].name || '');
+      });
+    });
+    expect(page2Names).toContain('待关闭草稿乙');
+
+    // 走与「入库并关闭页签」完全相同的内部路径关闭乙
+    const closeResult = await page1.evaluate(() => {
+      var host = window.app.state.xmindCaseGen;
+      var targetId = '';
+      (host.workspaceOrder || []).forEach(function(id) {
+        var record = host.workspaces[id];
+        if (record && String(record.name || '') === '待关闭草稿乙') targetId = String(id);
+      });
+      var api = window.app.xmindCasegenApi;
+      var ok = api.resetAfterStoreSuccess({ workspaceId: targetId, closeWorkspace: true, showToast: false });
+      var memoryNames = (host.workspaceOrder || []).map(function(id) {
+        return String(host.workspaces[id] && host.workspaces[id].name || '');
+      });
+      return { ok: ok === true, targetId: targetId, memoryNames: memoryNames };
+    });
+    expect(closeResult.targetId).toBeTruthy();
+    expect(closeResult.ok).toBe(true);
+    expect(closeResult.memoryNames).not.toContain('待关闭草稿乙');
+
+    // 另一个窗口用它启动时的旧内存态写回同一个缓存 key（真实场景里的延迟持久化/切页持久化）
+    await page2.evaluate(() => {
+      if (window.app && typeof window.app.persistWorkflowStateNow === 'function') {
+        window.app.persistWorkflowStateNow();
+      }
+    });
+
+    // 此时缓存里可能已经被旧状态写回，刷新后已关闭页签不能复活
+    await page1.reload({ waitUntil: 'domcontentloaded' });
+    await page1.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 25000 });
+    await waitXmindModelAssigned(page1, mockInfo.modelId);
+    const afterReload = await page1.evaluate(() => {
+      var host = window.app.state.xmindCaseGen || {};
+      var raw = localStorage.getItem('usecase-workflow-state-v1') || '';
+      var saved = raw ? JSON.parse(raw) : null;
+      var storedHost = saved && saved.data && saved.data.xmindCaseGen ? saved.data.xmindCaseGen : null;
+      var storedNames = [];
+      if (storedHost && storedHost.workspaces) {
+        Object.keys(storedHost.workspaces).forEach(function(id) {
+          storedNames.push(String(storedHost.workspaces[id].name || ''));
+        });
+      }
+      return {
+        memoryNames: (host.workspaceOrder || []).map(function(id) {
+          return String(host.workspaces[id] && host.workspaces[id].name || '');
+        }),
+        storedNames: storedNames,
+      };
+    });
+    expect(afterReload.memoryNames).not.toContain('待关闭草稿乙');
+    expect(afterReload.memoryNames).toContain('保留草稿甲');
+    expect(afterReload.storedNames).not.toContain('待关闭草稿乙');
+    await context.close();
+  });
+
 });

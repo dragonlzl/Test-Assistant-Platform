@@ -180,9 +180,14 @@
       return id.indexOf('deepseek-r1') !== -1 || id.indexOf('deepseek-reasoner') !== -1;
     }
 
+    function isPackycodeModel(model) {
+      const service = window.app.services && window.app.services.modelClient;
+      return Boolean(service && typeof service.isPackycodeModel === 'function' && service.isPackycodeModel(model));
+    }
+
     function isGptReasoningModel(model) {
       var id = getModelIdentifier(model);
-      return id.indexOf('gpt-5') === 0 && id.indexOf('chat') === -1;
+      return (id.indexOf('gpt-5') === 0 || isPackycodeModel(model)) && id.indexOf('chat') === -1;
     }
 
     function modelHasReasoningCapability(model) {
@@ -240,7 +245,9 @@
 
     function writeModelStreamToForm(value) {
       if (!modelStreamModeEl) return;
-      modelStreamModeEl.value = normalizeModelStream(value) ? 'stream' : 'nonstream';
+      const packy = modelProviderEl && modelProviderEl.value === 'packycode';
+      modelStreamModeEl.disabled = Boolean(packy);
+      modelStreamModeEl.value = packy || normalizeModelStream(value) ? 'stream' : 'nonstream';
     }
 
     function getModelStreamLabel(model) {
@@ -328,7 +335,7 @@
       if (!wireModel) return null;
       // 显式能力（含空数组）优先，避免把站点能力复制给其它模型。
       let capabilities = getDeclaredModelCapabilities(meta);
-      if (capabilities === null) capabilities = guessModelCapabilities(wireModel, meta.name);
+      if (capabilities === null) capabilities = guessModelCapabilities(wireModel, meta.name, site);
       return {
         id: getStableModelId(site),
         remoteId: site.remoteId,
@@ -1037,9 +1044,19 @@
     }
 
     function applyProviderPreset(providerEl, baseUrlEl) {
+      writeModelStreamToForm(readModelStreamFromForm());
       const preset = providerDefaults[providerEl && providerEl.value];
       if (!preset) return;
-      if (baseUrlEl && !baseUrlEl.value.trim()) baseUrlEl.value = preset.baseUrl;
+      const isPacky = providerEl.value === 'packycode';
+      const currentUrl = baseUrlEl ? baseUrlEl.value.trim() : '';
+      const isPresetUrl = Object.keys(providerDefaults).some(function(key) {
+        return providerDefaults[key].baseUrl === currentUrl;
+      });
+      if (baseUrlEl && (!currentUrl || (isPacky && isPresetUrl))) baseUrlEl.value = preset.baseUrl;
+      if (isPacky && modelStreamModeEl) modelStreamModeEl.value = 'stream';
+      if (isPacky && draftAvailableModels.length === 1 && Object.keys(providerDefaults).some(function(key) {
+        return providerDefaults[key].model === draftAvailableModels[0].id;
+      })) draftAvailableModels = [];
       if (preset.model && draftAvailableModels.length === 0) {
         draftAvailableModels = [{ id: preset.model, name: preset.model, contextWindow: undefined }];
         renderAvailableModels();
@@ -1080,7 +1097,7 @@
         baseUrl: toBaseUrlRoot(modelBaseUrlEl ? modelBaseUrlEl.value : ''),
         apiKey: modelApiKeyEl ? modelApiKeyEl.value.trim() : '',
         model: '',
-        stream: readModelStreamFromForm(),
+        stream: modelProviderEl && modelProviderEl.value === 'packycode' ? true : readModelStreamFromForm(),
         capabilities: [],
         reasoningEffort: '',
         availableModels: availableModels,
@@ -1517,6 +1534,15 @@
       }
       setStatus(statusEl, '正在测试模型...', '');
       try {
+        if (isPackycodeModel(model)) {
+          const client = window.app.services.modelClient.createModelClient({
+            getTimeoutSec: function() { return 30; },
+            proxyModelRequest: api && api.proxyModelRequest,
+          });
+          await client.callModelWithConfig(model, '只回复 OK', '请完成用户请求。', '', undefined, { transport: 'proxy' });
+          setStatus(statusEl, '测试成功，模型可用', 'ok');
+          return;
+        }
         var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
         var modelId = model && model.model ? String(model.model).toLowerCase() : '';
         var provider = model && model.provider ? String(model.provider).toLowerCase() : '';
@@ -1677,8 +1703,7 @@
         || /\/models$/i.test(url);
       if (!isFull) {
         if (url) {
-          const modelId = model && model.model ? String(model.model).trim().toLowerCase() : '';
-          const prefersResponses = modelId.indexOf('gpt-5') === 0 && modelId.indexOf('chat') === -1;
+          const prefersResponses = isGptReasoningModel(model);
           if (prefersResponses) {
             url += /\/v1$/i.test(url) ? '/responses' : '/v1/responses';
           } else {
@@ -1743,12 +1768,13 @@
       return models;
     }
 
-    function guessModelCapabilities(modelId, name) {
+    function guessModelCapabilities(modelId, name, site) {
       const haystack = String((modelId || '') + ' ' + (name || '')).toLowerCase();
       const caps = ['chat'];
       const has = function(marker) { return haystack.indexOf(marker) !== -1; };
-      const vision = has('vision') || has('multimodal') || has('gpt-4o') || has('gpt-4.1') || has('gpt-5') || has('grok-4') || has('claude-3.5') || has('claude-3.7') || has('claude-4') || has('gemini') || has('qvq') || has('qwen-vl') || has('glm-4v') || has('vl-');
-      const reasoning = has('reasoner') || has('reasoning') || has('deepseek-r1') || has('qwq') || has('thinking') || has('gpt-5') || has('grok-3') || has('grok-4');
+      const packy = isPackycodeModel(Object.assign({}, site, { model: modelId }));
+      const vision = has('vision') || has('multimodal') || has('gpt-4o') || has('gpt-4.1') || has('gpt-5') || (packy && has('gpt-6')) || has('grok-4') || has('claude-3.5') || has('claude-3.7') || has('claude-4') || has('gemini') || has('qvq') || has('qwen-vl') || has('glm-4v') || has('vl-');
+      const reasoning = has('reasoner') || has('reasoning') || has('deepseek-r1') || has('qwq') || has('thinking') || has('gpt-5') || (packy && has('gpt-6')) || has('grok-3') || has('grok-4');
       if (vision) caps.push('vision');
       if (reasoning) caps.push('reasoning');
       return caps;

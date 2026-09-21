@@ -16,6 +16,7 @@ from . import models
 from .config import settings
 from .db import SessionLocal
 from .model_gateway import ModelRequestCancelled, post_model_json, request_model_name, resolve_model_endpoint
+from .packycode import is_packycode
 
 
 TERMINAL_MODEL_TASK_STATUSES = {"succeeded", "failed", "cancelled"}
@@ -243,6 +244,15 @@ class ModelTaskExecutor:
                     task.request_json = {}
                     task.updated_at = now
                     continue
+                config = db.query(models.ModelConfig).filter(models.ModelConfig.id == task.model_config_id).first()
+                if config and is_packycode(config.config_json) and (task.started_at or task.attempt_count):
+                    task.status = "failed"
+                    task.error = "服务重启，Packycode 请求完成状态未知；为避免重复费用未自动重试，请确认后手动重试"
+                    task.completed_at = now
+                    task.request_json = {}
+                    task.worker_id = None
+                    task.updated_at = now
+                    continue
                 task.status = "queued"
                 task.worker_id = None
                 task.updated_at = now
@@ -335,6 +345,7 @@ class ModelTaskExecutor:
                 int(task.timeout_sec or 60),
                 cancel_event,
                 on_connection=lambda connection: self._set_connection(task_id, connection),
+                provider=str((model_config.config_json or {}).get("provider") or ""),
             )
             db.expire_all()
             current = db.query(models.ModelTask).filter(models.ModelTask.id == task_id).first()

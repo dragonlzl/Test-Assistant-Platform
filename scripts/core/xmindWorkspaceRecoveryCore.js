@@ -165,12 +165,122 @@
     return { allowed: true, recreateWorkspace: false, reason: 'compatible' };
   }
 
+  // 已关闭页签的墓碑表：关闭即丢弃，任何页面（含持有旧内存态的页面）都不得再把它写回流程缓存。
+  var CLOSED_WORKSPACE_STORAGE_KEY = 'tap-xmind-closed-workspaces-v1';
+  var CLOSED_WORKSPACE_MAX = 300;
+
+  function readClosedWorkspaceMap() {
+    if (typeof localStorage === 'undefined') return {};
+    try {
+      var raw = localStorage.getItem(CLOSED_WORKSPACE_STORAGE_KEY) || '';
+      if (!raw) return {};
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      return parsed;
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function writeClosedWorkspaceMap(map) {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+      localStorage.setItem(CLOSED_WORKSPACE_STORAGE_KEY, JSON.stringify(map || {}));
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function markWorkspaceClosed(workspaceId, closedAtValue) {
+    var stableId = normalizeText(workspaceId);
+    if (!stableId) return false;
+    var map = readClosedWorkspaceMap();
+    var closedAt = Number(closedAtValue);
+    if (!Number.isFinite(closedAt) || closedAt <= 0) closedAt = Date.now();
+    map[stableId] = closedAt;
+    var keys = Object.keys(map);
+    if (keys.length > CLOSED_WORKSPACE_MAX) {
+      keys.sort(function(a, b) {
+        return Number(map[a] || 0) - Number(map[b] || 0);
+      });
+      keys.slice(0, keys.length - CLOSED_WORKSPACE_MAX).forEach(function(key) {
+        delete map[key];
+      });
+    }
+    return writeClosedWorkspaceMap(map);
+  }
+
+  function isWorkspaceClosed(workspaceId) {
+    var stableId = normalizeText(workspaceId);
+    if (!stableId) return false;
+    var map = readClosedWorkspaceMap();
+    return Object.prototype.hasOwnProperty.call(map, stableId);
+  }
+
+  // 过滤掉已关闭页签，返回 { order, workspaces, activeWorkspaceId, mirrorWorkspaceId, changed }
+  function filterClosedWorkspaces(source) {
+    var input = source && typeof source === 'object' ? source : {};
+    var order = Array.isArray(input.workspaceOrder) ? input.workspaceOrder.slice() : [];
+    var workspaces = input.workspaces && typeof input.workspaces === 'object' ? input.workspaces : {};
+    var activeWorkspaceId = input.activeWorkspaceId ? String(input.activeWorkspaceId || '') : '';
+    var mirrorWorkspaceId = input.mirrorWorkspaceId ? String(input.mirrorWorkspaceId || '') : '';
+    var closedMap = readClosedWorkspaceMap();
+    var closedIds = Object.keys(closedMap);
+    if (!closedIds.length) {
+      return {
+        order: order,
+        workspaces: workspaces,
+        activeWorkspaceId: activeWorkspaceId,
+        mirrorWorkspaceId: mirrorWorkspaceId,
+        changed: false,
+      };
+    }
+    var changed = false;
+    var nextOrder = order.filter(function(id) {
+      var stableId = String(id || '');
+      if (!stableId) return false;
+      if (Object.prototype.hasOwnProperty.call(closedMap, stableId)) {
+        changed = true;
+        return false;
+      }
+      return true;
+    });
+    var nextWorkspaces = {};
+    Object.keys(workspaces).forEach(function(id) {
+      var stableId = String(id || '');
+      if (stableId && Object.prototype.hasOwnProperty.call(closedMap, stableId)) {
+        changed = true;
+        return;
+      }
+      nextWorkspaces[id] = workspaces[id];
+    });
+    if (activeWorkspaceId && !nextWorkspaces[activeWorkspaceId]) {
+      activeWorkspaceId = nextOrder.length ? String(nextOrder[0] || '') : '';
+      changed = true;
+    }
+    if (mirrorWorkspaceId && !nextWorkspaces[mirrorWorkspaceId]) {
+      mirrorWorkspaceId = activeWorkspaceId;
+      changed = true;
+    }
+    return {
+      order: nextOrder,
+      workspaces: nextWorkspaces,
+      activeWorkspaceId: activeWorkspaceId,
+      mirrorWorkspaceId: mirrorWorkspaceId,
+      changed: changed,
+    };
+  }
+
   window.app.xmindWorkspaceRecoveryCore = {
     areRestoreContextsCompatible: areRestoreContextsCompatible,
     buildRequirementFingerprint: buildRequirementFingerprint,
     createWorkspaceGenerationId: createWorkspaceGenerationId,
     createWorkspaceId: createWorkspaceId,
     evaluateTaskRestore: evaluateTaskRestore,
+    filterClosedWorkspaces: filterClosedWorkspaces,
     getRequirementFingerprint: getRequirementFingerprint,
+    isWorkspaceClosed: isWorkspaceClosed,
+    markWorkspaceClosed: markWorkspaceClosed,
   };
 })();

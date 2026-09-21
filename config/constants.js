@@ -25,6 +25,10 @@
   };
 
   var providerDefaults = {
+    packycode: {
+      baseUrl: 'https://cf.api.fan/v1',
+      model: 'gpt-6-astra',
+    },
     deepseek: {
       baseUrl: 'https://api.deepseek.com',
       model: 'deepseek-chat',

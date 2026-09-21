@@ -230,8 +230,12 @@
       return modelId.indexOf('claude') !== -1;
     }
 
+    function modelIsPackycode(model) {
+      return isPackycodeModel(model);
+    }
+
     function modelNeedsChatCompletionsCompat(model) {
-      if (!modelIsClaudeFamily(model)) return false;
+      if (modelIsPackycode(model) || !modelIsClaudeFamily(model)) return false;
       var baseUrl = model && model.baseUrl ? String(model.baseUrl).toLowerCase() : '';
       if (!baseUrl) return false;
       return /\/responses(?:\?|$)/i.test(baseUrl);
@@ -262,6 +266,10 @@
         url = url.slice(0, qIndex);
       }
       url = url.replace(/\/+$/, '');
+      if (modelIsPackycode(model)) {
+        url = url.replace(/\/(chat\/completions|completions|responses|chat|models)$/i, '');
+        return url + (/\/v1$/i.test(url) ? '/responses' : '/v1/responses') + query;
+      }
       var isFullEndpoint = /\/chat\/completions$/i.test(url)
         || /\/completions$/i.test(url)
         || /\/responses$/i.test(url)
@@ -298,6 +306,7 @@
     }
 
     function modelUsesStreaming(model) {
+      if (modelIsPackycode(model)) return true;
       if (!model || typeof model !== 'object') return false;
       var value = model.stream !== undefined && model.stream !== null ? model.stream : model.streamMode;
       if (value === true) return true;
@@ -307,6 +316,7 @@
     }
 
     function modelNeedsPackyResponsesStreamCompat(model) {
+      if (modelIsPackycode(model)) return false;
       if (!modelUsesStreaming(model)) return false;
       if (!modelUsesResponsesApi(model)) return false;
       var baseUrl = getEffectiveModelBaseUrl(model).toLowerCase();
@@ -340,7 +350,7 @@
 
     function isGptReasoningModel(model) {
       var id = model && model.model ? String(model.model).trim().toLowerCase() : '';
-      return id.indexOf('gpt-5') === 0 && id.indexOf('chat') === -1;
+      return (id.indexOf('gpt-5') === 0 || modelIsPackycode(model)) && id.indexOf('chat') === -1;
     }
 
     function modelPrefersResponsesEndpoint(model) {
@@ -367,6 +377,17 @@
       return prompt + '\n\n用户输入：\n' + text;
     }
 
+    function applyPackycodeRequest(model, body, instructions, effort) {
+      if (!modelIsPackycode(model)) return body;
+      body.instructions = String(instructions || '').trim() || '请完成用户请求。';
+      body.reasoning = { effort: effort || 'high' };
+      body.stream = true;
+      body.store = false;
+      body.max_output_tokens = 16384;
+      // prompt_cache_key 由后端在实际发送时生成，恢复查询不会创建新的上游调用。
+      return body;
+    }
+
     function buildModelRequestBody(model, systemPrompt, userText, reasoningEffort, deepseekJsonMode) {
       var useStream = modelUsesStreaming(model);
       var usePackyStreamCompat = modelNeedsPackyResponsesStreamCompat(model);
@@ -391,7 +412,7 @@
         if (effectiveReasoningEffort && (isGptReasoningModel(model) || modelHasReasoningCapability(model))) {
           responseBody.reasoning = { effort: effectiveReasoningEffort };
         }
-        return responseBody;
+        return applyPackycodeRequest(model, responseBody, systemPrompt, effectiveReasoningEffort);
       }
       var chatBody = {
         model: model.model,
@@ -472,7 +493,7 @@
         if (reasoningEffort && (isGptReasoningModel(model) || modelHasReasoningCapability(model))) {
           responseBody.reasoning = { effort: reasoningEffort };
         }
-        return responseBody;
+        return applyPackycodeRequest(model, responseBody, systemPrompt, reasoningEffort);
       }
       var messageContent = normalizedBlocks.map(function(block) {
         if (block.type === 'image') {
@@ -1015,7 +1036,7 @@
     async function sendModelRequest(model, headers, body, timeoutSec, signal, requestOptions) {
       var asyncTaskClient = resolveModelTaskClient();
       var opts = requestOptions && typeof requestOptions === 'object' ? requestOptions : {};
-      if (asyncTaskClient && typeof asyncTaskClient.runModelRequest === 'function') {
+      if (opts.transport !== 'proxy' && asyncTaskClient && typeof asyncTaskClient.runModelRequest === 'function') {
         var asyncResponse = await asyncTaskClient.runModelRequest({
           model: model,
           payload: body,
@@ -1027,11 +1048,22 @@
         }, signal);
         if (asyncResponse) return asyncResponse;
       }
-      if (!isModelTaskFallbackEnabled()) {
+      if (opts.transport !== 'proxy' && !isModelTaskFallbackEnabled()) {
         throw new Error('后端异步生成服务不可用，无法保证刷新后继续生成，请重启后端并刷新页面后重试');
       }
       var proxyFn = resolveProxyModelRequest();
       var requestUrl = getEffectiveModelBaseUrl(model);
+      if (modelIsPackycode(model)) {
+        if (!proxyFn) throw new Error('Packycode 需要后端代理设置请求头，请启动后端服务');
+        // 请求一旦交给代理即不回退直连，避免在结果未知时重复计费。
+        return proxyFn({
+          base_url: requestUrl,
+          provider: 'packycode',
+          api_key: model.apiKey || '',
+          payload: body,
+          timeout_sec: timeoutSec,
+        }, signal);
+      }
       var proxyFallbackResponse = null;
       var proxyError = null;
       if (proxyFn) {
@@ -1143,6 +1175,15 @@
       return new Error('模型调用超时（超过 ' + timeoutSec + ' 秒），请重试或检查服务状态');
     }
 
+    function validatePackycodeResult(model, parsedRaw) {
+      if (!modelIsPackycode(model)) return;
+      // 后端统一校验 SSE 完成事件并提取最终文本，HTTP 200 本身不代表成功。
+      var data = parsedRaw.data;
+      if (!data || data.status !== 'completed' || data.error || !data.output_text) {
+        parsedRaw.error = 'Packycode 未返回经完成事件确认的有效结果，请检查后端版本或上游错误';
+      }
+    }
+
     function normalizeAbortOrTimeoutError(err, signal, timeoutSec, timedOut) {
       if (!isAbortOrTimeoutError(err, signal)) return null;
       if (timedOut === true) return buildModelTimeoutError(timeoutSec);
@@ -1245,6 +1286,7 @@
         throw buildHtmlResponseError(rawBody);
       }
       var data = parsedRaw.data;
+      validatePackycodeResult(model, parsedRaw);
       var responseMetadata = mergeResponseMetadata(parsedRaw.metadata, data);
       responseMetadata.upstreamStatus = Number(res && res.status || 0) || 0;
       if (parsedRaw.modelTaskMetadata) responseMetadata = mergeResponseMetadata(responseMetadata, {
@@ -1378,6 +1420,7 @@
         throw buildHtmlResponseError(rawBody);
       }
       var data = parsedRaw.data;
+      validatePackycodeResult(model, parsedRaw);
       var responseMetadata = mergeResponseMetadata(parsedRaw.metadata, data);
       responseMetadata.upstreamStatus = Number(res && res.status || 0) || 0;
       if (parsedRaw.modelTaskMetadata) responseMetadata = mergeResponseMetadata(responseMetadata, {
@@ -1428,7 +1471,12 @@
     };
   }
 
+  function isPackycodeModel(model) {
+    return Boolean(model && String(model.provider || '').trim().toLowerCase() === 'packycode');
+  }
+
   window.app.services.modelClient = {
+    isPackycodeModel: isPackycodeModel,
     createModelClient: createModelClient,
     getNestedValue: getNestedValue,
     normalizeResponseContent: normalizeResponseContent,

@@ -11,7 +11,9 @@
 - 一键启动（后端 + 静态页）：macOS/Linux 运行 `./start.sh`，Windows 运行 `start.bat`。可用环境变量：`APP_DB_FILE`、`API_HOST`、`API_PORT`、`ADMIN_USER`、`ADMIN_PASS`、`DEFAULT_USER_PASS`、`RELOAD`。
 - `node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`：快速语法检查，避免旧浏览器报错。
 - `node tests/node/reuse_applicability_core.test.js`：验证复用预设获取/解锁方式识别、自动不适用、人工结果保护与恢复规则。
-- `python3 -m unittest discover -s tests/python -p test_model_gateway.py`：验证模型网关的非流式连接关闭与 SSE 分块读取（仅使用本地模拟服务，不连接模型供应商或数据库）。
+- `python3 -m unittest discover -s tests/python -p test_model_gateway.py`：验证模型网关的非流式连接关闭、SSE 分块读取、仅 packycode 类型启用最小请求、其他类型协议不变（仅使用本地模拟服务，不连接模型供应商或数据库）。
+- `python3 -m unittest discover -s tests/python -p 'test_*code*.py'`：验证 Packycode 代理完成判定与重启后禁止重复请求（本地模拟服务、数据库会话 mock）。
+- `npm run test:ui -- tests/ui/packycode.spec.js`：验证 Packycode 配置、文本/双图协议和单次/分批生成不自动重试。
 - `npm run test:ui -- tests/ui/tempexec_reuse_applicability.spec.js`：验证执行页预设方式选择、批量应用与手工结果接管。
 - `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/exec_reuse_applicability.spec.js`：验证适用性批量保存与失败原子性（后端必须使用测试库启动）。
 - 数据库（本地）：后端默认使用 `data/app.db`（正式）。任何测试/造数必须使用测试库（如 `data/apitest.db`），启动示例：`APP_DB_FILE=apitest.db uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080`。

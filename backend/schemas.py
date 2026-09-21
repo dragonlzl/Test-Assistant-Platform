@@ -683,6 +683,7 @@ class ModelConfigUpdate(BaseModel):
 
 class ModelProxyRequest(BaseModel):
     base_url: str
+    provider: Optional[str] = None
     api_key: Optional[str] = None
     payload: Optional[Any] = None
     timeout_sec: Optional[int] = 60

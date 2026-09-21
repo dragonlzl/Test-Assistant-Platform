@@ -19,6 +19,25 @@
 - 更新记录：如有后续变更，在此追加时间点与修改要点  
 ```
 
+- 功能名称：Packycode 显式类型与调用隔离
+- 功能描述：模型类型增加 `packycode（Codex / Responses API）`，仅 `provider=packycode` 启用最小请求；不按域名或模型名称自动切换协议。用于 Packycode 的 Codex 模型，也支持自定义入口和模型别名。
+- 操作方式：刷新页面，在模型管理中编辑原 Packycode 站点，将类型从“自定义”改为“packycode”并保存，再测试所选模型或重新生成；已失败记录不会自动重发。无需迁移数据库。
+- 使用效果：packycode 类型统一使用 Responses、非空 instructions、独立 prompt_cache_key、工具自身 User-Agent 及完成事件解析；自定义、Claude、DeepSeek 等其他类型保持原有协议和重试行为，即使使用同一个 Packycode 域名也不会启用最小请求。GPT-6 默认端点与能力推断的扩展也限于 packycode 类型。
+- 复用说明：复用已有模型代理、异步任务及 SSE 解析；前端模型测试、正式调用和自动重试统一使用同一个识别函数，后端网关、代理和任务恢复采用相同规则。无新增接口或数据库结构。
+- 测试与验证：本地模拟覆盖显式类型选择及保存、同域名不同类型的请求隔离、自定义模型别名、单次/分批失败不自动重试、SSE 完成判定以及重启恢复。
+- 更新记录：2026-09-21 按用户要求改为显式选择 packycode 类型，取消域名自动识别。
+
+- 功能名称：关闭 XMind 页签后不再复活草稿
+- 功能描述：关闭页签即丢弃该页签数据。删除时立即写入流程缓存，并记录“已关闭墓碑”，任何页面（含仍持有旧内存态的另一个窗口）都不再能把已关闭页签写回缓存，刷新恢复时也会被过滤掉。
+- 使用效果：多页签/多窗口场景下，入库关闭或手动关闭页签后刷新，已关闭页签不会带着此前导入的需求以“草稿中”状态复活；只剩最后一个页签时保持原有全量清空行为。若入库后页签因仍有生成任务进行中而未能关闭，会提示“页签未能关闭”，不再误报“入库并关闭页签成功”。
+- 新增内容/接口/组件：`xmindWorkspaceRecoveryCore` 新增 `markWorkspaceClosed` / `isWorkspaceClosed` / `filterClosedWorkspaces`（localStorage `tap-xmind-closed-workspaces-v1`，最多保留 300 条）；`deleteWorkspace` 写墓碑并立即落盘，`switchWorkspace` 支持 `persistImmediately`；`appRuntime` 在工作区快照的持久化与恢复两端过滤已关闭页签；`authGuard` 切换账号时一并清理墓碑表。
+- 复用说明：复用既有工作区快照与流程缓存持久化链路，未新增后端接口或数据库结构。
+- 测试与验证：
+  - `node --check scripts/core/xmindWorkspaceRecoveryCore.js scripts/core/appRuntime.js scripts/modules/xmindCasegen.js scripts/modules/authGuard.js`（通过）
+  - `node tests/node/xmind_workspace_recovery_core.test.js`（通过）
+  - 新增 UI 回归「其它窗口持有旧状态时，已关闭的 XMind 页签不会在刷新后复活」：修复前失败（刷新后页签带旧需求复活），修复后通过。
+  - 复跑页签关闭/入库/刷新恢复相关 13 条 UI 用例全部通过。
+
 - 功能名称：XMind 自定义提示词优先
 - 功能描述：配置了 XMind 自定义提示词时，仅使用自定义基础提示词；清空后才回退默认提示词。生成选项和 operation_contract 继续按当前操作追加。
 - 使用效果：避免默认规则与自定义规则同时进入请求，影响用户对模块拆分、用例风格等要求的控制。

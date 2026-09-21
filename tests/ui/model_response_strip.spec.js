@@ -468,7 +468,7 @@ test('Responses API 启用流式时能解析 SSE 内容', async ({ page }) => {
     });
 
     const content = await client.callModelWithConfig(
-      { baseUrl: 'https://www.packyapi.com/v1/responses', model: 'gpt-5.4', stream: true },
+      { baseUrl: 'https://other.example/v1/responses', model: 'gpt-5.4', stream: true },
       'ping',
       '任意提示'
     );
@@ -536,7 +536,7 @@ test('Responses API 标记输出截断时提示 token 上限而非 JSON 格式�
   expect(error).not.toContain('输出不是合法 JSON');
 });
 
-test('Packy Responses 流式调用使用精简兼容请求', async ({ page }) => {
+test('Packycode 类型使用后端最小请求并校验完成结果', async ({ page }) => {
   await page.route('**/*', (route) => {
     const url = route.request().url();
     if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
@@ -561,27 +561,25 @@ test('Packy Responses 流式调用使用精简兼容请求', async ({ page }) =>
     }
     const request = { body: '' };
     const client = service.createModelClient({
-      fetchImpl: async function mockFetch(_, options) {
-        request.body = options && options.body ? String(options.body) : '';
+      proxyModelRequest: async function(body) {
+        request.body = JSON.stringify(body.payload);
         return {
           ok: true,
+          status: 200,
           text: async function mockText() {
-            return [
-              'event: response.output_text.done',
-              'data: {"type":"response.output_text.done","text":"ok","output_index":0}',
-              '',
-            ].join('\n');
+            return JSON.stringify({ status: 'completed', output_text: 'ok' });
           },
         };
       },
     });
 
     const content = await client.callModelWithConfig(
-      { baseUrl: 'https://www.packyapi.com/v1/responses', model: 'gpt-5.4', stream: true, maxTokens: 1024 },
+      { provider: 'packycode', baseUrl: 'https://www.packyapi.com/v1/responses', model: 'gpt-5.4', stream: true, maxTokens: 1024 },
       '需求正文',
       '需求评审提示词',
       '',
-      0.2
+      0.2,
+      { transport: 'proxy' }
     );
 
     const body = request.body ? JSON.parse(request.body) : {};
@@ -596,9 +594,9 @@ test('Packy Responses 流式调用使用精简兼容请求', async ({ page }) =>
   });
 
   expect(captured.content).toBe('ok');
-  expect(captured.hasInstructions).toBeFalsy();
+  expect(captured.hasInstructions).toBeTruthy();
   expect(captured.hasTemperature).toBeFalsy();
-  expect(captured.inputText).toContain('需求评审提示词');
+  expect(captured.inputText).not.toContain('需求评审提示词');
   expect(captured.inputText).toContain('需求正文');
 });
 

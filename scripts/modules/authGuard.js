@@ -119,7 +119,9 @@
       var legacyCleanKey = getConfigValue('legacyCleanKey', 'cleaner-config-v1');
       var legacyCompareKey = getConfigValue('legacyCompareKey', 'cleaner-compare-config-v1');
       var workflowKey = getConfigValue('workflowStorageKey', 'usecase-workflow-state-v1');
-      var keysToClear = [modelsKey, assignmentKey, settingsKey, tempExecPageSizeKey, themeHintKey, opsLogViewKey, opsActivityViewKey, legacyCleanKey, legacyCompareKey, workflowKey];
+      // 已关闭 XMind 页签的墓碑表与流程缓存同生命周期，切换账号时一并清理。
+      var closedWorkspaceKey = 'tap-xmind-closed-workspaces-v1';
+      var keysToClear = [modelsKey, assignmentKey, settingsKey, tempExecPageSizeKey, themeHintKey, opsLogViewKey, opsActivityViewKey, legacyCleanKey, legacyCompareKey, workflowKey, closedWorkspaceKey];
       try {
         if (typeof localStorage !== 'undefined') {
           keysToClear.forEach(function(key) {

@@ -504,13 +504,14 @@
 <option value="deepseek">DeepSeek</option>
 <option value="kimi">Kimi K2</option>
 <option value="claude">Claude兼容</option>
+<option value="packycode">packycode（Codex / Responses API）</option>
 <option value="custom">自定义</option>
 </select>
 </div>
 <div class="row">
 <label for="modelBaseUrl">API 根地址（Base URL）</label>
 <input id="modelBaseUrl" placeholder="如：https://api.xxx.com/v1"/>
-<p class="hint" style="margin:0; flex:1 1 auto;">填中转/供应商的 Base URL 根地址即可，自动补 /chat/completions；Responses API 请以 /responses 结尾。</p>
+<p class="hint" style="margin:0; flex:1 1 auto;">填写供应商的 Base URL 根地址即可。使用 Packycode 的 Codex 模型时请选择 packycode 类型，启用 Responses 流式调用、默认 High 推理和 16384 输出上限；自定义及其他类型保持原调用方式。</p>
 </div>
 <div class="row">
 <label for="modelApiKey">API Key</label>
@@ -533,7 +534,7 @@
 <label for="modelStreamMode">调用方式</label>
 <select id="modelStreamMode">
 <option value="nonstream">非流式（默认）</option>
-<option value="stream">流式（使用packyapi请选择此选项）</option>
+<option value="stream">流式（Packycode 自动启用）</option>
 </select>
 </div>
 <div class="actions">

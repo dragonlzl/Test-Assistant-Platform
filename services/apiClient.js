@@ -844,6 +844,7 @@
       headers: buildHeaders(),
       body: JSON.stringify({
         base_url: body.base_url || body.baseUrl || '',
+        provider: body.provider || '',
         api_key: body.api_key || body.apiKey || '',
         payload: body.payload || {},
         timeout_sec: body.timeout_sec || body.timeoutSec || 60,

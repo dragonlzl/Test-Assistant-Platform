@@ -435,6 +435,32 @@
       }
     }
 
+    function filterClosedWorkspaceHost(host) {
+      var source = host && typeof host === 'object' ? host : null;
+      if (!source) return null;
+      var recoveryCore = window.app && window.app.xmindWorkspaceRecoveryCore
+        ? window.app.xmindWorkspaceRecoveryCore
+        : null;
+      if (!recoveryCore || typeof recoveryCore.filterClosedWorkspaces !== 'function') return null;
+      var filtered = null;
+      try {
+        filtered = recoveryCore.filterClosedWorkspaces({
+          workspaceOrder: source.workspaceOrder,
+          workspaces: source.workspaces,
+          activeWorkspaceId: source.activeWorkspaceId,
+          mirrorWorkspaceId: source.mirrorWorkspaceId,
+        });
+      } catch (err) {
+        return null;
+      }
+      if (!filtered || filtered.changed !== true) return null;
+      source.workspaceOrder = Array.isArray(filtered.order) ? filtered.order : [];
+      source.workspaces = filtered.workspaces && typeof filtered.workspaces === 'object' ? filtered.workspaces : {};
+      source.activeWorkspaceId = filtered.activeWorkspaceId ? String(filtered.activeWorkspaceId || '') : '';
+      source.mirrorWorkspaceId = filtered.mirrorWorkspaceId ? String(filtered.mirrorWorkspaceId || '') : '';
+      return source;
+    }
+
     function buildPersistedXmindCaseGenSnapshot() {
       var source = state.xmindCaseGen && typeof state.xmindCaseGen === 'object'
         ? state.xmindCaseGen
@@ -457,6 +483,12 @@
         Object.keys(source.workspaces).forEach(function(workspaceId) {
           host.workspaces[workspaceId] = compactWorkspaceRecordForPersistence(workspaceId, source.workspaces[workspaceId]);
         });
+      }
+      // 已关闭页签（含其它页面用旧内存态写回的情况）不得再写入流程缓存。
+      var persistedClosedFilter = filterClosedWorkspaceHost(host);
+      if (persistedClosedFilter) {
+        host = persistedClosedFilter;
+        activeWorkspaceId = host.activeWorkspaceId;
       }
       if (!activeWorkspaceId || !host.workspaces || typeof host.workspaces !== 'object') {
         return host;
@@ -768,6 +800,8 @@
         snapshots: [],
         modules: {},
       };
+      // 恢复时同样丢弃已关闭页签：即使其它页面把它写回了缓存，刷新后也不能复活。
+      filterClosedWorkspaceHost(state.xmindCaseGen);
       if (!state.caseGenProgressNotice.lastStates || typeof state.caseGenProgressNotice.lastStates !== 'object') {
         state.caseGenProgressNotice.lastStates = {};
       }

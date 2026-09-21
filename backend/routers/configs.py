@@ -15,7 +15,8 @@ from .. import models, schemas
 from ..audit import log_operation
 from ..db import get_db
 from ..dependencies import get_current_user
-from ..model_gateway import strip_output_token_limits
+from ..model_gateway import request_model_name, resolve_model_endpoint, strip_output_token_limits
+from ..packycode import ResponsesStream, is_packycode, prepare_request
 
 
 router = APIRouter(tags=["settings"])
@@ -340,7 +341,12 @@ def proxy_model_request(
     target_url = _validate_model_url(payload.base_url)
     timeout_sec = _normalize_timeout_sec(payload.timeout_sec)
     request_payload = strip_output_token_limits(payload.payload if payload.payload is not None else {})
+    config = {"provider": payload.provider, "baseUrl": target_url}
+    packy = is_packycode(config)
     try:
+        if packy:
+            target_url, _api_key = resolve_model_endpoint(config, request_model_name(payload.payload))
+            request_payload = prepare_request(payload.payload)
         body_bytes = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
     except Exception as exc:
         raise HTTPException(
@@ -353,6 +359,8 @@ def proxy_model_request(
         "User-Agent": "tap-model-proxy/1.0",
     }
     api_key = (payload.api_key or "").strip()
+    if packy:
+        headers.update({"User-Agent": "CodexTool/1.0", "Accept": "text/event-stream"})
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
 
@@ -367,6 +375,18 @@ def proxy_model_request(
 
     try:
         with opener.open(request_obj, timeout=timeout_sec) as upstream_resp:
+            if packy:
+                stream = ResponsesStream()
+                total = 0
+                while not stream.terminal:
+                    chunk = upstream_resp.read1(64 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > 20 * 1024 * 1024:
+                        raise ValueError("模型响应超过 20 MiB 上限")
+                    stream.feed(chunk)
+                return Response(content=json.dumps(stream.result(), ensure_ascii=False), media_type="application/json")
             raw = upstream_resp.read()
             content_type = upstream_resp.headers.get("Content-Type", "application/json")
             return Response(

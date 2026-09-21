@@ -4416,11 +4416,23 @@
           skipConfirm: true,
         }) === true;
       }
+      var closeBlocked = shouldCloseWorkspace
+        && Boolean(targetWorkspaceId)
+        && didClose !== true
+        && Boolean(getWorkspaceRecord(targetWorkspaceId));
       if (opts.showToast === true) {
-        notifySuccessToast(
-          String(opts.toastText || (didClose ? '入库并关闭页签成功' : '用例入库成功')),
-          opts.toastDurationMs || (didClose ? 5000 : 3000)
-        );
+        if (closeBlocked) {
+          notifyFloatingStatus(
+            '用例已入库，但页签未能关闭（可能仍有生成任务进行中），请手动关闭',
+            'warn',
+            opts.toastDurationMs || 5000
+          );
+        } else {
+          notifySuccessToast(
+            String(opts.toastText || (didClose ? '入库并关闭页签成功' : '用例入库成功')),
+            opts.toastDurationMs || (didClose ? 5000 : 3000)
+          );
+        }
       }
       return didReset || didClose;
     }
@@ -19117,6 +19129,8 @@
           restoreViewStateAfterRender: shouldCenterTargetAfterRender !== true && shouldRestoreTargetViewport,
           restoreViewState: targetRenderViewState,
         });
+        // 关闭/删除页签触发的切换必须立即落盘，避免刷新后已删除页签从流程缓存中复活。
+        if (opts.persistImmediately === true) persistXmindState(true);
       } else {
         persistXmindState(true);
       }
@@ -19336,6 +19350,11 @@
         });
         delete currentHost.workspaces[targetId];
         currentHost.workspaceOrder.splice(currentIndex, 1);
+        // 关闭即丢弃：写入墓碑，防止其它仍持有旧内存态的页面把该页签写回流程缓存。
+        var closeRecoveryCore = getWorkspaceRecoveryCore();
+        if (closeRecoveryCore && typeof closeRecoveryCore.markWorkspaceClosed === 'function') {
+          closeRecoveryCore.markWorkspaceClosed(targetId);
+        }
         if (!currentHost.workspaceOrder.length) {
           currentHost.activeWorkspaceId = '';
           currentHost.mirrorWorkspaceId = '';
@@ -19354,12 +19373,16 @@
         }
         if (wasActive) {
           var nextId = currentHost.workspaceOrder[Math.max(0, currentIndex - 1)] || currentHost.workspaceOrder[0];
-          return switchWorkspace(nextId, {
+          var switched = switchWorkspace(nextId, {
             reason: 'workspace-delete-switch',
             // 关闭当前页签后切回已有页签时，应优先恢复该页签自己的视图，不再额外强制根节点居中。
             centerRootAfterRender: false,
             skipCurrentSnapshotSave: true,
+            persistImmediately: true,
           });
+          // 兜底：页签已删除就必须立刻落盘，不能依赖切换流程里的其它副作用。
+          persistXmindState(true);
+          return switched;
         }
         renderWorkspaceTabs();
         persistXmindState(true);

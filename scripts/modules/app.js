@@ -1,4 +1,8 @@
     window.app = window.app || {};
+    function allowsAutomaticModelRetry(task) {
+      var model = task && task.model ? task.model : {};
+      return !window.app.services.modelClient.isPackycodeModel(model);
+    }
     function markInitStage(stage) {
       var stableStage = stage ? String(stage || '') : '';
       window.app.__tapInitStage = stableStage;
@@ -1008,7 +1012,7 @@
               writeTask(scene, current, 'suspend');
               return current;
             }
-            if (isTransientFetchError(err)) {
+            if (allowsAutomaticModelRetry(current) && isTransientFetchError(err)) {
               current.retryCount = Number(current.retryCount || 0) + 1;
               if (current.retryCount <= 2) {
                 current.status = 'running';
@@ -1815,7 +1819,7 @@
               writeTask(scene, current, 'suspend');
               return current;
             }
-            if (isTransientFetchError(err)) {
+            if (allowsAutomaticModelRetry(current) && isTransientFetchError(err)) {
               current.retryCount = Number(current.retryCount || 0) + 1;
               if (current.retryCount <= 2) {
                 current.status = 'running';
@@ -2953,7 +2957,7 @@
             })
             .catch(function(err) {
               if (shouldSuspendForNavigation(err)) throw err;
-              if (!isRetryableModelRequestError(err, {
+              if (!allowsAutomaticModelRetry(current) || !isRetryableModelRequestError(err, {
                 modelRequestDurationMs: Math.max(0, Date.now() - attemptStartedAt),
               }) || retryCount >= retryDelaysMs.length) {
                 if (err && typeof err === 'object') err.xmindBatchRetryHandled = true;
@@ -3112,7 +3116,7 @@
               upsertTask(current, 'suspend');
               return current;
             }
-            if (isRetryableModelRequestError(err, current) && !(err && err.xmindBatchRetryHandled === true)) {
+            if (allowsAutomaticModelRetry(current) && isRetryableModelRequestError(err, current) && !(err && err.xmindBatchRetryHandled === true)) {
               current.retryCount = Number(current.retryCount || 0) + 1;
               if (current.retryCount <= 2) {
                 current.status = 'running';
