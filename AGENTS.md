@@ -47,3 +47,4 @@
 - `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/knowledge_base.spec.js`：知识库 API 回归，先以测试库启动；测试会先为来源登记项目授权。
 - MCP 地址为 `/mcp`，部署与 Codex App/CLI 接入见 `MCP_GUIDE.md`。个人凭据与项目知识库登记在“设置 → AI 与知识库”管理。
 - 公开静态文件采用白名单。新增网页资源目录时需同步检查允许范围，禁止公开数据库、后端配置、隐藏文件或凭据。
+- `.venv\Scripts\python.exe -m unittest discover -s tests/python -p test_static_files.py -v`（Windows；macOS/Linux 使用 `.venv/bin/python`）：不连接数据库，以临时文件验证静态 ASGI 请求、Windows/POSIX 路径兼容、页面资源正常加载及私有文件/路径穿越隔离。

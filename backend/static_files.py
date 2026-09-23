@@ -1,4 +1,5 @@
 """Serve only published web assets, never the repository/database/config secrets."""
+import os
 from pathlib import PurePosixPath
 
 from starlette.exceptions import HTTPException
@@ -7,6 +8,10 @@ from starlette.staticfiles import StaticFiles
 
 class PlatformStaticFiles(StaticFiles):
     async def get_response(self, path, scope):
+        # Starlette 已将 URL 转成系统路径；Windows 分隔符需先统一再校验白名单。
+        if "\\" in scope.get("path", ""):
+            raise HTTPException(404)
+        path = path.replace(os.sep, "/")
         target = PurePosixPath(path)
         parts = target.parts
         if any(part.startswith(".") for part in parts) or "\\" in path:

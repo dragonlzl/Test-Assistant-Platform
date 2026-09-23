@@ -59,6 +59,14 @@ API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/exec_reuse_appl
 
 所有 UI 测试应阻断非本地请求，避免调用真实模型或外部服务。
 
+## 静态资源跨平台回归
+
+```powershell
+.venv\Scripts\python.exe -m unittest discover -s tests/python -p test_static_files.py -v
+```
+
+macOS/Linux 使用 `.venv/bin/python`。使用临时文件，不导入业务应用、不连接数据库。通过完整静态 ASGI 链路验证公开 HTML/CSS/JS、模板和图标可访问，模拟 Windows/POSIX 分隔符以覆盖跨平台差异，并验证私有文件、备份、隐藏文件和路径穿越仍被拦截。
+
 ## 数据库备份
 
 ```sh
