@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -173,6 +173,7 @@ class CaseItemOut(BaseModel):
     precondition: Optional[str] = None
     steps: Optional[str] = None
     remark: Optional[str] = None
+    ai_operations: List[Literal["created", "child_added", "modified", "executed"]] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(from_attributes=True)
@@ -448,6 +449,7 @@ class ExecCaseOut(BaseModel):
     reuse_details: Optional[Any] = None
     defect_links: Optional[Any] = None
     remark: Optional[str]
+    ai_operations: List[Literal["created", "child_added", "modified", "executed"]] = Field(default_factory=list)
     status: str
     order_no: int
     executor_id: Optional[int]
@@ -763,8 +765,13 @@ class KnowledgeBaseManifestExample(BaseModel):
     relative_path: str = ""
 
 
-class KnowledgeBaseValidateRequest(BaseModel):
-    base_url: str
+class KnowledgeBaseTarget(BaseModel):
+    base_url: Optional[str] = None
+    knowledge_base_id: Optional[int] = Field(default=None, gt=0)
+    project_id: Optional[int] = Field(default=None, gt=0)
+
+
+class KnowledgeBaseValidateRequest(KnowledgeBaseTarget):
     timeout_sec: Optional[int] = 15
     force_refresh: bool = False
     deep_check: bool = True
@@ -813,8 +820,7 @@ class KnowledgeBaseCatalogItemOut(BaseModel):
     heading_samples: List[str] = Field(default_factory=list)
 
 
-class KnowledgeBaseCatalogRequest(BaseModel):
-    base_url: str
+class KnowledgeBaseCatalogRequest(KnowledgeBaseTarget):
     timeout_sec: Optional[int] = 15
     force_refresh: bool = False
     max_docs: Optional[int] = None
@@ -848,8 +854,7 @@ class KnowledgeBaseDocumentOut(BaseModel):
     sections: List[KnowledgeBaseSectionOut] = Field(default_factory=list)
 
 
-class KnowledgeBaseDocumentsRequest(BaseModel):
-    base_url: str
+class KnowledgeBaseDocumentsRequest(KnowledgeBaseTarget):
     doc_ids: List[str] = Field(default_factory=list)
     timeout_sec: Optional[int] = 15
     force_refresh: bool = False
@@ -864,8 +869,7 @@ class KnowledgeBaseDocumentsResponse(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
-class KnowledgeBaseSearchRequest(BaseModel):
-    base_url: str
+class KnowledgeBaseSearchRequest(KnowledgeBaseTarget):
     workspace_id: Optional[str] = None
     request_id: Optional[str] = None
     timeout_sec: Optional[int] = 15

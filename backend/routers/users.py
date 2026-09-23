@@ -9,6 +9,7 @@ from ..config import settings
 from ..db import get_db
 from ..dependencies import get_current_user, require_admin
 from ..security import hash_password, verify_password
+from ..mcp_auth import revoke_user_mcp_tokens
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -72,6 +73,8 @@ def update_user(
         user.level = payload.level
     if payload.is_active is not None:
         user.is_active = payload.is_active
+        if not payload.is_active:
+            revoke_user_mcp_tokens(db, user.id)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -145,6 +148,7 @@ def reset_password(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     user.password_hash = hash_password(settings.default_user_password)
+    revoke_user_mcp_tokens(db, user.id)
     db.add(user)
     log_operation(
         db=db,

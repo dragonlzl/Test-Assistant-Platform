@@ -80,6 +80,8 @@ def normalize_base_url(raw_url: Optional[str]) -> str:
         raise KnowledgeBaseServiceError("知识库地址仅支持 http/https", 400)
     if not parsed.netloc:
         raise KnowledgeBaseServiceError("知识库地址格式不正确", 400)
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        raise KnowledgeBaseServiceError("知识库地址不能包含凭据、查询参数或片段", 400)
     path = parsed.path or "/"
     if not path.endswith("/"):
         path += "/"
@@ -87,6 +89,11 @@ def normalize_base_url(raw_url: Optional[str]) -> str:
 
 
 def _build_resource_url(base_url: str, relative_path: str) -> str:
+    # 知识库清单只能引用已授权目录内的文件，不能跳转到另一知识库。
+    relative = urllib_parse.unquote(str(relative_path or "")).replace("\\", "/")
+    target = urllib_parse.urlsplit(relative)
+    if target.scheme or target.netloc or relative.startswith("/") or ".." in relative.split("/"):
+        raise KnowledgeBaseServiceError("知识库资源路径超出授权目录", 502)
     joined = urllib_parse.urljoin(base_url, str(relative_path or "").lstrip("/"))
     parsed = urllib_parse.urlparse(joined)
     normalized_path = urllib_parse.quote(
@@ -1063,12 +1070,15 @@ def catalog_knowledge_base(payload: Dict[str, Any]) -> Dict[str, Any]:
         timeout,
         force_refresh=force_refresh,
     )
-    catalog_items = _build_catalog_items(manifest, kb_manifest, entries, max_docs=max_docs)
+    all_items = _build_catalog_items(manifest, kb_manifest, entries)
+    offset = max(0, int(payload.get("offset") or 0))
+    catalog_items = all_items[offset:offset + max_docs]
     return {
         "base_url": _stringify(base_url),
         "normalized_base_url": normalized_base_url,
         "manifest": _build_manifest_summary(kb_manifest, manifest, len(_build_catalog_items(manifest, kb_manifest, entries)), len(entries)),
         "documents": catalog_items,
+        "next_offset": offset + len(catalog_items) if offset + len(catalog_items) < len(all_items) else None,
         "doc_count": len(catalog_items),
         "warnings": _build_manifest_warnings(kb_manifest, manifest, len(_build_catalog_items(manifest, kb_manifest, entries)), len(entries)),
     }

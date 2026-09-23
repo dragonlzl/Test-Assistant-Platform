@@ -812,6 +812,7 @@ def share_case_file(
                 "steps": item.steps if item.steps is not None else "",
                 "expected": item.expected,
                 "remark": item.remark,
+                "ai_operations": list(item.ai_operations or []),
                 "order_no": idx + 1,
                 "created_by": user.id,
                 "updated_by": user.id,

@@ -1,3 +1,4 @@
+const { operationResponse } = require('./helpers/operation_query_mock');
 const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
@@ -158,6 +159,10 @@ test.describe('操作记录-用例执行贡献视图', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin, userB]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        opsCalls += 1;
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') {
         opsCalls += 1;
         return respond(200, logs);
@@ -207,7 +212,7 @@ test.describe('操作记录-用例执行贡献视图', () => {
     await page.click('#openOpsExecContributionDrawerBtnInline');
     await expect(page.locator('#opsExecContributionDrawer')).toHaveClass(/open/);
     await expect.poll(() => opsCalls).toBeGreaterThan(beforeRefreshCalls);
-    await page.click('#opsExecContributionDrawer [data-drawer-close="opsExecContributionDrawer"]');
+    await page.locator('#opsExecContributionDrawer button[data-drawer-close="opsExecContributionDrawer"]').first().click();
     await expect(page.locator('#opsExecContributionDrawer')).not.toHaveClass(/open/);
 
     await page.click('input[data-ops-exec-contribution-behavior="archive"]');
@@ -310,6 +315,10 @@ test.describe('操作记录-用例执行贡献视图', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin, userB]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        opsCalls += 1;
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') {
         opsCalls += 1;
         const limit = Number(url.searchParams.get('limit') || logs.length);

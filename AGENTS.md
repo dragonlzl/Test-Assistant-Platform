@@ -33,3 +33,15 @@
 - Commit message 采用祈使句，总结核心改动，如 “Fix legacy browser syntax errors”、“Add case-generation hints”；若关联任务单，请在尾部追加 `(#123)`。
 - Pull Request 需包含：改动摘要、验证步骤（命令输出或界面截图）、潜在风险与跨浏览器注意事项；若引入新资源/配置，写明部署影响。
 - 在评审描述中强调是否需要重新下载静态资源或清理浏览器缓存，方便使用者快速复现。
+
+## MCP 与知识库权限验证
+- `npm run test:ui -- tests/ui/models_settings.spec.js --grep '功能指派页只展示保留能力并使用最新基础文案'`：验证默认 XMind/用例库提示词包含人类风格、复杂度自检、按独立目标拆分及必要连续操作保留规则。
+- `.venv/bin/python -m unittest discover -s tests/python -p test_case_similarity.py -v`：临时测试库验证 MCP 新增相似检查、对比后修改/新增/跳过、令牌与版本校验、权限隔离、并发幂等和混合写入回滚；不调用真实模型。
+- `.venv/bin/python -m unittest discover -s tests/python -p test_execution_reuse.py -v`：临时测试库验证 MCP/HTTP 复用子项新增及“AI新增子项”独立标识、解锁方式配置、快速执行、人工结果保护、权限/只读、幂等并发/冲突及整体回滚，并与浏览器规则进行一致性比较（需 Node）。
+- `npm run test:ui -- tests/ui/case_library_edit_focus.spec.js tests/ui/tempexec_edit_defer_save.spec.js tests/ui/tempexec_reuse_align.spec.js tests/ui/tempexec_view_empty.spec.js`：验证 AI 操作列空值/多标识、人工编辑后保留、列顺序、复用对齐和执行空态，使用本地 API mock。
+- `.venv/bin/python -m unittest discover -s tests/python -p test_operation_query.py -v`：临时测试库验证操作记录筛选、游标快照、大详情分段、SQL 贡献汇总、HTTP/MCP 管理员权限和索引。
+- `npm run test:ui -- tests/ui/ops_log.spec.js tests/ui/ops_log_drawer_restore.spec.js tests/ui/ops_log_exec_case_run.spec.js tests/ui/ops_activity.spec.js tests/ui/ops_contribution.spec.js tests/ui/ops_exec_contribution.spec.js --workers=1`：操作记录分页、详情、恢复与统计图回归；需先安装后端依赖到 `.venv`，UI 夹具调用内存 SQLite 查询适配器，不连接正式库。
+- `.venv/bin/python -m unittest discover -s tests/python -p test_mcp_service.py -v`：自动创建临时测试库并启动独立后端，覆盖 MCP 握手、人工编写风格上下文、用例字段协议兼容、工具链路、凭据撤销、权限实时变化、知识库跨项目隔离、幂等重试、并发冲突及事务回滚。测试结束自动清理，不使用正式数据库。
+- `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/knowledge_base.spec.js`：知识库 API 回归，先以测试库启动；测试会先为来源登记项目授权。
+- MCP 地址为 `/mcp`，部署与 Codex App/CLI 接入见 `MCP_GUIDE.md`。个人凭据与项目知识库登记在“设置 → AI 与知识库”管理。
+- 公开静态文件采用白名单。新增网页资源目录时需同步检查允许范围，禁止公开数据库、后端配置、隐藏文件或凭据。

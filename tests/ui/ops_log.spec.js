@@ -1,3 +1,4 @@
+const { operationResponse } = require('./helpers/operation_query_mock');
 const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
@@ -102,6 +103,9 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin, userB]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, settings);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') {
         const uid = url.searchParams.get('user_id');
         if (uid) return respond(200, logs.filter((l) => String(l.user_id) === String(uid)));
@@ -150,13 +154,13 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('批量删除2条');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('20 -> 23');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('23 -> 21');
-    await page.click('#opsLogPaginationTop [data-ops-log-page="last"]');
+    await page.click('#opsLogPaginationTop [data-ops-log-page="next"]');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('版本 proj-2v2');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('解散归档');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('覆盖入库');
 
     // 操作行为筛选：点击“批量新增”后仅保留批量新增记录。
-    await page.click('input[data-ops-log-action="批量新增"]');
+    await page.click('input[data-ops-log-action="batch_create_case_items"]');
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('批量新增3条');
     await expect(page.locator('#opsLogDrawerTableBody')).not.toContainText('批量删除2条');
     await page.click('input[data-ops-log-action="all"]');
@@ -220,6 +224,9 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
 
       if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
@@ -318,6 +325,9 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
 
       if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
@@ -370,6 +380,9 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, settings);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
 
       if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
@@ -418,7 +431,7 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     expect(download.suggestedFilename()).toMatch(/\.xlsx$/);
   });
 
-  test('设置更新不展示在查看记录列表', async ({ page }) => {
+  test('设置更新只展示摘要，详情按需读取', async ({ page }) => {
     const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
     const now = new Date();
     const logs = [
@@ -456,6 +469,9 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
 
       if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
@@ -476,9 +492,9 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await expect(page.locator('#openOpsLogDrawerBtn')).toBeVisible();
     await page.click('#openOpsLogDrawerBtn', { force: true });
     await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
-    await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(1);
+    await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(2);
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('登录');
-    await expect(page.locator('#opsLogDrawerTableBody')).not.toContainText('更新设置');
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('修改设置');
     await expect(page.locator('#opsLogDrawerTableBody')).not.toContainText('settings#');
   });
 
@@ -564,6 +580,9 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
 
       if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
@@ -597,4 +616,68 @@ test.describe('操作记录-抽屉列表/筛选/分页', () => {
     await expect(page.locator('#opsLogDrawerTableBody')).toContainText('用例库');
   });
 
+});
+
+test('操作记录按需分页和详情，不自动下载后续页', async ({ page }) => {
+  const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
+  const logs = Array.from({ length: 45 }, (_, i) => ({
+    id: i + 1, user_id: 1, username: 'admin', action: 'login', target_type: 'auth', target_id: 1,
+    result: 'success', detail: { payload: 'DETAIL_ONLY_' + 'x'.repeat(14000) },
+    created_at: new Date(Date.now() - i * 1000).toISOString(),
+  }));
+  const queries = [];
+  const details = [];
+  let legacyRequests = 0;
+  await page.addInitScript(() => {
+    localStorage.setItem('tap-auth-token', 'test-token');
+    localStorage.setItem('tap-ops-log-view-v1', JSON.stringify({ actions: ['登录'], dateStart: '', dateEnd: '' }));
+  });
+  await page.route('**/api/**', async route => {
+    const pathName = new URL(route.request().url()).pathname;
+    const respond = body => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+    if (pathName === '/api/users/me') return respond(admin);
+    if (pathName === '/api/users') return respond([admin]);
+    if (pathName === '/api/ops') { legacyRequests += 1; return respond([]); }
+    if (pathName === '/api/ops/query') {
+      queries.push(route.request().postDataJSON());
+      return respond(operationResponse(logs, route));
+    }
+    if (pathName === '/api/ops/detail') {
+      details.push(route.request().postDataJSON());
+      return respond(operationResponse(logs, route));
+    }
+    return respond([]);
+  });
+  await gotoIndex(page);
+  await waitAppReady(page);
+  await page.waitForFunction(() => window.app.opsLogBound === true);
+  await page.click('#openOpsLogDrawerBtn');
+  await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(20);
+  expect(queries).toHaveLength(1);
+  expect(queries[0].start_ms).toBeGreaterThan(Date.now() - 8 * 86400000);
+  expect(queries[0].cursor).toBeNull();
+  expect(queries[0].actions).toEqual([]);
+  expect(details).toHaveLength(0);
+  expect(legacyRequests).toBe(0);
+  await expect(page.locator('#opsLogDrawerTableBody')).not.toContainText('DETAIL_ONLY');
+  await page.locator('#opsLogDrawerTableBody [data-ops-log-detail]').first().click();
+  await expect(page.locator('#opsLogDetailText')).toContainText('DETAIL_ONLY');
+  expect(details).toHaveLength(1);
+  expect(await page.locator('#opsLogDetailText').textContent()).toHaveLength(6000);
+  await page.locator('#opsLogDetailPages button').last().click();
+  await expect.poll(() => details.length).toBe(2);
+  expect(details[1].offset).toBe(6000);
+  await page.click('#opsLogPaginationTop [data-ops-log-page="next"]');
+  await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(20);
+  await expect.poll(() => queries.length).toBe(2);
+  expect(queries[1].cursor).toBeTruthy();
+  await expect(page.locator('#opsLogDetailPanel')).toHaveClass(/hidden/);
+  await page.click('#opsLogPaginationTop [data-ops-log-page="next"]');
+  await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(5);
+  await expect(page.locator('#opsLogPaginationTop [data-ops-log-page="next"]')).toBeDisabled();
+  await page.click('#opsLogPaginationTop [data-ops-log-page="prev"]');
+  await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(20);
+  await page.selectOption('#opsLogResultFilter', 'failed');
+  await expect(page.locator('#opsLogDrawerTableBody tr')).toHaveCount(0);
+  expect(queries[queries.length - 1].cursor).toBeNull();
 });

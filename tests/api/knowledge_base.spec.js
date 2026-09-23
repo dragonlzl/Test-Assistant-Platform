@@ -20,6 +20,18 @@ test.describe('knowledge base api', () => {
     return body.access_token;
   }
 
+  async function registerKnowledgeSource(ctx, headers, baseUrl) {
+    const projectRes = await ctx.post(`${apiBase}/api/projects`, {
+      headers, data: { name: '知识库权限测试-' + Date.now() + '-' + Math.random().toString(16).slice(2) },
+    });
+    expect(projectRes.status()).toBe(201);
+    const project = await projectRes.json();
+    const sourceRes = await ctx.post(`${apiBase}/api/knowledge-base/sources`, {
+      headers, data: { project_id: project.id, name: '测试知识库', base_url: baseUrl },
+    });
+    expect(sourceRes.status()).toBe(201);
+  }
+
   function writeJson(filePath, payload) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
@@ -162,6 +174,7 @@ test.describe('knowledge base api', () => {
       baseUrl = server.baseUrl;
     }
     const normalizedBaseUrl = String(baseUrl || '').endsWith('/') ? String(baseUrl || '') : (String(baseUrl || '') + '/');
+    await registerKnowledgeSource(ctx, headers, normalizedBaseUrl);
 
     try {
       const res = await ctx.post(`${apiBase}/api/knowledge-base/validate`, {
@@ -190,6 +203,7 @@ test.describe('knowledge base api', () => {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const fixtureDir = createKbFixture();
     const server = await startStaticServer(fixtureDir);
+    await registerKnowledgeSource(ctx, headers, server.baseUrl);
 
     try {
       const res = await ctx.post(`${apiBase}/api/knowledge-base/catalog`, {
@@ -218,6 +232,7 @@ test.describe('knowledge base api', () => {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const fixtureDir = createKbFixture();
     const server = await startStaticServer(fixtureDir);
+    await registerKnowledgeSource(ctx, headers, server.baseUrl);
 
     try {
       const res = await ctx.post(`${apiBase}/api/knowledge-base/documents`, {
@@ -272,6 +287,7 @@ test.describe('knowledge base api', () => {
       baseUrl = server.baseUrl;
     }
     const normalizedBaseUrl = String(baseUrl || '').endsWith('/') ? String(baseUrl || '') : (String(baseUrl || '') + '/');
+    await registerKnowledgeSource(ctx, headers, normalizedBaseUrl);
 
     try {
       const res = await ctx.post(`${apiBase}/api/knowledge-base/validate`, {
@@ -303,6 +319,7 @@ test.describe('knowledge base api', () => {
       baseUrl = server.baseUrl;
     }
     const normalizedBaseUrl = String(baseUrl || '').endsWith('/') ? String(baseUrl || '') : (String(baseUrl || '') + '/');
+    await registerKnowledgeSource(ctx, headers, normalizedBaseUrl);
 
     try {
       const res = await ctx.post(`${apiBase}/api/knowledge-base/search`, {
@@ -349,6 +366,7 @@ test.describe('knowledge base api', () => {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const fixtureDir = createKbFixture();
     const server = await startFlakyStaticServer(fixtureDir, '/manifest.json');
+    await registerKnowledgeSource(ctx, headers, server.baseUrl);
 
     try {
       const res = await ctx.post(`${apiBase}/api/knowledge-base/search`, {
@@ -387,6 +405,7 @@ test.describe('knowledge base api', () => {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const fixtureDir = createKbFixture();
     const server = await startFlakyStaticServer(fixtureDir, '/manifest.json');
+    await registerKnowledgeSource(ctx, headers, server.baseUrl);
 
     try {
       const res = await ctx.post(`${apiBase}/api/knowledge-base/catalog`, {
@@ -412,6 +431,7 @@ test.describe('knowledge base api', () => {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const fixtureDir = createKbFixture();
     const server = await startFlakyStaticServer(fixtureDir, '/_llm/docs/01_core/damage.md');
+    await registerKnowledgeSource(ctx, headers, server.baseUrl);
 
     try {
       const res = await ctx.post(`${apiBase}/api/knowledge-base/documents`, {
@@ -438,6 +458,7 @@ test.describe('knowledge base api', () => {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const fixtureDir = createKbFixture({ useChinesePath: true });
     const server = await startStaticServer(fixtureDir);
+    await registerKnowledgeSource(ctx, headers, server.baseUrl);
     const normalizedBaseUrl = server.baseUrl;
 
     try {
@@ -478,6 +499,7 @@ test.describe('knowledge base api', () => {
     const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     const fixtureDir = createKbFixture();
     const server = await startStaticServer(fixtureDir);
+    await registerKnowledgeSource(ctx, headers, server.baseUrl);
 
     try {
       const emptyRes = await ctx.post(`${apiBase}/api/knowledge-base/documents`, {

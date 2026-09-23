@@ -53,3 +53,15 @@ APP_DB_FILE=apitest.db uvicorn backend.main:app --host 127.0.0.1 --port 8080
 - JavaScript 兼容 ES2019，不使用可选链、空值合并或逻辑赋值。
 - HTML/CSS 使用 2 空格缩进，JavaScript 语句以分号结尾。
 - 外部运行时依赖必须本地 vendoring，不依赖 CDN。
+
+## Codex MCP 服务
+
+团队成员可用本机 Codex App/CLI 连接现有服务器的 `/mcp`，以个人平台身份查询和维护用例、管理执行记录、读取进度与历史、检索项目知识库。提供 30 个工具和用例规范资源，无需平台配置成员的模型 API Key。支持为活动复用执行集新增预设子项、设置获取/解锁方式和快速执行适用性规则。管理员可分页查询操作记录摘要、按需读取详情及获取计数汇总，默认最近 7 天，避免全量日志下载。
+
+在“设置 → AI 与知识库 → Codex MCP 接入”生成个人凭据。知识库由管理员绑定项目，网页和 MCP 共用实时权限检查；历史知识库地址需先完成项目登记。接入、HTTPS 部署和迁移细节见 [MCP_GUIDE.md](MCP_GUIDE.md)。
+
+专项测试（自动使用临时测试数据库）：
+
+```sh
+.venv/bin/python -m unittest discover -s tests/python -p test_mcp_service.py -v
+```

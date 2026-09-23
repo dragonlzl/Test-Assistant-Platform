@@ -74,6 +74,7 @@ test.describe('执行页编辑保存时机', () => {
       case_item_id: 101,
       module: '登录',
       title: '旧标题',
+      ai_operations: ['created', 'child_added', 'modified', 'executed'],
       expected: '成功',
       priority: 'P1',
       precondition: '无',
@@ -121,7 +122,7 @@ test.describe('执行页编辑保存时机', () => {
 
       if (pathName === `/api/exec/sets/${execSet.id}/cases` && method === 'GET') {
         if (!authed) return respond(401, { detail: 'unauthorized' });
-        return respond(200, [execCase]);
+        return respond(200, [execCase, { ...execCase, id: execCase.id + 1, title: '人工用例', ai_operations: [] }]);
       }
 
       if (pathName === `/api/exec/sets/${execSet.id}/case-library-sync` && method === 'POST') {
@@ -167,6 +168,11 @@ test.describe('执行页编辑保存时机', () => {
     await waitAppReady(page, 30000);
     await page.waitForLoadState('networkidle');
 
+    const aiCells = page.locator('#tempExecView tr.case-row td.ai-operations');
+    await expect(aiCells.first().locator('[data-ai-operation]')).toHaveText(['AI新增', 'AI新增子项', 'AI修改', 'AI执行']);
+    await expect(aiCells.nth(1)).toBeEmpty();
+    expect((await page.locator('#tempExecView th').allTextContents()).slice(-2)).toEqual(['AI操作', '增删']);
+
     const titleCell = page.locator('[data-temp-edit-field="title"]').first();
     await expect(titleCell).toBeVisible();
     await titleCell.click();
@@ -182,5 +188,13 @@ test.describe('执行页编辑保存时机', () => {
     expect(patchCalls).toBe(1);
     expect(patchPayloads.length).toBe(1);
     expect(patchPayloads[0].title || '').toContain('新增文本');
+    await expect(aiCells.first().locator('[data-ai-operation]')).toHaveText(['AI新增', 'AI新增子项', 'AI修改', 'AI执行']);
+    await aiCells.first().scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'output/playwright/ai-operations-execution.png', fullPage: true });
+    await page.setViewportSize({ width: 600, height: 800 });
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await aiCells.first().scrollIntoViewIfNeeded();
+    await expect(aiCells.first().locator('[data-ai-operation]')).toHaveText(['AI新增', 'AI新增子项', 'AI修改', 'AI执行']);
+    await page.screenshot({ path: 'output/playwright/ai-operations-execution-narrow.png', fullPage: true });
   });
 });

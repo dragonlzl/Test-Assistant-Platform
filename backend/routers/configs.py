@@ -453,6 +453,13 @@ def proxy_model_listing(
     发送，不落库、不回显。目标地址是调用方拼好的 ``.../models`` 列表地址。
     """
     target_url = _validate_model_url(payload.base_url)
+    parsed_target = urllib_parse.urlsplit(target_url)
+    # 前端模型发现仅使用 /models；不得借此通用 GET 代理绕过知识库授权。
+    decoded_path = urllib_parse.unquote(parsed_target.path).rstrip("/")
+    if (not decoded_path.lower().endswith("/models") or "%" in decoded_path
+            or "\\" in decoded_path or ";" in decoded_path or ".." in decoded_path.split("/")
+            or parsed_target.query or parsed_target.fragment or parsed_target.username or parsed_target.password):
+        raise HTTPException(status_code=400, detail="模型列表代理仅支持不带查询参数的 /models 地址")
     timeout_sec = _normalize_timeout_sec(payload.timeout_sec)
 
     headers = {

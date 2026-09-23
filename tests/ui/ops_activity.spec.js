@@ -1,3 +1,4 @@
+const { operationResponse } = require('./helpers/operation_query_mock');
 const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
@@ -63,6 +64,10 @@ test.describe('操作记录-活跃度视图', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin, userB, userC]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, settings);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        opsCalls += 1;
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') {
         opsCalls += 1;
         return respond(200, logs);
@@ -109,7 +114,7 @@ test.describe('操作记录-活跃度视图', () => {
     await page.click('#openOpsActivityDrawerBtnInline');
     await expect(page.locator('#opsActivityDrawer')).toHaveClass(/open/);
     await expect.poll(() => opsCalls).toBeGreaterThan(beforeRefreshCalls);
-    await page.click('#opsActivityDrawer [data-drawer-close="opsActivityDrawer"]');
+    await page.locator('#opsActivityDrawer button[data-drawer-close="opsActivityDrawer"]').first().click();
     await expect(page.locator('#opsActivityDrawer')).not.toHaveClass(/open/);
 
     await expect(page.locator('#opsActivityBehaviorFilterGrid')).toContainText('登录');

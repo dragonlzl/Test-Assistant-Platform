@@ -8,14 +8,30 @@ from .. import models, schemas
 from ..audit import log_operation
 from ..db import get_db
 from ..dependencies import get_current_user, require_admin
+from ..operation_query import LogPage, LogSummary, LogDetail, list_logs, summarize_logs, get_log_detail
 
 
 router = APIRouter(prefix="/ops", tags=["operation-logs"])
 
 
+@router.post("/query")
+def query_operation_logs(payload: LogPage, user=Depends(require_admin), db: Session = Depends(get_db)):
+    return list_logs(db, user, payload)
+
+
+@router.post("/summary")
+def summarize_operation_logs(payload: LogSummary, user=Depends(require_admin), db: Session = Depends(get_db)):
+    return summarize_logs(db, user, payload)
+
+
+@router.post("/detail")
+def read_operation_detail(payload: LogDetail, user=Depends(require_admin), db: Session = Depends(get_db)):
+    return get_log_detail(db, user, payload)
+
+
 @router.get("", response_model=List[schemas.OperationLogOut])
 def list_operation_logs(
-    limit: int = 200,
+    limit: int = 50,
     offset: int = 0,
     user_id: Optional[int] = None,
     start_ms: Optional[int] = None,

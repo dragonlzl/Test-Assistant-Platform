@@ -1,3 +1,4 @@
+const { operationResponse } = require('./helpers/operation_query_mock');
 const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
@@ -29,7 +30,7 @@ test.describe('操作记录-执行用例聚合展示', () => {
     });
   });
 
-  test('执行用例按天聚合为首条/末条记录', async ({ page }) => {
+  test('执行结果显示可追溯的原始记录，不依赖全量日志聚合', async ({ page }) => {
     const admin = { id: 1, username: 'admin', role: 'admin', level: 'leader' };
     const base = new Date();
     const yesterday = new Date(base.getFullYear(), base.getMonth(), base.getDate() - 1, 10, 0, 0);
@@ -130,6 +131,9 @@ test.describe('操作记录-执行用例聚合展示', () => {
       if (pathName === '/api/users/me') return respond(200, admin);
       if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
       if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+      if (pathName.startsWith('/api/ops/') && method === 'POST') {
+        return respond(200, operationResponse(logs, route));
+      }
       if (pathName === '/api/ops' && method === 'GET') return respond(200, logs);
 
       if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
@@ -154,24 +158,10 @@ test.describe('操作记录-执行用例聚合展示', () => {
       return document.querySelectorAll('#opsLogDrawerTableBody tr').length > 0;
     });
 
-    const execRows = await page.$$eval('#opsLogDrawerTableBody tr', (rows) => {
-      return rows
-        .filter((row) => row.textContent.includes('执行用例'))
-        .map((row) => {
-          return {
-            text: row.textContent || '',
-          };
-        });
-    });
-    const execText = execRows.map((row) => row.text).join(' ');
-    expect(execRows.length).toBe(4);
-    expect(execText).toContain('0 -> 1');
-    expect(execText).toContain('1 -> 2');
-    expect(execText).toContain('用例：用例A');
-    expect(execText).toContain('用例：用例B');
-    const firstCount = execRows.filter((row) => row.text.includes('0 -> 1')).length;
-    const lastCount = execRows.filter((row) => row.text.includes('1 -> 2')).length;
-    expect(firstCount).toBe(2);
-    expect(lastCount).toBe(2);
+    const rows = page.locator('#opsLogDrawerTableBody tr');
+    await expect(rows).toHaveCount(logs.length);
+    await expect(page.locator('#opsLogDrawerTableBody')).toContainText('执行记录变更');
+    await expect(rows.locator('[data-ops-log-detail]')).toHaveCount(logs.length);
+
   });
 });

@@ -11090,6 +11090,19 @@
         );
         return null;
       }
+      // 复用浏览器缓存前重新鉴权，避免项目权限撤销后继续自动注入旧知识。
+      var knowledgeClient = window.app && window.app.apiClient;
+      if (knowledgeClient && typeof knowledgeClient.checkKnowledgeAccess === 'function') {
+        try {
+          await knowledgeClient.checkKnowledgeAccess(baseUrl);
+        } catch (err) {
+          delete knowledgeBaseActionResultMap[stableWorkspaceId];
+          setWorkspaceKnowledgeBaseState(stableWorkspaceId,
+            buildKnowledgeBaseSkipState(stableWorkspaceId, contract, '知识库访问失败：' + (err.message || '没有权限')),
+            { force: true });
+          return null;
+        }
+      }
       var existingState = getWorkspaceKnowledgeBaseState(stableWorkspaceId);
       if (canReuseKnowledgeBaseState(existingState, baseUrl, queryKey)) {
         var reusedState = buildReusedKnowledgeBaseState(existingState, contract, stableWorkspaceId);

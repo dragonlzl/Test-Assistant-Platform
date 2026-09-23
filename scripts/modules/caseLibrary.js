@@ -14434,6 +14434,7 @@
 	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"precondition\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + preHtml + '</div></td>' +
 	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"steps\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + stepsHtml + '</div></td>' +
 	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"expected\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + expectedHtml + '</div></td>' +
+              '<td class=\"ai-operations\">' + utils.renderAiOperations(item.ai_operations) + '</td>' +
 	          '<td class=\"case-op-col\">' +
 	            '<div class=\"case-ops\">' +
 	              '<button type=\"button\" class=\"case-op remove\" title=\"删除当前用例\" data-case-lib-remove data-index=\"' + idx + '\">−</button>' +
@@ -14451,7 +14452,7 @@
 	    );
 	    var emptyRow = visibleIndexes.length
 	      ? ''
-	      : '<tr><td colspan=\"9\">' + (state.editor.items.length ? '当前页暂无用例' : '未解析到有效用例') + '</td></tr>';
+	      : '<tr><td colspan=\"10\">' + (state.editor.items.length ? '当前页暂无用例' : '未解析到有效用例') + '</td></tr>';
     var paginationTop = buildEditorPagination(totalCases, state.editor.pageIndex, totalPages, start, end);
     var paginationBottom = buildEditorPagination(totalCases, state.editor.pageIndex, totalPages, start, end);
     dom.editView.innerHTML = (
@@ -14467,6 +14468,7 @@
 	            '<th>前提条件</th>' +
 	            '<th>操作步骤</th>' +
 	            '<th>预期结果</th>' +
+                '<th class=\"ai-operations\">AI操作</th>' +
 	            '<th class=\"ops\" title=\"增删\">增删</th>' +
 	          '</tr>' +
 	        '</thead>' +

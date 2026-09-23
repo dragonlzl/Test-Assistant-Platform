@@ -186,7 +186,7 @@
     var status = res.status;
     return res.json().catch(function() { return {}; }).then(function(body) {
       if (res.ok) return body;
-      if (status === 401 || status === 403) {
+      if (status === 401) {
         handleAuthRedirect(res);
       }
       var detail = translateDetail(body && body.detail ? body.detail : body, status);
@@ -920,6 +920,20 @@
     }).then(handleResponse);
   }
 
+  function integrationRequest(path, method, payload) {
+    var options = { method: method || 'GET', headers: buildHeaders(), cache: 'no-store' };
+    if (payload !== undefined) options.body = JSON.stringify(payload);
+    return fetch('/api/' + path, options).then(handleResponse);
+  }
+
+  function listKnowledgeSources() {
+    return integrationRequest('knowledge-base/sources');
+  }
+
+  function checkKnowledgeAccess(baseUrl) {
+    return integrationRequest('knowledge-base/access', 'POST', { base_url: baseUrl });
+  }
+
   function catalogKnowledgeBase(payload) {
     return fetch('/api/knowledge-base/catalog', {
       method: 'POST',
@@ -1000,6 +1014,22 @@
       headers: buildHeaders(),
       body: JSON.stringify(payload || {}),
     }).then(handleResponse);
+  }
+
+  function queryOperationLogs(payload, signal) {
+    return fetch('/api/ops/query', {
+      method: 'POST', headers: buildHeaders(), body: JSON.stringify(payload || {}), signal: signal,
+    }).then(handleResponse);
+  }
+
+  function summarizeOperationLogs(payload, signal) {
+    return fetch('/api/ops/summary', {
+      method: 'POST', headers: buildHeaders(), body: JSON.stringify(payload || {}), signal: signal,
+    }).then(handleResponse);
+  }
+
+  function getOperationLogDetail(payload) {
+    return integrationRequest('ops/detail', 'POST', payload);
   }
 
   function getExecutionOverview(projectId, versionId) {
@@ -1143,6 +1173,9 @@
     cancelModelTask: cancelModelTask,
     cancelModelTasksByOwner: cancelModelTasksByOwner,
     validateKnowledgeBase: validateKnowledgeBase,
+    integrationRequest: integrationRequest,
+    listKnowledgeSources: listKnowledgeSources,
+    checkKnowledgeAccess: checkKnowledgeAccess,
     catalogKnowledgeBase: catalogKnowledgeBase,
     getKnowledgeBaseDocuments: getKnowledgeBaseDocuments,
     searchKnowledgeBase: searchKnowledgeBase,
@@ -1150,6 +1183,9 @@
     createFeatureAssignment: createFeatureAssignment,
     updateFeatureAssignment: updateFeatureAssignment,
     listOperationLogs: listOperationLogs,
+    queryOperationLogs: queryOperationLogs,
+    summarizeOperationLogs: summarizeOperationLogs,
+    getOperationLogDetail: getOperationLogDetail,
     createOperationLogEvent: createOperationLogEvent,
     getExecutionOverview: getExecutionOverview,
     getExecutionOverviewLayout: getExecutionOverviewLayout,

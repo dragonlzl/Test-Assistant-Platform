@@ -376,11 +376,41 @@
     </div>
     <div class="settings-item settings-item-wide-control">
       <div class="settings-inline">
-        <div class="meta"><strong>共享知识库地址</strong><p>XMind 用例生成会在生成前检索并注入知识库上下文。</p></div>
+        <div class="meta"><strong>当前知识库地址</strong><p>仅允许使用管理员已绑定到你所属项目的知识库。可在下方选择；旧地址需先完成项目登记。</p></div>
         <div class="control"><input id="knowledgeBaseBaseUrlInput" type="text" placeholder="如：http://192.168.50.10:8003/sk/"/></div>
       </div>
       <div class="actions"><button class="secondary" id="saveKnowledgeBaseBaseUrl">保存地址</button><button class="secondary" id="validateKnowledgeBaseBaseUrl">校验地址</button></div>
       <p class="status" id="knowledgeBaseBaseUrlStatus"></p>
+    </div>
+    <div class="settings-item settings-item-stacked-control" id="knowledgeSourcePanel">
+      <div class="meta"><strong>项目知识库</strong><p>只显示你有权访问的知识库。选择后点击上方“保存地址”，用于 XMind 生成。</p></div>
+      <div class="control"><select id="knowledgeSourceSelect" aria-label="选择项目知识库"><option value="">请选择知识库</option></select></div>
+      <div class="actions"><button class="secondary" id="refreshKnowledgeSources" type="button">刷新知识库</button></div>
+      <div id="knowledgeSourceAdmin" class="hidden">
+        <p>管理员登记知识库：同一来源需要共享给多个项目时，分别登记对应项目。</p>
+        <div class="control"><select id="knowledgeSourceProject" aria-label="知识库所属项目"></select></div>
+        <div class="control"><input id="knowledgeSourceName" aria-label="知识库名称" placeholder="知识库名称" maxlength="120"/></div>
+        <div class="control"><input id="knowledgeSourceUrl" aria-label="知识库来源地址" placeholder="知识库来源地址（仅服务器需要访问）" maxlength="2048"/></div>
+        <div class="actions"><button class="secondary" id="registerKnowledgeSource" type="button">登记到项目</button></div>
+        <div id="knowledgeSourceList"></div>
+      </div>
+      <p class="status" id="knowledgeSourceStatus" role="status"></p>
+    </div>
+    <div class="settings-item settings-item-stacked-control" id="mcpAccessPanel">
+      <div class="meta"><strong>Codex MCP 接入</strong><p>凭据使用你的实时平台权限。支持本机 Codex App 和 CLI，修改密码、停用账号或撤销凭据后失效。</p></div>
+      <div class="control"><label>凭据名称 <input id="mcpTokenName" maxlength="80" placeholder="例如：我的工作电脑"/></label></div>
+      <div class="control"><label>有效天数 <input id="mcpTokenDays" type="number" min="1" max="365" value="90"/></label></div>
+      <div class="control"><label><input id="mcpTokenReadOnly" type="checkbox"/> 仅允许读取</label></div>
+      <div class="actions"><button class="secondary" id="createMcpToken" type="button">生成个人凭据</button><button class="secondary" id="refreshMcpTokens" type="button">刷新列表</button></div>
+      <div id="mcpTokenReveal" class="hidden">
+        <p>凭据仅显示这一次，请保存到本机凭据配置，不要发送给模型或其他成员。</p>
+        <textarea id="mcpTokenSecret" readonly rows="2" aria-label="新生成的 MCP 凭据" autocomplete="off"></textarea>
+        <div class="actions"><button class="secondary" id="copyMcpToken" type="button">复制凭据</button><button class="secondary" id="hideMcpToken" type="button">已保存，隐藏</button></div>
+      </div>
+      <p>服务地址：<span id="mcpServerAddress"></span></p>
+      <p><a href="./MCP_GUIDE.md" target="_blank" rel="noopener">查看 Codex App / CLI 接入与部署说明</a></p>
+      <div id="mcpTokenList"></div>
+      <p class="status" id="mcpTokenStatus" role="status"></p>
     </div>
     <div class="settings-item settings-item-stacked-control">
       <div class="settings-inline">
@@ -646,6 +676,7 @@
 <script src="./services/apiClient.js" defer></script>
 <script src="./services/modelTaskClient.js" defer></script>
 <script src="./scripts/modules/settings.js" defer></script>
+<script src="./scripts/modules/mcpSettings.js" defer></script>
 <script src="./scripts/modules/models.js" defer></script>
 <script src="./scripts/handlers/assignHandlers.js" defer></script>
 <script src="./scripts/modules/assign.js" defer></script>

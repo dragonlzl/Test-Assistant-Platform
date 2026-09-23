@@ -11,8 +11,6 @@
   var EXEC_CONTRIBUTION_STORAGE_KEY = appConfig.opsExecContributionViewStorageKey || 'tap-ops-exec-contribution-view-v1';
   var DEFAULT_ACTIVITY_RANGE = 'week';
   var ACTIVITY_BAR_MAX_RATIO = 82;
-  var DRAWER_MAX_ALLOWED_LOGS = Number(appConfig.opsLogDrawerMaxAllowed || 500);
-  if (!Number.isFinite(DRAWER_MAX_ALLOWED_LOGS) || DRAWER_MAX_ALLOWED_LOGS <= 0) DRAWER_MAX_ALLOWED_LOGS = 500;
   var OVERVIEW_AUTO_REFRESH_INTERVAL_MS = Number(appConfig.opsOverviewAutoRefreshIntervalMs || 60000);
   if (!Number.isFinite(OVERVIEW_AUTO_REFRESH_INTERVAL_MS) || OVERVIEW_AUTO_REFRESH_INTERVAL_MS < 0) {
     OVERVIEW_AUTO_REFRESH_INTERVAL_MS = 60000;
@@ -28,6 +26,40 @@
     { key: 'version', label: '版本' },
     { key: 'user', label: '人员' },
   ];
+
+  // 在展示时翻译工具名，已有操作记录和 Excel 导出共用，不改写原始审计详情。
+  var MCP_TOOL_LABELS = {
+    get_current_user: '查看当前用户与凭据权限',
+    list_projects: '查询项目列表',
+    list_versions: '查询项目版本',
+    create_version: '创建项目版本',
+    list_case_files: '查询用例文件',
+    get_case_items: '查看用例内容',
+    search_cases: '搜索用例',
+    create_case_file: '新建用例文件并入库',
+    append_case_items: '追加用例',
+    update_case_item: '修改用例内容',
+    create_execution_set: '将用例转入执行',
+    list_execution_sets: '查询执行集',
+    get_execution_cases: '查看执行用例',
+    get_execution_reuse_context: '查看复用子项与解锁配置',
+    add_execution_reuse_presets: '新增复用子项',
+    update_execution_reuse_presets: '配置复用解锁方式',
+    quick_execute_reuse: '复用用例快速执行',
+    record_execution_result: '记录用例执行结果',
+    get_execution_overview: '查看执行统计',
+    list_archives: '查询用例归档',
+    get_archive: '查看归档详情',
+    get_case_history: '查看用例变更历史',
+    list_missing_cases: '查询易漏用例',
+    list_knowledge_bases: '查询项目知识库',
+    search_knowledge: '检索知识库内容',
+    get_knowledge_document: '读取知识库文档',
+    list_knowledge_documents: '查询知识库文档目录',
+    list_operation_logs: '查询操作记录',
+    get_operation_log_detail: '查看操作记录详情',
+    get_operation_log_summary: '汇总操作记录',
+  };
 
   var CONTRIBUTION_BEHAVIORS = [
     { key: 'import', label: '用例导入' },
@@ -45,6 +77,13 @@
     drawer: null,
     users: [],
     logs: [],
+    cursors: [null],
+    nextCursor: null,
+    logRequestId: 0,
+    logController: null,
+    queryPageSize: null,
+    actionOptions: [],
+    detailRequestId: 0,
     pageIndex: 0,
     selectedUserId: '',
     selectedTargets: { all: true },
@@ -185,7 +224,7 @@
     n = Math.round(Number(n));
     if (!Number.isFinite(n) || n <= 0) return 20;
     if (n < 5) return 5;
-    if (n > 200) return 200;
+    if (n > 100) return 100;
     return n;
   }
 
@@ -259,97 +298,6 @@
       if (t !== null) return t;
     }
     return null;
-  }
-
-  function fetchOperationLogsByRange(range, options) {
-    var limit = 500;
-    var offset = 0;
-    var userId = options && (options.userId || options.userId === 0) ? options.userId : null;
-    var startMs = null;
-    var endMs = null;
-    if (range && range.startMs !== null && range.startMs !== undefined) {
-      var s = Number(range.startMs);
-      if (Number.isFinite(s) && s >= 0) startMs = Math.floor(s);
-    }
-    if (range && range.endMs !== null && range.endMs !== undefined) {
-      var e = Number(range.endMs);
-      if (Number.isFinite(e) && e >= 0) endMs = Math.floor(e);
-    }
-    var results = [];
-
-    function loadNext() {
-      return apiClient
-        .listOperationLogs({
-          limit: limit,
-          offset: offset,
-          user_id: userId !== null ? userId : undefined,
-          start_ms: startMs !== null ? startMs : undefined,
-          end_ms: endMs !== null ? endMs : undefined,
-        })
-        .then(function(list) {
-          var rawList = Array.isArray(list) ? list : [];
-          if (!rawList.length) return results;
-          offset += rawList.length;
-          results = results.concat(rawList.filter(function(row) { return !isAutoOperation(row); }));
-          var shouldContinue = rawList.length >= limit;
-          if (!shouldContinue) return results;
-          return loadNext();
-        });
-    }
-
-    return loadNext();
-  }
-
-  function fetchDrawerLogs(range, options) {
-    var limit = 500;
-    var offset = 0;
-    var userId = options && (options.userId || options.userId === 0) ? options.userId : null;
-    var maxAllowed = options && Number.isFinite(options.maxAllowed) ? options.maxAllowed : DRAWER_MAX_ALLOWED_LOGS;
-    var startMs = null;
-    var endMs = null;
-    if (range && range.startMs !== null && range.startMs !== undefined) {
-      var s = Number(range.startMs);
-      if (Number.isFinite(s) && s >= 0) startMs = Math.floor(s);
-    }
-    if (range && range.endMs !== null && range.endMs !== undefined) {
-      var e = Number(range.endMs);
-      if (Number.isFinite(e) && e >= 0) endMs = Math.floor(e);
-    }
-    var results = [];
-    var allowedCount = 0;
-    var hasRange = Boolean(range && (range.startMs !== null || range.endMs !== null));
-    var reachedCap = false;
-
-    function loadNext() {
-      return apiClient
-        .listOperationLogs({
-          limit: limit,
-          offset: offset,
-          user_id: userId !== null ? userId : undefined,
-          start_ms: startMs !== null ? startMs : undefined,
-          end_ms: endMs !== null ? endMs : undefined,
-        })
-        .then(function(list) {
-          var rawList = Array.isArray(list) ? list : [];
-          if (!rawList.length) return { logs: results, allowedCount: allowedCount, reachedCap: reachedCap };
-          offset += rawList.length;
-          rawList.forEach(function(row) {
-            if (isAutoOperation(row)) return;
-            if (hasRange && !isTimeInRange(row && row.created_at, range)) return;
-            results.push(row);
-            if (isAllowedLog(row)) allowedCount += 1;
-          });
-          var shouldContinue = rawList.length >= limit;
-          if (shouldContinue && !hasRange && maxAllowed && allowedCount >= maxAllowed) {
-            shouldContinue = false;
-            reachedCap = true;
-          }
-          if (!shouldContinue) return { logs: results, allowedCount: allowedCount, reachedCap: reachedCap };
-          return loadNext();
-        });
-    }
-
-    return loadNext();
   }
 
   function parseDateInputValue(value, isEnd) {
@@ -441,7 +389,7 @@
     var saved = readPersisted();
     if (!saved || typeof saved !== 'object') return;
     state.selectedUserId = saved.userId ? String(saved.userId || '') : '';
-    state.pageIndex = Number(saved.pageIndex) || 0;
+    state.pageIndex = 0;
     state.hasViewed = Boolean(saved.hasViewed);
     state.drawerOpen = Boolean(saved.drawerOpen);
     state.overviewView = normalizeOpsOverviewView(saved.overviewView);
@@ -643,6 +591,15 @@
     var id = (l.target_id || l.target_id === 0) ? String(l.target_id) : '';
     var detail = l.detail && typeof l.detail === 'object' ? l.detail : {};
     var action = normalizeAction(l.action);
+    if (action === 'update_settings') return '平台设置';
+    if (action === 'mcp_tool_call') {
+      var tool = String(detail.tool || '').trim();
+      var toolLabel = Object.prototype.hasOwnProperty.call(MCP_TOOL_LABELS, tool)
+        ? MCP_TOOL_LABELS[tool] : '其他工具调用';
+      return 'MCP：' + toolLabel;
+    }
+    if (type === 'knowledge_source') return '知识库：' + String(detail.name || id);
+    if (type === 'mcp_token') return 'MCP 凭据：' + String(detail.name || id);
 
     if (action === 'create_case_file_association' || action === 'update_case_file_association' || action === 'delete_case_file_association') {
       var associationTargetLabel = String(detail.association_target_label || '').trim();
@@ -1025,31 +982,19 @@
 
   function syncActionGrid() {
     if (!dom.actionGrid) return;
-    var list = Array.isArray(state.logs) ? state.logs : [];
-    var execLogs = buildExecCaseRunLogs(list);
-    var options = buildActionFilterOptions(list.concat(execLogs));
-    var optionKeys = options.map(function(item) { return item.key; });
-    state.actionOptionKeys = optionKeys;
-    trimActionSelection(optionKeys);
-    syncAllActionSelection(optionKeys);
+    var options = state.actionOptions || [];
+    state.actionOptionKeys = options.map(function(item) { return item.key; });
     var selected = state.selectedActions || { all: true };
-    var html = ['<label class="ops-log-filter-chip">' +
-      '<input type="checkbox" data-ops-log-action="all"' + (selected.all ? ' checked' : '') + ' />' +
-      '<span>全部</span>' +
-    '</label>'];
+    var html = ['<label class="ops-log-filter-chip"><input type="checkbox" data-ops-log-action="all"'
+      + (selected.all ? ' checked' : '') + ' /><span>全部</span></label>'];
     options.forEach(function(item) {
-      var key = item.key;
-      var checked = '';
-      if (!selected.all && selected[key]) checked = ' checked';
-      html.push(
-        '<label class="ops-log-filter-chip">' +
-          '<input type="checkbox" data-ops-log-action="' + escapeHtml(key) + '"' + checked + ' />' +
-          '<span>' + escapeHtml(item.label) + '</span>' +
-        '</label>'
-      );
+      html.push('<label class="ops-log-filter-chip"><input type="checkbox" data-ops-log-action="'
+        + escapeHtml(item.key) + '"' + (!selected.all && selected[item.key] ? ' checked' : '')
+        + ' /><span>' + escapeHtml(item.label) + '</span></label>');
     });
     dom.actionGrid.innerHTML = html.join('');
   }
+
 
   function syncOpsLogDateRange() {
     if (dom.dateStart) dom.dateStart.value = state.dateStart || '';
@@ -1566,7 +1511,7 @@
 
   function getActivityRangeStartMs() {
     var range = state.activity.timeRange || DEFAULT_ACTIVITY_RANGE;
-    if (range === 'all') return null;
+    if (range === 'all') return Date.now() - 365 * 24 * 60 * 60 * 1000;
     var now = new Date();
     if (range === 'year') return new Date(now.getFullYear(), 0, 1).getTime();
     if (range === 'month') return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
@@ -1589,7 +1534,7 @@
 
   function getContributionRangeStartMs() {
     var range = state.contribution.timeRange || DEFAULT_ACTIVITY_RANGE;
-    if (range === 'all') return null;
+    if (range === 'all') return Date.now() - 365 * 24 * 60 * 60 * 1000;
     var now = new Date();
     if (range === 'year') return new Date(now.getFullYear(), 0, 1).getTime();
     if (range === 'month') return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
@@ -1612,7 +1557,7 @@
 
   function getExecContributionRangeStartMs() {
     var range = state.execContribution.timeRange || DEFAULT_ACTIVITY_RANGE;
-    if (range === 'all') return null;
+    if (range === 'all') return Date.now() - 365 * 24 * 60 * 60 * 1000;
     var now = new Date();
     if (range === 'year') return new Date(now.getFullYear(), 0, 1).getTime();
     if (range === 'month') return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
@@ -1704,10 +1649,10 @@
     selectedIds.forEach(function(id) { allowed[String(id)] = true; });
     var range = getActivityDateRangeMs();
     return list.filter(function(log) {
-      if (!log || !isAllowedLog(log)) return false;
+      if (!log || (!log._aggregate && !isAllowedLog(log))) return false;
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
       if (!userId || !allowed[userId]) return false;
-      if (!isTimeInRange(log.created_at, range)) return false;
+      if (!log._aggregate && !isTimeInRange(log.created_at, range)) return false;
       return true;
     });
   }
@@ -1723,7 +1668,7 @@
       if (!log) return false;
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
       if (!userId || !allowed[userId]) return false;
-      if (!isTimeInRange(log.created_at, range)) return false;
+      if (!log._aggregate && !isTimeInRange(log.created_at, range)) return false;
       return true;
     });
   }
@@ -1739,12 +1684,13 @@
       if (!log) return false;
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
       if (!userId || !allowed[userId]) return false;
-      if (!isTimeInRange(log.created_at, range)) return false;
+      if (!log._aggregate && !isTimeInRange(log.created_at, range)) return false;
       return true;
     });
   }
 
   function resolveContributionEntry(log) {
+    if (log && log._aggregate) return { key: log.key, count: log.count };
     if (!log || typeof log !== 'object') return null;
     var action = normalizeAction(log.action);
     var detail = log.detail && typeof log.detail === 'object' ? log.detail : {};
@@ -1892,141 +1838,8 @@
     return isExecCaseExecuted(detail);
   }
 
-  function buildExecCaseRunLogs(list) {
-    if (!Array.isArray(list) || !list.length) return [];
-    var groups = {};
-    var todayKey = getDayKeyFromMs(Date.now());
-    list.forEach(function(log) {
-      if (!log || normalizeAction(log.action) !== 'update_exec_case') return;
-      var detail = log.detail && typeof log.detail === 'object' ? log.detail : {};
-      var t = parseTimeMs(log.created_at);
-      if (t === null) return;
-      var dayKey = getDayKeyFromMs(t);
-      if (!dayKey) return;
-      var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
-      if (!userId) return;
-      var fileName = resolveExecCaseFileName(detail);
-      var fileKey = fileName;
-      if (!fileKey) {
-        var execSetId = (detail.exec_set_id || detail.exec_set_id === 0) ? String(detail.exec_set_id) : '';
-        fileKey = execSetId ? ('exec-set-' + execSetId) : 'unknown';
-      }
-      var groupKey = userId + '::' + dayKey + '::' + fileKey;
-      if (!groups[groupKey]) {
-        groups[groupKey] = {
-          userId: userId,
-          dayKey: dayKey,
-          fileKey: fileKey,
-          fileName: fileName || '',
-          logs: [],
-          username: log.username || ''
-        };
-      }
-      if (!groups[groupKey].username && log.username) groups[groupKey].username = log.username;
-      if (!groups[groupKey].fileName && fileName) groups[groupKey].fileName = fileName;
-      groups[groupKey].logs.push({ log: log, time: t });
-    });
-
-    var results = [];
-    Object.keys(groups).forEach(function(key) {
-      var group = groups[key];
-      var items = group && Array.isArray(group.logs) ? group.logs : [];
-      if (!items.length) return;
-      items.sort(function(a, b) { return a.time - b.time; });
-      var executedMap = {};
-      var executedCount = 0;
-      var firstEvent = null;
-      var lastEvent = null;
-      var firstAfter = null;
-      var lastAfter = null;
-      var firstBefore = null;
-      items.forEach(function(entry) {
-        var log = entry.log;
-        var detail = log && log.detail && typeof log.detail === 'object' ? log.detail : {};
-        var caseKey = normalizeExecCaseKey(detail);
-        if (!caseKey) return;
-        var prevExecuted = executedMap[caseKey] === true;
-        var nextExecuted = resolveExecCaseExecutedState(detail) === true;
-        var beforeCount = executedCount;
-        if (nextExecuted !== prevExecuted) {
-          if (nextExecuted) executedCount += 1;
-          else executedCount = Math.max(0, executedCount - 1);
-          executedMap[caseKey] = nextExecuted;
-        } else if (executedMap[caseKey] === undefined) {
-          executedMap[caseKey] = nextExecuted;
-        }
-        var afterCount = executedCount;
-        if (!isExecCaseRunEvent(detail)) return;
-        var reuseMeta = resolveReuseMeta(detail);
-        var title = String(detail.title || detail.case_title || detail.case_name || '').trim();
-        var fileName = resolveExecCaseFileName(detail);
-        var payload = {
-          log: log,
-          before: beforeCount,
-          after: afterCount,
-          title: title || null,
-          fileName: fileName || null,
-          reuseType: reuseMeta.isReuse === true ? 'reuse' : '',
-        };
-        if (!firstEvent) {
-          firstEvent = payload;
-          firstBefore = beforeCount;
-          firstAfter = afterCount;
-        }
-        lastEvent = payload;
-        lastAfter = afterCount;
-      });
-
-      if (!firstEvent) return;
-      var baseDetail = {
-        page: 'tempexec',
-        exec_day: group.dayKey,
-      };
-      results.push({
-        id: 'exec-case-run-first-' + group.userId + '-' + group.dayKey + '-' + group.fileKey,
-        user_id: firstEvent.log.user_id,
-        username: firstEvent.log.username || group.username,
-        action: 'exec_case_run',
-        target_type: 'exec_set',
-        target_id: null,
-        result: 'success',
-        detail: Object.assign({}, baseDetail, {
-          exec_stage: 'first',
-          exec_count: 1,
-          before_count: firstBefore,
-          after_count: firstAfter,
-          case_title: firstEvent.title || null,
-          case_file_name: firstEvent.fileName || group.fileName || null,
-          case_type: firstEvent.reuseType || '',
-        }),
-        created_at: firstEvent.log.created_at,
-      });
-      if (lastEvent && lastEvent !== firstEvent && group.dayKey !== todayKey) {
-        results.push({
-          id: 'exec-case-run-last-' + group.userId + '-' + group.dayKey + '-' + group.fileKey,
-          user_id: lastEvent.log.user_id,
-          username: lastEvent.log.username || group.username,
-          action: 'exec_case_run',
-          target_type: 'exec_set',
-          target_id: null,
-          result: 'success',
-          detail: Object.assign({}, baseDetail, {
-            exec_stage: 'last',
-            exec_count: (firstAfter !== null && lastAfter !== null) ? (lastAfter - firstAfter) : 0,
-            before_count: firstAfter,
-            after_count: lastAfter,
-            case_title: lastEvent.title || null,
-            case_file_name: lastEvent.fileName || group.fileName || null,
-            case_type: lastEvent.reuseType || '',
-          }),
-          created_at: lastEvent.log.created_at,
-        });
-      }
-    });
-    return results;
-  }
-
   function resolveExecContributionEntry(log) {
+    if (log && log._aggregate) return { key: log.key, count: log.count };
     if (!log || typeof log !== 'object') return null;
     var action = normalizeAction(log.action);
     var detail = log.detail && typeof log.detail === 'object' ? log.detail : {};
@@ -2049,7 +1862,7 @@
     var userMap = {};
     var behaviorTotals = {};
     logs.forEach(function(log) {
-      var label = resolveActivityActionLabel(log);
+      var label = log._aggregate ? log.key : resolveActivityActionLabel(log);
       if (!label) return;
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
       if (!userId) return;
@@ -2059,9 +1872,10 @@
         entry = { id: userId, name: String(log.username || fallbackName), total: 0, behaviors: {} };
         userMap[userId] = entry;
       }
-      entry.total += 1;
-      entry.behaviors[label] = (entry.behaviors[label] || 0) + 1;
-      behaviorTotals[label] = (behaviorTotals[label] || 0) + 1;
+      var count = log._aggregate ? log.count : 1;
+      entry.total += count;
+      entry.behaviors[label] = (entry.behaviors[label] || 0) + count;
+      behaviorTotals[label] = (behaviorTotals[label] || 0) + count;
     });
 
     var behaviorList = Object.keys(behaviorTotals).map(function(key) {
@@ -2201,7 +2015,7 @@
       var userId = (log.user_id || log.user_id === 0) ? String(log.user_id) : '';
       if (!userId) return;
       var entryCount = getPositiveNumber(entry.count);
-      if (entry.key === 'exec') {
+      if (entry.key === 'exec' && !log._aggregate) {
         var caseKey = String(entry.caseKey || '').trim();
         if (!caseKey) return;
         if (!execCaseDedup[userId]) execCaseDedup[userId] = {};
@@ -2499,29 +2313,17 @@
     if (dom.paginationBottom) dom.paginationBottom.innerHTML = html || '';
   }
 
-  function buildPagination(total, pageIndex, totalPages, start, end) {
-    total = Number(total) || 0;
-    pageIndex = Number(pageIndex) || 0;
-    totalPages = Number(totalPages) || 1;
-    start = Number(start) || 0;
-    end = Number(end) || 0;
-    var currentPage = totalPages ? pageIndex + 1 : 1;
-    var maxPage = totalPages || 1;
-    var rangeInfo = total ? ('显示 ' + (start + 1) + '-' + end + ' / 共 ' + total + ' 条') : '暂无记录';
-    return (
-      '<div class="temp-pagination" data-ops-log-pagination>' +
-        '<div class="temp-pagination-info">' + escapeHtml(rangeInfo) + '，每页 ' + getPageSize() + ' 条</div>' +
-        '<div class="temp-pagination-controls">' +
-          '<button type="button" class="secondary" data-ops-log-page="first" ' + (pageIndex <= 0 ? 'disabled' : '') + '>首页</button>' +
-          '<button type="button" class="secondary" data-ops-log-page="prev" ' + (pageIndex <= 0 ? 'disabled' : '') + '>上一页</button>' +
-          '<button type="button" class="secondary" data-ops-log-page="next" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>下一页</button>' +
-          '<button type="button" class="secondary" data-ops-log-page="last" ' + (pageIndex >= totalPages - 1 ? 'disabled' : '') + '>末页</button>' +
-          '<label>跳转</label>' +
-          '<input type="number" min="1" max="' + maxPage + '" value="' + Math.min(currentPage, maxPage) + '" data-ops-log-page-input>' +
-        '</div>' +
-      '</div>'
-    );
+  function buildPagination() {
+    var disabled = state.loading ? 'disabled' : '';
+    return '<div class="temp-pagination"><div class="temp-pagination-info">第 ' + (state.pageIndex + 1)
+      + ' 页，本页 ' + state.logs.length + ' 条，每页最多 ' + getPageSize() + ' 条</div>'
+      + '<div class="temp-pagination-controls">'
+      + '<button type="button" class="secondary" data-ops-log-page="first" ' + (state.pageIndex <= 0 ? 'disabled' : disabled) + '>首页</button>'
+      + '<button type="button" class="secondary" data-ops-log-page="prev" ' + (state.pageIndex <= 0 ? 'disabled' : disabled) + '>上一页</button>'
+      + '<button type="button" class="secondary" data-ops-log-page="next" ' + (!state.nextCursor ? 'disabled' : disabled) + '>下一页</button>'
+      + '</div></div>';
   }
+
 
   function resolveLogTargetKeys(log) {
     var l = log && typeof log === 'object' ? log : null;
@@ -2802,6 +2604,7 @@
       if (k === 'project-admin') return '项目管理';
       if (k === 'user-admin') return '人员管理';
       if (k === 'ops-log') return '操作记录';
+      if (k === 'mcp') return 'MCP 接入';
       if (k === 'settings') return '其他配置';
       if (k === 'models') return '模型管理';
       if (k === 'assign') return '功能指派';
@@ -2814,6 +2617,7 @@
     if (fromDetail) return fromDetail;
 
     // 兜底：老日志缺少 page 时按 action 推断
+    if (action === 'mcp_tool_call') return 'MCP 接入';
     if (action === 'login' || action === 'logout' || action === 'change_password') return '系统平台';
     if (
       action === 'create_user' ||
@@ -2859,47 +2663,10 @@
   }
 
   function getFilteredLogs() {
-    var list = Array.isArray(state.logs) ? state.logs : [];
-    var execLogs = buildExecCaseRunLogs(list);
-    if (execLogs.length) list = list.concat(execLogs);
-    list = list.filter(isAllowedLog);
-    var range = getDateRangeMs(state.dateStart, state.dateEnd);
-    var selected = state.selectedTargets || { all: true };
-    if (selected.all) {
-      return list.filter(function(log) {
-        return isTimeInRange(log && log.created_at, range);
-      }).filter(function(log) {
-        var selectedActions = state.selectedActions || { all: true };
-        if (selectedActions.all) return true;
-        var label = resolveActionFilterLabel(log);
-        if (!label) return false;
-        return Boolean(selectedActions[label]);
-      }).sort(function(a, b) {
-        return (parseTimeMs(b && b.created_at) || 0) - (parseTimeMs(a && a.created_at) || 0);
-      });
-    }
-    var allow = {};
-    TARGETS.forEach(function(b) {
-      if (!b || b.key === 'all') return;
-      if (selected[b.key]) allow[b.key] = true;
-    });
-    return list.filter(function(log) {
-      if (!isTimeInRange(log && log.created_at, range)) return false;
-      var keys = resolveLogTargetKeys(log);
-      for (var i = 0; i < keys.length; i += 1) {
-        if (allow[keys[i]]) return true;
-      }
-      return false;
-    }).filter(function(log) {
-      var selected = state.selectedActions || { all: true };
-      if (selected.all) return true;
-      var label = resolveActionFilterLabel(log);
-      if (!label) return false;
-      return Boolean(selected[label]);
-    }).sort(function(a, b) {
-      return (parseTimeMs(b && b.created_at) || 0) - (parseTimeMs(a && a.created_at) || 0);
-    });
+    // 日期、人员、对象和行为均已在数据库中筛选，这里只持有当前页。
+    return Array.isArray(state.logs) ? state.logs : [];
   }
+
 
   function getDownloadBlob() {
     if (utils && typeof utils.downloadBlob === 'function') return utils.downloadBlob;
@@ -2947,7 +2714,7 @@
         operator,
         resolvePageLabel(log),
         buildTargetLabel(log),
-        resolveActionLabel(log) || '--',
+        log.action_label || resolveActionLabel(log) || '--',
         resolveCountChangeLabel(log),
       ];
     });
@@ -2997,40 +2764,25 @@
   function renderList() {
     if (!dom.tableBody) return;
     var rows = getFilteredLogs();
-    if (!rows.length) {
-      dom.tableBody.innerHTML = '';
-      if (dom.emptyHint) dom.emptyHint.classList.remove('hidden');
-      setPagination(buildPagination(0, 0, 1, 0, 0));
-      return;
-    }
-    if (dom.emptyHint) dom.emptyHint.classList.add('hidden');
-
-    var pageSize = getPageSize();
-    var total = rows.length;
-    var totalPages = total ? Math.ceil(total / pageSize) : 1;
-    if (!Number.isFinite(state.pageIndex) || state.pageIndex < 0) state.pageIndex = 0;
-    if (state.pageIndex >= totalPages) state.pageIndex = Math.max(totalPages - 1, 0);
-    var start = state.pageIndex * pageSize;
-    var end = Math.min(total, start + pageSize);
-    var view = rows.slice(start, end);
-
-    setPagination(buildPagination(total, state.pageIndex, totalPages, start, end));
-    dom.tableBody.innerHTML = view.map(function(log) {
+    if (dom.emptyHint) dom.emptyHint.classList.toggle('hidden', rows.length > 0);
+    setPagination(buildPagination());
+    dom.tableBody.innerHTML = rows.map(function(log) {
       var operator = log && (log.username || log.user_id) ? String(log.username || log.user_id) : '--';
-      return (
-        '<tr>' +
-          '<td>' + escapeHtml(formatTime(log.created_at)) + '</td>' +
-          '<td>' + escapeHtml(operator) + '</td>' +
-          '<td>' + escapeHtml(resolvePageLabel(log)) + '</td>' +
-          '<td>' + escapeHtml(buildTargetLabel(log)) + '</td>' +
-          '<td>' + escapeHtml(resolveActionLabel(log) || '--') + '</td>' +
-          '<td>' + escapeHtml(resolveCountChangeLabel(log)) + '</td>' +
-        '</tr>'
-      );
+      return '<tr>'
+        + '<td>' + escapeHtml(formatTime(log.created_at)) + '</td>'
+        + '<td>' + escapeHtml(operator) + '</td>'
+        + '<td>' + escapeHtml(resolvePageLabel(log)) + '</td>'
+        + '<td>' + escapeHtml(buildTargetLabel(log)) + '</td>'
+        + '<td>' + escapeHtml(log.action_label || resolveActionLabel(log) || log.action) + '</td>'
+        + '<td>' + escapeHtml(resolveCountChangeLabel(log)) + '</td>'
+        + '<td>' + escapeHtml(log.result === 'success' ? '成功' : log.result === 'failed' ? '失败' : log.result) + '</td>'
+        + '<td><button class="secondary" type="button" data-ops-log-detail="' + log.id + '">详情</button></td></tr>';
     }).join('');
   }
 
+
   function handlePageSizeChanged() {
+    if (state.drawerOpen && state.queryPageSize !== null && state.queryPageSize !== getPageSize()) loadLogs();
     if (state.overviewView === 'contribution') {
       renderContributionView();
       return;
@@ -3076,165 +2828,134 @@
       });
   }
 
-  function loadLogs() {
-    if (!apiClient.listOperationLogs) return Promise.resolve([]);
-    if (!canView()) {
-      state.logs = [];
+  function loadLogs(options) {
+    if (!apiClient.queryOperationLogs || !canView()) return Promise.resolve([]);
+    var continuing = options && options.page === true;
+    if (!continuing) {
       state.pageIndex = 0;
-      renderList();
-      setStatus(dom.drawerStatusEl, '仅管理员可查看操作记录', 'warn');
-      return Promise.resolve([]);
+      state.cursors = [null];
     }
-    if (state.loading) {
-      state.pendingReload = true;
-      return Promise.resolve(state.logs);
-    }
+    var requestId = ++state.logRequestId;
+    if (state.logController) state.logController.abort();
+    state.logController = typeof AbortController !== 'undefined' ? new AbortController() : null;
     state.loading = true;
+    state.logs = [];
+    state.nextCursor = null;
+    state.detailRequestId += 1;
+    var detailPanel = document.getElementById('opsLogDetailPanel');
+    if (detailPanel) detailPanel.classList.add('hidden');
+    renderList();
     if (dom.drawerRefreshBtn) dom.drawerRefreshBtn.disabled = true;
-    setStatus(dom.drawerStatusEl, '加载中...', '');
-    var userId = state.selectedUserId ? Number(state.selectedUserId) : null;
+    if (dom.drawerExportBtn) dom.drawerExportBtn.disabled = true;
+    setStatus(dom.drawerStatusEl, '正在查询当前页...', '');
     var range = getDateRangeMs(state.dateStart, state.dateEnd);
-    return fetchDrawerLogs(range, {
-      userId: userId !== null && Number.isFinite(userId) ? userId : null,
-      maxAllowed: DRAWER_MAX_ALLOWED_LOGS,
-    })
-      .then(function(payload) {
-        state.logs = payload && payload.logs ? payload.logs : [];
-        state.pageIndex = 0;
+    state.queryPageSize = getPageSize();
+    var payload = {
+      limit: state.queryPageSize, cursor: state.cursors[state.pageIndex] || null,
+      start_ms: range.startMs, end_ms: range.endMs,
+      user_id: state.selectedUserId ? Number(state.selectedUserId) : null,
+      target_groups: getSelectedTargetKeys(), actions: getSelectedActionKeys(),
+      result: document.getElementById('opsLogResultFilter').value || null,
+    };
+    return apiClient.queryOperationLogs(payload, state.logController ? state.logController.signal : undefined)
+      .then(function(result) {
+        if (requestId !== state.logRequestId) return [];
+        state.logs = Array.isArray(result.items) ? result.items : [];
+        state.nextCursor = result.next_cursor || null;
+        state.actionOptions = Array.isArray(result.action_options) ? result.action_options : [];
         syncActionGrid();
-        renderList();
-        var allowedCount = payload && Number.isFinite(payload.allowedCount) ? payload.allowedCount : state.logs.filter(isAllowedLog).length;
-        var hasRange = range && (range.startMs !== null || range.endMs !== null);
-        var msg = '已加载 ' + allowedCount + ' 条记录';
-        if (!hasRange) msg += '（最多 ' + DRAWER_MAX_ALLOWED_LOGS + ' 条）';
-        if (payload && payload.reachedCap && !hasRange) msg += '，可通过日期筛选查看更多';
-        setStatus(dom.drawerStatusEl, msg, 'ok');
+        setStatus(dom.drawerStatusEl, '本页 ' + state.logs.length + ' 条摘要' + (state.nextCursor ? '，可翻页查看更多' : '，已到末页'), 'ok');
         return state.logs;
       })
       .catch(function(err) {
-        state.logs = [];
-        state.pageIndex = 0;
-        renderList();
-        setStatus(dom.drawerStatusEl, err && err.message ? err.message : '加载失败', 'err');
+        if (requestId !== state.logRequestId) return [];
+        setStatus(dom.drawerStatusEl, err && err.message ? err.message : '查询失败', 'err');
         return [];
       })
       .finally(function() {
+        if (requestId !== state.logRequestId) return;
         state.loading = false;
         if (dom.drawerRefreshBtn) dom.drawerRefreshBtn.disabled = false;
-        if (state.pendingReload) {
-          state.pendingReload = false;
-          loadLogs();
-        }
+        if (dom.drawerExportBtn) dom.drawerExportBtn.disabled = !state.logs.length;
+        renderList();
       });
   }
+
+  function loadLogDetail(id, offset) {
+    var panel = document.getElementById('opsLogDetailPanel');
+    var text = document.getElementById('opsLogDetailText');
+    var buttons = document.getElementById('opsLogDetailPages');
+    var serial = ++state.detailRequestId;
+    panel.classList.remove('hidden');
+    text.textContent = '正在读取详情...';
+    buttons.textContent = '';
+    panel.scrollIntoView({ block: 'nearest' });
+    return apiClient.getOperationLogDetail({ log_id: id, offset: offset || 0, limit: 6000 }).then(function(result) {
+      if (serial !== state.detailRequestId) return;
+      text.textContent = result.detail_text || '无详情';
+      buttons.innerHTML = '<span>记录 #' + id + '，字符 ' + (result.offset + 1) + '–'
+        + Math.min(result.offset + 6000, result.total_chars) + ' / ' + result.total_chars + '</span>'
+        + '<button class="secondary" data-ops-detail-id="' + id + '" data-ops-detail-offset="' + Math.max(0, result.offset - 6000) + '" '
+        + (result.offset ? '' : 'disabled') + '>上一段</button>'
+        + '<button class="secondary" data-ops-detail-id="' + id + '" data-ops-detail-offset="' + (result.next_offset || 0) + '" '
+        + (result.next_offset !== null ? '' : 'disabled') + '>下一段</button>';
+      panel.scrollIntoView({ block: 'nearest' });
+    }).catch(function(err) {
+      if (serial === state.detailRequestId) text.textContent = err.message || '读取失败';
+    });
+  }
+
+  function loadOverview(view, force, range, statusEl, refreshBtn) {
+    var target = state[view];
+    if (!canView() || !target.selectedUserIds.length) return Promise.resolve([]);
+    if (target.logsLoaded && !force) return Promise.resolve(target.logs);
+    if (target.controller) target.controller.abort();
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    target.controller = controller;
+    var serial = (target.requestId || 0) + 1;
+    target.requestId = serial;
+    target.loading = true;
+    target.logs = [];
+    if (refreshBtn) refreshBtn.disabled = true;
+    setStatus(statusEl, '正在汇总所选人员...', '');
+    return apiClient.summarizeOperationLogs({ view: view, user_ids: target.selectedUserIds.map(Number),
+      start_ms: range.startMs, end_ms: range.endMs }, controller ? controller.signal : undefined)
+      .then(function(result) {
+        if (serial !== target.requestId) return [];
+        target.logs = (Array.isArray(result.items) ? result.items : []).map(function(item) {
+          return { _aggregate: true, user_id: item.user_id, username: item.username, key: item.key, count: item.count };
+        });
+        target.logsLoaded = true;
+        target.lastFetchedAt = Date.now();
+        setStatus(statusEl, '已按所选人员和日期汇总', 'ok');
+        return target.logs;
+      }).catch(function(err) {
+        if (serial !== target.requestId) return [];
+        target.logsLoaded = false;
+        setStatus(statusEl, err.message || '汇总失败', 'err');
+        return [];
+      }).finally(function() {
+        if (serial !== target.requestId) return;
+        target.loading = false;
+        if (refreshBtn) refreshBtn.disabled = false;
+      });
+  }
+
 
   function loadActivityLogs(force) {
-    if (!apiClient.listOperationLogs) return Promise.resolve([]);
-    if (!canView()) {
-      state.activity.logs = [];
-      state.activity.logsLoaded = true;
-      renderActivityView();
-      setStatus(dom.activityStatus, '仅管理员可查看活跃度', 'warn');
-      return Promise.resolve([]);
-    }
-    if (state.activity.loading) return Promise.resolve(state.activity.logs);
-    if (state.activity.logsLoaded && !force) return Promise.resolve(state.activity.logs);
-    state.activity.loading = true;
-    if (dom.activityRefreshBtn) dom.activityRefreshBtn.disabled = true;
-    setStatus(dom.activityStatus, '加载中...', '');
-    var range = getActivityDateRangeMs();
-    var userId = resolveSingleUserId(state.activity.selectedUserIds);
-    return fetchOperationLogsByRange(range, { userId: userId })
-      .then(function(list) {
-        state.activity.logs = Array.isArray(list) ? list : [];
-        state.activity.logsLoaded = true;
-        state.activity.lastFetchedAt = Date.now();
-        setStatus(dom.activityStatus, '已加载 ' + state.activity.logs.length + ' 条记录', 'ok');
-        return state.activity.logs;
-      })
-      .catch(function(err) {
-        state.activity.logs = [];
-        state.activity.logsLoaded = true;
-        setStatus(dom.activityStatus, err && err.message ? err.message : '加载失败', 'err');
-        return [];
-      })
-      .finally(function() {
-        state.activity.loading = false;
-        if (dom.activityRefreshBtn) dom.activityRefreshBtn.disabled = false;
-      });
+    return loadOverview("activity", force, getActivityDateRangeMs(), dom.activityStatus, dom.activityRefreshBtn);
   }
+
 
   function loadContributionLogs(force) {
-    if (!apiClient.listOperationLogs) return Promise.resolve([]);
-    if (!canView()) {
-      state.contribution.logs = [];
-      state.contribution.logsLoaded = true;
-      renderContributionView();
-      setStatus(dom.contributionStatus, '仅管理员可查看用例贡献', 'warn');
-      return Promise.resolve([]);
-    }
-    if (state.contribution.loading) return Promise.resolve(state.contribution.logs);
-    if (state.contribution.logsLoaded && !force) return Promise.resolve(state.contribution.logs);
-    state.contribution.loading = true;
-    if (dom.contributionRefreshBtn) dom.contributionRefreshBtn.disabled = true;
-    setStatus(dom.contributionStatus, '加载中...', '');
-    var range = getContributionDateRangeMs();
-    var userId = resolveSingleUserId(state.contribution.selectedUserIds);
-    return fetchOperationLogsByRange(range, { userId: userId })
-      .then(function(list) {
-        state.contribution.logs = Array.isArray(list) ? list : [];
-        state.contribution.logsLoaded = true;
-        state.contribution.lastFetchedAt = Date.now();
-        setStatus(dom.contributionStatus, '已加载 ' + state.contribution.logs.length + ' 条记录', 'ok');
-        return state.contribution.logs;
-      })
-      .catch(function(err) {
-        state.contribution.logs = [];
-        state.contribution.logsLoaded = true;
-        setStatus(dom.contributionStatus, err && err.message ? err.message : '加载失败', 'err');
-        return [];
-      })
-      .finally(function() {
-        state.contribution.loading = false;
-        if (dom.contributionRefreshBtn) dom.contributionRefreshBtn.disabled = false;
-      });
+    return loadOverview("contribution", force, getContributionDateRangeMs(), dom.contributionStatus, dom.contributionRefreshBtn);
   }
 
+
   function loadExecContributionLogs(force) {
-    if (!apiClient.listOperationLogs) return Promise.resolve([]);
-    if (!canView()) {
-      state.execContribution.logs = [];
-      state.execContribution.logsLoaded = true;
-      renderExecContributionView();
-      setStatus(dom.execContributionStatus, '仅管理员可查看用例执行贡献', 'warn');
-      return Promise.resolve([]);
-    }
-    if (state.execContribution.loading) return Promise.resolve(state.execContribution.logs);
-    if (state.execContribution.logsLoaded && !force) return Promise.resolve(state.execContribution.logs);
-    state.execContribution.loading = true;
-    if (dom.execContributionRefreshBtn) dom.execContributionRefreshBtn.disabled = true;
-    setStatus(dom.execContributionStatus, '加载中...', '');
-    var range = getExecContributionDateRangeMs();
-    var userId = resolveSingleUserId(state.execContribution.selectedUserIds);
-    return fetchOperationLogsByRange(range, { userId: userId })
-      .then(function(list) {
-        state.execContribution.logs = Array.isArray(list) ? list : [];
-        state.execContribution.logsLoaded = true;
-        state.execContribution.lastFetchedAt = Date.now();
-        setStatus(dom.execContributionStatus, '已加载 ' + state.execContribution.logs.length + ' 条记录', 'ok');
-        return state.execContribution.logs;
-      })
-      .catch(function(err) {
-        state.execContribution.logs = [];
-        state.execContribution.logsLoaded = true;
-        setStatus(dom.execContributionStatus, err && err.message ? err.message : '加载失败', 'err');
-        return [];
-      })
-      .finally(function() {
-        state.execContribution.loading = false;
-        if (dom.execContributionRefreshBtn) dom.execContributionRefreshBtn.disabled = false;
-      });
+    return loadOverview("execContribution", force, getExecContributionDateRangeMs(), dom.execContributionStatus, dom.execContributionRefreshBtn);
   }
+
 
   function refreshActivityView(force) {
     if (!state.activity.hasSelection || !state.activity.selectedUserIds.length) {
@@ -3420,6 +3141,8 @@
 
   function openDrawerIfNeeded() {
     if (!state.drawerOpen) return;
+    var element = document.getElementById('opsLogDrawer');
+    if (element && element.classList.contains('open')) return;
     var drawer = ensureDrawer();
     if (!drawer || typeof drawer.open !== 'function') return;
     drawer.open();
@@ -3473,7 +3196,7 @@
           syncTargetGrid();
           state.pageIndex = 0;
           persistViewState();
-          renderList();
+          loadLogs();
           return;
         }
         if (!state.selectedTargets || typeof state.selectedTargets !== 'object') state.selectedTargets = { all: true };
@@ -3488,7 +3211,7 @@
         syncTargetGrid();
         state.pageIndex = 0;
         persistViewState();
-        renderList();
+        loadLogs();
       });
     }
     if (dom.actionGrid) {
@@ -3502,7 +3225,7 @@
           syncActionGrid();
           state.pageIndex = 0;
           persistViewState();
-          renderList();
+          loadLogs();
           return;
         }
         if (!state.selectedActions || typeof state.selectedActions !== 'object') state.selectedActions = { all: true };
@@ -3517,7 +3240,7 @@
         syncActionGrid();
         state.pageIndex = 0;
         persistViewState();
-        renderList();
+        loadLogs();
       });
     }
     if (dom.activitySelectAll) {
@@ -3815,39 +3538,36 @@
       });
     }
     function bindPaginationContainer(container) {
-      if (!container || !container.addEventListener) return;
+      if (!container) return;
       container.addEventListener('click', function(e) {
-        var btn = e && e.target && e.target.closest ? e.target.closest('[data-ops-log-page]') : null;
-        if (!btn || !btn.dataset) return;
-        var action = btn.dataset.opsLogPage || '';
-        var rows = getFilteredLogs();
-        var pageSize = getPageSize();
-        var total = rows.length;
-        var totalPages = total ? Math.ceil(total / pageSize) : 1;
-        if (action === 'prev') state.pageIndex -= 1;
-        else if (action === 'next') state.pageIndex += 1;
+        var btn = e.target && e.target.closest ? e.target.closest('[data-ops-log-page]') : null;
+        if (!btn || btn.disabled || state.loading) return;
+        var action = btn.dataset.opsLogPage;
+        if (action === 'next' && state.nextCursor) {
+          state.cursors[state.pageIndex + 1] = state.nextCursor;
+          state.pageIndex += 1;
+        } else if (action === 'prev' && state.pageIndex > 0) state.pageIndex -= 1;
         else if (action === 'first') state.pageIndex = 0;
-        else if (action === 'last') state.pageIndex = totalPages - 1;
-        if (state.pageIndex < 0) state.pageIndex = 0;
-        if (state.pageIndex >= totalPages) state.pageIndex = Math.max(totalPages - 1, 0);
-        persistViewState();
-        renderList();
-      });
-      container.addEventListener('change', function(e) {
-        var input = e && e.target && e.target.closest ? e.target.closest('[data-ops-log-page-input]') : null;
-        if (!input) return;
-        var rows = getFilteredLogs();
-        var pageSize = getPageSize();
-        var total = rows.length;
-        var totalPages = total ? Math.ceil(total / pageSize) : 1;
-        var n = Number(input.value);
-        if (!isFinite(n)) return;
-        var idx = Math.max(0, Math.min(totalPages - 1, Math.floor(n - 1)));
-        state.pageIndex = idx;
-        persistViewState();
-        renderList();
+        else return;
+        loadLogs({ page: true });
       });
     }
+    var resultFilter = document.getElementById('opsLogResultFilter');
+    if (resultFilter) resultFilter.addEventListener('change', function() { loadLogs(); });
+    if (dom.tableBody) dom.tableBody.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-ops-log-detail]');
+      if (btn) loadLogDetail(Number(btn.dataset.opsLogDetail), 0);
+    });
+    var detailPages = document.getElementById('opsLogDetailPages');
+    if (detailPages) detailPages.addEventListener('click', function(e) {
+      var btn = e.target.closest('[data-ops-detail-id]');
+      if (btn && !btn.disabled) loadLogDetail(Number(btn.dataset.opsDetailId), Number(btn.dataset.opsDetailOffset));
+    });
+    var closeDetail = document.getElementById('opsLogDetailClose');
+    if (closeDetail) closeDetail.addEventListener('click', function() {
+      state.detailRequestId += 1;
+      document.getElementById('opsLogDetailPanel').classList.add('hidden');
+    });
     bindPaginationContainer(dom.paginationTop);
     bindPaginationContainer(dom.paginationBottom);
   }
@@ -3885,6 +3605,12 @@
     if (!apiClient || !globalState) return;
 
     restoreViewState();
+    if (!state.dateStart && !state.dateEnd) {
+      state.dateStart = getDayKeyFromMs(Date.now() - 6 * 24 * 60 * 60 * 1000);
+      state.dateEnd = getDayKeyFromMs(Date.now());
+    }
+    // 旧行为筛选保存的是中文标签；新查询使用稳定的 action key。
+    if (getSelectedActionKeys().some(function(key) { return /[^a-z_]/.test(key); })) state.selectedActions = { all: true };
     restoreActivityState();
     restoreContributionState();
     restoreExecContributionState();
@@ -3892,7 +3618,7 @@
     ensureActivityDrawer();
     ensureContributionDrawer();
     ensureExecContributionDrawer();
-    applyOpsOverviewView(state.overviewView, { persist: false });
+    applyOpsOverviewView(state.overviewView, { persist: false, refresh: false });
     syncTargetGrid();
     syncOpsLogDateRange();
     syncActivityTimeRange();
@@ -3923,11 +3649,10 @@
       return;
     }
     setStatus(dom.statusEl, '已启用操作记录（仅管理员）', 'ok');
-    refreshActivityView(false);
-    refreshContributionView(false);
-    refreshExecContributionView(false);
+    if (globalState.activeTab === 'ops-log') refreshCurrentOverviewViewByPolicy();
     window.app = window.app || {};
     window.app.opsLogBound = true;
+    if (globalState.activeTab === 'ops-log') openDrawerIfNeeded();
   }
 
   var started = false;

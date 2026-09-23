@@ -2050,7 +2050,28 @@ body {
     #caseLibraryEditView th:nth-child(8),
     #caseLibraryEditView td:nth-child(8) { width: 260px; }
     #caseLibraryEditView th:nth-child(9),
-    #caseLibraryEditView td:nth-child(9) { width: 72px; }
+    #caseLibraryEditView td:nth-child(9) { width: 112px; }
+    #caseLibraryEditView th:nth-child(10),
+    #caseLibraryEditView td:nth-child(10) { width: 72px; }
+
+    .ai-operations { text-align: center; }
+    .ai-operation-tag {
+      display: inline-block;
+      margin: 2px;
+      padding: 2px 5px;
+      border: 1px solid rgba(99,102,241,0.25);
+      border-radius: 4px;
+      color: #4338ca;
+      background: rgba(99,102,241,0.08);
+      font-size: 12px;
+      white-space: nowrap;
+      line-height: 1.5;
+    }
+    :root[data-theme="dark"] .ai-operation-tag {
+      color: #c7d2fe;
+      border-color: rgba(165,180,252,0.35);
+      background: rgba(99,102,241,0.16);
+    }
 
     /* 归档用例详情：字段间距/列宽对齐用例库展示风格 */
     .case-archive-cases-view {
@@ -3030,13 +3051,14 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
     .case-library-changes-btn.has-new:not([disabled])::after {
       content: '';
       position: absolute;
-      top: 7px;
-      right: 9px;
+      top: -4px;
+      right: -4px;
       width: 8px;
       height: 8px;
       border-radius: 999px;
-      background: #f97316;
+      background: #ef4444;
       box-shadow: 0 0 0 2px rgba(255,255,255,0.9);
+      pointer-events: none;
     }
     .case-lib-diff-header {
       display: flex;
@@ -7428,6 +7450,10 @@ tr.import-invalid-locate-active td {
   gap: 8px;
   min-height: 36px;
 }
+#opsLogActionFilterGrid {
+  max-height: 136px;
+  overflow-y: auto;
+}
 .ops-log-filter-chip {
   display: inline-flex;
   align-items: center;
@@ -7886,6 +7912,14 @@ tr.import-invalid-locate-active td {
 .ops-log-table td.mono {
   font-family: monospace;
   word-break: break-all;
+}
+.ops-log-table {
+  min-width: 860px;
+}
+.ops-log-table th,
+.ops-log-table td:nth-child(7),
+.ops-log-table td:nth-child(8) {
+  white-space: nowrap;
 }
 
 .admin-table .ghost-btn {

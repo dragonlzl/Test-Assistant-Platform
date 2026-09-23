@@ -9,6 +9,7 @@ from ..config import settings
 from ..db import get_db
 from ..dependencies import get_current_session, get_current_user
 from ..security import generate_token, hash_password, verify_password
+from ..mcp_auth import revoke_user_mcp_tokens
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -72,6 +73,7 @@ def change_password(
     if not verify_password(payload.old_password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="旧密码错误")
     user.password_hash = hash_password(payload.new_password)
+    revoke_user_mcp_tokens(db, user.id)
     db.add(user)
     db.query(models.UserSession).filter(models.UserSession.user_id == user.id).update(
         {"revoked": True}

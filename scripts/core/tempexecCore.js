@@ -1022,6 +1022,7 @@
         expected: expected,
         actual: item && item.actual ? item.actual : '未执行',
         remark: item && item.remark ? item.remark : '',
+        aiOperations: item && Array.isArray(item.aiOperations) ? item.aiOperations.slice() : [],
         reuseDetails: normalizeReuseDetails(item && item.reuseDetails),
         defectLinks: normalizeDefectLinks(item && item.defectLinks),
       };
@@ -1118,6 +1119,7 @@
             steps: item.steps,
             expected: item.expected,
             actual: item.actual,
+            aiOperations: Array.isArray(item.aiOperations) ? item.aiOperations.slice() : [],
             remark: item.remark,
             reuseDetails: Array.isArray(item.reuseDetails)
               ? item.reuseDetails.map(function(detail) {
@@ -2919,7 +2921,7 @@
     }
 
     function isRequiredTempExecColumn(key) {
-      return key === 'select' || key === 'title' || key === 'actual' || key === 'remark' || key === 'defect' || key === 'ops';
+      return key === 'select' || key === 'title' || key === 'actual' || key === 'remark' || key === 'defect' || key === 'aiOperations' || key === 'ops';
     }
 
     function scrollTempExecViewTop() {
@@ -7207,6 +7209,7 @@
         execCaseId: item.id,
         caseItemId: item.case_item_id || null,
         caseItemSourceId: item.case_item_source_id || null,
+        aiOperations: Array.isArray(item.ai_operations) ? item.ai_operations.slice() : [],
         module: item.module || '',
         title: item.title || '',
         priority: item.priority || '',
@@ -10094,7 +10097,7 @@
       var cols = ensureTempExecColumns();
       var show = function(key) { return isRequiredTempExecColumn(key) ? true : cols[key] !== false; };
       var visibleIndexes = [];
-      var columnOrder = ['select', 'index', 'module', 'title', 'priority', 'preconditions', 'steps', 'expected', 'actual', 'remark', 'defect', 'ops'];
+      var columnOrder = ['select', 'index', 'module', 'title', 'priority', 'preconditions', 'steps', 'expected', 'actual', 'remark', 'defect', 'aiOperations', 'ops'];
       var visibleKeys = columnOrder.filter(show);
       var colCount = visibleKeys.length || 1;
 
@@ -10124,6 +10127,7 @@
         actual: emToPx(7) + 'px',
         remark: emToPx(6) + 'px',
         defect: emToPx(6) + 'px',
+        aiOperations: '112px',
         ops: '76px',
       };
       stretchVisible.forEach(function(key) {
@@ -10232,6 +10236,8 @@
             cells.push('<td class="remark"><button type="button" class="' + remarkBtnClass.join(' ') + '" data-temp-remark-toggle="' + file.id + '" data-index="' + idx + '">' + (hasRemark ? '备注已填' : '备注') + '</button></td>');
           } else if (key === 'defect') {
             cells.push('<td class="defect"><button type="button" class="' + defectBtnClass.join(' ') + '" data-temp-defect-toggle="' + file.id + '" data-index="' + idx + '">' + (hasDefects ? '链接已填' : '缺陷链接') + '</button></td>');
+          } else if (key === 'aiOperations') {
+            cells.push('<td class="ai-operations">' + window.app.utils.renderAiOperations(item.aiOperations) + '</td>');
           } else if (key === 'ops') {
             cells.push(
               '<td class="case-op-col">' +
@@ -10339,6 +10345,7 @@
       headerCells.push('<th class="actual">实际结果</th>');
       headerCells.push('<th>备注</th>');
       headerCells.push('<th>缺陷链接</th>');
+      headerCells.push('<th class="ai-operations">AI操作</th>');
       if (show('ops')) headerCells.push('<th class="ops" title="增删">增删</th>');
       return (
         presetPanel +

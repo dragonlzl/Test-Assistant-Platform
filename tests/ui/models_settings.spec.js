@@ -219,6 +219,12 @@ test.describe('模型管理与保留设置', () => {
     await expect(xmindCaseGenPrompt).toHaveValue(/title 写短检查点/);
     await expect(caseLibraryGenPrompt).toHaveValue(/AI_CASE_WRITING_STYLE_GUIDE\.md/);
     await expect(caseLibraryGenPrompt).toHaveValue(/title 写短检查点/);
+    for (const prompt of [xmindCaseGenPrompt, caseLibraryGenPrompt]) {
+      await expect(prompt).toHaveValue(/复杂度自检/);
+      await expect(prompt).toHaveValue(/拆成多条用例/);
+      await expect(prompt).toHaveValue(/必要连续操作/);
+      await expect(prompt).toHaveValue(/逐条与已有用例及本批候选做语义去重/);
+    }
   });
 
   test('功能指派页点击保存指派后显示 3 秒悬浮提示', async ({ page }) => {

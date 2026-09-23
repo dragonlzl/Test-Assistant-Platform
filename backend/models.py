@@ -49,6 +49,46 @@ class UserSession(Base):
     user = relationship("User", back_populates="sessions")
 
 
+class McpToken(Base):
+    __tablename__ = "mcp_tokens"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    token_prefix = Column(String(20), nullable=False)
+    read_only = Column(Boolean, nullable=False, default=False)
+    revoked = Column(Boolean, nullable=False, default=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    user = relationship("User")
+
+
+class McpWriteReceipt(Base):
+    __tablename__ = "mcp_write_receipts"
+    __table_args__ = (UniqueConstraint("user_id", "request_key", name="uq_mcp_user_request"),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    request_key = Column(String(128), nullable=False)
+    request_hash = Column(String(64), nullable=False)
+    result_json = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+
+
+class KnowledgeSource(Base):
+    __tablename__ = "knowledge_sources"
+    __table_args__ = (UniqueConstraint("project_id", "base_url", name="uq_knowledge_project_url"),)
+
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    base_url = Column(String(2048), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -98,6 +138,12 @@ class UserProject(Base):
 
 class OperationLog(Base):
     __tablename__ = "operation_logs"
+    __table_args__ = (
+        Index("ix_ops_time_id", "created_at", "id"),
+        Index("ix_ops_user_time_id", "user_id", "created_at", "id"),
+        Index("ix_ops_action_time_id", "action", "created_at", "id"),
+        Index("ix_ops_target_time_id", "target_type", "target_id", "created_at", "id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
@@ -158,6 +204,7 @@ class CaseItem(Base):
     steps = Column(Text, nullable=False, default="")
     expected = Column(Text, nullable=False)
     remark = Column(Text, nullable=True)
+    ai_operations = Column(JSON, nullable=False, default=list, server_default="[]")
     order_no = Column(Integer, default=0, nullable=False)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
     updated_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
@@ -374,6 +421,7 @@ class ExecCase(Base):
     reuse_details = Column(JSON, nullable=True)
     defect_links = Column(JSON, nullable=True)
     remark = Column(Text, nullable=True)
+    ai_operations = Column(JSON, nullable=False, default=list, server_default="[]")
     status = Column(String(32), nullable=False, default="未执行")
     order_no = Column(Integer, default=0, nullable=False)
     executor_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))

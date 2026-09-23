@@ -771,7 +771,7 @@
         <div class="card-body">
           <div class="toolbar">
             <button class="secondary" id="opsLogDrawerRefreshBtn" type="button">刷新</button>
-            <button class="secondary" id="opsLogDrawerExportBtn" type="button">导出记录Excel</button>
+            <button class="secondary" id="opsLogDrawerExportBtn" type="button">导出当前页Excel</button>
             <label class="inline">人员
               <select id="opsLogUserSelect"></select>
             </label>
@@ -780,6 +780,7 @@
               <span class="ops-activity-date-sep">-</span>
               <input class="ops-activity-date-input" id="opsLogDateEnd" type="date"/>
             </label>
+            <label>结果 <select id="opsLogResultFilter"><option value="">全部</option><option value="success">成功</option><option value="failed">失败</option></select></label>
             <span class="status" id="opsLogDrawerStatus"></span>
           </div>
           <div class="ops-log-filters">
@@ -787,9 +788,10 @@
             <div class="ops-log-filter-grid" id="opsLogTargetFilterGrid"></div>
           </div>
           <div class="ops-log-filters">
-            <div class="ops-log-filter-title">操作行为</div>
+            <div class="ops-log-filter-title">操作行为（可多选，滚动查看更多）</div>
             <div class="ops-log-filter-grid" id="opsLogActionFilterGrid"></div>
           </div>
+          <p class="hint">默认最近 7 天，按需翻页，单次查询最多 366 天。列表展示原始操作摘要；点击详情读取内容，Excel 仅导出当前页。</p>
           <div id="opsLogPaginationTop"></div>
           <div class="admin-table-wrapper" style="margin-top:10px;">
             <table class="admin-table ops-log-table">
@@ -801,12 +803,19 @@
                   <th>操作项</th>
                   <th>操作行为</th>
                   <th>变化</th>
+                  <th>结果</th>
+                  <th>详情</th>
                 </tr>
               </thead>
               <tbody id="opsLogDrawerTableBody"></tbody>
             </table>
           </div>
           <div id="opsLogPaginationBottom"></div>
+          <div id="opsLogDetailPanel" class="hidden" style="margin-top:12px;">
+            <button class="secondary" id="opsLogDetailClose" type="button">收起详情</button>
+            <div id="opsLogDetailPages" class="actions"></div>
+            <pre id="opsLogDetailText" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;"></pre>
+          </div>
           <p class="hint hidden" id="opsLogDrawerEmpty">暂无操作记录</p>
         </div>
       </section>
@@ -832,7 +841,7 @@
       <div class="ops-activity-controls">
         <label class="inline">时间
           <select class="ops-activity-select" id="opsActivityTimeRangeSelect">
-            <option value="all">历史至今</option>
+            <option value="all">最近 365 天</option>
             <option value="year">年</option>
             <option value="month">月</option>
             <option value="week" selected>周</option>
@@ -871,7 +880,7 @@
       <div class="ops-activity-controls">
         <label class="inline">时间
           <select class="ops-activity-select" id="opsContributionTimeRangeSelect">
-            <option value="all">历史至今</option>
+            <option value="all">最近 365 天</option>
             <option value="year">年</option>
             <option value="month">月</option>
             <option value="week" selected>周</option>
@@ -910,7 +919,7 @@
       <div class="ops-activity-controls">
         <label class="inline">时间
           <select class="ops-activity-select" id="opsExecContributionTimeRangeSelect">
-            <option value="all">历史至今</option>
+            <option value="all">最近 365 天</option>
             <option value="year">年</option>
             <option value="month">月</option>
             <option value="week" selected>周</option>

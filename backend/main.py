@@ -3,7 +3,6 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from .api import api_router
@@ -13,6 +12,8 @@ from .db import Base, SessionLocal, engine
 from .initial_data import init_db
 from .migrations import apply_migrations
 from .model_task_service import model_task_executor
+from .mcp_server import router as mcp_router
+from .static_files import PlatformStaticFiles
 
 logger = logging.getLogger("tap")
 
@@ -80,9 +81,10 @@ def on_shutdown() -> None:
 
 
 app.include_router(api_router)
+app.include_router(mcp_router)
 
 STATIC_DIR = Path(BASE_DIR)
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+app.mount("/", PlatformStaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 
 if __name__ == "__main__":

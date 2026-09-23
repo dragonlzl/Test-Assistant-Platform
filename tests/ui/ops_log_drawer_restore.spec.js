@@ -1,3 +1,4 @@
+const { operationResponse } = require('./helpers/operation_query_mock');
 const { test, expect } = require('@playwright/test');
 
 async function gotoIndex(page) {
@@ -25,6 +26,7 @@ async function mockApi(page) {
     if (pathName === '/api/users/me') return respond(200, admin);
     if (pathName === '/api/users' && method === 'GET') return respond(200, [admin]);
     if (pathName === '/api/settings' && method === 'GET') return respond(200, []);
+    if (pathName.startsWith('/api/ops/') && method === 'POST') return respond(200, operationResponse([], route));
     if (pathName === '/api/ops' && method === 'GET') return respond(200, []);
 
     if (pathName === '/api/projects' && method === 'GET') return respond(200, []);
@@ -73,6 +75,10 @@ test.describe('操作记录-查看记录抽屉恢复', () => {
   });
 
   test('刷新前打开抽屉会自动恢复', async ({ page }) => {
+    let queries = 0;
+    page.on('request', request => {
+      if (new URL(request.url()).pathname === '/api/ops/query') queries += 1;
+    });
     await page.addInitScript(() => {
       try {
         localStorage.setItem('tap-ops-log-view-v1', JSON.stringify({ hasViewed: true, drawerOpen: true }));
@@ -87,6 +93,14 @@ test.describe('操作记录-查看记录抽屉恢复', () => {
     });
 
     await expect(page.locator('#opsLogDrawer')).toHaveClass(/open/);
+    await expect(page.locator('#opsLogDrawerStatus')).toContainText('本页');
+    // 初始化/设置加载可能重复派发事件，同一分页设置不能触发重复查询。
+    await page.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('app-tab-activated', { detail: { tab: 'ops-log' } }));
+      window.dispatchEvent(new CustomEvent('app-page-size-changed', { detail: { size: 20 } }));
+    });
+    await page.waitForLoadState('networkidle');
+    expect(queries).toBe(1);
   });
 
   test('查看记录抽屉宽度与其他抽屉一致', async ({ page }) => {

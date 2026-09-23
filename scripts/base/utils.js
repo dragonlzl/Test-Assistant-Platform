@@ -696,8 +696,19 @@
     }
     return '';
   }
+  function renderAiOperations(values) {
+    var flags = Array.isArray(values) ? values : [];
+    var labels = { created: 'AI新增', child_added: 'AI新增子项', modified: 'AI修改', executed: 'AI执行' };
+    return ['created', 'child_added', 'modified', 'executed'].filter(function(key) {
+      return flags.indexOf(key) !== -1;
+    }).map(function(key) {
+      return '<span class="ai-operation-tag" data-ai-operation="' + key + '">' + labels[key] + '</span>';
+    }).join('');
+  }
+
   window.app = window.app || {};
   window.app.utils = {
+    renderAiOperations: renderAiOperations,
     setStatus: setStatus,
     debounce: debounce,
     downloadBlob: downloadBlob,

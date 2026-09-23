@@ -2388,6 +2388,85 @@
   border-bottom: 0;
 }
 
+/* MCP 凭据与项目知识库包含多步操作，使用独立纵向布局。 */
+.workspace-shell-enabled body[data-page="settings"] #mcpAccessPanel,
+.workspace-shell-enabled body[data-page="settings"] #knowledgeSourcePanel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+}
+
+#mcpAccessPanel .meta p,
+#knowledgeSourcePanel .meta p {
+  margin: 6px 0 0;
+  color: var(--workspace-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+#mcpAccessPanel > p,
+#knowledgeSourcePanel > p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+#mcpAccessPanel .control label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.workspace-shell-enabled body[data-page="settings"] #mcpAccessPanel input:not([type="checkbox"]),
+#mcpTokenSecret,
+#knowledgeSourcePanel input,
+#knowledgeSourcePanel select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 520px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--workspace-border);
+  color: var(--workspace-text);
+  background: var(--workspace-surface);
+  font: inherit;
+}
+
+.workspace-shell-enabled body[data-page="settings"] #mcpAccessPanel > .actions,
+.workspace-shell-enabled body[data-page="settings"] #knowledgeSourcePanel > .actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+#knowledgeSourceAdmin .control {
+  margin: 10px 0;
+}
+
+#mcpTokenList p,
+#knowledgeSourceList p {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+#mcpTokenReveal p {
+  color: var(--workspace-muted);
+  font-size: 12px;
+}
+
+#mcpTokenSecret {
+  resize: vertical;
+}
+
 .workspace-shell-enabled body[data-page="settings"] .settings-item-wide-control {
   grid-template-columns: minmax(220px, 1fr) minmax(260px, 390px) auto;
 }

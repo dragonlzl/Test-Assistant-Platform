@@ -1094,3 +1094,24 @@ def apply_migrations(engine: Engine) -> None:
                 if "request_endpoint" not in cols:
                     conn.execute(text("ALTER TABLE model_tasks ADD COLUMN request_endpoint TEXT"))
             mark_applied(28)
+
+        # v29: 操作记录按时间游标、人员、行为及对象查询的索引。
+        if not _is_applied(conn, 29):
+            if "operation_logs" in tables:
+                for name, columns in (
+                    ("ix_ops_time_id", "created_at, id"),
+                    ("ix_ops_user_time_id", "user_id, created_at, id"),
+                    ("ix_ops_action_time_id", "action, created_at, id"),
+                    ("ix_ops_target_time_id", "target_type, target_id, created_at, id"),
+                ):
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS " + name + " ON operation_logs(" + columns + ")"))
+            mark_applied(29)
+
+        # v30: AI 操作来源只累积不清空；旧用例默认没有 AI 标识。
+        if not _is_applied(conn, 30):
+            for table in ("case_items", "exec_cases"):
+                if table in tables:
+                    cols = {c["name"] for c in insp.get_columns(table)}
+                    if "ai_operations" not in cols:
+                        conn.execute(text("ALTER TABLE " + table + " ADD COLUMN ai_operations JSON NOT NULL DEFAULT '[]'"))
+            mark_applied(30)

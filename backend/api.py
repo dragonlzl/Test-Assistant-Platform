@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .routers import auth, users, projects, cases, exec_routes, configs, ops, missing_cases, knowledge_base, model_tasks
+from .routers import auth, users, projects, cases, exec_routes, exec_reuse, configs, ops, missing_cases, knowledge_base, model_tasks, mcp_tokens
 from .config import settings
 
 
@@ -12,10 +12,12 @@ api_router.include_router(cases.router)
 api_router.include_router(missing_cases.router)
 api_router.include_router(missing_cases.types_router)
 api_router.include_router(exec_routes.router)
+api_router.include_router(exec_reuse.router)
 api_router.include_router(configs.router)
 api_router.include_router(model_tasks.router)
 api_router.include_router(knowledge_base.router)
 api_router.include_router(ops.router)
+api_router.include_router(mcp_tokens.router)
 
 
 @api_router.get("/health", tags=["health"])

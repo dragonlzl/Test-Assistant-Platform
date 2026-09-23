@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, aliased
 
 from .. import models, schemas
+from ..ai_operations import merge_ai_operations
 from ..audit import log_case_library_change, log_operation
 from ..db import get_db
 from ..dependencies import get_current_user
@@ -1367,6 +1368,7 @@ def _load_exec_source_case_items(
                 precondition=row.precondition,
                 steps=row.steps,
                 remark=row.remark,
+                ai_operations=merge_ai_operations(row.ai_operations),
             )
         )
 
@@ -1422,6 +1424,7 @@ def _load_exec_source_case_items(
                     precondition=row.precondition,
                     steps=row.steps,
                     remark=row.remark,
+                    ai_operations=merge_ai_operations(row.ai_operations),
                 )
             )
 
@@ -1617,6 +1620,7 @@ def upsert_exec_set_from_case_file(
             before_priority = existing.priority
             before_precondition = existing.precondition
             before_steps = existing.steps
+            existing.ai_operations = merge_ai_operations(existing.ai_operations, item.ai_operations)
             existing.module = item.module
             existing.title = item.title
             existing.expected = item.expected
@@ -1691,6 +1695,7 @@ def upsert_exec_set_from_case_file(
             exec_set_id=exec_set.id,
             case_item_id=(item_id if int(getattr(item, "case_file_id", case_file.id)) == int(case_file.id) else None),
             case_item_source_id=item_id,
+            ai_operations=merge_ai_operations(item.ai_operations),
             module=item.module,
             title=item.title,
             expected=item.expected,
@@ -2139,6 +2144,7 @@ def _sync_exec_set_from_case_file(
                 or has_reuse_execution
             )
 
+            existing.ai_operations = merge_ai_operations(existing.ai_operations, item.ai_operations)
             existing.module = item.module
             existing.title = item.title
             existing.expected = item.expected
@@ -2184,6 +2190,7 @@ def _sync_exec_set_from_case_file(
             exec_set_id=exec_set.id,
             case_item_id=(item_id if int(getattr(item, "case_file_id", case_file.id)) == int(case_file.id) else None),
             case_item_source_id=item_id,
+            ai_operations=merge_ai_operations(item.ai_operations),
             module=item.module,
             title=item.title,
             expected=item.expected,
@@ -2727,6 +2734,7 @@ def create_exec_case(
         exec_set_id=exec_set.id,
         case_item_id=case_item_id,
         case_item_source_id=int(case_item_id) if case_item_id is not None else None,
+        ai_operations=merge_ai_operations(case_item.ai_operations) if case_item_id else [],
         module=module,
         title=title,
         expected=expected,
@@ -2766,6 +2774,8 @@ def create_exec_case(
                     updated_case = True
                 exec_case.case_item_id = existing.id
                 exec_case.case_item_source_id = int(existing.id)
+                exec_case.ai_operations = merge_ai_operations(exec_case.ai_operations, existing.ai_operations)
+                existing.ai_operations = list(exec_case.ai_operations)
                 if updated_case:
                     existing.updated_by = user.id
                     existing.updated_at = now
@@ -2805,6 +2815,7 @@ def create_exec_case(
                 )
                 case_item = models.CaseItem(
                     case_file_id=case_file.id,
+                    ai_operations=merge_ai_operations(exec_case.ai_operations),
                     module=exec_case.module,
                     title=exec_case.title,
                     expected=exec_case.expected,
@@ -2822,6 +2833,8 @@ def create_exec_case(
                 db.flush()
                 exec_case.case_item_id = case_item.id
                 exec_case.case_item_source_id = int(case_item.id)
+                exec_case.ai_operations = merge_ai_operations(exec_case.ai_operations, case_item.ai_operations)
+                case_item.ai_operations = list(exec_case.ai_operations)
                 case_file.updated_by = user.id
                 case_file.updated_at = now
                 db.add(case_file)
@@ -3038,6 +3051,7 @@ def add_cases_from_library(
             exec_set_id=exec_set.id,
             case_item_id=item.id,
             case_item_source_id=int(item.id),
+            ai_operations=merge_ai_operations(item.ai_operations),
             module=item.module,
             title=item.title,
             expected=item.expected,
@@ -3170,6 +3184,8 @@ def update_exec_case(
                     if int(case_item.case_file_id) != int(exec_set.case_file_id):
                         if exec_case.case_item_source_id is None:
                             exec_case.case_item_source_id = int(case_item.id)
+                            exec_case.ai_operations = merge_ai_operations(exec_case.ai_operations, case_item.ai_operations)
+                            case_item.ai_operations = list(exec_case.ai_operations)
                         # 关联引用条目不应绑定为主用例 case_item，但仍允许把结构变更同步到其来源条目。
                         exec_case.case_item_id = None
                         db.add(exec_case)
@@ -3178,6 +3194,8 @@ def update_exec_case(
             if case_item:
                 if exec_case.case_item_source_id is None:
                     exec_case.case_item_source_id = int(case_item.id)
+                    exec_case.ai_operations = merge_ai_operations(exec_case.ai_operations, case_item.ai_operations)
+                    case_item.ai_operations = list(exec_case.ai_operations)
                 old_snap = _snapshot_case_item_for_history(case_item)
                 updated_case = False
                 for key in case_fields:
@@ -3329,6 +3347,8 @@ def update_exec_case(
                     except Exception:
                         exec_case.case_item_id = None
                 exec_case.case_item_source_id = int(source_case_item.id)
+                exec_case.ai_operations = merge_ai_operations(exec_case.ai_operations, source_case_item.ai_operations)
+                source_case_item.ai_operations = list(exec_case.ai_operations)
             else:
                 # 新增的执行用例可能尚未绑定 case_item：当必填字段齐全时自动落库到用例库并绑定。
                 required_ready = _exec_case_ready_for_library(exec_case)
@@ -3351,6 +3371,8 @@ def update_exec_case(
                                     updated_case = True
                                 exec_case.case_item_id = existing.id
                                 exec_case.case_item_source_id = int(existing.id)
+                                exec_case.ai_operations = merge_ai_operations(exec_case.ai_operations, existing.ai_operations)
+                                existing.ai_operations = list(exec_case.ai_operations)
                                 if updated_case:
                                     existing.updated_by = user.id
                                     existing.updated_at = now
@@ -3405,6 +3427,7 @@ def update_exec_case(
                                 )
                                 case_item = models.CaseItem(
                                     case_file_id=case_file.id,
+                                    ai_operations=merge_ai_operations(exec_case.ai_operations),
                                     module=exec_case.module,
                                     title=exec_case.title,
                                     expected=exec_case.expected,
@@ -3422,6 +3445,8 @@ def update_exec_case(
                                 db.flush()
                                 exec_case.case_item_id = case_item.id
                                 exec_case.case_item_source_id = int(case_item.id)
+                                exec_case.ai_operations = merge_ai_operations(exec_case.ai_operations, case_item.ai_operations)
+                                case_item.ai_operations = list(exec_case.ai_operations)
                                 case_file.updated_by = user.id
                                 case_file.updated_at = now
                                 db.add(case_file)
@@ -4405,6 +4430,7 @@ def restore_exec_archive(
             exec_set_id=new_exec_set.id,
             case_item_id=item.case_item_id,
             case_item_source_id=item.case_item_source_id,
+            ai_operations=merge_ai_operations(item.ai_operations),
             module=item.module,
             title=item.title,
             expected=item.expected,

@@ -39,7 +39,7 @@ test.describe('用例库编辑交互', () => {
         version_id: versions[0].id,
         file_name_clean: '用例库B',
         reuse_enabled: false,
-        item_count: 1,
+        item_count: 2,
         importer_id: user.id,
         importer_name: user.username,
         imported_at: now,
@@ -57,6 +57,7 @@ test.describe('用例库编辑交互', () => {
         case_file_id: caseFileId,
         module: '模块A',
         title: '正常登录',
+        ai_operations: ['created', 'child_added', 'modified', 'executed'],
         priority: 'P0',
         precondition: '',
         steps: '步骤1',
@@ -66,6 +67,8 @@ test.describe('用例库编辑交互', () => {
         updated_at: now,
       },
     ];
+
+    caseItemsByFileId[caseFileId].push({ ...caseItemsByFileId[caseFileId][0], id: 5102, title: '人工用例', ai_operations: [] });
 
     await page.route('**/api/**', async (route) => {
       const url = new URL(route.request().url());
@@ -154,6 +157,13 @@ test.describe('用例库编辑交互', () => {
     await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
+    const aiCell = page.locator('#caseLibraryEditView tbody tr.case-row').first().locator('td.ai-operations');
+    await expect(aiCell.locator('[data-ai-operation]')).toHaveText(['AI新增', 'AI新增子项', 'AI修改', 'AI执行']);
+    await expect(page.locator('#caseLibraryEditView tbody tr.case-row').nth(1).locator('td.ai-operations')).toBeEmpty();
+    expect(await page.locator('#caseLibraryEditView th').allTextContents()).toEqual([
+      '', '编号', '模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果', 'AI操作', '增删'
+    ]);
+
     const moduleCell = page.locator('#caseLibraryEditView [data-case-lib-edit-field="module"][data-index="0"]');
     const titleCell = page.locator('#caseLibraryEditView [data-case-lib-edit-field="title"][data-index="0"]');
 
@@ -184,8 +194,13 @@ test.describe('用例库编辑交互', () => {
     });
     expect(new Set(optionColors).size).toBe(3);
 
+    const prioritySaved = page.waitForResponse((res) => res.url().includes('/api/case-files/items/') && res.request().method() === 'PATCH');
     await prioritySelect.selectOption('P2');
+    await prioritySaved;
     await expect(prioritySelect).toHaveAttribute('data-priority', 'p2');
     await expect.poll(() => lastPriorityPatch).toBe('P2');
+    await expect(aiCell.locator('[data-ai-operation]')).toHaveText(['AI新增', 'AI新增子项', 'AI修改', 'AI执行']);
+    await aiCell.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'output/playwright/ai-operations-library.png', fullPage: true });
   });
 });
