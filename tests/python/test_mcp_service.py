@@ -517,7 +517,8 @@ uvicorn.run('backend.main:app', host='127.0.0.1', port=int(os.environ['TAP_MCP_T
                          'http://kb.test/alpha/_llm/docs/rules.md')
 
     def test_static_secrets_and_audit(self):
-        for path in ('/backend/config.py', '/backend/config_local.py', '/data/app.db', '/.git/config', '/feishu_config.json', '/config/auth.json'):
+        for path in ('/backend/config.py', '/backend/config_local.py', '/data/app.db', '/.git/config', '/feishu_config.json', '/config/auth.json',
+                     '/data/backups/app.db/short.db', '/data/backups/app.db/long.db', '/data/backups/app.db/.backup.lock'):
             self.assertEqual(http(self.base, path)[0], 404, path)
         for path in ('/', '/settings.html', '/services/apiClient.js', '/scripts/modules/mcpSettings.js', '/MCP_GUIDE.md',
                      '/styles/workspace-shell.css', '/styles/workspace-lists.css', '/caseTemplate/manifest.json'):

@@ -9,6 +9,7 @@ from .api import api_router
 from .audit import reset_operation_context, set_operation_context
 from .config import BASE_DIR, settings
 from .db import Base, SessionLocal, engine
+from .database_backup import DatabaseBackupService
 from .initial_data import init_db
 from .migrations import apply_migrations
 from .model_task_service import model_task_executor
@@ -16,6 +17,7 @@ from .mcp_server import router as mcp_router
 from .static_files import PlatformStaticFiles
 
 logger = logging.getLogger("tap")
+database_backup_service = DatabaseBackupService(Path(engine.url.database))
 
 app = FastAPI(title=settings.app_name)
 
@@ -73,10 +75,12 @@ def _run_startup_tasks() -> None:
 def on_startup() -> None:
     _run_startup_tasks()
     model_task_executor.recover_incomplete()
+    database_backup_service.start()
 
 
 @app.on_event("shutdown")
 def on_shutdown() -> None:
+    database_backup_service.stop()
     model_task_executor.shutdown()
 
 

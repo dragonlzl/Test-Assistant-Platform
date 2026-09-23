@@ -17,6 +17,8 @@
 - `npm run test:ui -- tests/ui/tempexec_reuse_applicability.spec.js`：验证执行页预设方式选择、批量应用与手工结果接管。
 - `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/exec_reuse_applicability.spec.js`：验证适用性批量保存与失败原子性（后端必须使用测试库启动）。
 - 数据库（本地）：后端默认使用 `data/app.db`（正式）。任何测试/造数必须使用测试库（如 `data/apitest.db`），启动示例：`APP_DB_FILE=apitest.db uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080`。
+- 数据库备份：后端启动后自动维护当前库同目录下 `backups/<完整库文件名>/short.db`（24 小时）及 `long.db`（7 天），各保留一份；初始化缺失备份、停机到期补做、失败保留旧快照。测试应使用临时目录并连同备份目录清理，禁止读取或覆盖正式库及其备份。
+- `.venv/bin/python -m unittest discover -s tests/python -p test_database_backup.py -v`：临时 SQLite 测试库验证短/长轮换、WAL 一致性、原子替换失败、重启续算、多进程锁、异常重试、启停及静态访问隔离。
 - 若需要 GUI 预览，也可使用 `npx serve` 等静态服务器；新增工具务必在此文件补充说明。
 
 ## 代码风格与命名约定

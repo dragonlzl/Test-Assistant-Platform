@@ -9,5 +9,6 @@ data/*.db
 data/*.db-*
 data/*.sqlite
 data/*.sqlite-*
+data/backups/
 backend/config_local.py
 .env
