@@ -652,6 +652,14 @@
     }).then(handleResponse);
   }
 
+  function getExecFailureEvidence(caseId, evidenceId) {
+    return fetch('/api/exec/cases/' + encodeURIComponent(caseId) + '/failure-evidence/' + encodeURIComponent(evidenceId), {
+      method: 'GET',
+      headers: buildHeaders(),
+      cache: 'no-store',
+    }).then(handleResponse);
+  }
+
   function updateExecSet(execSetId, payload) {
     return fetch('/api/exec/sets/' + execSetId, {
       method: 'PATCH',
@@ -1145,6 +1153,7 @@
     listExecSetsByCaseFile: listExecSetsByCaseFile,
     createExecSet: createExecSet,
     listExecCases: listExecCases,
+    getExecFailureEvidence: getExecFailureEvidence,
     updateExecSet: updateExecSet,
     deleteExecSet: deleteExecSet,
     archiveExecSet: archiveExecSet,

@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Literal, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class TokenResponse(BaseModel):
@@ -433,6 +433,26 @@ class ExecCaseCreateFromLibrary(BaseModel):
     case_item_ids: List[int]
 
 
+class ExecFailureEvidenceSummary(BaseModel):
+    id: int
+    reuse_detail_id: Optional[str] = None
+    reuse_detail_name: Optional[str] = None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("created_at")
+    @classmethod
+    def utc_timestamp(cls, value):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+class ExecFailureEvidenceOut(ExecFailureEvidenceSummary):
+    case_title: str
+    reason: str
+    screenshot: Optional[str] = None
+    executor_name: str
+
+
 class ExecCaseOut(BaseModel):
     id: int
     exec_set_id: int
@@ -450,6 +470,7 @@ class ExecCaseOut(BaseModel):
     defect_links: Optional[Any] = None
     remark: Optional[str]
     ai_operations: List[Literal["created", "child_added", "modified", "executed"]] = Field(default_factory=list)
+    failure_evidence: List[ExecFailureEvidenceSummary] = Field(default_factory=list)
     status: str
     order_no: int
     executor_id: Optional[int]

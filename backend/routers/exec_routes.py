@@ -4,7 +4,7 @@ import json
 import re
 from types import SimpleNamespace
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session, aliased
 
 from .. import models, schemas
@@ -3089,6 +3089,25 @@ def add_cases_from_library(
     return new_cases
 
 
+@router.get("/cases/{case_id}/failure-evidence/{evidence_id}", response_model=schemas.ExecFailureEvidenceOut)
+def get_exec_failure_evidence(
+    case_id: int,
+    evidence_id: int,
+    response: Response,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = db.get(models.ExecCase, case_id)
+    if row is None:
+        raise HTTPException(404, "执行用例不存在")
+    _ensure_exec_set_read_access(db, user, row.exec_set_id)
+    evidence = db.query(models.ExecFailureEvidence).filter_by(id=evidence_id, exec_case_id=case_id).first()
+    if evidence is None:
+        raise HTTPException(404, "失败凭证不存在")
+    response.headers["Cache-Control"] = "no-store"
+    return evidence
+
+
 @router.patch("/cases/{case_id}", response_model=schemas.ExecCaseOut)
 def update_exec_case(
     case_id: int,
@@ -4451,6 +4470,11 @@ def restore_exec_archive(
             updated_at=now,
         )
         db.add(exec_case)
+        exec_case.failure_evidence = [models.ExecFailureEvidence(
+            reuse_detail_id=proof.reuse_detail_id, reuse_detail_name=proof.reuse_detail_name,
+            case_title=proof.case_title, reason=proof.reason, screenshot=proof.screenshot,
+            created_by=proof.created_by, executor_name=proof.executor_name, created_at=proof.created_at,
+        ) for proof in item.failure_evidence]
     db.commit()
 
     version_name = None

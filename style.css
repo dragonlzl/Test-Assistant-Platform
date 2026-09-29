@@ -9535,6 +9535,98 @@ tr.import-invalid-locate-active td {
       color: var(--muted);
       font-size: 13px;
     }
+    .failure-evidence-trigger {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+      padding: 4px 6px;
+      font-size: 11px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    td.actual .failure-evidence-trigger {
+      display: block;
+      margin: 6px auto 0;
+      max-width: 100%;
+    }
+    .card[data-section-id="tempexec-view"] .reuse-entry .failure-evidence-trigger {
+      grid-column: 3;
+      grid-row: 2;
+      justify-self: start;
+      width: 91px;
+      box-sizing: border-box;
+      margin-top: 6px;
+      transform: translateX(var(--reuse-status-shift, 0px));
+    }
+    .card[data-section-id="tempexec-view"] .reuse-entry > input,
+    .card[data-section-id="tempexec-view"] .reuse-entry > select,
+    .card[data-section-id="tempexec-view"] .reuse-entry > .reuse-remove {
+      grid-row: 1;
+    }
+    .failure-evidence-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 20000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      box-sizing: border-box;
+      background: rgba(15, 23, 42, 0.56);
+    }
+    .failure-evidence-dialog {
+      width: min(820px, 100%);
+      max-height: calc(100vh - 40px);
+      overflow: auto;
+      box-sizing: border-box;
+      padding: 24px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--card);
+      color: var(--text);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+    }
+    .failure-evidence-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 0;
+      margin: 0;
+      border: 0;
+      background: none;
+      box-shadow: none;
+    }
+    .failure-evidence-header h2 { margin: 4px 0; font-size: 21px; }
+    .failure-evidence-source, .failure-evidence-meta, .failure-evidence-hint {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .failure-evidence-close {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .failure-evidence-context { overflow-wrap: anywhere; font-weight: 600; }
+    .failure-evidence-history { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 16px 0; }
+    .failure-evidence-history select { max-width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+    .failure-evidence-body { border-top: 1px solid var(--border); padding-top: 16px; overflow-wrap: anywhere; }
+    .failure-evidence-body h3 { font-size: 15px; margin: 16px 0 8px; }
+    .failure-evidence-reason { white-space: pre-wrap; line-height: 1.7; margin: 0; }
+    .failure-evidence-image { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; box-sizing: border-box; }
+    @media (max-width: 600px) {
+      .failure-evidence-overlay { padding: 12px; }
+      .failure-evidence-dialog { padding: 16px; max-height: calc(100vh - 24px); }
+    }
     .reuse-entry {
       display: flex;
       align-items: center;

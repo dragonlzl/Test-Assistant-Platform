@@ -12,7 +12,7 @@ from sqlalchemy import (
     func,
     Index,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import deferred, relationship
 
 from .db import Base
 
@@ -433,6 +433,25 @@ class ExecCase(Base):
     )
 
     exec_set = relationship("ExecSet", back_populates="cases")
+    failure_evidence = relationship(
+        "ExecFailureEvidence", cascade="all, delete-orphan", lazy="selectin",
+        order_by="(ExecFailureEvidence.created_at.desc(), ExecFailureEvidence.id.desc())",
+    )
+
+
+class ExecFailureEvidence(Base):
+    __tablename__ = "exec_failure_evidence"
+
+    id = Column(Integer, primary_key=True)
+    exec_case_id = Column(Integer, ForeignKey("exec_cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    reuse_detail_id = Column(String(255), nullable=True)
+    reuse_detail_name = Column(Text, nullable=True)
+    case_title = Column(Text, nullable=False)
+    reason = deferred(Column(Text, nullable=False))
+    screenshot = deferred(Column(Text, nullable=True))
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    executor_name = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
 
 
 class ExecCaseHistory(Base):

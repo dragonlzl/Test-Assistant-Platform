@@ -7,18 +7,22 @@ from fastapi import HTTPException
 
 from . import models
 from .audit import log_operation
+from .execution_evidence import make_failure_evidence
 from .routers.exec_routes import _ensure_exec_set_access, _load_json_list, _resolve_reuse_archive_status
 
 
-def record_result(db, user, row, fields, reuse_detail_id=None, reuse_note=None):
+def record_result(db, user, row, fields, reuse_detail_id=None, reuse_note=None, failure_evidence=None):
     parent = _ensure_exec_set_access(db, user, row.exec_set_id)
     fields = dict(fields)
+    detail = None
+    now = datetime.now(timezone.utc)
     if parent.reuse_enabled:
         details = copy.deepcopy(_load_json_list(row.reuse_details))
         detail = next((item for item in details if isinstance(item, dict) and not item.get("removed")
                        and str(item.get("id")) == reuse_detail_id), None)
         if detail is None:
             raise HTTPException(400, "复用用例须指定有效的 reuse_detail_id；请先读取执行明细，未配置时可用 add_execution_reuse_presets 新增预设子项")
+        evidence = make_failure_evidence(user, row, fields, detail, failure_evidence, now)
         detail["status"] = fields["status"]
         detail.pop("statusOrigin", None)
         detail.pop("statusOriginProfile", None)
@@ -28,8 +32,12 @@ def record_result(db, user, row, fields, reuse_detail_id=None, reuse_note=None):
         fields["status"] = _resolve_reuse_archive_status(details)
     elif reuse_detail_id is not None or reuse_note is not None:
         raise HTTPException(400, "当前执行集未开启复用")
+    else:
+        evidence = make_failure_evidence(user, row, fields, None, failure_evidence, now)
     changed = []
-    now = datetime.now(timezone.utc)
+    if evidence is not None:
+        row.failure_evidence.insert(0, evidence)
+        changed.append("failure_evidence")
     for key in ("status", "actual_result", "remark", "defect_link", "reuse_details"):
         if key not in fields or fields[key] == getattr(row, key):
             continue

@@ -7953,8 +7953,128 @@
       });
     }
 
+    // 凭证与可编辑结果分离；只在打开窗口时读取一条截图。
+    var closeFailureEvidence = null;
+    function openFailureEvidence(trigger) {
+      var file = (state.tempExecFiles || []).find(function(item) { return String(item.id) === trigger.dataset.tempFailureEvidence; });
+      var caseItem = file && file.cases ? file.cases[Number(trigger.dataset.index)] : null;
+      var client = window.app && window.app.apiClient;
+      if (!caseItem || !client || !client.getExecFailureEvidence) return;
+      var proofs = (caseItem.failureEvidence || []).filter(function(proof) {
+        return !trigger.hasAttribute('data-detail') || String(proof.reuse_detail_id || '') === trigger.dataset.detail;
+      }).slice().sort(function(a, b) {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || Number(b.id) - Number(a.id);
+      });
+      if (!proofs.length) return;
+      if (closeFailureEvidence) closeFailureEvidence();
+      var overlay = document.createElement('div');
+      overlay.id = 'tempExecFailureEvidence';
+      overlay.className = 'failure-evidence-overlay';
+      overlay.innerHTML = '<section class="failure-evidence-dialog" role="dialog" aria-modal="true" aria-labelledby="failureEvidenceTitle">' +
+        '<header class="failure-evidence-header"><div><span class="failure-evidence-source">MCP 执行记录</span>' +
+        '<h2 id="failureEvidenceTitle">AI执行失败凭证</h2></div><button type="button" class="failure-evidence-close" aria-label="关闭失败凭证">×</button></header>' +
+        '<p class="failure-evidence-context"></p><p class="failure-evidence-hint">保留失败时的截图与原因，后续修改执行结果不会清除凭证。</p>' +
+        '<label class="failure-evidence-history">失败记录 <select aria-label="选择失败记录"></select></label>' +
+        '<div class="failure-evidence-body" aria-live="polite"></div></section>';
+      document.body.appendChild(overlay);
+      var closeButton = overlay.querySelector('.failure-evidence-close');
+      var select = overlay.querySelector('select');
+      var body = overlay.querySelector('.failure-evidence-body');
+      var context = overlay.querySelector('.failure-evidence-context');
+      context.textContent = caseItem.title || '执行用例';
+      proofs.forEach(function(proof, index) {
+        var option = document.createElement('option');
+        option.value = String(proof.id);
+        var date = new Date(proof.created_at);
+        var time = Number.isNaN(date.getTime()) ? '' : date.toLocaleString();
+        option.textContent = (index === 0 ? '最近一次 · ' : '') + time +
+          (proof.reuse_detail_id ? ' · ' + (proof.reuse_detail_name || '复用子项') : '');
+        select.appendChild(option);
+      });
+      var sequence = 0;
+      var oldOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      function close() {
+        sequence += 1;
+        overlay.remove();
+        document.body.style.overflow = oldOverflow;
+        document.removeEventListener('keydown', onKey, true);
+        if (trigger.isConnected) trigger.focus();
+        closeFailureEvidence = null;
+      }
+      function onKey(event) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+        } else if (event.key === 'Tab') {
+          var focusable = Array.from(overlay.querySelectorAll('button, select, a[href]')).filter(function(el) { return !el.disabled; });
+          var first = focusable[0];
+          var last = focusable[focusable.length - 1];
+          if (event.shiftKey && (document.activeElement === first || !overlay.contains(document.activeElement))) {
+            event.preventDefault(); last.focus();
+          } else if (!event.shiftKey && (document.activeElement === last || !overlay.contains(document.activeElement))) {
+            event.preventDefault(); first.focus();
+          }
+        }
+      }
+      function load() {
+        var current = ++sequence;
+        body.textContent = '正在加载失败凭证…';
+        client.getExecFailureEvidence(caseItem.execCaseId, select.value).then(function(proof) {
+          if (current !== sequence || !overlay.isConnected) return;
+          context.textContent = proof.case_title + (proof.reuse_detail_name ? ' / ' + proof.reuse_detail_name : '');
+          body.innerHTML = '<div class="failure-evidence-meta"></div><h3>失败原因</h3><p class="failure-evidence-reason"></p>';
+          body.querySelector('.failure-evidence-meta').textContent = '执行人：' + proof.executor_name + ' · 结果：失败';
+          body.querySelector('.failure-evidence-reason').textContent = proof.reason;
+          if (proof.screenshot && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(proof.screenshot)) {
+            var heading = document.createElement('h3');
+            heading.textContent = '失败截图';
+            body.appendChild(heading);
+            var img = document.createElement('img');
+            img.className = 'failure-evidence-image';
+            img.alt = '失败关键截图';
+            img.addEventListener('error', function() {
+              img.remove();
+              var error = document.createElement('p');
+              error.textContent = '截图加载失败，请参考上方失败原因。';
+              body.appendChild(error);
+            });
+            img.src = proof.screenshot;
+            body.appendChild(img);
+          } else {
+            var empty = document.createElement('p');
+            empty.className = 'failure-evidence-hint';
+            empty.textContent = '本次未附截图，以上为实际失败描述。';
+            body.appendChild(empty);
+          }
+        }).catch(function(err) {
+          if (current !== sequence || !overlay.isConnected) return;
+          body.textContent = '凭证加载失败：' + (err && err.message ? err.message : '请重试');
+          var retry = document.createElement('button');
+          retry.type = 'button';
+          retry.textContent = '重新加载';
+          retry.addEventListener('click', load);
+          body.appendChild(retry);
+        });
+      }
+      closeButton.addEventListener('click', close);
+      closeFailureEvidence = close;
+      overlay.addEventListener('click', function(event) { if (event.target === overlay) close(); });
+      select.addEventListener('change', load);
+      document.addEventListener('keydown', onKey, true);
+      closeButton.focus();
+      load();
+    }
+
     if (tempExecView && api.renderTempExecView) {
       tempExecView.addEventListener('click', function(e) {
+        var evidenceButton = e.target.closest('[data-temp-failure-evidence]');
+        if (evidenceButton) {
+          e.preventDefault();
+          openFailureEvidence(evidenceButton);
+          return;
+        }
         var reminderLink = e && e.target && e.target.closest ? e.target.closest('[data-missing-reminder-link]') : null;
         if (reminderLink) {
           openCaseLibraryMissingDrawerFromTempExec();

@@ -7210,6 +7210,7 @@
         caseItemId: item.case_item_id || null,
         caseItemSourceId: item.case_item_source_id || null,
         aiOperations: Array.isArray(item.ai_operations) ? item.ai_operations.slice() : [],
+        failureEvidence: Array.isArray(item.failure_evidence) ? item.failure_evidence.slice() : [],
         module: item.module || '',
         title: item.title || '',
         priority: item.priority || '',
@@ -10019,6 +10020,17 @@
       );
     }
 
+    function renderFailureEvidenceButton(file, caseItem, caseIndex, detailId) {
+      var proofs = Array.isArray(caseItem.failureEvidence) ? caseItem.failureEvidence : [];
+      if (detailId !== undefined) {
+        proofs = proofs.filter(function(proof) { return String(proof.reuse_detail_id || '') === String(detailId); });
+      }
+      if (!proofs.length || !caseItem.execCaseId) return '';
+      return '<button type="button" class="failure-evidence-trigger" data-temp-failure-evidence="' + escapeHtml(file.id) +
+        '" data-index="' + caseIndex + '"' + (detailId !== undefined ? ' data-detail="' + escapeHtml(detailId) + '"' : '') +
+        ' title="查看 MCP 失败记录，人工修改结果后仍保留">AI失败凭证' + (proofs.length > 1 ? ' · ' + proofs.length : '') + '</button>';
+    }
+
     function renderReuseEntries(file, caseItem, caseIndex) {
       var details = Array.isArray(caseItem.reuseDetails) ? caseItem.reuseDetails : [];
       var visibleDetails = details.filter(function(detail) { return detail && !isReuseDetailRemoved(detail); });
@@ -10048,6 +10060,7 @@
                 '<select class="status-select ' + statusClass + '" data-temp-reuse-status="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '">' +
                   optionsHtml +
                 '</select>' +
+                renderFailureEvidenceButton(file, caseItem, caseIndex, detail.id) +
                 '<button type="button" class="reuse-remove" data-temp-reuse-remove="' + file.id + '" data-index="' + caseIndex + '" data-detail="' + detail.id + '" title="删除测试项">删除</button>' +
               '</div>'
             );
@@ -10196,11 +10209,13 @@
                 escapeHtml(reuseStatus.label) +
                 reusePendingBadge +
               '</button>' +
+              renderFailureEvidenceButton(file, item, idx) +
             '</td>'
           : '<td class="actual">' +
               '<select class="status-select" data-temp-result="' + file.id + '" data-index="' + idx + '" data-status="' + item.actual + '">' +
                 resultOptions +
               '</select>' +
+              renderFailureEvidenceButton(file, item, idx) +
             '</td>';
         var cells = [];
         visibleKeys.forEach(function(key) {

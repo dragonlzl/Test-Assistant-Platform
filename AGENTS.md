@@ -40,6 +40,7 @@
 - `npm run test:ui -- tests/ui/models_settings.spec.js --grep '功能指派页只展示保留能力并使用最新基础文案'`：验证默认 XMind/用例库提示词包含人类风格、复杂度自检、按独立目标拆分及必要连续操作保留规则。
 - `.venv/bin/python -m unittest discover -s tests/python -p test_case_similarity.py -v`：临时测试库验证 MCP 新增相似检查、对比后修改/新增/跳过、令牌与版本校验、权限隔离、并发幂等和混合写入回滚；不调用真实模型。
 - `.venv/bin/python -m unittest discover -s tests/python -p test_execution_reuse.py -v`：临时测试库验证 MCP/HTTP 复用子项新增及“AI新增子项”独立标识、解锁方式配置、快速执行、人工结果保护、权限/只读、幂等并发/冲突及整体回滚，并与浏览器规则进行一致性比较（需 Node）。
+- `.venv/bin/python -m unittest discover -s tests/python -p test_execution_evidence.py -v`：临时测试库验证 MCP 失败凭证、关键截图裁剪、无图原因、复用子项隔离、人工改通过保留、归档恢复、权限、幂等并发和事务回滚；需安装最新后端依赖（Pillow），不连接正式库。
 - `npm run test:ui -- tests/ui/case_library_edit_focus.spec.js tests/ui/tempexec_edit_defer_save.spec.js tests/ui/tempexec_reuse_align.spec.js tests/ui/tempexec_view_empty.spec.js`：验证 AI 操作列空值/多标识、人工编辑后保留、列顺序、复用对齐和执行空态，使用本地 API mock。
 - `.venv/bin/python -m unittest discover -s tests/python -p test_operation_query.py -v`：临时测试库验证操作记录筛选、游标快照、大详情分段、SQL 贡献汇总、HTTP/MCP 管理员权限和索引。
 - `npm run test:ui -- tests/ui/ops_log.spec.js tests/ui/ops_log_drawer_restore.spec.js tests/ui/ops_log_exec_case_run.spec.js tests/ui/ops_activity.spec.js tests/ui/ops_contribution.spec.js tests/ui/ops_exec_contribution.spec.js --workers=1`：操作记录分页、详情、恢复与统计图回归；需先安装后端依赖到 `.venv`，UI 夹具调用内存 SQLite 查询适配器，不连接正式库。

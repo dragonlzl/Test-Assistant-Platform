@@ -14,6 +14,7 @@ from . import models, schemas
 from .ai_operations import mark_ai_operation
 from .case_similarity import REVIEW_INSTRUCTIONS, SimilarityReview, check_additions
 from .execution_result_service import record_result
+from .execution_evidence import FailureEvidence
 from .execution_reuse_service import AddPresets, UpdatePresets, QuickExecute, get_reuse_context, mutate_reuse
 from .knowledge_access import accessible_sources, authorized_payload
 from .knowledge_base_service import catalog_knowledge_base, get_knowledge_base_documents, search_knowledge_base
@@ -128,13 +129,14 @@ register("update_execution_reuse_presets", "修改指定预设的获取/解锁�
          project_id=ID, exec_set_id=ID, idempotency_key=(str, Field(min_length=8, max_length=128)))
 register("quick_execute_reuse", "与网页快速执行相同：按预设获取/解锁方式将不匹配子项设为不适用；匹配项不标通过，旧自动不适用可恢复未执行，保留人工结果/备注/已移除子项。preset_ids 可限制范围；不运行被测程序。", QuickExecute, True,
          project_id=ID, exec_set_id=ID, idempotency_key=(str, Field(min_length=8, max_length=128)))
-register("record_execution_result", "记录实际测试结果、备注及缺陷链接；只能修改本人执行集（管理员除外）。复用用例必须指定 reuse_detail_id，自动汇总状态，不修改用例内容。", Write, True,
+register("record_execution_result", "记录实际测试结果、备注及缺陷链接；只能修改本人执行集（管理员除外）。失败时必须提供 failure_evidence.reason（兼容 actual_result），描述实际现象与预期差异；有截图须提交关键截图，可用 crop 裁剪，无截图只写明确简要原因。每次失败独立留证，人工改通过仍保留。复用用例必须指定 reuse_detail_id，凭证归属该子项，自动汇总状态，不修改用例内容。", Write, True,
          case_id=ID, expected_updated_at=EXPECTED, status=(STATUS, ...),
          actual_result=(Optional[str], Field(default=None, max_length=20000)),
          remark=(Optional[str], Field(default=None, max_length=10000)),
          defect_link=(Optional[str], Field(default=None, max_length=2048)),
          reuse_detail_id=(Optional[str], Field(default=None, min_length=1, max_length=255)),
-         reuse_note=(Optional[str], Field(default=None, max_length=10000)))
+         reuse_note=(Optional[str], Field(default=None, max_length=10000)),
+         failure_evidence=(Optional[FailureEvidence], None))
 register("get_execution_overview", "分页返回项目/版本按人员分组的执行统计；统计口径与网页执行总览一致（包含归档）。", ProjectPage, version_id=VERSION)
 register("list_archives", "分页查询有权限项目的历史归档。", ProjectPage, version_id=VERSION, query=QUERY)
 register("get_archive", "读取归档元信息和分页执行用例。", ProjectPage, exec_set_id=ID)
@@ -371,8 +373,9 @@ def execute_tool(name, a, db, user, token):
             raise HTTPException(400, "缺陷链接必须是 http/https 地址")
         fields = a.model_dump(include={"status", "actual_result", "remark", "defect_link"}, exclude_unset=True)
         before = copy.deepcopy({key: getattr(row, key) for key in ("status", "actual_result", "remark", "defect_link", "reuse_details")})
-        result = record_result(db, user, row, fields, a.reuse_detail_id, a.reuse_note)
-        if any(getattr(result, key) != value for key, value in before.items()):
+        evidence_count = len(row.failure_evidence)
+        result = record_result(db, user, row, fields, a.reuse_detail_id, a.reuse_note, a.failure_evidence)
+        if len(result.failure_evidence) != evidence_count or any(getattr(result, key) != value for key, value in before.items()):
             mark_ai_operation(db, result, "executed")
         return dump(schemas.ExecCaseOut, result)
     if name == "get_execution_overview":

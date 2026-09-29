@@ -307,7 +307,7 @@ uvicorn.run('backend.main:app', host='127.0.0.1', port=int(os.environ['TAP_MCP_T
         self.assertEqual(edited['ai_operations'], ['created', 'modified'])
         row = self.tool('get_execution_cases', exec_target)['items'][0]
         self.assertEqual(row['ai_operations'], ['created', 'modified'])
-        args = self.write_args(case_id=row['id'], expected_updated_at=row['updated_at'], status='失败')
+        args = self.write_args(case_id=row['id'], expected_updated_at=row['updated_at'], status='失败', actual_result='页面未显示预期内容')
         result = self.tool('record_execution_result', args)
         self.assertEqual(result, self.tool('record_execution_result', args))
         flags = ['created', 'modified', 'executed']
@@ -352,7 +352,7 @@ uvicorn.run('backend.main:app', host='127.0.0.1', port=int(os.environ['TAP_MCP_T
             db.execute("CREATE TRIGGER fail_ai_receipt BEFORE INSERT ON mcp_write_receipts BEGIN SELECT RAISE(ABORT, 'rollback'); END")
         try:
             self.tool('record_execution_result', self.write_args(case_id=row['id'], expected_updated_at=row['updated_at'],
-                      status='失败'), error='CONFLICT')
+                      status='失败', actual_result='页面未显示预期内容'), error='CONFLICT')
         finally:
             with sqlite3.connect(self.db_file) as db:
                 db.execute('DROP TRIGGER fail_ai_receipt')
@@ -376,7 +376,7 @@ uvicorn.run('backend.main:app', host='127.0.0.1', port=int(os.environ['TAP_MCP_T
         with sqlite3.connect(self.db_file) as db:
             db.execute('update exec_cases set case_item_source_id=? where id=?', (new['id'], row['id']))
         updated = self.tool('record_execution_result', self.write_args(case_id=row['id'],
-                            expected_updated_at=row['updated_at'], status='失败'))
+                            expected_updated_at=row['updated_at'], status='失败', actual_result='页面未显示预期内容'))
         self.assertEqual(updated['ai_operations'], ['created', 'executed'])
         self.assertEqual(self.tool('get_case_items', target)['items'][0]['ai_operations'], [])
 
@@ -393,7 +393,7 @@ uvicorn.run('backend.main:app', host='127.0.0.1', port=int(os.environ['TAP_MCP_T
                               expected_updated_at=row['updated_at'], status='未执行'))
         self.assertEqual(unchanged['ai_operations'], [])
         result = self.tool('record_execution_result', self.write_args(case_id=row['id'],
-                           expected_updated_at=unchanged['updated_at'], status='失败'))
+                           expected_updated_at=unchanged['updated_at'], status='失败', actual_result='页面未显示预期内容'))
         self.assertEqual(result['ai_operations'], ['executed'])
         items = self.api('case-files/' + str(file['id']) + '/items', token=self.web)
         self.assertEqual(next(item for item in items if item['id'] == row['case_item_id'])['ai_operations'], ['executed'])
