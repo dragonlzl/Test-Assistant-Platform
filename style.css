@@ -9558,6 +9558,7 @@ tr.import-invalid-locate-active td {
       box-sizing: border-box;
       margin-top: 6px;
       transform: translateX(var(--reuse-status-shift, 0px));
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
     }
     .card[data-section-id="tempexec-view"] .reuse-entry > input,
     .card[data-section-id="tempexec-view"] .reuse-entry > select,

@@ -3448,7 +3448,7 @@
         && previousMoreToggle
         && previousMoreToggle.getAttribute('aria-expanded') === 'true'
       );
-      var summary = buildTempExecSummary(file);
+      var summary = buildTempExecFilterSummary(file);
       var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
       var activeFilter = statusFilter.fileId === file.id ? statusFilter.status : '';
       var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
@@ -3558,6 +3558,46 @@
       return true;
     }
 
+    // 快速筛选允许复用用例同时包含未执行和失败，整体结果与进度仍按原聚合规则处理。
+    function getTempExecCaseFilterState(file, caseItem) {
+      var status = getCaseExecutionStatus(file, caseItem);
+      var filters = {
+        executed: status !== '未执行',
+        pending: status === '未执行',
+        passed: status === '通过',
+        failed: status === '失败',
+        blocked: status === '阻塞',
+        unspecified: status === '不适用',
+      };
+      if (!file || !file.reuseEnabled || !caseItem) return filters;
+      var raw = String(caseItem.actual || '').trim();
+      if (raw === '变更重跑' || raw === '有改动') return filters;
+      var aggregate = aggregateReuseDetails(caseItem.reuseDetails);
+      var total = aggregate.passed + aggregate.failed + aggregate.blocked + aggregate.unspecified + aggregate.pending;
+      filters.pending = !total || aggregate.pending > 0;
+      filters.failed = aggregate.failed > 0;
+      filters.passed = total > 0 && aggregate.passed === total;
+      return filters;
+    }
+
+    function matchesTempExecCaseStatusFilter(file, caseItem, filterKey) {
+      var filters = getTempExecCaseFilterState(file, caseItem);
+      return !Object.prototype.hasOwnProperty.call(filters, filterKey) || filters[filterKey];
+    }
+
+    function buildTempExecFilterSummary(file) {
+      var summary = { executed: 0, pending: 0, passed: 0, failed: 0, blocked: 0, unspecified: 0 };
+      if (!file || !Array.isArray(file.cases)) return summary;
+      var keys = Object.keys(summary);
+      file.cases.forEach(function(item) {
+        var filters = getTempExecCaseFilterState(file, item);
+        keys.forEach(function(key) {
+          if (filters[key]) summary[key] += 1;
+        });
+      });
+      return summary;
+    }
+
     function getTempExecCaseMatchIndexes(file) {
       if (!file || !Array.isArray(file.cases)) return [];
       var searchState = state.tempExecSearch || { fileId: '', term: '', raw: '' };
@@ -3567,8 +3607,7 @@
       return file.cases.map(function(item, idx) {
         return { item: item, idx: idx };
       }).filter(function(entry) {
-        var status = getCaseExecutionStatus(file, entry.item);
-        if (hasFilter && !mapFilterToStatus(statusFilter.status, status)) return false;
+        if (hasFilter && !matchesTempExecCaseStatusFilter(file, entry.item, statusFilter.status)) return false;
         if (!searchTerm) return true;
         var target = [
           entry.item.module,
@@ -10464,6 +10503,9 @@
       var entry = targetCase.reuseDetails.find(function(item) { return item.id === detailId; });
       if (!entry) return;
       if (isReuseDetailRemoved(entry)) return;
+      var statusFilter = state.tempExecStatusFilter || { fileId: '', status: '' };
+      var activeFilter = statusFilter.fileId === fileId ? statusFilter.status : '';
+      var matchedBefore = activeFilter ? matchesTempExecCaseStatusFilter(file, targetCase, activeFilter) : true;
       var nextStatus = tempExecResultOptions.indexOf(value) !== -1 ? value : '未执行';
       entry.status = nextStatus;
       clearReuseDetailAutoStatus(entry);
@@ -10472,6 +10514,12 @@
         queueExecCasePatchForItem(targetCase, { reuse_details: targetCase.reuseDetails, status: targetCase.actual });
       }
       persistTempExecState();
+      if (activeFilter && matchedBefore !== matchesTempExecCaseStatusFilter(file, targetCase, activeFilter)) {
+        state.tempExecPreserveScrollOnce = true;
+        renderTempExecView();
+        updateTempExecFileStateClass(fileId);
+        return;
+      }
       updateTempExecReuseStatusUi(fileId, index, detailId, nextStatus);
     }
 

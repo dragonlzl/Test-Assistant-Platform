@@ -15,6 +15,7 @@
 - `python3 -m unittest discover -s tests/python -p 'test_*code*.py'`：验证 Packycode 代理完成判定与重启后禁止重复请求（本地模拟服务、数据库会话 mock）。
 - `npm run test:ui -- tests/ui/packycode.spec.js`：验证 Packycode 配置、文本/双图协议和单次/分批生成不自动重试。
 - `npm run test:ui -- tests/ui/tempexec_reuse_applicability.spec.js`：验证执行页预设方式选择、批量应用与手工结果接管。
+- `npm run test:ui -- tests/ui/tempexec_reuse_pending_badge.spec.js tests/ui/tempexec_reuse_status_no_jitter.spec.js`：使用本地 API mock 验证复用未执行提示、未执行/失败重叠命中、全部有效子项通过、筛选计数与列表一致、人工结果更新和 DOM 稳定，不连接正式库。
 - `API_BASE_URL=http://127.0.0.1:8080 npm run test:api -- tests/api/exec_reuse_applicability.spec.js`：验证适用性批量保存与失败原子性（后端必须使用测试库启动）。
 - 数据库（本地）：后端默认使用 `data/app.db`（正式）。任何测试/造数必须使用测试库（如 `data/apitest.db`），启动示例：`APP_DB_FILE=apitest.db uvicorn backend.main:app --reload --host 0.0.0.0 --port 8080`。
 - 数据库备份：后端启动后自动维护当前库同目录下 `backups/<完整库文件名>/short.db`（24 小时）及 `long.db`（7 天），各保留一份；初始化缺失备份、停机到期补做、失败保留旧快照。测试应使用临时目录并连同备份目录清理，禁止读取或覆盖正式库及其备份。
