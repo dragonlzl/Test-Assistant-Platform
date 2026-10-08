@@ -346,19 +346,31 @@
   background-color: #eef1f4;
 }
 
-.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="success"] {
+/* 复用子项重建时直接按状态类着色，避免等待下一帧补充属性而闪色。 */
+.workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.pending {
+  border-color: var(--workspace-border-strong);
+  color: var(--workspace-text-soft);
+  background-color: var(--workspace-surface-muted);
+}
+
+.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="success"],
+.workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.passed {
   border-color: rgba(24, 134, 75, 0.28);
   color: #11703d;
   background-color: #e5f5eb;
 }
 
-.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="danger"] {
+.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="danger"],
+.workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.failed,
+.workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.issue {
   border-color: rgba(195, 59, 69, 0.28);
   color: #a52d37;
   background-color: #fdebed;
 }
 
-.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="warning"] {
+.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="warning"],
+.workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.blocked,
+.workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.changed {
   border-color: rgba(180, 83, 9, 0.28);
   color: #9a4707;
   background-color: #fff1dc;
@@ -369,23 +381,35 @@
   background-color: var(--workspace-surface-muted);
 }
 
-.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="info"] {
+.workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="info"],
+.workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.unspecified {
   border-color: rgba(37, 99, 235, 0.24);
   color: #1d4ed8;
   background-color: #eaf1ff;
 }
 
-:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="success"] {
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.pending {
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #e2e8f0;
+  background-color: rgba(148, 163, 184, 0.2);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="success"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.passed {
   color: #91deb0;
   background-color: rgba(24, 134, 75, 0.18);
 }
 
-:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="danger"] {
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="danger"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.failed,
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.issue {
   color: #ffabb1;
   background-color: rgba(195, 59, 69, 0.18);
 }
 
-:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="warning"] {
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="warning"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.blocked,
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.changed {
   color: #f0b35e;
   background-color: rgba(180, 83, 9, 0.18);
 }
@@ -401,9 +425,31 @@
 }
 
 :root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .priority-select[data-priority="p2"],
-:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="info"] {
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .status-select[data-workspace-state="info"],
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.unspecified {
   color: #9dbdff;
   background-color: rgba(37, 99, 235, 0.18);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.passed {
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.failed,
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.issue {
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.blocked {
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.changed {
+  border-color: rgba(125, 180, 255, 0.45);
+}
+
+:root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .reuse-entry .status-select.unspecified {
+  border-color: rgba(59, 130, 246, 0.55);
 }
 
 :root[data-theme="dark"].workspace-shell-enabled .workspace-list-view .priority-select option[value="P0"],

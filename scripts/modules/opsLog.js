@@ -674,6 +674,15 @@
       if (execTitle) return '用例：' + execTitle + suffix;
       return '用例' + suffix;
     }
+    if (type === 'exec_case') {
+      var execCaseFileName = String(detail.case_file_name || detail.file_name || detail.file_name_clean || detail.exec_set_name || '').trim();
+      var execCaseTitle = String(detail.case_title || detail.case_name || detail.title || '').trim();
+      if (execCaseFileName && execCaseTitle && execCaseFileName !== execCaseTitle) {
+        return '执行用例：' + execCaseFileName + ' / ' + execCaseTitle;
+      }
+      if (execCaseFileName || execCaseTitle) return '执行用例：' + (execCaseTitle || execCaseFileName);
+      return id ? ('执行用例#' + id) : '执行用例';
+    }
 
     // 解散归档占位（执行页版本盒子）
     if (action === 'dissolve_exec_archived_placeholders') {
