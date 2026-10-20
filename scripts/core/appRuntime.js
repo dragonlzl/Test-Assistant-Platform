@@ -236,6 +236,7 @@
         historyActionLabel: String(source.historyActionLabel || ''),
         stage: String(source.stage || ''),
         discoveryStatus: String(source.discoveryStatus || ''),
+        discoveryError: String(source.discoveryError || ''),
         hadAiContentBeforeAction: source.hadAiContentBeforeAction === true,
         hadAiLayerBeforeAction: source.hadAiLayerBeforeAction === true,
         hadAiCasesBeforeAction: source.hadAiCasesBeforeAction === true,

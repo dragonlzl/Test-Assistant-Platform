@@ -22,7 +22,7 @@
 
     var fileInput = createRuntimeElement(root, 'input', 'fileInput');
     fileInput.type = 'file';
-    fileInput.accept = '.doc,.docx,.txt,.md';
+    fileInput.accept = '.doc,.docx,.txt,.md,.xlsx';
     createRuntimeElement(root, 'span', 'fileName').textContent = '未选择文件';
     createRuntimeElement(root, 'textarea', 'rawText');
     createRuntimeElement(root, 'p', 'parseStatus');
@@ -274,6 +274,8 @@
         blob: blob,
         rid: segment.rid || '',
         mediaPath: segment.mediaPath || '',
+        name: segment.name || '',
+        source: segment.source || '',
         textOffset: textOffset,
       });
     });
@@ -296,22 +298,83 @@
     var rawText = dom.rawText || document.getElementById('rawText');
     var parseStatus = document.getElementById('parseStatus');
     var caseFileInput = dom.caseFileInput || document.getElementById('caseFileInput');
+    var requirementImportVersion = 0;
+
+    function currentWorkspaceId() {
+      return state.xmindCaseGen ? String(state.xmindCaseGen.activeWorkspaceId || '') : '';
+    }
+
+    function currentOwnerId() {
+      return state.currentUser && state.currentUser.id !== undefined && state.currentUser.id !== null
+        ? String(state.currentUser.id)
+        : '';
+    }
+
+    function updateImportStatus(message, type) {
+      setStatus(parseStatus, message, type);
+      dispatchValueChange(parseStatus);
+    }
 
     async function importRequirementFile(file) {
       if (!file || !rawText) return false;
-      setStatus(parseStatus, '正在读取文件...', '');
+      var importVersion = ++requirementImportVersion;
+      var workspaceId = currentWorkspaceId();
+      var ownerId = currentOwnerId();
+      var cachedDocumentId = '';
+      var importApplied = false;
+      var mediaStore = window.app && window.app.services ? window.app.services.requirementMediaStore : null;
+      async function discardUnusedMedia() {
+        if (!cachedDocumentId || importApplied || !mediaStore) return;
+        try {
+          await mediaStore.removeDocument(ownerId, cachedDocumentId);
+        } catch (err) {
+          // 未应用的图片稍后由缓存清理回收，不影响已导入的需求。
+        }
+      }
+      updateImportStatus('正在读取文件...', '');
       try {
         var name = file.name ? String(file.name) : '';
         var ext = name && name.split ? (name.split('.').pop() || '').toLowerCase() : '';
         var text = '';
+        var media = createEmptyRequirementMedia();
         if (ext === 'docx') {
           var parsed = await parseDocx(file, typeof window !== 'undefined' ? window.JSZip : null);
           text = parsed.text || '';
-          state.requirementMedia = buildRequirementMedia(parsed.segments);
+          media = buildRequirementMedia(parsed.segments);
+        } else if (ext === 'xlsx') {
+          var excelParser = window.app && window.app.xlsxRequirementCore;
+          if (!excelParser || typeof excelParser.parseXlsx !== 'function') {
+            throw new Error('缺少 Excel 需求解析能力，请刷新页面后重试');
+          }
+          var workbook = await excelParser.parseXlsx(file, window.JSZip);
+          text = workbook.text || '';
+          media = buildRequirementMedia(workbook.segments);
+          if (media.docxImages.length) {
+            if (!mediaStore || typeof mediaStore.saveDocument !== 'function') {
+              throw new Error('缺少本地图片缓存能力，请刷新页面后重试');
+            }
+            cachedDocumentId = await mediaStore.saveDocument(ownerId, media.docxImages.map(function(item) { return item.blob; }));
+            media.docxImages.forEach(function(item, index) {
+              item.cacheId = cachedDocumentId;
+              item.cacheImageIndex = index;
+            });
+          }
+        } else if (ext === 'xls' || ext === 'xlsm' || ext === 'xlsb') {
+          throw new Error('暂不支持此 Excel 格式，请另存为 .xlsx 后导入');
         } else {
           text = await file.text();
-          state.requirementMedia = createEmptyRequirementMedia();
         }
+        if (importVersion !== requirementImportVersion) {
+          await discardUnusedMedia();
+          return false;
+        }
+        if (workspaceId !== currentWorkspaceId() || ownerId !== currentOwnerId()) {
+          await discardUnusedMedia();
+          updateImportStatus('需求页签已切换，本次导入已取消，请在当前页签重新导入', 'err');
+          return false;
+        }
+        state.requirementMedia = media;
+        importApplied = true;
         rawText.value = String(text || '');
         state.lastRawImportName = name;
         if (fileName) fileName.textContent = name || '未选择文件';
@@ -319,13 +382,15 @@
         var imageCount = state.requirementMedia && Array.isArray(state.requirementMedia.docxImages)
           ? state.requirementMedia.docxImages.length
           : 0;
-        setStatus(parseStatus, imageCount ? ('文件读取完成，检测到图片 ' + imageCount + ' 张') : '文件读取完成', 'ok');
+        updateImportStatus(imageCount ? ('文件读取完成，检测到图片 ' + imageCount + ' 张') : '文件读取完成', 'ok');
         dispatchValueChange(rawText);
         persistWorkflowState();
         return true;
       } catch (err) {
+        await discardUnusedMedia();
+        if (importVersion !== requirementImportVersion) return false;
         var reason = err && err.message ? err.message : '请确认文件格式';
-        setStatus(parseStatus, '读取失败：' + reason, 'err');
+        updateImportStatus('读取失败：' + reason, 'err');
         if (typeof console !== 'undefined' && console.warn) console.warn('XMind 需求文件读取失败', err);
         return false;
       }

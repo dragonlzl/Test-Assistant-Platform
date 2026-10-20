@@ -109,6 +109,7 @@
         xmindGenApi: {
           callModelWithConfig: clients.callModelWithConfig,
           callModelWithContent: clients.callModelWithContent,
+          verifyVisionSupport: clients.verifyVisionSupport,
           getAssignedModel: source.getAssignedModel,
           getReasoningForType: source.getReasoningForType,
           getTemperatureForType: source.getTemperatureForType,

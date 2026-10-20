@@ -1076,12 +1076,15 @@
           }, signal);
           // 在纯静态模式（无后端 API）或未登录态下，回退到直连，保持旧行为兼容。
           if (proxied) {
+            if (opts.noFallback === true) return proxied;
             var status = Number(proxied.status);
             var canFallback = [401, 403, 404, 405, 501].indexOf(status) !== -1;
             if (!canFallback) return proxied;
             proxyFallbackResponse = proxied;
           }
+          if (opts.noFallback === true) throw new Error('模型代理未返回有效响应');
         } catch (err) {
+          if (opts.noFallback === true) throw err;
           proxyError = err;
           if (!fetchImpl) throw err;
         }
@@ -1462,9 +1465,80 @@
       return content;
     }
 
+    // 用随机图片中的数字验证实际识图能力，避免仅接受图片参数却忽略图片的接口误通过。
+    function createVisionChallenge() {
+      if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+        throw new Error('当前环境无法创建视觉检测图片');
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 144;
+      var context = canvas.getContext('2d');
+      if (!context) throw new Error('当前环境无法创建视觉检测图片');
+      var digits = '';
+      var randomValues = new Uint32Array(8);
+      if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        crypto.getRandomValues(randomValues);
+      } else {
+        for (var i = 0; i < randomValues.length; i += 1) randomValues[i] = Math.floor(Math.random() * 4294967296);
+      }
+      for (var j = 0; j < randomValues.length; j += 1) digits += String(randomValues[j] % 10);
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#000000';
+      context.font = 'bold 84px monospace';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(digits, canvas.width / 2, canvas.height / 2);
+      var dataUrl = canvas.toDataURL('image/png');
+      if (!/^data:image\/png;base64,/.test(dataUrl)) throw new Error('视觉检测图片生成失败');
+      return { answer: digits, dataUrl: dataUrl };
+    }
+
+    function isExplicitVisionRejection(err) {
+      var message = err && err.message ? String(err.message) : String(err || '');
+      // 认证、限流、超时及服务故障均不能证明模型不支持图片。
+      if (/HTTP\s*(?:401|403|408|429|5\d\d)\b/i.test(message)) return false;
+      var hasImageTerm = /image|vision|multimodal|multi.modal|图片|图像|视觉/i.test(message);
+      var hasUnsupportedTerm = /not\s+support|does\s+not\s+support|do\s+not\s+support|unsupported|not\s+capable|text.only|only\s+supports?\s+text|不支持|无法(?:识别|处理|查看|接收)/i.test(message);
+      var unknownImageType = /unknown\s+(?:content\s+)?type[^\n]*(?:image_url|input_image)|(?:image_url|input_image)[^\n]*not\s+(?:allowed|supported)/i.test(message);
+      return (hasImageTerm && hasUnsupportedTerm) || unknownImageType;
+    }
+
+    async function verifyVisionSupport(model, options) {
+      var opts = options && typeof options === 'object' ? options : {};
+      var challenge;
+      try {
+        challenge = createVisionChallenge();
+        var result = await callModelWithContent(model, [
+          { type: 'text', text: '[VISION_CAPABILITY_CHECK] 请读取附图中唯一一行的 8 位数字，只回复这 8 位数字，保留开头的 0；若无法查看图片，请回复 NO_IMAGE。' },
+          { type: 'image', dataUrl: challenge.dataUrl },
+        ], '[VISION_CAPABILITY_CHECK] 这是图片识别检测。答案仅存在于图片像素中；请读取图片，不要猜测。', {
+          timeoutSec: 30,
+          owner: opts.owner || '',
+          reasoningEffort: opts.reasoningEffort || '',
+          transport: 'proxy',
+          noFallback: true,
+          scene: 'vision-preflight',
+        });
+        if (String(result || '').replace(/\s/g, '').indexOf(challenge.answer) !== -1) {
+          return { status: 'supported', reason: 'verified' };
+        }
+        return { status: 'unsupported', reason: 'image-not-recognized' };
+      } catch (err) {
+        if (err && err.name === 'AbortError') throw err;
+        if (isExplicitVisionRejection(err)) return { status: 'unsupported', reason: 'image-rejected' };
+        return {
+          status: 'unknown',
+          reason: err && err.message ? String(err.message) : '视觉能力检测未完成',
+        };
+      }
+    }
+
     return {
       callModelWithConfig: callModelWithConfig,
       callModelWithContent: callModelWithContent,
+      verifyVisionSupport: verifyVisionSupport,
       buildMultimodalRequestBody: buildMultimodalRequestBody,
       abortAllRequests: abortAllRequests,
       abortRequestsByOwner: abortRequestsByOwner,

@@ -11,6 +11,9 @@
 - 一键启动（后端 + 静态页）：macOS/Linux 运行 `./start.sh`，Windows 运行 `start.bat`。可用环境变量：`APP_DB_FILE`、`API_HOST`、`API_PORT`、`ADMIN_USER`、`ADMIN_PASS`、`DEFAULT_USER_PASS`、`RELOAD`。
 - `node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`：快速语法检查，避免旧浏览器报错。
 - `node tests/node/reuse_applicability_core.test.js`：验证复用预设获取/解锁方式识别、自动不适用、人工结果保护与恢复规则。
+- `npm run test:ui -- tests/ui/xlsx_requirement_core.spec.js tests/ui/xmind_casegen_flow.spec.js --grep 'Excel|xls' --workers=1`：使用合成 OOXML 和本地 API/模型 mock 验证 XMind 需求 Excel（.xlsx）的多工作表与行列阅读顺序、富文本/合并/数值格式、配图锚点与发送、文件选择/拖拽、格式错误保护和异步导入隔离，不连接真实模型或正式数据库。
+- `npm run test:ui -- tests/ui/requirement_media_store.spec.js --workers=1`：验证需求图片通过浏览器 IndexedDB 保存、跨页/刷新后按引用恢复、按当前账号隔离、未引用缓存回收及缓存不可用提示；上述 Excel 回归命令另覆盖刷新/跨页切换模型后的图片恢复和旧缓存失效提示，不连接真实模型或正式数据库。
+- `npm run test:ui -- tests/ui/models_vision_support.spec.js tests/ui/model_vision_probe.spec.js tests/ui/xmind_casegen_flow.spec.js --grep '视觉|无配图' --workers=1`：使用本地 API/模型 mock 验证每个模型的视觉支持选择与持久化、实际图片识别验证、模型拒绝或忽略图片、错误分类和取消，以及生成前弹窗中止/无视觉继续、图片不参与识别提示和纯文本跳过验证；不连接真实模型或正式数据库。
 - `python3 -m unittest discover -s tests/python -p test_model_gateway.py`：验证模型网关的非流式连接关闭、SSE 分块读取、仅 packycode 类型启用最小请求、其他类型协议不变（仅使用本地模拟服务，不连接模型供应商或数据库）。
 - `python3 -m unittest discover -s tests/python -p 'test_*code*.py'`：验证 Packycode 代理完成判定与重启后禁止重复请求（本地模拟服务、数据库会话 mock）。
 - `npm run test:ui -- tests/ui/packycode.spec.js`：验证 Packycode 配置、文本/双图协议和单次/分批生成不自动重试。

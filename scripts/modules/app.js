@@ -2379,6 +2379,7 @@
           stream: model.stream,
           streamMode: model.streamMode,
           reasoningEffort: model.reasoningEffort || model.reasoning_effort || '',
+          visionSupport: model.visionSupport || 'auto',
           capabilities: cloneJson(model.capabilities, []),
           configCreatedAt: model.configCreatedAt || model.created_at || model.createdAt || '',
           configUpdatedAt: model.configUpdatedAt || model.updated_at || model.updatedAt || '',
@@ -3386,6 +3387,9 @@
         clients: {
           callModelWithConfig: callModelWithConfig,
           callModelWithContent: callModelWithContent,
+          verifyVisionSupport: modelClient && typeof modelClient.verifyVisionSupport === 'function'
+            ? modelClient.verifyVisionSupport
+            : null,
           abortRequestsByOwner: abortModelRequestsByOwner,
           cancelTasksByOwner: cancelModelTasksByOwner,
           buildModelTaskRequestOptions: buildModelTaskRequestOptions,

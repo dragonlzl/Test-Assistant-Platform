@@ -2911,6 +2911,7 @@
         historyActionLabel: input.historyActionLabel ? String(input.historyActionLabel || '') : '',
         stage: input.stage ? String(input.stage || '') : '',
         discoveryStatus: input.discoveryStatus ? String(input.discoveryStatus || '') : '',
+        discoveryError: input.discoveryError ? String(input.discoveryError || '') : '',
         hadAiContentBeforeAction: input.hadAiContentBeforeAction === true,
         hadAiLayerBeforeAction: input.hadAiLayerBeforeAction === true,
         hadAiCasesBeforeAction: input.hadAiCasesBeforeAction === true,
@@ -2948,6 +2949,7 @@
         historyActionLabel: snapshot.historyActionLabel,
         stage: snapshot.stage,
         discoveryStatus: snapshot.discoveryStatus,
+        discoveryError: snapshot.discoveryError,
         hadAiContentBeforeAction: snapshot.hadAiContentBeforeAction === true,
         hadAiLayerBeforeAction: snapshot.hadAiLayerBeforeAction === true,
         hadAiCasesBeforeAction: snapshot.hadAiCasesBeforeAction === true,
@@ -2990,6 +2992,7 @@
         historyActionLabel: String(cloned.historyActionLabel || ''),
         stage: String(cloned.stage || ''),
         discoveryStatus: String(cloned.discoveryStatus || ''),
+        discoveryError: String(cloned.discoveryError || ''),
         hadAiContentBeforeAction: cloned.hadAiContentBeforeAction === true,
         hadAiLayerBeforeAction: cloned.hadAiLayerBeforeAction === true,
         hadAiCasesBeforeAction: cloned.hadAiCasesBeforeAction === true,
@@ -3065,6 +3068,7 @@
       base.historyActionLabel = pickString(base.historyActionLabel, incoming.historyActionLabel);
       base.stage = pickString(base.stage, incoming.stage);
       base.discoveryStatus = pickString(base.discoveryStatus, incoming.discoveryStatus);
+      base.discoveryError = pickString(base.discoveryError, incoming.discoveryError);
       base.cancelReason = pickString(base.cancelReason, incoming.cancelReason);
       base.dedupeStatus = pickString(base.dedupeStatus, incoming.dedupeStatus);
       base.dedupeTaskId = pickString(base.dedupeTaskId, incoming.dedupeTaskId);
@@ -3661,7 +3665,14 @@
       var host = state.xmindCaseGen && typeof state.xmindCaseGen === 'object' ? state.xmindCaseGen : {};
       Object.keys(host).forEach(function(key) {
         if (!WORKSPACE_HOST_KEYS[key]) return;
-        next[key] = cloneJson(host[key], host[key]);
+        if (key === 'workspaces') {
+          next.workspaces = {};
+          Object.keys(host.workspaces || {}).forEach(function(id) {
+            next.workspaces[id] = normalizeWorkspaceRecord(id, host.workspaces[id]);
+          });
+        } else {
+          next[key] = cloneJson(host[key], host[key]);
+        }
       });
       state.xmindCaseGen = next;
     }
@@ -3768,7 +3779,7 @@
       state.requirementMedia = cloneRequirementMediaValue(next.requirementMedia);
       state.caseGenRunning = new Set();
       if (opts.silentDom === true) {
-        shadowWorkspaceSharedState = cloneJson(next, {});
+        shadowWorkspaceSharedState = normalizeWorkspaceSharedState(next);
         return;
       }
       shadowWorkspaceSharedState = null;
@@ -4276,6 +4287,8 @@
       var rawTextEl = document.getElementById('rawText');
       var fileNameEl = document.getElementById('fileName');
       var fileInputEl = document.getElementById('fileInput');
+      var parseStatusEl = document.getElementById('parseStatus');
+      if (parseStatusEl) parseStatusEl.textContent = '';
       if (rawTextEl) rawTextEl.value = '';
       if (fileNameEl) fileNameEl.textContent = '未选择文件';
       if (fileInputEl) fileInputEl.value = '';
@@ -6211,48 +6224,148 @@
       return raw;
     }
 
-    function normalizeModelCapabilityList(model) {
-      if (!model || typeof model !== 'object') return [];
-      var raw = model.capabilities || model.modelCapabilities || model.tags || model.multiModalTags || model.multimodalTags;
-      var list = [];
-      if (Array.isArray(raw)) {
-        list = raw.slice();
-      } else if (typeof raw === 'string') {
-        list = raw.split(/[,|/、\s]+/);
-      } else if (raw && typeof raw === 'object') {
-        Object.keys(raw).forEach(function(key) {
-          if (raw[key]) list.push(key);
-        });
-      }
-      var seen = {};
-      return list.map(function(item) { return String(item || '').trim(); }).filter(function(item) {
-        var key = item.toLowerCase();
-        if (!key || seen[key]) return false;
-        seen[key] = true;
-        return true;
+    var visionGenerationDecisions = {};
+    var visionUnsupportedDialogQueue = Promise.resolve();
+    var noVisionGenerationNotice = '已选择继续无视觉生成，需求中的图片未参与识别';
+
+    function isVisionPreparationActive(task) {
+      var manager = getXmindTaskManager();
+      var current = manager && typeof manager.getTask === 'function' ? manager.getTask(task.id) : null;
+      return Boolean(current && current.status === 'running' && current.preparationPending === true);
+    }
+
+    function requireActiveVisionPreparation(task) {
+      if (isVisionPreparationActive(task)) return;
+      var err = new Error('已中止生成');
+      err.name = 'AbortError';
+      throw err;
+    }
+
+    // 复用同一次生成的选择；分模块生成不重复探测或询问。
+    function getVisionGenerationOperationKey(task) {
+      return String(task.workspaceId || '') + ':' + String(task.rootPipelineId || task.knowledgeBaseActionKey || task.id || '');
+    }
+
+    function openVisionUnsupportedDialog(task) {
+      var pending = visionUnsupportedDialogQueue.catch(function() {}).then(function() {
+        if (!isVisionPreparationActive(task)) return false;
+        return createVisionUnsupportedDialog(task);
+      });
+      visionUnsupportedDialogQueue = pending.then(function() {}, function() {});
+      return pending;
+    }
+
+    function createVisionUnsupportedDialog(task) {
+      return new Promise(function(resolve) {
+        var previousFocus = document.activeElement;
+        var overlay = document.createElement('div');
+        overlay.id = 'xmindVisionSupportOverlay';
+        overlay.setAttribute('data-vision-task-id', String(task.id || ''));
+        overlay.className = 'xmind-casegen-summary-overlay xmind-vision-support-overlay';
+        overlay.innerHTML = '<section class="xmind-casegen-summary-dialog xmind-vision-support-dialog" role="dialog" aria-modal="true" aria-labelledby="xmindVisionSupportTitle" aria-describedby="xmindVisionSupportMessage">'
+          + '<strong class="xmind-casegen-summary-dialog-title" id="xmindVisionSupportTitle">模型不支持视觉</strong>'
+          + '<p id="xmindVisionSupportMessage">该模型不支持视觉，如果需要识别需求中的图片，需切换多模态模型后重试。</p>'
+          + '<div class="xmind-vision-support-actions"><button type="button" class="secondary" data-vision-action="abort">中止生成</button>'
+          + '<button type="button" data-vision-action="continue">继续无视觉生成</button></div></section>';
+        var abortButton = overlay.querySelector('[data-vision-action="abort"]');
+        var continueButton = overlay.querySelector('[data-vision-action="continue"]');
+        var settled = false;
+        function finish(continueWithoutVision) {
+          if (settled) return;
+          settled = true;
+          window.removeEventListener('xmind-casegen-task', onTaskChange);
+          window.removeEventListener('pageshow', onTaskChange);
+          document.removeEventListener('keydown', onKeyDown, true);
+          overlay.remove();
+          if (previousFocus && document.documentElement.contains(previousFocus) && typeof previousFocus.focus === 'function') previousFocus.focus();
+          resolve(continueWithoutVision === true && isVisionPreparationActive(task));
+        }
+        function onTaskChange() { if (!isVisionPreparationActive(task)) finish(false); }
+        function onKeyDown(event) {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            finish(false);
+          } else if (event.key === 'Tab') {
+            event.preventDefault();
+            if (document.activeElement === abortButton && !event.shiftKey) continueButton.focus();
+            else if (document.activeElement === continueButton && event.shiftKey) abortButton.focus();
+            else if (event.shiftKey) continueButton.focus();
+            else abortButton.focus();
+          }
+        }
+        abortButton.addEventListener('click', function() { finish(false); });
+        continueButton.addEventListener('click', function() { finish(true); });
+        window.addEventListener('xmind-casegen-task', onTaskChange);
+        window.addEventListener('pageshow', onTaskChange);
+        document.addEventListener('keydown', onKeyDown, true);
+        document.body.appendChild(overlay);
+        abortButton.focus();
+        onTaskChange();
       });
     }
 
-    function modelSupportsVision(model) {
-      var caps = normalizeModelCapabilityList(model);
-      for (var i = 0; i < caps.length; i += 1) {
-        var token = String(caps[i] || '').trim().toLowerCase();
-        if (!token) continue;
-        if (
-          token === 'vision' || token === '视觉' ||
-          token.indexOf('vision') !== -1 ||
-          token.indexOf('visual') !== -1 ||
-          token.indexOf('multimodal') !== -1 ||
-          token.indexOf('multi-modal') !== -1 ||
-          token.indexOf('multi_modal') !== -1 ||
-          token.indexOf('image') !== -1 ||
-          token.indexOf('图像') !== -1 ||
-          token.indexOf('图片') !== -1
-        ) {
+    function cancelVisionGenerationOperation(task) {
+      var manager = getXmindTaskManager();
+      if (!manager || typeof manager.cancelTask !== 'function') return;
+      var operationKey = getVisionGenerationOperationKey(task);
+      var tasks = typeof manager.getTasks === 'function' ? manager.getTasks() : [task];
+      tasks.forEach(function(current) {
+        if (!current || current.status !== 'running' || getVisionGenerationOperationKey(current) !== operationKey) return;
+        manager.cancelTask(current.id, {
+          reason: '已中止生成：当前模型不支持视觉',
+          source: 'vision-preflight',
+          abortReason: 'xmind-vision-generation-aborted',
+        });
+      });
+    }
+
+    async function resolveGenerationVisionDecision(task, model, preparationContext) {
+      requireActiveVisionPreparation(task);
+      var key = getVisionGenerationOperationKey(task);
+      var signature = JSON.stringify([model.provider, model.baseUrl, model.apiKey, model.model, model.visionSupport || 'auto']);
+      var existing = visionGenerationDecisions[key];
+      if (existing && existing.signature === signature) return existing.promise;
+      var decisionKeys = Object.keys(visionGenerationDecisions);
+      if (decisionKeys.length >= 32) {
+        decisionKeys.some(function(oldKey) {
+          if (oldKey === key || !visionGenerationDecisions[oldKey].done) return false;
+          delete visionGenerationDecisions[oldKey];
           return true;
-        }
+        });
       }
-      return false;
+      var entry = { signature: signature, done: false, promise: null };
+      entry.promise = Promise.resolve().then(async function() {
+        requireActiveVisionPreparation(task);
+        var result = { status: 'unsupported' };
+        if (model.visionSupport !== 'unsupported') {
+          if (!xmindGenApi || typeof xmindGenApi.verifyVisionSupport !== 'function') throw new Error('视觉能力验证尚未就绪，请刷新页面后重试');
+          var requestOptions = preparationContext && typeof preparationContext.buildRequestOptions === 'function'
+            ? preparationContext.buildRequestOptions('vision-verification')
+            : { owner: task.requestOwner || '' };
+          notifyFloatingStatus('正在验证当前模型的视觉支持能力', 'info', 3000);
+          result = await xmindGenApi.verifyVisionSupport(model, requestOptions);
+          requireActiveVisionPreparation(task);
+          if (!result || (result.status !== 'supported' && result.status !== 'unsupported')) {
+            throw new Error('视觉能力验证失败：' + String(result && result.reason ? result.reason : '未获得有效的验证结果') + '。请检查模型接口后重试。');
+          }
+        }
+        if (result.status === 'supported') return 'vision';
+        var continueWithoutVision = await openVisionUnsupportedDialog(task);
+        requireActiveVisionPreparation(task);
+        if (continueWithoutVision) return 'text';
+        cancelVisionGenerationOperation(task);
+        requireActiveVisionPreparation(task);
+        throw new Error('已中止生成');
+      }).then(function(decision) {
+        entry.done = true;
+        return decision;
+      }, function(err) {
+        if (visionGenerationDecisions[key] === entry) delete visionGenerationDecisions[key];
+        throw err;
+      });
+      visionGenerationDecisions[key] = entry;
+      return entry.promise;
     }
 
     function collectDocumentRequirementImages() {
@@ -6264,15 +6377,17 @@
       function append(item, source) {
         if (!item || typeof item !== 'object') return;
         var blob = item.blob || item.file || null;
-        if (!blob) return;
+        if (!blob && !item.cacheId && item.source !== 'xlsx') return;
         list.push({
           blob: blob,
-          source: source || '',
+          source: item.source || source || '',
           index: Number(item.index) || (list.length + 1),
           textOffset: Number.isFinite(Number(item.textOffset)) ? Number(item.textOffset) : null,
           name: item.name || '',
           rid: item.rid || '',
           mediaPath: item.mediaPath || '',
+          cacheId: item.cacheId || '',
+          cacheImageIndex: item.cacheImageIndex,
         });
       }
       if (Array.isArray(media.docxImages)) media.docxImages.forEach(function(item) { append(item, 'docx'); });
@@ -6354,16 +6469,26 @@
       }
     }
 
-    async function preprocessImageToDataUrl(blobOrDataUrl) {
+    async function preprocessImageToDataUrl(blobOrDataUrl, requireDecodedImage) {
       if (!blobOrDataUrl) return { ok: false, reason: 'missing_blob' };
       var dataUrl = '';
       if (typeof blobOrDataUrl === 'string' && blobOrDataUrl.indexOf('data:') === 0) {
         dataUrl = blobOrDataUrl;
       } else {
+        if (!(typeof Blob !== 'undefined' && blobOrDataUrl instanceof Blob)) {
+          return { ok: false, reason: 'missing_blob' };
+        }
         try {
           dataUrl = await readBlobAsDataUrl(blobOrDataUrl);
         } catch (err) {
           return { ok: false, reason: 'read_failed' };
+        }
+      }
+      if (requireDecodedImage === true) {
+        try {
+          await loadImageByDataUrl(dataUrl);
+        } catch (err) {
+          return { ok: false, reason: 'decode_failed' };
         }
       }
       var best = await resizeDataUrl(dataUrl, multimodalMaxEdge, null, 0.92);
@@ -6391,7 +6516,7 @@
 
     async function buildImageContentBlocks(images, fromDataUrl) {
       var result = [];
-      var stats = { total: Array.isArray(images) ? images.length : 0, sent: 0, skipped: 0 };
+      var stats = { total: Array.isArray(images) ? images.length : 0, sent: 0, skipped: 0, missing: 0, decodeFailed: 0, tooLarge: 0 };
       if (!Array.isArray(images) || !images.length) return { blocks: result, stats: stats };
       for (var i = 0; i < images.length; i += 1) {
         if (i >= multimodalMaxImages) {
@@ -6399,10 +6524,30 @@
           break;
         }
         var item = images[i];
-        var pre = await preprocessImageToDataUrl(fromDataUrl === true ? item.dataUrl : (item && item.blob ? item.blob : null));
+        var imageSource = fromDataUrl === true ? item.dataUrl : (item && item.blob ? item.blob : null);
+        if (fromDataUrl !== true && item && item.cacheId && !(typeof Blob !== 'undefined' && imageSource instanceof Blob)) {
+          var mediaStore = window.app && window.app.services ? window.app.services.requirementMediaStore : null;
+          var currentUser = state && state.currentUser;
+          var ownerId = currentUser && currentUser.id !== undefined && currentUser.id !== null ? String(currentUser.id) : '';
+          try {
+            imageSource = mediaStore ? await mediaStore.loadImage(ownerId, item.cacheId, item.cacheImageIndex) : null;
+          } catch (err) {
+            imageSource = null;
+          }
+        }
+        var pre = await preprocessImageToDataUrl(
+          imageSource,
+          Boolean(item && item.source === 'xlsx')
+        );
         if (!pre.ok || !pre.dataUrl) {
           stats.skipped += 1;
+          if (pre.reason === 'missing_blob' || pre.reason === 'read_failed') stats.missing += 1;
+          if (pre.reason === 'decode_failed') stats.decodeFailed += 1;
+          if (pre.reason === 'too_large') stats.tooLarge += 1;
           continue;
+        }
+        if (fromDataUrl !== true && item && item.name) {
+          result.push({ type: 'text', text: String(item.name) });
         }
         result.push({
           type: 'image',
@@ -7733,6 +7878,9 @@
       var docValue = rawTextEl && rawTextEl.value ? String(rawTextEl.value).trim() : '';
       var docImportName = state.lastRawImportName ? String(state.lastRawImportName).trim() : '';
       var docImageCount = getDocumentRequirementImageCount();
+      var docParseStatus = document.getElementById('parseStatus');
+      var docImportStatus = docParseStatus ? String(docParseStatus.textContent || '') : '';
+      var docImportFailed = docParseStatus && docParseStatus.classList.contains('err');
       var docStatusText = docValue
         ? ('已导入' + (docImportName ? '：' + docImportName + '，' : '，') + '正文 ' + String(docValue.length) + ' 字，图片 ' + String(docImageCount) + ' 张')
         : '导入后内容会同步到当前需求上下文';
@@ -7763,7 +7911,7 @@
         +     '<label class="xmind-casegen-prep-choice is-success ' + (mode === 'document' ? 'is-active ' : '') + (locked ? 'is-readonly' : '') + '">'
         +       '<input type="radio" name="xmindRequirementMode" value="document" ' + (mode === 'document' ? 'checked ' : '') + disabledAttr + ' />'
         +       '<span class="xmind-casegen-prep-choice-title">导入需求文档</span>'
-        +       '<span class="xmind-casegen-prep-choice-desc">复用现有需求导入链路，可补充说明。</span>'
+        +       '<span class="xmind-casegen-prep-choice-desc">支持 Word、文本和 Excel（.xlsx），可补充说明。</span>'
         +     '</label>'
         +     '<label class="xmind-casegen-prep-choice is-success ' + (mode === 'manual' ? 'is-active ' : '') + (locked ? 'is-readonly' : '') + '">'
         +       '<input type="radio" name="xmindRequirementMode" value="manual" ' + (mode === 'manual' ? 'checked ' : '') + disabledAttr + ' />'
@@ -7787,6 +7935,8 @@
             +     '</div>'
             +     '<div class="status' + (docValue ? ' ok' : '') + '">' + escapeHtml(docStatusText) + '</div>'
             +   '</div>'
+            +   '<p class="hint">Excel 按工作表、行列顺序读取正文和配图；配图需使用支持视觉的模型。</p>'
+            +   '<p id="xmindCaseGenRequirementImportStatus" class="status' + (docImportFailed ? ' err' : '') + '" role="status">' + escapeHtml(docImportStatus) + '</p>'
             + '</div>'
             + '<div class="xmind-casegen-prep-field">'
             +   '<label for="xmindCaseGenRequirementSupplement">需求补充</label>'
@@ -11421,8 +11571,9 @@
 
     function buildCoverageRetryHistoryDiagnostics(task) {
       var labels = task && Array.isArray(task.coverageRetryReasons) ? normalizeHistoryDiagnostics(task.coverageRetryReasons) : [];
-      if (!labels.length) return [];
-      return ['已自动补强覆盖：' + labels.join('、')];
+      var diagnostics = task && task.degradedToTextOnly === true ? [noVisionGenerationNotice] : [];
+      if (labels.length) diagnostics.push('已自动补强覆盖：' + labels.join('、'));
+      return diagnostics;
     }
 
     function tryStartRootCoverageRetry(task, gapInfo, anchorNodeId) {
@@ -11539,20 +11690,39 @@
       var reasoning = task && task.reasoning ? String(task.reasoning || '') : '';
       var temperature = Number(task && task.temperature);
       if (!Number.isFinite(temperature)) temperature = 0.2;
-      var modelCanSeeImages = modelSupportsVision(model);
       var requestMode = 'text';
       var requestText = payload.text;
       var contentBlocks = [];
       var degradedToTextOnly = false;
+      var hasExcelImages = payload.images && payload.images.some(function(item) { return item && item.source === 'xlsx'; });
       var taskWorkspaceId = String(task && task.workspaceId ? task.workspaceId : (getActiveWorkspaceId() || ''));
       var requestPayloadLimit = getXmindRequestPayloadLimit();
 
       if (payload.images && payload.images.length) {
-        if (!modelCanSeeImages && !payload.text) {
-          throw new Error('当前 XMind 用例生成模型不支持图片，且需求文本为空');
-        }
-        if (modelCanSeeImages && xmindGenApi && typeof xmindGenApi.callModelWithContent === 'function') {
+        var visionDecision = await resolveGenerationVisionDecision(task, model, preparationContext);
+        requireActiveVisionPreparation(task);
+        if (visionDecision === 'text') {
+          degradedToTextOnly = true;
+          requestText = String(requestText || '') + '\n\n本次仅依据需求文本生成，需求中的图片未参与识别，请勿推测图片内容。';
+          notifyFloatingStatus(noVisionGenerationNotice, 'warn', 6000);
+          if (task && task.rootPipelineId) {
+            updateRootPipelineState(function(current) {
+              if (String(current.id || '') === String(task.rootPipelineId)) appendRootPipelineDiagnostics(current, noVisionGenerationNotice);
+            });
+          }
+        } else {
+          if (!xmindGenApi || typeof xmindGenApi.callModelWithContent !== 'function') throw new Error('多模态模型客户端不可用，请刷新页面后重试');
+          if (hasExcelImages && payload.images.length > multimodalMaxImages) {
+            throw new Error('Excel 需求包含 ' + payload.images.length + ' 张图片，超过单次上限 ' + multimodalMaxImages + ' 张，请拆分需求后生成');
+          }
           var imageBlocks = await buildImageContentBlocks(payload.images, payload.mode === 'manual');
+          if (hasExcelImages && imageBlocks.stats.skipped > 0) {
+            if (imageBlocks.stats.missing > 0) {
+              throw new Error('Excel 需求有 ' + imageBlocks.stats.missing + ' 张图片内容已丢失或本地缓存不可用，请重新导入 Excel 后再生成');
+            }
+            throw new Error('Excel 需求有 ' + imageBlocks.stats.skipped + ' 张图片无法处理，请检查图片格式和大小后重新导入');
+          }
+          requireActiveVisionPreparation(task);
           if (imageBlocks.stats.sent > 0) {
             contentBlocks = [{ type: 'text', text: payload.text }].concat(imageBlocks.blocks || []);
             var payloadSize = estimateTaskContentBlocksSize(contentBlocks);
@@ -11998,7 +12168,9 @@
       var rawMessage = err && err.message ? String(err.message) : '未知错误';
       var detailText = normalizeHistoryLongText(rawMessage, 2000);
       var reasonText = '模型调用出错，请稍后重试。';
-      if (/XMind 请求体超出当前上限/.test(rawMessage)) {
+      if (/^XMind 生成准备失败[：:]/.test(rawMessage)) {
+        reasonText = rawMessage.replace(/^XMind 生成准备失败[：:]\s*/, '');
+      } else if (/XMind 请求体超出当前上限/.test(rawMessage)) {
         reasonText = rawMessage;
       } else if (/MODEL_OUTPUT_TOKEN_LIMIT|输出达到 token 上限|输出.*token.*截断/i.test(rawMessage)) {
         reasonText = '模型输出达到 token 上限，JSON 可能已被截断。请缩小单次生成范围，或确认代理对当前模型开放了足够的输出上限。';
@@ -16553,7 +16725,7 @@
           renderReason = 'root-pipeline-cancelled';
         } else if (Number(pipeline.errorCount || 0) > 0 || pipeline.discoveryStatus === 'error') {
           resultKind = 'error';
-          reasonText = '模型调用出错，请稍后重试。';
+          reasonText = pipeline.discoveryError || '模型调用出错，请稍后重试。';
           summaryText = getGenerationFailureLabel('root', actionId, {
             hadAiContentBeforeAction: pipeline.hadAiContentBeforeAction === true,
             hadAiCasesBeforeAction: pipeline.hadAiCasesBeforeAction === true,
@@ -16867,6 +17039,7 @@
       updateRootPipelineState(function(current) {
         current.stage = 'modules';
         current.discoveryStatus = opts.resultKind === 'cancelled' ? 'cancelled' : 'error';
+        current.discoveryError = opts.resultKind === 'cancelled' ? '' : errorInfo.reasonText;
         if (opts.resultKind === 'cancelled') {
           current.cancelled = true;
           current.cancelReason = errorInfo.reasonText;
@@ -17410,7 +17583,7 @@
             }],
             resultKind: appendNoChangeInfo.resultKind,
             reasonText: appendNoChangeInfo.reasonText,
-            diagnostics: appendNoChangeInfo.diagnostics,
+            diagnostics: (appendNoChangeInfo.diagnostics || []).concat(buildCoverageRetryHistoryDiagnostics(task)),
             previewText: appendNoChangeInfo.previewText,
           });
           notifyStatus('当前模块未补充到新的用例', 'warn', { forceInline: true });
@@ -17452,7 +17625,7 @@
             }],
             resultKind: fullNoChangeInfo.resultKind,
             reasonText: fullNoChangeInfo.reasonText,
-            diagnostics: fullNoChangeInfo.diagnostics,
+            diagnostics: (fullNoChangeInfo.diagnostics || []).concat(buildCoverageRetryHistoryDiagnostics(task)),
             previewText: fullNoChangeInfo.previewText,
           });
           notifyStatus('当前模块未生成到有效用例', 'warn', { forceInline: true });
@@ -17484,6 +17657,7 @@
           caseCount: actionId === MODULE_ACTIONS.APPEND ? appended.length : nextList.length,
           durationMs: getTaskModelRequestDurationMs(task),
         }],
+        diagnostics: buildCoverageRetryHistoryDiagnostics(task),
       });
       notifyStatus(
         actionId === MODULE_ACTIONS.APPEND
@@ -20058,6 +20232,14 @@
           }, 220);
         });
       });
+      var parseStatus = document.getElementById('parseStatus');
+      function syncRequirementImportStatus() {
+        var target = document.getElementById('xmindCaseGenRequirementImportStatus');
+        if (!target || !parseStatus) return;
+        target.textContent = parseStatus.textContent || '';
+        target.className = 'status ' + (parseStatus.classList.contains('err') ? 'err' : '');
+      }
+      if (parseStatus) parseStatus.addEventListener('change', syncRequirementImportStatus);
       var caseFileList = document.getElementById('caseFileList');
       if (caseFileList && typeof MutationObserver !== 'undefined') {
         listObserver = new MutationObserver(function() {

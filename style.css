@@ -5191,6 +5191,23 @@ html[data-preload-nav="1"][data-init-tab="settings"] .tempexec-head[data-tab-sec
 .xmind-casegen-summary-overlay.hidden {
   display: none;
 }
+.xmind-vision-support-overlay {
+  position: fixed;
+  z-index: 5000;
+}
+.xmind-casegen-summary-dialog.xmind-vision-support-dialog {
+  width: min(480px, calc(100% - 24px));
+}
+.xmind-vision-support-dialog p {
+  margin: 0;
+  line-height: 1.7;
+}
+.xmind-vision-support-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
 .case-page-ai-gen-prep-overlay {
   position: fixed;
   z-index: 1900;
@@ -15945,6 +15962,35 @@ button.exec-overview-file-chip,
 }
 .model-available-list .hint {
   margin: 0;
+}
+.model-available-item {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+.model-available-item .model-id-chip {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.model-vision-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+}
+.model-vision-choice select {
+  width: auto;
+  min-width: 112px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.model-vision-source {
+  color: var(--muted);
+  font-size: 12px;
 }
 .model-id-chip-list {
   display: flex;

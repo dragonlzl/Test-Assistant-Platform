@@ -166,6 +166,21 @@
       return null;
     }
 
+    function normalizeVisionSupport(value) {
+      return value === 'supported' || value === 'unsupported' ? value : 'auto';
+    }
+
+    function getResolvedModelCapabilities(model, site) {
+      let capabilities = getDeclaredModelCapabilities(model);
+      if (capabilities === null) capabilities = guessModelCapabilities(model.id, model.name, site);
+      const visionSupport = normalizeVisionSupport(model.visionSupport);
+      if (visionSupport === 'supported' && capabilities.indexOf('vision') === -1) capabilities.push('vision');
+      if (visionSupport === 'unsupported') {
+        capabilities = capabilities.filter(function(capability) { return capability !== 'vision'; });
+      }
+      return capabilities;
+    }
+
     function normalizeReasoningEffort(value) {
       var raw = value === undefined || value === null ? '' : String(value).trim().toLowerCase();
       return Object.prototype.hasOwnProperty.call(reasoningEffortLabels, raw) ? raw : '';
@@ -297,6 +312,7 @@
           id: id,
           name: (item && typeof item === 'object' && item.name) ? String(item.name) : id,
           contextWindow: (item && typeof item === 'object') ? listingCapacity(item.context_window, item.context_length, item.contextWindow) : undefined,
+          visionSupport: normalizeVisionSupport(item && item.visionSupport),
         };
         const capabilities = getDeclaredModelCapabilities(item);
         if (capabilities !== null) normalized.capabilities = capabilities;
@@ -334,8 +350,7 @@
       const wireModel = String(meta.id || '').trim();
       if (!wireModel) return null;
       // 显式能力（含空数组）优先，避免把站点能力复制给其它模型。
-      let capabilities = getDeclaredModelCapabilities(meta);
-      if (capabilities === null) capabilities = guessModelCapabilities(wireModel, meta.name, site);
+      const capabilities = getResolvedModelCapabilities(meta, site);
       return {
         id: getStableModelId(site),
         remoteId: site.remoteId,
@@ -346,6 +361,7 @@
         model: wireModel,
         stream: normalizeModelStream(site.stream !== undefined ? site.stream : site.streamMode),
         capabilities: capabilities,
+        visionSupport: normalizeVisionSupport(meta.visionSupport),
         reasoningEffort: normalizeReasoningEffort(site.reasoningEffort),
         configCreatedAt: site.configCreatedAt || site.created_at || site.createdAt || '',
         configUpdatedAt: site.configUpdatedAt || site.updated_at || site.updatedAt || '',
@@ -1789,12 +1805,35 @@
       modelAvailableList.innerHTML = draftAvailableModels.map(function(item, index) {
         const extra = [];
         if (item.contextWindow) extra.push('上下文 ' + item.contextWindow);
-        return '<span class="model-id-chip" title="点击 × 移除">'
+        const visionSupport = normalizeVisionSupport(item.visionSupport);
+        const declaredCapabilities = getDeclaredModelCapabilities(item);
+        const detectedCapabilities = declaredCapabilities === null
+          ? guessModelCapabilities(item.id, item.name, { provider: modelProviderEl ? modelProviderEl.value : 'custom' })
+          : declaredCapabilities;
+        const detected = detectedCapabilities.indexOf('vision') !== -1 ? '支持' : '未识别为支持';
+        const source = declaredCapabilities === null ? '名称推断' : '供应商/已有配置';
+        return '<div class="model-available-item">'
+          + '<span class="model-id-chip">'
           + escapeHtml(item.id)
           + (extra.length ? '<em>' + escapeHtml(extra.join(' · ')) + '</em>' : '')
-          + '<button type="button" class="model-id-chip-remove" data-remove-model="' + index + '" aria-label="移除">×</button>'
-          + '</span>';
+          + '<button type="button" class="model-id-chip-remove" data-remove-model="' + index + '" aria-label="移除 ' + escapeHtml(item.id) + '">×</button>'
+          + '</span>'
+          + '<label class="model-vision-choice">视觉支持'
+          + '<select data-model-vision-support="' + index + '" aria-label="' + escapeHtml(item.id) + ' 的视觉支持">'
+          + '<option value="auto"' + (visionSupport === 'auto' ? ' selected' : '') + '>自动识别</option>'
+          + '<option value="supported"' + (visionSupport === 'supported' ? ' selected' : '') + '>支持视觉</option>'
+          + '<option value="unsupported"' + (visionSupport === 'unsupported' ? ' selected' : '') + '>不支持视觉</option>'
+          + '</select></label>'
+          + '<span class="model-vision-source">自动识别：' + detected + '（' + source + '）</span>'
+          + '</div>';
       }).join('');
+      modelAvailableList.querySelectorAll('[data-model-vision-support]').forEach(function(node) {
+        node.addEventListener('change', function() {
+          const index = Number(node.getAttribute('data-model-vision-support'));
+          if (!draftAvailableModels[index]) return;
+          draftAvailableModels[index].visionSupport = normalizeVisionSupport(node.value);
+        });
+      });
       modelAvailableList.querySelectorAll('[data-remove-model]').forEach(function(node) {
         node.addEventListener('click', function() {
           const idx = Number(node.getAttribute('data-remove-model'));
@@ -1874,7 +1913,14 @@
           setStatus(modelListFetchStatus, '该端点没有返回可用模型，请检查接口地址或改为手工添加', 'warn');
           return;
         }
-        draftAvailableModels = normalizeAvailableModels(candidates);
+        const previousModels = draftAvailableModels;
+        draftAvailableModels = normalizeAvailableModels(candidates).map(function(item) {
+          const previous = previousModels.find(function(existing) {
+            return String(existing.id).toLowerCase() === item.id.toLowerCase();
+          });
+          if (previous) item.visionSupport = normalizeVisionSupport(previous.visionSupport);
+          return item;
+        });
         renderAvailableModels();
         setStatus(modelListFetchStatus, '已获取 ' + draftAvailableModels.length + ' 个模型，保存后生效', 'ok');
       } catch (err) {
@@ -1888,6 +1934,7 @@
     if (modelProviderEl) {
       modelProviderEl.addEventListener('change', () => {
         applyProviderPreset(modelProviderEl, modelBaseUrlEl);
+        renderAvailableModels();
       });
     }
     if (modelIdentifierEl) {

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const { test, expect } = require('@playwright/test');
 const { installPersistentModelTaskRoute } = require('./helpers/persistent_model_task_mock');
+const { XLSX_MIME_TYPE, buildXlsxRequirementBuffer } = require('./helpers/xlsx_requirement_fixture');
 
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+bB9sAAAAASUVORK5CYII=',
@@ -181,6 +182,7 @@ async function mockCaseGenApisWithModel(page, token, user, options) {
           model: modelName,
           maxTokens: 1024,
           capabilities: modelCapabilities,
+          availableModels: opts.visionSupport ? [{ id: modelName, capabilities: modelCapabilities, visionSupport: opts.visionSupport }] : undefined,
         },
       };
       return respond(200, modelConfigs || [baseModel].concat(extraModels));
@@ -213,11 +215,45 @@ async function installXmindProxyRecorder(page, options) {
   const input = options || {};
   const responseText = input.responseText || '{"modules":[]}';
   const status = Number(input.status || 200);
-  await page.evaluate(({ responseText, status }) => {
+  await page.evaluate(({ responseText, status, visionProbeStatus }) => {
     var client = window.app && window.app.apiClient ? window.app.apiClient : null;
     if (!client || typeof client.proxyModelRequest !== 'function') return;
     window.__xmindProxyCalls = [];
+    window.__xmindVisionProbeCalls = [];
+    if (!window.__xmindVisionChallengeCaptureInstalled) {
+      var getContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function() {
+        var context = getContext.apply(this, arguments);
+        if (context && typeof context.fillText === 'function' && !context.__xmindChallengeCaptureInstalled) {
+          var fillText = context.fillText;
+          context.fillText = function(text) {
+            if (/^\d{8}$/.test(String(text || ''))) window.__xmindVisionChallengeAnswer = String(text);
+            return fillText.apply(this, arguments);
+          };
+          context.__xmindChallengeCaptureInstalled = true;
+        }
+        return context;
+      };
+      window.__xmindVisionChallengeCaptureInstalled = true;
+    }
     client.proxyModelRequest = function(payload) {
+      if (JSON.stringify(payload || {}).indexOf('[VISION_CAPABILITY_CHECK]') !== -1) {
+        window.__xmindVisionProbeCalls.push(JSON.parse(JSON.stringify(payload || {})));
+        var probeStatus = visionProbeStatus === 'unsupported' ? 400 : (visionProbeStatus === 'unknown' ? 503 : 200);
+        var probeBody = probeStatus === 400
+          ? { error: { message: 'This model does not support image inputs', type: 'invalid_request_error', code: 'unsupported_image' } }
+          : (probeStatus === 503
+            ? { error: { message: 'upstream temporarily unavailable', type: 'service_unavailable' } }
+            : {
+              choices: [{ message: { content: String(window.__xmindVisionChallengeAnswer || '') } }],
+              output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: String(window.__xmindVisionChallengeAnswer || '') }] }],
+            });
+        return Promise.resolve({
+          ok: probeStatus === 200,
+          status: probeStatus,
+          text: function() { return Promise.resolve(JSON.stringify(probeBody)); },
+        });
+      }
       window.__xmindProxyCalls.push(JSON.parse(JSON.stringify(payload || {})));
       return Promise.resolve({
         ok: Number(status || 200) >= 200 && Number(status || 200) < 300,
@@ -239,7 +275,17 @@ async function installXmindProxyRecorder(page, options) {
   }, {
     responseText: String(responseText || '{"modules":[]}'),
     status: status,
+    visionProbeStatus: input.visionProbeStatus || 'supported',
   });
+}
+
+async function abortXmindGenerationWithoutVision(page) {
+  const dialog = page.locator('#xmindVisionSupportOverlay');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('该模型不支持视觉，如果需要识别需求中的图片，需切换多模态模型后重试。');
+  await expect(dialog.getByRole('button', { name: '继续无视觉生成', exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: '中止生成', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
 }
 
 async function waitXmindModelAssigned(page, expectedModelId) {
@@ -1521,7 +1567,8 @@ async function dispatchFileDropToZone(page, zoneId, options) {
     var list = Array.isArray(payload.files) ? payload.files : [];
     list.forEach(function(item) {
       if (!item) return;
-      dt.items.add(new File([String(item.text || '')], String(item.name || 'payload.txt'), {
+      var content = Array.isArray(item.bytes) ? new Uint8Array(item.bytes) : String(item.text || '');
+      dt.items.add(new File([content], String(item.name || 'payload.txt'), {
         type: String(item.mimeType || 'text/plain'),
       }));
     });
@@ -1547,6 +1594,44 @@ async function dispatchFileDropToZone(page, zoneId, options) {
     zoneId: String(zoneId || ''),
     files: Array.isArray(input.files) ? input.files : [],
   });
+}
+
+async function importExcelRequirementAndCompletePrep(page, fileName, fixtureOptions) {
+  await openXmindCaseGenDrawer(page);
+  await clickElementById(page, 'xmindCaseGenSummaryBtn');
+  await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+  const buffer = await buildXlsxRequirementBuffer(page, fixtureOptions);
+  await page.locator('#fileInput').setInputFiles({ name: fileName, mimeType: XLSX_MIME_TYPE, buffer: buffer });
+  await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText(fileName);
+  await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('图片 1 张');
+  await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+  await page.check('input[name="xmindCaseImportMode"][value="skip"]');
+  await expect(page.locator('input[name="xmindCaseImportMode"][value="skip"]')).toBeChecked();
+  await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+  await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+  await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]')).toBeVisible();
+  await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
+  await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+  await waitForNodeText(page, fileName.replace(/\.xlsx$/i, ''));
+}
+
+async function startDelayedExcelRequirementImport(page, buffer) {
+  await page.evaluate((bytes) => {
+    var resultBuffer = new Uint8Array(bytes).buffer;
+    var resolveRead;
+    var delayedRead = new Promise(function(resolve) { resolveRead = resolve; });
+    var file = new File([resultBuffer], 'delayed-requirement.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    window.__delayedExcelReadStarted = false;
+    file.arrayBuffer = function() {
+      window.__delayedExcelReadStarted = true;
+      return delayedRead;
+    };
+    window.__delayedExcelRelease = function() { resolveRead(resultBuffer); };
+    window.__delayedExcelImport = window.app.xmindImportApi.importRequirementFile(file);
+  }, Array.from(buffer));
+  await page.waitForFunction(() => window.__delayedExcelReadStarted === true);
 }
 
 async function openXmindCaseGenDrawer(page) {
@@ -2047,6 +2132,15 @@ async function openRootContextMenu(page) {
     });
   }
   var opened = false;
+  // WebKit 的原生右键回退可能遗留系统菜单，沿用节点菜单的事件触发，后续按钮仍使用真实点击。
+  if (page.context().browser().browserType().name() === 'webkit') {
+    await dispatchRootContextMenu();
+    await page.waitForFunction(() => {
+      var buttons = document.querySelectorAll('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn');
+      return buttons && buttons.length > 0;
+    });
+    return;
+  }
   for (var i = 0; i < 4; i += 1) {
     try {
       await target.click({ button: 'right', force: true });
@@ -4545,6 +4639,608 @@ test.describe('XMind 用例生成抽屉', () => {
     await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('xmind-step1-requirement.txt');
     await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('图片 0 张');
     await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+  });
+
+  test('前置准备选择 Excel 需求按工作表和单元格顺序读取，并携带图片生成用例', async ({ page }) => {
+    const user = { id: 1131, username: 'xmind_excel_requirement', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-requirement', user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'gpt-5.4',
+      modelCapabilities: ['vision', 'reasoning', 'chat'],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      responseText: '{"modules":[{"module":"器灵获取","key_scenarios":["获取条件"],"test_points":["获取方式校验"],"coupled_modules":[],"cases":[{"module":"器灵获取","title":"器灵获取条件校验","priority":"P1","preconditions":"进入器灵界面","steps":["检查获取条件"],"expected":"按条件展示获取方式"}]}]}',
+    });
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    const buffer = await buildXlsxRequirementBuffer(page);
+    await expect(page.locator('#fileInput')).toHaveAttribute('accept', /\.xlsx/);
+    const chooserPromise = page.waitForEvent('filechooser');
+    await page.click('#xmindCaseGenPrepRequirementDropzone');
+    const chooser = await chooserPromise;
+    await chooser.setFiles({ name: 'ordered-requirements.xlsx', mimeType: XLSX_MIME_TYPE, buffer: buffer });
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('ordered-requirements.xlsx');
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('图片 1 张');
+    const text = await page.locator('#rawText').inputValue();
+    const orderedTokens = ['首张需求', '器灵迭代总览', '获取方式标签', '前置 & 条件', '进入器灵界面', 'TRUE', 'FALSE', '次张验收', '次表验收开始', '次表验收结束'];
+    let lastIndex = -1;
+    orderedTokens.forEach((token) => {
+      const index = text.indexOf(token);
+      expect(index, '正文缺少或顺序错误：' + token).toBeGreaterThan(lastIndex);
+      lastIndex = index;
+    });
+    expect(text).toContain('A1:C1');
+    expect(text).toMatch(/A2[^\n]*获取方式标签/);
+    expect(text).toMatch(/C2[^\n]*\b0\b/);
+    expect(text).toMatch(/C3[^\n]*\b2\b/);
+    expect(text).not.toContain('PK\u0003\u0004');
+    const media = await page.evaluate(() => {
+      var source = window.app.state.requirementMedia;
+      var images = source && Array.isArray(source.docxImages) ? source.docxImages : [];
+      return images.map(function(item) {
+        return { textOffset: item.textOffset, type: item.blob && item.blob.type, size: item.blob && item.blob.size };
+      });
+    });
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe('image/png');
+    expect(media[0].size).toBeGreaterThan(0);
+    expect(media[0].textOffset).toBeGreaterThan(text.indexOf('进入器灵界面'));
+    expect(media[0].textOffset).toBeLessThanOrEqual(text.indexOf('TRUE'));
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.check('input[name="xmindCaseImportMode"][value="skip"]', { force: true });
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]');
+    await page.click('#xmindCaseGenSummaryDialogBody [data-prep-nav="confirm"]');
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
+    await waitForNodeText(page, 'ordered-requirements');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => (window.__xmindVisionProbeCalls || []).length)).toBe(1);
+    const content = await page.evaluate(() => window.__xmindProxyCalls[0].payload.input[0].content);
+    const requestText = content.filter(item => item.type === 'input_text').map(item => item.text).join('\n');
+    expect(requestText).toContain(text);
+    expect(requestText.indexOf('器灵迭代总览')).toBeLessThan(requestText.indexOf('次表验收开始'));
+    const images = content.filter(item => item.type === 'input_image');
+    expect(images).toHaveLength(1);
+    expect(images[0].image_url).toMatch(/^data:image\/(png|jpeg);base64,/);
+    const imageIndex = content.findIndex(item => item.type === 'input_image');
+    expect(content[imageIndex - 1].text).toContain('首张需求');
+    expect(content[imageIndex - 1].text).toContain('C2');
+  });
+
+  test('前置准备可拖拽 Excel 需求并读取全部工作表与图片', async ({ page }) => {
+    const user = { id: 1132, username: 'xmind_excel_drop', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-drop', user);
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    const buffer = await buildXlsxRequirementBuffer(page);
+    await dispatchFileDropToZone(page, 'xmindCaseGenPrepRequirementDropzone', {
+      files: [{ name: 'dropped-requirements.xlsx', mimeType: XLSX_MIME_TYPE, bytes: Array.from(buffer) }],
+    });
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('dropped-requirements.xlsx');
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('图片 1 张');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+    const text = await page.locator('#rawText').inputValue();
+    expect(text.indexOf('首张需求')).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf('次张验收')).toBeGreaterThan(text.indexOf('器灵迭代总览'));
+    expect(text).toContain('次表验收结束');
+  });
+
+  test('含图片的 Excel 需求使用非视觉模型时弹窗，中止生成保留正文和图片', async ({ page }) => {
+    const user = { id: 1134, username: 'xmind_excel_without_vision', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-without-vision', user, {
+      modelName: 'deepseek-chat',
+      modelCapabilities: ['chat'],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, { visionProbeStatus: 'unsupported' });
+    await importExcelRequirementAndCompletePrep(page, 'excel-with-pictures.xlsx');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await abortXmindGenerationWithoutVision(page);
+    expect(await page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(0);
+    expect(await page.evaluate(() => (window.__xmindVisionProbeCalls || []).length)).toBe(1);
+    expect(await page.locator('#rawText').inputValue()).toContain('次表验收结束');
+    expect(await page.evaluate(() => window.app.state.requirementMedia.docxImages.length)).toBe(1);
+  });
+
+  test('Excel 模型标记支持视觉但实际拒绝图片时，生成前弹窗且中止不发送生成请求', async ({ page }) => {
+    const user = { id: 1142, username: 'xmind_excel_vision_probe_rejected', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-probe-rejected', user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'marked-vision-model',
+      modelCapabilities: ['vision', 'chat'],
+      visionSupport: 'supported',
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, { visionProbeStatus: 'unsupported' });
+    await importExcelRequirementAndCompletePrep(page, 'excel-probe-rejected.xlsx');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    const dialog = page.locator('#xmindVisionSupportOverlay');
+    await expect(dialog).toBeVisible();
+    const buttons = dialog.getByRole('button');
+    await expect(buttons).toHaveText(['中止生成', '继续无视觉生成']);
+    const bounds = await buttons.evaluateAll((items) => items.map((item) => {
+      const rect = item.getBoundingClientRect();
+      return { x: rect.x, y: rect.y };
+    }));
+    expect(bounds[0].x).toBeLessThan(bounds[1].x);
+    expect(bounds[0].y).toBe(bounds[1].y);
+    const panelBounds = await dialog.getByRole('dialog').boundingBox();
+    const viewport = page.viewportSize();
+    expect(Math.abs(panelBounds.x + panelBounds.width / 2 - viewport.width / 2)).toBeLessThan(2);
+    expect(Math.abs(panelBounds.y + panelBounds.height / 2 - viewport.height / 2)).toBeLessThan(2);
+    expect(await page.evaluate(() => (window.__xmindVisionProbeCalls || []).length)).toBe(1);
+    expect(await page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(0);
+    const pendingTaskId = await dialog.getAttribute('data-vision-task-id');
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('pagehide'));
+      window.dispatchEvent(new Event('pageshow'));
+    });
+    await expect(dialog).toBeVisible();
+    expect(await page.evaluate(id => window.app.xmindCaseGenTaskManager.getTask(id).status, pendingTaskId)).toBe('running');
+    await abortXmindGenerationWithoutVision(page);
+    expect(await page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(0);
+    expect(await page.evaluate(() => window.app.state.requirementMedia.docxImages.length)).toBe(1);
+  });
+
+  test('Excel 视觉校验不通过后继续无视觉生成，仅发送正文并明确图片未参与识别', async ({ page }) => {
+    const user = { id: 1143, username: 'xmind_excel_vision_text_only', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-probe-text-only', user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'marked-vision-model',
+      modelCapabilities: ['vision', 'chat'],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, {
+      visionProbeStatus: 'unsupported',
+      responseText: '{"modules":[{"module":"器灵获取","key_scenarios":["获取条件"],"test_points":["获取方式校验"],"coupled_modules":[],"cases":[{"module":"器灵获取","title":"器灵获取条件校验","priority":"P1","preconditions":"进入器灵界面","steps":["检查获取条件"],"expected":"按条件展示获取方式"}]}]}',
+    });
+    await importExcelRequirementAndCompletePrep(page, 'excel-probe-text-only.xlsx');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    const dialog = page.locator('#xmindVisionSupportOverlay');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: '继续无视觉生成', exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBeGreaterThan(0);
+    const content = await page.evaluate(() => window.__xmindProxyCalls[0].payload.input[0].content);
+    expect(content.filter(item => item.type === 'input_image')).toHaveLength(0);
+    const text = content.filter(item => item.type === 'input_text').map(item => item.text).join('\n');
+    expect(text).toContain('器灵迭代总览');
+    expect(text).toContain('次表验收结束');
+    expect(text).toContain('本次仅依据需求文本生成，需求中的图片未参与识别，请勿推测图片内容。');
+    await expect(page.getByText('已选择继续无视觉生成，需求中的图片未参与识别', { exact: false }).first()).toBeVisible();
+    expect(await page.evaluate(() => (window.__xmindVisionProbeCalls || []).length)).toBe(1);
+    expect(await page.evaluate(() => window.app.state.requirementMedia.docxImages.length)).toBe(1);
+    await waitForNodeText(page, '器灵获取条件校验');
+    await expect(page.locator('#xmindVisionSupportOverlay')).not.toBeVisible();
+    expect(await page.evaluate(() => (window.__xmindVisionProbeCalls || []).length)).toBe(1);
+    const generationCalls = await page.evaluate(() => window.__xmindProxyCalls);
+    expect(generationCalls.length).toBeGreaterThan(1);
+    generationCalls.forEach(call => {
+      const serialized = JSON.stringify(call.payload);
+      expect(serialized).not.toContain('input_image');
+      expect(serialized).not.toContain('image_url');
+    });
+  });
+
+  test('Excel 手动选择不支持视觉时直接弹窗，自动识别未知但实际支持时可携图生成', async ({ page }) => {
+    const user = { id: 1146, username: 'xmind_excel_manual_vision', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-manual-vision', user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'supplier-alias',
+      modelCapabilities: ['chat'],
+      visionSupport: 'unsupported',
+      extraModels: [{
+        id: 902,
+        name: 'UnknownAlias',
+        owner_id: user.id,
+        scope: 'user',
+        config_json: {
+          provider: 'custom',
+          baseUrl: 'https://mock-model.local/v1/responses',
+          apiKey: 'mock-key',
+          availableModels: [{ id: 'unrecognized-alias', capabilities: ['chat'], visionSupport: 'auto' }],
+        },
+      }],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page);
+    await importExcelRequirementAndCompletePrep(page, 'excel-manual-vision.xlsx');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    const dialog = page.locator('#xmindVisionSupportOverlay');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: '中止生成', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: '继续无视觉生成', exact: true })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(dialog.getByRole('button', { name: '中止生成', exact: true })).toBeFocused();
+    expect(await page.evaluate(() => (window.__xmindVisionProbeCalls || []).length)).toBe(0);
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.app.xmindCaseGenTaskManager.getTasks().filter(task => task.status === 'running').length)).toBe(0);
+    await page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]').selectOption({ label: 'UnknownAlias · unrecognized-alias' });
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => (window.__xmindVisionProbeCalls || []).length)).toBe(1);
+    expect(await page.evaluate(() => JSON.stringify(window.__xmindProxyCalls[0].payload))).toContain('input_image');
+  });
+
+  test('Excel 视觉校验遇到暂时服务错误时提示验证失败，不误报模型不支持视觉', async ({ page }) => {
+    const user = { id: 1144, username: 'xmind_excel_vision_probe_unavailable', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-probe-unavailable', user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'marked-vision-model',
+      modelCapabilities: ['vision', 'chat'],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, { visionProbeStatus: 'unknown' });
+    await importExcelRequirementAndCompletePrep(page, 'excel-probe-unavailable.xlsx');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect(page.locator('#xmindCaseGenStatus')).toContainText('生成失败');
+    await expect(page.locator('#xmindVisionSupportOverlay')).not.toBeVisible();
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').first();
+    await expect(latestCard).toContainText('视觉能力验证失败');
+    await expect(latestCard).not.toContainText('该模型不支持视觉');
+    expect(await page.evaluate(() => (window.__xmindVisionProbeCalls || []).length)).toBe(1);
+    expect(await page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(0);
+  });
+
+  test('纯文本需求使用视觉模型生成时不发起视觉校验请求', async ({ page }) => {
+    const user = { id: 1145, username: 'xmind_text_no_vision_probe', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-text-no-vision-probe', user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'marked-vision-model',
+      modelCapabilities: ['vision', 'chat'],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, { visionProbeStatus: 'unsupported' });
+    await openXmindCaseGenDrawer(page);
+    await createXmindWorkspaceByManualPrep(page, '纯文本需求', '登录后可以查看器灵状态。', {
+      useExistingWorkspace: true,
+      completePrep: true,
+    });
+    await waitForNodeText(page, '纯文本需求');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => (window.__xmindVisionProbeCalls || []).length)).toBe(0);
+    await expect(page.locator('#xmindVisionSupportOverlay')).not.toBeVisible();
+  });
+
+  test('Excel 非视觉生成中止后切换视觉模型重试，原始配图仍能发送', async ({ page }) => {
+    const user = { id: 1138, username: 'xmind_excel_vision_retry', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-vision-retry', user, {
+      modelName: 'deepseek-chat',
+      modelCapabilities: ['chat'],
+      extraModels: [{
+        id: 902,
+        name: 'ExcelVisionModel',
+        owner_id: user.id,
+        scope: 'user',
+        config_json: {
+          provider: 'custom',
+          baseUrl: 'https://mock-vision.local/v1/responses',
+          apiKey: 'mock-vision-key',
+          model: 'gpt-5.4',
+          maxTokens: 2048,
+          capabilities: ['vision', 'reasoning', 'chat'],
+        },
+      }],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page, { visionProbeStatus: 'unsupported' });
+    await importExcelRequirementAndCompletePrep(page, 'excel-retry-pictures.xlsx');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await abortXmindGenerationWithoutVision(page);
+    expect(await page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(0);
+
+    await page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]')
+      .selectOption({ label: 'ExcelVisionModel · gpt-5.4' });
+    await installXmindProxyRecorder(page);
+    expect(await page.evaluate(() => window.app.state.requirementMedia.docxImages[0].blob instanceof Blob)).toBe(true);
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBeGreaterThan(0);
+    const content = await page.evaluate(() => window.__xmindProxyCalls[0].payload.input[0].content);
+    expect(content.filter(item => item.type === 'input_image')).toHaveLength(1);
+    expect(content.filter(item => item.type === 'input_text').map(item => item.text).join('\n')).toContain('次表验收结束');
+  });
+
+  test('Excel 需求切换生成页签再返回后保留原始配图并可生成', async ({ page }) => {
+    const user = { id: 1139, username: 'xmind_excel_workspace_return', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-workspace-return', user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'gpt-5.4',
+      modelCapabilities: ['vision', 'reasoning', 'chat'],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page);
+    await importExcelRequirementAndCompletePrep(page, 'excel-workspace-pictures.xlsx');
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
+    await page.click('#xmindCaseGenSummaryCloseBtn');
+    await page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]').first().click();
+    await waitForNodeText(page, 'excel-workspace-pictures');
+    const media = await page.evaluate(() => window.app.state.requirementMedia.docxImages.map(function(item) {
+      return { isBlob: item.blob instanceof Blob, type: item.blob && item.blob.type, size: item.blob && item.blob.size };
+    }));
+    expect(media).toHaveLength(1);
+    expect(media[0].isBlob).toBe(true);
+    expect(media[0].type).toBe('image/png');
+    expect(media[0].size).toBeGreaterThan(0);
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBeGreaterThan(0);
+    const content = await page.evaluate(() => window.__xmindProxyCalls[0].payload.input[0].content);
+    expect(content.filter(item => item.type === 'input_image')).toHaveLength(1);
+    expect(content.filter(item => item.type === 'input_text').map(item => item.text).join('\n')).toContain('次表验收结束');
+  });
+
+  ['刷新页面', '跳转模型设置页后返回'].forEach((navigation) => {
+    test('Excel 需求' + navigation + '仍保留图片并发送完整生成请求', async ({ page }) => {
+      const user = { id: 1140, username: 'xmind_excel_persisted_picture', role: 'user', level: 'member' };
+      const switchModelAfterReturn = navigation === '跳转模型设置页后返回';
+      const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-persisted-picture', user, {
+        modelBaseUrl: 'https://mock-model.local/v1/responses',
+        modelName: switchModelAfterReturn ? 'deepseek-chat' : 'gpt-5.4',
+        modelCapabilities: switchModelAfterReturn ? ['chat'] : ['vision', 'reasoning', 'chat'],
+        extraModels: [{
+          id: 902,
+          name: 'ExcelVisionModel',
+          owner_id: user.id,
+          scope: 'user',
+          config_json: {
+            provider: 'custom',
+            baseUrl: 'https://mock-vision.local/v1/responses',
+            apiKey: 'mock-vision-key',
+            model: 'gpt-5.4',
+            maxTokens: 2048,
+            capabilities: ['vision', 'reasoning', 'chat'],
+          },
+        }],
+      });
+      await gotoCasesgenWorkflow(page);
+      await waitXmindModelAssigned(page, mockInfo.modelId);
+      await installXmindProxyRecorder(page, { visionProbeStatus: switchModelAfterReturn ? 'unsupported' : 'supported' });
+      await importExcelRequirementAndCompletePrep(page, 'excel-persisted-pictures.xlsx');
+      if (switchModelAfterReturn) {
+        await openRootContextMenu(page);
+        await clickContextMenuAction(page, '生成全量用例');
+        await abortXmindGenerationWithoutVision(page);
+        expect(await page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(0);
+      }
+      await page.evaluate(() => window.app.persistWorkflowStateNow());
+      const savedMedia = await page.evaluate(() => {
+        var images = window.app.state.requirementMedia.docxImages;
+        return {
+          cacheIds: images.map(function(item) { return String(item.cacheId || ''); }),
+          snapshot: localStorage.getItem('usecase-workflow-state-v1') || '',
+        };
+      });
+      expect(savedMedia.cacheIds).toHaveLength(1);
+      expect(savedMedia.cacheIds[0]).toBeTruthy();
+      expect(savedMedia.snapshot).toContain(savedMedia.cacheIds[0]);
+      expect(savedMedia.snapshot).not.toContain('data:image/');
+      expect(savedMedia.snapshot).not.toContain('iVBORw0KGgo');
+      if (navigation === '刷新页面') {
+        await page.reload({ waitUntil: 'domcontentloaded' });
+      } else {
+        await page.goto('/ai-tools.html?tab=models');
+        await page.waitForFunction(() => window.app && window.app._inited === true);
+        await expect(page).toHaveURL(/\/ai-tools\.html\?tab=models/);
+        await gotoCasesgenWorkflow(page, { resetWorkflowStorage: false });
+      }
+      await page.waitForFunction(() => window.app && window.app._inited === true);
+      await waitXmindModelAssigned(page, mockInfo.modelId);
+      await installXmindProxyRecorder(page);
+      await openXmindCaseGenDrawer(page);
+      await waitForNodeText(page, 'excel-persisted-pictures');
+      expect(await page.locator('#rawText').inputValue()).toContain('次表验收结束');
+      expect(await page.evaluate(() => window.app.state.requirementMedia.docxImages.length)).toBe(1);
+      if (switchModelAfterReturn) {
+        await page.locator('#xmindCaseGenMindContainer [data-xmind-casegen-model-select]')
+          .selectOption({ label: 'ExcelVisionModel · gpt-5.4' });
+      }
+      await openRootContextMenu(page);
+      await clickContextMenuAction(page, '生成全量用例');
+      await expect.poll(() => page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBeGreaterThan(0);
+      const content = await page.evaluate(() => window.__xmindProxyCalls[0].payload.input[0].content);
+      expect(content.filter(item => item.type === 'input_image')).toHaveLength(1);
+      expect(content.filter(item => item.type === 'input_image')[0].image_url).toMatch(/^data:image\/(png|jpeg);base64,/);
+      expect(content.filter(item => item.type === 'input_text').map(item => item.text).join('\n')).toContain('次表验收结束');
+    });
+  });
+
+  test('旧 Excel 缓存丢失图片内容时提示重新导入，不误报模型调用失败', async ({ page }) => {
+    const user = { id: 1141, username: 'xmind_excel_legacy_missing_picture', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-legacy-missing-picture', user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'gpt-5.4',
+      modelCapabilities: ['vision', 'reasoning', 'chat'],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await importExcelRequirementAndCompletePrep(page, 'excel-legacy-missing-pictures.xlsx');
+    await page.evaluate(() => {
+      window.app.persistWorkflowStateNow();
+      var key = 'usecase-workflow-state-v1';
+      var snapshot = JSON.parse(localStorage.getItem(key));
+      function removePictureContent(value) {
+        if (!value || typeof value !== 'object') return;
+        if (Array.isArray(value.docxImages)) {
+          value.docxImages.forEach(function(item) {
+            if (!item || item.source !== 'xlsx') return;
+            item.blob = {};
+            delete item.cacheId;
+            delete item.cacheImageIndex;
+          });
+        }
+        Object.keys(value).forEach(function(name) { removePictureContent(value[name]); });
+      }
+      removePictureContent(window.app.state.requirementMedia);
+      removePictureContent(window.app.state.xmindCaseGen.workspaces);
+      removePictureContent(snapshot);
+      localStorage.setItem(key, JSON.stringify(snapshot));
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app._inited === true);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page);
+    await openXmindCaseGenDrawer(page);
+    await waitForNodeText(page, 'excel-legacy-missing-pictures');
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect(page.locator('#xmindCaseGenStatus')).toContainText('生成失败');
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').first();
+    await expect(latestCard).toContainText('Excel 需求有 1 张图片内容已丢失或本地缓存不可用，请重新导入 Excel 后再生成');
+    await expect(latestCard).not.toContainText('模型调用出错');
+    expect(await page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(0);
+    expect(await page.locator('#rawText').inputValue()).toContain('次表验收结束');
+  });
+
+  test('Excel 需求图片无法解码时明确失败，不静默省略图片后生成', async ({ page }) => {
+    const user = { id: 1135, username: 'xmind_excel_broken_picture', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-broken-picture', user, {
+      modelBaseUrl: 'https://mock-model.local/v1/responses',
+      modelName: 'gpt-5.4',
+      modelCapabilities: ['vision', 'reasoning', 'chat'],
+    });
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await installXmindProxyRecorder(page);
+    await importExcelRequirementAndCompletePrep(page, 'excel-with-broken-picture.xlsx', {
+      imageBase64: Buffer.from('not-a-decodable-png').toString('base64'),
+    });
+    await openRootContextMenu(page);
+    await clickContextMenuAction(page, '生成全量用例');
+    await expect(page.locator('#xmindCaseGenStatus')).toContainText('生成失败');
+    await clickElementById(page, 'xmindCaseGenHistoryBtn');
+    const latestCard = page.locator('.xmind-casegen-history-card').first();
+    await expect(latestCard).toBeVisible();
+    await expect(latestCard).toContainText('Excel 需求有 1 张图片无法处理，请检查图片格式和大小后重新导入');
+    await expect(latestCard).not.toContainText('模型调用出错');
+    expect(await page.evaluate(() => (window.__xmindProxyCalls || []).length)).toBe(0);
+    expect(await page.locator('#rawText').inputValue()).toContain('器灵迭代总览');
+    expect(await page.evaluate(() => window.app.state.requirementMedia.docxImages.length)).toBe(1);
+  });
+
+  test('Excel 读取未完成时新导入文本需求，迟到的 Excel 不会覆盖新正文和图片状态', async ({ page }) => {
+    const user = { id: 1136, username: 'xmind_excel_import_race', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-import-race', user);
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    const buffer = await buildXlsxRequirementBuffer(page);
+    await startDelayedExcelRequirementImport(page, buffer);
+    const result = await page.evaluate(async () => {
+      var current = await window.app.xmindImportApi.importRequirementFile(new File([
+        '最新文本需求：后选择的文件必须保留，不能被较慢的 Excel 覆盖。',
+      ], 'newest-requirement.txt', { type: 'text/plain' }));
+      window.__delayedExcelRelease();
+      var old = await window.__delayedExcelImport;
+      return { current: current, old: old };
+    });
+    expect(result).toEqual({ current: true, old: false });
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('newest-requirement.txt');
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('图片 0 张');
+    expect(await page.locator('#rawText').inputValue()).toBe('最新文本需求：后选择的文件必须保留，不能被较慢的 Excel 覆盖。');
+    expect(await page.evaluate(() => ({
+      name: window.app.state.lastRawImportName,
+      images: window.app.state.requirementMedia.docxImages.length,
+    }))).toEqual({ name: 'newest-requirement.txt', images: 0 });
+    await expect(page.locator('#xmindCaseGenRequirementImportStatus')).toContainText('文件读取完成');
+  });
+
+  test('Excel 读取期间切换生成页签会取消导入，不把正文和图片写入新页签', async ({ page }) => {
+    const user = { id: 1137, username: 'xmind_excel_workspace_race', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-workspace-race', user);
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    const firstWorkspace = await page.evaluate(() => window.app.state.xmindCaseGen.activeWorkspaceId);
+    const buffer = await buildXlsxRequirementBuffer(page);
+    await startDelayedExcelRequirementImport(page, buffer);
+    await page.click('#xmindCaseGenWorkspaceAddBtn');
+    await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(2);
+    await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    const before = await page.evaluate(() => ({
+      workspace: window.app.state.xmindCaseGen.activeWorkspaceId,
+      text: document.getElementById('rawText').value,
+      name: window.app.state.lastRawImportName,
+      images: window.app.state.requirementMedia.docxImages.length,
+    }));
+    expect(before.workspace).not.toBe(firstWorkspace);
+    const oldResult = await page.evaluate(async () => {
+      window.__delayedExcelRelease();
+      return await window.__delayedExcelImport;
+    });
+    expect(oldResult).toBe(false);
+    expect(await page.evaluate(() => ({
+      workspace: window.app.state.xmindCaseGen.activeWorkspaceId,
+      text: document.getElementById('rawText').value,
+      name: window.app.state.lastRawImportName,
+      images: window.app.state.requirementMedia.docxImages.length,
+    }))).toEqual(before);
+    await expect(page.locator('#xmindCaseGenRequirementImportStatus')).toContainText('需求页签已切换，本次导入已取消');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeDisabled();
+  });
+
+  test('损坏 Excel 和旧版 xls 导入失败时保留原需求与图片，不把二进制写成正文', async ({ page }) => {
+    const user = { id: 1133, username: 'xmind_excel_invalid', role: 'user', level: 'member' };
+    const mockInfo = await mockCaseGenApisWithModel(page, 'token-xmind-excel-invalid', user);
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page, mockInfo.modelId);
+    await openXmindCaseGenDrawer(page);
+    await clickElementById(page, 'xmindCaseGenSummaryBtn');
+    await page.check('input[name="xmindRequirementMode"][value="document"]', { force: true });
+    const buffer = await buildXlsxRequirementBuffer(page);
+    await page.locator('#fileInput').setInputFiles({ name: 'retained-requirements.xlsx', mimeType: XLSX_MIME_TYPE, buffer: buffer });
+    await expect(page.locator('#xmindCaseGenPrepRequirementDropzone')).toContainText('retained-requirements.xlsx');
+    const originalText = await page.locator('#rawText').inputValue();
+    const failures = [
+      { name: 'broken-requirements.xlsx', mimeType: XLSX_MIME_TYPE, buffer: Buffer.from('PK\u0003\u0004broken-xlsx-binary\u0000') },
+      { name: 'legacy-requirements.xls', mimeType: 'application/vnd.ms-excel', buffer: Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]) },
+    ];
+    for (const invalid of failures) {
+      await page.locator('#fileInput').setInputFiles(invalid);
+      await expect(page.locator('#parseStatus')).toContainText('读取失败');
+      await expect(page.locator('#xmindCaseGenRequirementImportStatus')).toBeVisible();
+      await expect(page.locator('#xmindCaseGenRequirementImportStatus')).toContainText('读取失败');
+      if (invalid.name.endsWith('.xls')) await expect(page.locator('#parseStatus')).toContainText('xlsx');
+      expect(await page.locator('#rawText').inputValue()).toBe(originalText);
+      const state = await page.evaluate(() => ({
+        name: window.app.state.lastRawImportName,
+        imageCount: window.app.state.requirementMedia.docxImages.length,
+      }));
+      expect(state).toEqual({ name: 'retained-requirements.xlsx', imageCount: 1 });
+      await expect(page.locator('#xmindCaseGenSummaryDialogBody [data-prep-nav="next"]')).toBeEnabled();
+    }
   });
 
   test('前置准备 step1 导入需求后展示需求图片数量', async ({ page }) => {
