@@ -2369,6 +2369,10 @@
     }
 
     function finalizeLegacyWorkflowRestore() {
+      if (!getWorkspaceOrder().length) {
+        drawerLegacyRestoreSnapshot = null;
+        return;
+      }
       restoreLegacyWorkflowContext({
         allowWhileXmindMirror: true,
         render: false,
@@ -19543,6 +19547,7 @@
           closeRecoveryCore.markWorkspaceClosed(targetId);
         }
         if (!currentHost.workspaceOrder.length) {
+          var activeCaseGenView = state.caseGenSettings.activeTab;
           currentHost.activeWorkspaceId = '';
           currentHost.mirrorWorkspaceId = '';
           clearCurrentWorkspaceUiBeforeSwitch();
@@ -19550,6 +19555,7 @@
           resetWorkflowStateForXmind(isDrawerOpen(), drawerEl && drawerEl.classList
             ? drawerEl.classList.contains('xmind-drawer-fullscreen')
             : false);
+          state.caseGenSettings.activeTab = activeCaseGenView;
           renderWorkspaceTabs();
           updateSummary();
           if (isDrawerOpen()) {

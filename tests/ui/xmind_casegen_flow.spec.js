@@ -13907,6 +13907,148 @@ test.describe('XMind 用例生成抽屉', () => {
     expect(retryResult.cloudfrontRunning).toBe(false);
   });
 
+  for (const scenario of [
+    { name: '收起重开', navigate: false },
+    { name: '收起并切页返回', navigate: true },
+  ]) {
+    test('关闭最后一个已生成的文档页签后' + scenario.name + '及刷新不会复活旧需求', async ({ page }) => {
+      const token = 'token-xmind-last-document-close-' + String(scenario.navigate);
+      const user = { id: 921, username: 'last_document_close', role: 'user', level: 'member' };
+      const mockInfo = await mockCaseGenApisWithModel(page, token, user, {});
+      const requirementLabel = '关闭最后一个文档页签';
+      const requirementText = '需求：关闭最后一个已生成的文档页签后，不应从旧流程输入中重新创建同名草稿。';
+      await gotoCasesgenWorkflow(page);
+      await waitXmindModelAssigned(page, mockInfo.modelId);
+      await seedDocumentRequirement(page, {
+        requirementLabel: requirementLabel,
+        text: requirementText,
+      });
+      await seedAiSkeleton(page, [{
+        id: 'last-document-module',
+        title: '最后文档模块',
+        scenarios: ['关闭生成页签'],
+        points: ['关闭后保留空态'],
+        coupled: [],
+      }]);
+      await seedAiCases(page, {
+        'last-document-module': [{
+          module: '最后文档模块',
+          title: '关闭后不会重新创建旧需求页签',
+          priority: 'P1',
+          preconditions: '文档需求已生成用例',
+          steps: ['关闭最后一个生成页签', '收起并重新打开生成面板'],
+          expected: '生成面板保持无页签空态',
+        }],
+      });
+      await seedPrepState(page, {
+        requirementMode: 'document',
+        caseImportMode: 'skip',
+        completed: true,
+      });
+      await page.evaluate(() => {
+        window.app.casesGenApi.syncLegacyCaseGenState({ force: true, persist: false });
+      });
+      await openXmindCaseGenDrawer(page);
+      await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
+      await expect.poll(async () => {
+        const overview = await readXmindToolbarOverview(page);
+        return { modules: overview.modules, cases: overview.cases };
+      }).toEqual({ modules: 1, cases: 1 });
+
+      const readLegacyInputs = async () => page.evaluate(() => {
+        var legacy = window.app.state.caseGenLegacy || {};
+        var results = legacy.results && typeof legacy.results === 'object' ? legacy.results : {};
+        var caseCount = 0;
+        Object.keys(results).forEach(function(key) {
+          var value = results[key];
+          if (Array.isArray(value)) {
+            caseCount += value.length;
+            return;
+          }
+          try {
+            var parsed = typeof value === 'string' ? JSON.parse(value) : value;
+            if (Array.isArray(parsed)) caseCount += parsed.length;
+          } catch (_) {}
+        });
+        return {
+          requirementLabel: String(legacy.requirementLabel || ''),
+          rawText: String(legacy.rawText || ''),
+          lastRawImportName: String(legacy.lastRawImportName || ''),
+          modules: Array.isArray(legacy.modules) ? legacy.modules.length : 0,
+          cases: caseCount,
+        };
+      });
+      const legacyInputs = {
+        requirementLabel: requirementLabel,
+        rawText: requirementText,
+        lastRawImportName: 'xmind-requirement.docx',
+        modules: 1,
+        cases: 1,
+      };
+      expect(await readLegacyInputs()).toEqual(legacyInputs);
+
+      const expectEmptyWorkspace = async () => {
+        await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(0);
+        await expect(page.locator('#xmindCaseGenMindContainer .xmind-casegen-empty-title')).toHaveText('暂无生成页签');
+        await expect.poll(async () => page.evaluate(() => {
+          var host = window.app.state.xmindCaseGen || {};
+          var raw = localStorage.getItem('usecase-workflow-state-v1') || '';
+          var saved = raw ? JSON.parse(raw) : null;
+          var storedHost = saved && saved.data && saved.data.xmindCaseGen ? saved.data.xmindCaseGen : {};
+          return {
+            order: host.workspaceOrder || [],
+            workspaceIds: Object.keys(host.workspaces || {}),
+            activeWorkspaceId: String(host.activeWorkspaceId || ''),
+            storedOrder: storedHost.workspaceOrder || [],
+            storedWorkspaceIds: Object.keys(storedHost.workspaces || {}),
+          };
+        })).toEqual({
+          order: [],
+          workspaceIds: [],
+          activeWorkspaceId: '',
+          storedOrder: [],
+          storedWorkspaceIds: [],
+        });
+      };
+
+      await clickXmindWorkspaceCloseUi(page, requirementLabel);
+      await expect(page.locator('#appConfirmDrawer')).toHaveClass(/open/);
+      await expect(page.locator('#appConfirmDrawerTitle')).toHaveText('关闭生成页签');
+      await expect(page.locator('#appConfirmDrawerConfirmBtn')).toHaveText('直接关闭');
+      await page.click('#appConfirmDrawerConfirmBtn');
+      await expect(page.locator('#appConfirmDrawer')).not.toHaveClass(/open|closing/);
+      await expectEmptyWorkspace();
+      expect(await readLegacyInputs()).toEqual(legacyInputs);
+
+      await page.click('#closeXmindCaseGenDrawerBtn');
+      await waitXmindDrawerClosedStable(page);
+      expect(await readLegacyInputs()).toEqual(legacyInputs);
+
+      if (scenario.navigate) {
+        await page.click('[data-tab-btn="tempexec"]');
+        await expect(page).toHaveURL(/\/case-exec\.html\?tab=tempexec/);
+        await page.waitForFunction(() => window.app && window.app._inited === true);
+        await page.click('[data-tab-btn="casesgen"]');
+        await expect(page).toHaveURL(/\/ai-workflow\.html\?tab=casesgen/);
+        await page.waitForFunction(() => window.app && window.app._inited === true);
+        await waitXmindModelAssigned(page, mockInfo.modelId);
+      }
+
+      await page.click('#xmindCaseGenOpenBtn');
+      await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+      await expectEmptyWorkspace();
+      if (!scenario.navigate) {
+        expect(await readLegacyInputs()).toEqual(legacyInputs);
+      }
+
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => window.app && window.app._inited === true, {}, { timeout: 25000 });
+      await waitXmindModelAssigned(page, mockInfo.modelId);
+      await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+      await expectEmptyWorkspace();
+    });
+  }
+
   test('关闭 XMind 页签必须立即从本地缓存移除，刷新后不会复活草稿', async ({ browser }) => {
     const token = 'token-xmind-close-persist-now';
     const user = { id: 918, username: 'close_persist_now', role: 'user', level: 'member' };
