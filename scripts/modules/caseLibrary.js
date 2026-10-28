@@ -10643,6 +10643,7 @@
         generationMode: '',
         resultGeneratedCount: 0,
         resultDedupeCount: 0,
+        resultDedupePending: false,
       };
     }
     if (!state.aiGen.selection || !(state.aiGen.selection instanceof Set)) {
@@ -11205,11 +11206,15 @@
     if (generatedCount === null) generatedCount = keptCount + removedCount;
     ai.resultGeneratedCount = generatedCount;
     ai.resultDedupeCount = removedCount;
+    ai.resultDedupePending = Boolean(parsed && parsed.ai_dedupe_error);
   }
 
   function formatCaseLibraryAiGenCompleteStatus(ai) {
     var generatedCount = normalizeCaseLibraryAiGenCount(ai.resultGeneratedCount);
     var dedupeCount = normalizeCaseLibraryAiGenCount(ai.resultDedupeCount);
+    if (ai.resultDedupePending === true) {
+      return '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重未完成';
+    }
     var text = '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条';
     if (!ai.modules || !ai.modules.length) return '生成完成：' + text + '，未返回可追加用例';
     return '生成完成：' + text;
@@ -11224,7 +11229,9 @@
     }
     var generatedCount = normalizeCaseLibraryAiGenCount(ai.resultGeneratedCount);
     var dedupeCount = normalizeCaseLibraryAiGenCount(ai.resultDedupeCount);
-    dom.aiGenResultSummary.textContent = '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条';
+    dom.aiGenResultSummary.textContent = ai.resultDedupePending === true
+      ? ('生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重未完成')
+      : ('生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条');
   }
 
   function renderCaseLibraryAiGenResult() {
@@ -11453,6 +11460,7 @@
     ai.generationMode = '';
     ai.resultGeneratedCount = 0;
     ai.resultDedupeCount = 0;
+    ai.resultDedupePending = false;
     if (!keepRequirement) {
       ai.requirementText = '';
       ai.requirementFileName = '';
@@ -11510,6 +11518,17 @@
     }
   }
 
+  function cloneCaseLibraryAiGenCaseList(items) {
+    if (!Array.isArray(items)) return [];
+    try {
+      return JSON.parse(JSON.stringify(items));
+    } catch (err) {
+      return items.map(function(item) {
+        return item && typeof item === 'object' ? Object.assign({}, item) : item;
+      });
+    }
+  }
+
   function persistCaseLibraryAiGenSemanticDedupeResult(task, parsed, errorText) {
     if (!task || !task.id) return;
     var manager = getCaseLibraryAiGenManager();
@@ -11521,7 +11540,7 @@
       semanticDedupeRunning: false,
       semanticDedupeResult: snapshot,
       semanticDedupeCompletedAt: Date.now(),
-      semanticDedupeError: errorText ? String(errorText || '') : '',
+      semanticDedupeError: errorText ? String(errorText || '') : String(snapshot.ai_dedupe_error || ''),
     }, 'semantic-dedupe');
   }
 
@@ -11533,11 +11552,14 @@
       ai.selection = new Set();
       ai.resultGeneratedCount = 0;
       ai.resultDedupeCount = 0;
+      ai.resultDedupePending = false;
     } else {
       ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
       ai.selection = new Set();
       applyCaseLibraryAiGenResultStats(ai, parsed);
-      setStatus(dom.aiGenStatus, formatCaseLibraryAiGenCompleteStatus(ai), 'ok');
+      setStatus(dom.aiGenStatus, parsed && parsed.ai_dedupe_error
+        ? ('去重失败，已保留生成结果：' + String(parsed.ai_dedupe_error || ''))
+        : formatCaseLibraryAiGenCompleteStatus(ai), parsed && parsed.ai_dedupe_error ? 'warn' : 'ok');
       if (resultToken) {
         applyCaseLibraryAiGenAppendMap(ai.modules, getCaseLibraryAiGenAppendMap(task.caseFileId, resultToken));
       }
@@ -11616,7 +11638,9 @@
       }
       if (parsed && !parsed.error && task.prepContext) {
         var prepApi = getCasePageAiGenPrepApi();
-        var sourceCases = state.editor.items || [];
+        var sourceCases = cloneCaseLibraryAiGenCaseList(Array.isArray(task.prepContext.sourceCases)
+          ? task.prepContext.sourceCases
+          : (state.editor.items || []));
         var coreApi = getCore();
         if (prepApi && typeof prepApi.applyAiDedupeToParsed === 'function' && coreApi && typeof coreApi.callModelWithConfig === 'function') {
           if (task.id && caseLibraryAiDedupeResultMap[task.id]) {
@@ -11650,11 +11674,12 @@
             if (task.id) caseLibraryAiDedupeResultMap[task.id] = nextParsed;
             persistCaseLibraryAiGenSemanticDedupeResult(task, nextParsed, '');
             finishCaseLibraryAiGenParsedResult(ai, nextParsed, task, resultToken);
-          }).catch(function() {
+          }).catch(function(err) {
             var currentTask = getCurrentCaseLibraryAiGenTask();
             if (!currentTask || currentTask.id !== task.id || currentTask.status === 'cancelled') return;
+            parsed.ai_dedupe_error = err && err.message ? err.message : 'AI 语义去重失败';
             if (task.id) caseLibraryAiDedupeResultMap[task.id] = parsed;
-            persistCaseLibraryAiGenSemanticDedupeResult(task, parsed, 'AI 语义去重失败');
+            persistCaseLibraryAiGenSemanticDedupeResult(task, parsed, parsed.ai_dedupe_error);
             finishCaseLibraryAiGenParsedResult(ai, parsed, task, resultToken);
           }).finally(function() {
             delete caseLibraryAiDedupeTaskMap[task.id];
@@ -11857,7 +11882,7 @@
       displayName: state.editor.caseFile.file_name_clean || state.editor.caseFile.name || '当前用例文件',
       projectId: state.editor.caseFile.project_id || '',
       versionId: state.editor.caseFile.version_id || '',
-      cases: state.editor.items || [],
+      cases: cloneCaseLibraryAiGenCaseList(state.editor.items || []),
       requirementText: currentRequirement || ai.requirementText || '',
       requirementSupplement: '',
       model: model,
@@ -12030,8 +12055,9 @@
       showCenterToast('请到AI功能-功能指派 页面下，配置该功能模型。', 'warn', 5000);
       return;
     }
-    var moduleList = buildCaseLibraryAiGenModuleList(state.editor.items || []);
-    var casePayload = buildCaseLibraryAiGenCasePayload(state.editor.items || []);
+    var originalCasesForRun = cloneCaseLibraryAiGenCaseList(state.editor.items || []);
+    var moduleList = buildCaseLibraryAiGenModuleList(originalCasesForRun);
+    var casePayload = buildCaseLibraryAiGenCasePayload(originalCasesForRun);
     var threshold = resolveCaseLibraryGenCoverageThreshold();
     var assignments = getGlobalAssignments();
     var prompt = (assignments && assignments.caseLibraryGenPrompt)
@@ -12093,6 +12119,7 @@
     ai.generationMode = resolveCaseLibraryAiGenGenerationMode(prepContext);
     ai.resultGeneratedCount = 0;
     ai.resultDedupeCount = 0;
+    ai.resultDedupePending = false;
     setStatus(dom.aiGenStatus, '正在生成用例...', '');
     renderCaseLibraryAiGenResult();
     syncCaseLibraryAiGenRunBtn();
@@ -12140,7 +12167,10 @@
         if (parsed && !parsed.error && prepContext && prepApi) {
           if (typeof prepApi.applyAiDedupeToParsed === 'function') {
             setStatus(dom.aiGenStatus, '正在进行 AI 语义去重...', '');
-            return prepApi.applyAiDedupeToParsed(parsed, state.editor.items || [], prepContext, {
+            var dedupeSourceCases = Array.isArray(prepContext.sourceCases)
+              ? cloneCaseLibraryAiGenCaseList(prepContext.sourceCases)
+              : originalCasesForRun;
+            return prepApi.applyAiDedupeToParsed(parsed, dedupeSourceCases, prepContext, {
               model: model,
               reasoning: reasoning,
               temperature: temperature,
@@ -12157,11 +12187,14 @@
         ai.modules = [];
         ai.resultGeneratedCount = 0;
         ai.resultDedupeCount = 0;
+        ai.resultDedupePending = false;
       } else {
         ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
         applyCaseLibraryAiGenResultStats(ai, parsed);
         if (resultToken) applyCaseLibraryAiGenAppendMap(ai.modules, getCaseLibraryAiGenAppendMap(ai.caseFileId, resultToken));
-        setStatus(dom.aiGenStatus, formatCaseLibraryAiGenCompleteStatus(ai), 'ok');
+        setStatus(dom.aiGenStatus, parsed && parsed.ai_dedupe_error
+          ? ('去重失败，已保留生成结果：' + String(parsed.ai_dedupe_error || ''))
+          : formatCaseLibraryAiGenCompleteStatus(ai), parsed && parsed.ai_dedupe_error ? 'warn' : 'ok');
         genOk = true;
       }
       })
@@ -14434,7 +14467,6 @@
 	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"precondition\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + preHtml + '</div></td>' +
 	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"steps\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + stepsHtml + '</div></td>' +
 	          '<td><div class=\"temp-inline-edit\" contenteditable=\"true\" data-case-lib-edit-field=\"expected\" data-index=\"' + idx + '\" data-case-lib-multiline=\"true\" data-placeholder=\"' + editPlaceholder + '\">' + expectedHtml + '</div></td>' +
-              '<td class=\"ai-operations\">' + utils.renderAiOperations(item.ai_operations) + '</td>' +
 	          '<td class=\"case-op-col\">' +
 	            '<div class=\"case-ops\">' +
 	              '<button type=\"button\" class=\"case-op remove\" title=\"删除当前用例\" data-case-lib-remove data-index=\"' + idx + '\">−</button>' +
@@ -14452,7 +14484,7 @@
 	    );
 	    var emptyRow = visibleIndexes.length
 	      ? ''
-	      : '<tr><td colspan=\"10\">' + (state.editor.items.length ? '当前页暂无用例' : '未解析到有效用例') + '</td></tr>';
+	      : '<tr><td colspan=\"9\">' + (state.editor.items.length ? '当前页暂无用例' : '未解析到有效用例') + '</td></tr>';
     var paginationTop = buildEditorPagination(totalCases, state.editor.pageIndex, totalPages, start, end);
     var paginationBottom = buildEditorPagination(totalCases, state.editor.pageIndex, totalPages, start, end);
     dom.editView.innerHTML = (
@@ -14468,7 +14500,6 @@
 	            '<th>前提条件</th>' +
 	            '<th>操作步骤</th>' +
 	            '<th>预期结果</th>' +
-                '<th class=\"ai-operations\">AI操作</th>' +
 	            '<th class=\"ops\" title=\"增删\">增删</th>' +
 	          '</tr>' +
 	        '</thead>' +

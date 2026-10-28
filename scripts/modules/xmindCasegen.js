@@ -99,6 +99,8 @@
     var deleteUndoBtn = document.getElementById('xmindCaseGenDeleteUndoBtn');
     var deleteRedoBtn = document.getElementById('xmindCaseGenDeleteRedoBtn');
     var summaryOverlayEl = document.getElementById('xmindCaseGenSummaryOverlay');
+    var summaryOverlayHomeParent = null;
+    var summaryOverlayHomeNextSibling = null;
     var summaryDialogEl = document.getElementById('xmindCaseGenSummaryDialog');
     var summaryDialogTitleEl = document.getElementById('xmindCaseGenSummaryDialogTitle');
     var summaryDialogDescEl = document.getElementById('xmindCaseGenSummaryDialogDesc');
@@ -347,6 +349,11 @@
         result: null,
         signature: '',
         selectedSegmentId: '',
+        pendingSegments: {},
+        pendingRequirementText: '',
+        supplementedSegments: {},
+        supplementedRequirementText: '',
+        supplement: { running: false, taskId: '', status: '', error: '' },
         updatedAt: 0,
       };
     }
@@ -366,6 +373,18 @@
         next.signature = String(next.result.signature || '');
       }
       next.selectedSegmentId = source.selectedSegmentId ? String(source.selectedSegmentId || '') : '';
+      next.pendingSegments = cloneJson(source.pendingSegments, {});
+      next.pendingRequirementText = String(source.pendingRequirementText || '');
+      next.supplementedSegments = cloneJson(source.supplementedSegments, {});
+      next.supplementedRequirementText = String(source.supplementedRequirementText || '');
+      var supplement = source.supplement && typeof source.supplement === 'object' ? source.supplement : {};
+      next.supplement = {
+        running: supplement.running === true,
+        taskId: String(supplement.taskId || ''),
+        status: String(supplement.status || ''),
+        error: String(supplement.error || ''),
+        addedCases: Number(supplement.addedCases || 0) || 0,
+      };
       if (!next.selectedSegmentId && next.result && next.result.selectedSegmentId) {
         next.selectedSegmentId = String(next.result.selectedSegmentId || '');
       }
@@ -830,6 +849,12 @@
 
     function createFallbackKnowledgeBaseState() {
       return {
+        pipelineVersion: 4,
+        knowledgeVersion: '',
+        topicsAvailable: false,
+        selectedTopics: [],
+        injectedTopicIds: [],
+        omittedTopicIds: [],
         baseUrl: '',
         enabled: false,
         workspaceId: '',
@@ -2103,7 +2128,8 @@
       var requirementText = getSelectedRequirementSource().text || '';
       var hasRequirementText = Boolean(String(requirementText || '').trim());
       var hasCases = getVisibleCaseCountForCoverage() > 0;
-      coverageBtn.disabled = running || !hasWorkspace || !hasRequirementText || !hasCases;
+      var supplementRunning = coverageState.supplement && coverageState.supplement.running === true;
+      coverageBtn.disabled = (running && !supplementRunning) || !hasWorkspace || !hasRequirementText || !hasCases;
       coverageBtn.classList.toggle('is-running', coverageRunning);
       coverageBtn.setAttribute('aria-busy', coverageRunning ? 'true' : 'false');
       coverageBtn.setAttribute('aria-expanded', summaryDialogOpen === true && summaryDialogMode === 'coverage' ? 'true' : 'false');
@@ -2112,6 +2138,8 @@
         : '需求覆盖';
       if (coverageRunning) {
         coverageBtn.title = '需求覆盖分析中，请等待完成';
+      } else if (supplementRunning) {
+        coverageBtn.title = '正在补充用例，点击查看需求覆盖和补充进度';
       } else if (running) {
         coverageBtn.title = '当前有 XMind 任务进行中，请等待完成后再查看覆盖';
       } else if (!hasWorkspace) {
@@ -2369,7 +2397,7 @@
     }
 
     function finalizeLegacyWorkflowRestore() {
-      if (!getWorkspaceOrder().length) {
+      if (shouldXmindOwnLiveWorkspaceState() || !getWorkspaceOrder().length) {
         drawerLegacyRestoreSnapshot = null;
         return;
       }
@@ -3409,18 +3437,9 @@
           result.push(normalized);
           return;
         }
-        var existing = result[indexMap[key]];
-        if (!existing || normalized.cases.length >= existing.cases.length) {
-          result[indexMap[key]] = normalized;
-        }
+        result[indexMap[key]] = normalized;
       });
       return result;
-    }
-
-    function hasRootPipelineDedupeCases(modules) {
-      return (Array.isArray(modules) ? modules : []).some(function(item) {
-        return Boolean(item && Array.isArray(item.cases) && item.cases.length > 0);
-      });
     }
 
     function upsertRootPipelineDedupeModule(pipeline, item) {
@@ -3434,9 +3453,7 @@
         var sameId = normalized.moduleId && existing.moduleId && normalized.moduleId === existing.moduleId;
         var sameKey = normalized.moduleKey && existing.moduleKey && normalized.moduleKey === existing.moduleKey;
         if (!sameId && !sameKey) return;
-        if ((normalized.cases || []).length > (existing.cases || []).length) {
-          list[index] = normalized;
-        }
+        list[index] = normalized;
         replaced = true;
       });
       if (!replaced) list.push(normalized);
@@ -7102,6 +7119,10 @@
         var duplicateOf = String(item.duplicateOf || item.duplicate_of || item.duplicateWith || item.duplicate_with || item.sameAs || item.same_as || '').replace(/\s+/g, ' ').trim();
         var duplicatePoint = normalizeHistoryDedupeOptionalReason(item.duplicatePoint || item.duplicate_point || item.overlapPoint || item.overlap_point || item.samePoint || item.same_point || item.overlap || '');
         var mergedFrom = normalizeHistoryDedupeStringList(item.mergedFrom || item.merged_from || item.sourceTitles || item.source_titles || item.beforeTitles || item.before_titles || []);
+        var dedupeId = String(item.dedupe_id || item.dedupeId || '').trim();
+        var duplicateWithId = String(item.duplicateWithId || item.duplicate_with_id || item.duplicateOfId || item.duplicate_of_id || '').trim();
+        var mergedIntoId = String(item.mergedIntoId || item.merged_into_id || '').trim();
+        var mergedFromIds = normalizeHistoryDedupeStringList(item.mergedFromIds || item.merged_from_ids || []);
         if (!title && mergedFrom.length) title = mergedFrom[0];
         if (!moduleTitle || !title) return;
         var actionType = normalizeHistoryDedupeActionType(item.type || item.action || item.actionType || item.action_type || item.kind || '', {
@@ -7109,19 +7130,24 @@
           mergedInto: mergedInto,
           mergedFrom: mergedFrom,
         });
-        var key = normalizeModuleKey(moduleTitle) + '::' + title.toLowerCase() + '::' + reason + '::'
-          + actionType + '::' + duplicateOf + '::' + duplicatePoint + '::' + mergedInto + '::' + mergedFrom.join('|');
+        var key = normalizeModuleKey(moduleTitle) + '::' + (dedupeId || title.toLowerCase()) + '::' + reason + '::'
+          + actionType + '::' + duplicateOf + '::' + duplicatePoint + '::' + mergedInto + '::' + mergedFrom.join('|')
+          + '::' + duplicateWithId + '::' + mergedIntoId + '::' + mergedFromIds.join('|');
         if (seen[key]) return;
         seen[key] = true;
         result.push({
+          dedupe_id: dedupeId,
           module: moduleTitle,
           title: title,
           reason: reason,
           actionType: actionType,
           duplicateOf: duplicateOf,
+          duplicateWithId: duplicateWithId,
           duplicatePoint: duplicatePoint,
           mergedInto: mergedInto,
+          mergedIntoId: mergedIntoId,
           mergedFrom: mergedFrom,
+          mergedFromIds: mergedFromIds,
         });
       });
       return result;
@@ -8361,6 +8387,7 @@
     function isCoverageResultStale(coverageState, requestInfo) {
       var result = coverageState && coverageState.result ? coverageState.result : null;
       var request = requestInfo && requestInfo.request ? requestInfo.request : null;
+      if (result && result.casesChanged === true) return true;
       if (!result || !request) return false;
       var resultSignature = coverageState.signature || result.signature || '';
       return Boolean(resultSignature && request.signature && String(resultSignature) !== String(request.signature));
@@ -8398,6 +8425,146 @@
       var matches = highlightedId ? findCoverageSegmentsByCaseId(result, highlightedId) : [];
       if (matches.length) return matches;
       return selected ? [selected] : [];
+    }
+
+    function isCoverageSegmentMarked(coverageState, segment, kind) {
+      if (!coverageState || !segment) return false;
+      var supplemented = kind === 'supplemented';
+      var sourceText = supplemented ? coverageState.supplementedRequirementText : coverageState.pendingRequirementText;
+      var result = coverageState.result;
+      if (!result || String(sourceText || '') !== String(result.requirementText || '')) return false;
+      var marks = supplemented ? coverageState.supplementedSegments : coverageState.pendingSegments;
+      var mark = marks && marks[segment.id];
+      return Boolean(mark && mark.text === segment.text && (supplemented || mark.manual === true || mark.batch === true));
+    }
+
+    function getCoverageMarkedSegments(coverageState, kind) {
+      var result = coverageState && coverageState.result;
+      return (result && Array.isArray(result.segments) ? result.segments : []).filter(function(segment) {
+        return isCoverageSegmentMarked(coverageState, segment, kind);
+      });
+    }
+
+    function updateCoveragePendingMarks(actionId) {
+      if (hasAnyRunningGenerationOperation()) return;
+      var requestInfo = getCoverageCurrentRequestInfo();
+      var coverageState = ensureCoverageUiState();
+      if (!coverageState.result || requestInfo.error || isCoverageResultStale(coverageState, requestInfo)) return;
+      var selected = getSelectedCoverageSegment(coverageState.result, coverageState);
+      if (coverageState.pendingRequirementText !== coverageState.result.requirementText) coverageState.pendingSegments = {};
+      coverageState.pendingRequirementText = String(coverageState.result.requirementText || '');
+      var marks = coverageState.pendingSegments;
+      if (actionId === 'toggle-pending' && selected) {
+        var current = marks[selected.id];
+        if (current && (current.manual === true || current.batch === true)) {
+          delete marks[selected.id];
+        } else {
+          marks[selected.id] = { text: selected.text, manual: true, batch: false };
+        }
+      } else if (actionId === 'mark-gaps') {
+        coverageState.result.segments.forEach(function(segment) {
+          if (segment.status !== 'partial' && segment.status !== 'uncovered') return;
+          var mark = marks[segment.id];
+          if (!mark || mark.text !== segment.text) mark = { text: segment.text, manual: false, batch: false };
+          mark.batch = true;
+          marks[segment.id] = mark;
+        });
+      } else if (actionId === 'clear-batch') {
+        Object.keys(marks).forEach(function(segmentId) {
+          if (!marks[segmentId]) return;
+          marks[segmentId].batch = false;
+          if (marks[segmentId].manual !== true) delete marks[segmentId];
+        });
+      }
+      coverageState.updatedAt = Date.now();
+      persistXmindState(true);
+      renderCoverageDialog();
+    }
+
+    function buildCoveragePendingCountsHtml(coverageState) {
+      var counts = { uncovered: 0, partial: 0, context: 0, covered: 0 };
+      getCoverageMarkedSegments(coverageState, 'pending').forEach(function(segment) {
+        if (counts[segment.status] !== undefined) counts[segment.status] += 1;
+      });
+      var labels = { uncovered: '未覆盖', partial: '部分覆盖', context: '上下文', covered: '已覆盖' };
+      return '<div class="xmind-casegen-coverage-pending-counts">' + Object.keys(counts).map(function(status) {
+        return '<span data-coverage-pending-count="' + status + '">' + labels[status] + ' ' + String(counts[status]) + '</span>';
+      }).join('') + '</div>';
+    }
+
+    function buildCoverageActionsHtml(coverageState, requestInfo, stale, busy) {
+      var selected = getSelectedCoverageSegment(coverageState.result, coverageState);
+      var pending = getCoverageMarkedSegments(coverageState, 'pending');
+      var supplemented = getCoverageMarkedSegments(coverageState, 'supplemented');
+      var selectedPending = isCoverageSegmentMarked(coverageState, selected, 'pending');
+      var disabled = busy || stale || Boolean(requestInfo.error) || !coverageState.result;
+      var hasBatch = pending.some(function(segment) { return coverageState.pendingSegments[segment.id].batch === true; });
+      var hasGaps = coverageState.result && coverageState.result.segments.some(function(segment) {
+        return segment.status === 'partial' || segment.status === 'uncovered';
+      });
+      var supplement = coverageState.supplement || {};
+      var message = '标记目标后补充；上下文作为参考。后补充 ' + String(supplemented.length) + ' 段（累计保留）。';
+      if (supplement.running === true) message = '正在补充用例，关闭此界面后任务仍会继续。';
+      else if (supplement.error) message = supplement.error;
+      else if (stale) message = '需求或用例已变化，请重新分析后再标记补充。后补充 ' + String(supplemented.length) + ' 段。';
+      else if (coverageState.running === true) message = '正在分析覆盖，完成后可继续标记和补充。';
+      else if (supplement.status === 'done') message = '本次新增 ' + String(supplement.addedCases || 0) + ' 条用例，累计后补充 ' + String(supplemented.length) + ' 段。可按“后补充”定位并核对覆盖。';
+      return '<section class="xmind-casegen-coverage-actions" aria-label="补充用例操作">'
+        + '<div class="xmind-casegen-coverage-actions-head"><strong>补充用例</strong><span>待补充 ' + String(pending.length) + ' 段</span></div>'
+        + buildCoveragePendingCountsHtml(coverageState)
+        + '<div class="xmind-casegen-coverage-action-status">'
+        + (selected ? '当前 ' + escapeHtml(selected.id) + ' · ' + escapeHtml(getCoverageStatusMeta(selected.status).label)
+          + (isCoverageSegmentMarked(coverageState, selected, 'supplemented') ? ' · 后补充' : '') : '点击左侧片段进行标记') + '</div>'
+        + '<div class="xmind-casegen-coverage-action-buttons">'
+        + '<button type="button" class="secondary" data-coverage-action="toggle-pending" aria-pressed="' + (selectedPending ? 'true' : 'false') + '" ' + (disabled || !selected ? 'disabled' : '') + '>' + (selectedPending ? '取消当前待补充' : '标记当前待补充') + '</button>'
+        + '<button type="button" class="secondary" data-coverage-action="mark-gaps" ' + (disabled || !hasGaps ? 'disabled' : '') + '>一键标记部分/未覆盖</button>'
+        + '<button type="button" class="secondary" data-coverage-action="clear-batch" ' + (disabled || !hasBatch ? 'disabled' : '') + '>取消一键标记</button>'
+        + '<button type="button" class="primary" data-coverage-action="supplement" ' + (disabled || !pending.length ? 'disabled' : '') + '>'
+        + (supplement.running === true ? '<span class="xmind-casegen-coverage-spinner" aria-hidden="true"></span>正在补充' : '补充用例') + '</button>'
+        + '</div><div class="xmind-casegen-coverage-action-status' + (supplement.error ? ' is-error' : '') + '" role="status">' + escapeHtml(message) + '</div>'
+        + '</section>';
+    }
+
+    function confirmCoverageSupplement(coverageState) {
+      return new Promise(function(resolve) {
+        var dialog = document.createElement('dialog');
+        dialog.className = 'xmind-casegen-summary-dialog xmind-casegen-coverage-confirm-dialog';
+        dialog.setAttribute('aria-labelledby', 'xmindCoverageSupplementConfirmTitle');
+        dialog.setAttribute('data-drawer-scroll-owner', 'xmindCaseGenDrawer');
+        dialog.innerHTML = '<strong id="xmindCoverageSupplementConfirmTitle">确认补充用例</strong>'
+          + '<p>将结合全部已有用例和标记后的需求补充用例，优先追加到现有模块，必要时新建模块。原始需求正文保留。</p>'
+          + buildCoveragePendingCountsHtml(coverageState)
+          + '<label class="xmind-casegen-coverage-confirm-option"><input type="checkbox" data-coverage-auto-analyze checked><span>补充完成后自动执行一次需求覆盖分析（使用无临时标记的原始需求）</span></label>'
+          + '<div class="xmind-casegen-coverage-confirm-actions"><button type="button" class="secondary" data-coverage-cancel>取消</button><button type="button" class="primary" data-coverage-confirm>确认补充</button></div>';
+        function finish(confirmed) {
+          var autoAnalyze = dialog.querySelector('[data-coverage-auto-analyze]').checked === true;
+          dialog.close();
+          dialog.remove();
+          resolve({ confirmed: confirmed, autoAnalyze: autoAnalyze });
+        }
+        dialog.querySelector('[data-coverage-cancel]').addEventListener('click', function() { finish(false); });
+        dialog.querySelector('[data-coverage-confirm]').addEventListener('click', function() { finish(true); });
+        dialog.addEventListener('cancel', function(event) { event.preventDefault(); finish(false); });
+        document.body.appendChild(dialog);
+        dialog.showModal();
+      });
+    }
+
+    async function requestCoverageSupplement() {
+      if (hasAnyRunningGenerationOperation()) return;
+      var requestInfo = getCoverageCurrentRequestInfo();
+      var coverageState = ensureCoverageUiState();
+      if (requestInfo.error || isCoverageResultStale(coverageState, requestInfo) || !getCoverageMarkedSegments(coverageState, 'pending').length) return;
+      var workspaceId = getActiveWorkspaceId();
+      var signature = requestInfo.request.signature;
+      var confirmation = await confirmCoverageSupplement(coverageState);
+      if (!confirmation.confirmed) return;
+      var currentRequestInfo = getCoverageCurrentRequestInfo();
+      if (getActiveWorkspaceId() !== workspaceId || currentRequestInfo.error || currentRequestInfo.request.signature !== signature) {
+        notifyStatus('需求或用例已变化，请重新分析并确认补充', 'warn', { forceInline: true });
+        return;
+      }
+      startCoverageSupplementTask({ autoAnalyze: confirmation.autoAnalyze });
     }
 
     function buildCoverageSummaryHtml(result, stale) {
@@ -8442,7 +8609,7 @@
       return Number(summary && summary[key] || 0) || 0;
     }
 
-    function buildCoverageSourceLegendHtml(result) {
+    function buildCoverageSourceLegendHtml(result, coverageState) {
       var items = [
         { key: 'covered', label: '已覆盖', countKey: 'covered', sample: '实线' },
         { key: 'partial', label: '部分覆盖', countKey: 'partial', sample: '虚线' },
@@ -8461,6 +8628,8 @@
             + '<span>' + escapeHtml(item.label) + ' ' + escapeHtml(String(getCoverageSummaryCount(result, item.countKey))) + '</span>'
           + '</button>';
         }).join('')
+        + buildCoverageStatusJumpButton('pending', '待补充', getCoverageMarkedSegments(coverageState, 'pending').length, 'xmind-casegen-coverage-source-legend-item')
+        + buildCoverageStatusJumpButton('supplemented', '后补充', getCoverageMarkedSegments(coverageState, 'supplemented').length, 'xmind-casegen-coverage-source-legend-item')
       + '</div>';
     }
 
@@ -8476,7 +8645,9 @@
       if (stale) {
         notices.push({
           className: 'is-stale',
-          text: '当前需求或可见用例已变化，下面展示的是上一次分析结果。',
+          text: coverageState.result && coverageState.result.casesChanged === true
+            ? '已删除用例并移除对应关联，请重新分析以更新准确的覆盖结果。'
+            : '当前需求或可见用例已变化，下面展示的是上一次分析结果。',
         });
       }
       if (requestInfo && requestInfo.error) {
@@ -8636,7 +8807,7 @@
       + '</figure>';
     }
 
-    function buildCoverageSourceSegmentHtml(segment, selected, highlightedCaseId, textOverride) {
+    function buildCoverageSourceSegmentHtml(segment, selected, highlightedCaseId, textOverride, coverageState) {
       var meta = getCoverageStatusMeta(segment && segment.status);
       var caseIds = getCoverageSegmentCaseIds(segment);
       var directCount = Array.isArray(segment && segment.directCaseIds) ? segment.directCaseIds.length : caseIds.length;
@@ -8644,6 +8815,10 @@
       var classes = ['xmind-casegen-coverage-segment', meta.className];
       if (selected && String(selected.id || '') === String(segment.id || '')) classes.push('is-active');
       if (highlightedCaseId && caseIds.indexOf(highlightedCaseId) !== -1) classes.push('is-case-highlighted');
+      var pending = isCoverageSegmentMarked(coverageState, segment, 'pending');
+      var supplemented = isCoverageSegmentMarked(coverageState, segment, 'supplemented');
+      if (pending) classes.push('is-pending');
+      if (supplemented) classes.push('is-supplemented');
       var reason = segment && segment.reason ? String(segment.reason || '') : '';
       var titleText = meta.label + ' / 直接 ' + String(directCount) + ' 条，关联 ' + String(relatedCount) + ' 条' + (reason ? ' / ' + reason : '');
       var displayText = textOverride !== undefined && textOverride !== null
@@ -8654,10 +8829,12 @@
         + ' data-coverage-status="' + escapeHtml(meta.key || '') + '"'
         + ' title="' + escapeHtml(titleText) + '">'
         + '<span class="xmind-casegen-coverage-doc-text">' + escapeHtml(displayText) + '</span>'
+        + (pending ? '<span class="xmind-casegen-coverage-pending-badge">待补充</span>' : '')
+        + (supplemented ? '<span class="xmind-casegen-coverage-supplemented-badge">后补充</span>' : '')
       + '</button>';
     }
 
-    function buildCoverageDocumentHtml(result, segments, selected, highlightedCaseId, mediaItems) {
+    function buildCoverageDocumentHtml(result, segments, selected, highlightedCaseId, mediaItems, coverageState) {
       var fullText = result && result.requirementText ? String(result.requirementText || '') : '';
       var media = Array.isArray(mediaItems) ? mediaItems : [];
       function buildRemainingMediaHtml() {
@@ -8667,7 +8844,7 @@
       }
       if (!fullText) {
         return segments.map(function(segment) {
-          return buildCoverageSourceSegmentHtml(segment, selected, highlightedCaseId, segment && segment.text ? segment.text : '');
+          return buildCoverageSourceSegmentHtml(segment, selected, highlightedCaseId, segment && segment.text ? segment.text : '', coverageState);
         }).join('\n') + buildRemainingMediaHtml();
       }
       var cursor = 0;
@@ -8723,13 +8900,13 @@
         }
         if (index > cursor) appendTextRangeWithMedia(cursor, index);
         appendMediaUpTo(index);
-        pieces.push(buildCoverageSourceSegmentHtml(segment, selected, highlightedCaseId, segmentText));
+        pieces.push(buildCoverageSourceSegmentHtml(segment, selected, highlightedCaseId, segmentText, coverageState));
         cursor = index + segmentText.length;
         appendMediaUpTo(cursor);
       });
       if (!matchedAll) {
         return segments.map(function(segment) {
-          return buildCoverageSourceSegmentHtml(segment, selected, highlightedCaseId, segment && segment.text ? segment.text : '');
+          return buildCoverageSourceSegmentHtml(segment, selected, highlightedCaseId, segment && segment.text ? segment.text : '', coverageState);
         }).join('\n') + buildRemainingMediaHtml();
       }
       if (cursor < fullText.length) appendTextRangeWithMedia(cursor, fullText.length);
@@ -8746,7 +8923,7 @@
       var highlightedCaseId = coverageHighlightedCaseId ? String(coverageHighlightedCaseId || '') : '';
       var mediaItems = collectCoverageRequirementMediaItems(result);
       return '<article class="xmind-casegen-coverage-segment-list xmind-casegen-coverage-document" data-coverage-source-scroll>'
-        + buildCoverageDocumentHtml(result, segments, selected, highlightedCaseId, mediaItems)
+        + buildCoverageDocumentHtml(result, segments, selected, highlightedCaseId, mediaItems, coverageState)
         + '</article>';
     }
 
@@ -8785,7 +8962,113 @@
       + '</div>';
     }
 
-    function buildCoverageCaseListHtml(result, coverageState) {
+    function buildCoverageCaseContentKey(item) {
+      return JSON.stringify([
+        item.moduleKey, item.module, item.title, item.priority,
+        item.preconditions, item.steps, item.expected,
+      ]);
+    }
+
+    function resolveCoverageCaseDeleteMeta(item, request, result) {
+      if (!item || !request) return null;
+      var storedMeta = item.deleteMeta;
+      if (!storedMeta) {
+        var originalMatches = (result && Array.isArray(result.cases) ? result.cases : []).filter(function(candidate) {
+          return candidate && buildCoverageCaseContentKey(item) === buildCoverageCaseContentKey(candidate);
+        });
+        if (originalMatches.length !== 1) return null;
+      }
+      var candidates = (Array.isArray(request.cases) ? request.cases : []).filter(function(candidate) {
+        var meta = candidate && candidate.deleteMeta;
+        if (!meta) return false;
+        if (!storedMeta) return buildCoverageCaseContentKey(item) === buildCoverageCaseContentKey(candidate);
+        return meta.moduleKey === storedMeta.moduleKey
+          && meta.moduleId === storedMeta.moduleId
+          && meta.caseSource === storedMeta.caseSource
+          && meta.caseSignature === storedMeta.caseSignature;
+      });
+      return candidates.length === 1 ? cloneJson(candidates[0].deleteMeta, null) : null;
+    }
+
+    function confirmCoverageCaseDelete(item) {
+      return new Promise(function(resolve) {
+        var dialog = document.createElement('dialog');
+        dialog.className = 'xmind-casegen-summary-dialog xmind-casegen-coverage-confirm-dialog';
+        dialog.setAttribute('aria-labelledby', 'xmindCoverageDeleteConfirmTitle');
+        dialog.setAttribute('data-drawer-scroll-owner', 'xmindCaseGenDrawer');
+        dialog.innerHTML = '<strong id="xmindCoverageDeleteConfirmTitle">确认删除用例</strong>'
+          + '<p>确认从当前页签删除「' + escapeHtml(item.module || '未命名模块') + '」中的「' + escapeHtml(item.title || '未命名用例') + '」？</p>'
+          + '<p>删除后会同步更新用例和所有需求片段的关联，可通过工具栏撤销删除。之前的“放弃本次生成”回退记录将失效，覆盖结果需重新分析。</p>'
+          + '<div class="xmind-casegen-coverage-confirm-actions"><button type="button" class="secondary" data-coverage-delete-cancel>取消</button><button type="button" class="primary xmind-casegen-coverage-delete-confirm" data-coverage-delete-confirm>确认删除</button></div>';
+        function finish(confirmed) {
+          dialog.close();
+          dialog.remove();
+          resolve(confirmed);
+        }
+        dialog.querySelector('[data-coverage-delete-cancel]').addEventListener('click', function() { finish(false); });
+        dialog.querySelector('[data-coverage-delete-confirm]').addEventListener('click', function() { finish(true); });
+        dialog.addEventListener('cancel', function(event) { event.preventDefault(); finish(false); });
+        document.body.appendChild(dialog);
+        dialog.showModal();
+      });
+    }
+
+    function removeDeletedCoverageCase(coverageState, caseId) {
+      var result = coverageState.result;
+      var coverageCoreApi = getXmindRequirementCoverageCoreApi();
+      var segments = (result.segments || []).map(function(segment) {
+        return {
+          segmentId: segment.id,
+          status: segment.status,
+          caseIds: getCoverageSegmentCaseIds(segment).filter(function(id) { return id !== caseId && getCoverageCaseRelation(segment, id) === 'direct'; }),
+          relatedCaseIds: getCoverageSegmentCaseIds(segment).filter(function(id) { return id !== caseId && getCoverageCaseRelation(segment, id) === 'related'; }),
+          reason: segment.reason,
+        };
+      });
+      var updated = coverageCoreApi.normalizeCoverageResult(JSON.stringify({ segments: segments }), {
+        requirementText: result.requirementText,
+        signature: result.signature,
+        segments: result.segments,
+        cases: (result.cases || []).filter(function(item) { return item && item.id !== caseId; }),
+      });
+      updated.casesChanged = true;
+      coverageState.result = updated;
+      coverageState.updatedAt = Date.now();
+      if (coverageHighlightedCaseId === caseId) coverageHighlightedCaseId = '';
+    }
+
+    async function requestCoverageCaseDelete(caseId) {
+      if (hasAnyRunningGenerationOperation()) return;
+      var coverageState = ensureCoverageUiState();
+      var item = buildCoverageCaseMap(coverageState.result)[caseId];
+      var requestInfo = getCoverageCurrentRequestInfo();
+      var meta = resolveCoverageCaseDeleteMeta(item, requestInfo.request, coverageState.result);
+      if (!meta) {
+        notifyStatus('该用例已变化或无法唯一定位，请重新分析后再删除', 'warn', { forceInline: true });
+        return;
+      }
+      var workspaceId = getActiveWorkspaceId();
+      var signature = requestInfo.request.signature;
+      hideCoverageCaseDetailTooltip();
+      if (!await confirmCoverageCaseDelete(item)) return;
+      var currentRequestInfo = getCoverageCurrentRequestInfo();
+      var currentCoverageState = ensureCoverageUiState();
+      var currentItem = buildCoverageCaseMap(currentCoverageState.result)[caseId];
+      var currentMeta = resolveCoverageCaseDeleteMeta(currentItem, currentRequestInfo.request, currentCoverageState.result);
+      if (workspaceId !== getActiveWorkspaceId() || hasAnyRunningGenerationOperation()
+        || !currentRequestInfo.request || currentRequestInfo.request.signature !== signature
+        || !currentMeta || buildDeleteTargetKey(currentMeta) !== buildDeleteTargetKey(meta)) {
+        notifyStatus('当前页签或用例已变化，请重新确认删除', 'warn', { forceInline: true });
+        return;
+      }
+      var plan = buildDeleteSelectionPlan({ meta: currentMeta });
+      if (!applyDeleteSelectionPlan(plan)) return;
+      removeDeletedCoverageCase(ensureCoverageUiState(), caseId);
+      renderCoverageDialog();
+      persistXmindState(true);
+    }
+
+    function buildCoverageCaseListHtml(result, coverageState, requestInfo, busy) {
       var selected = getSelectedCoverageSegment(result, coverageState);
       var caseMap = buildCoverageCaseMap(result);
       if (!selected) {
@@ -8799,14 +9082,16 @@
         var relation = getCoverageCaseRelation(selected, id);
         var relationLabel = relation === 'related' ? '关联' : '直接';
         var priority = getCoverageCasePriorityMeta(item);
-        return '<button type="button" class="xmind-casegen-coverage-case ' + (active ? 'is-active ' : '') + (relation === 'related' ? 'is-related' : 'is-direct') + '" data-coverage-case="' + escapeHtml(id) + '" data-coverage-case-detail-trigger>'
+        var canDelete = !busy && Boolean(resolveCoverageCaseDeleteMeta(item, requestInfo && requestInfo.request, result));
+        var deleteTitle = busy ? '任务进行中，完成后可删除' : (canDelete ? '删除此用例' : '用例已变化或无法唯一定位，请重新分析');
+        return '<div class="xmind-casegen-coverage-case-row"><button type="button" class="xmind-casegen-coverage-case ' + (active ? 'is-active ' : '') + (relation === 'related' ? 'is-related' : 'is-direct') + '" data-coverage-case="' + escapeHtml(id) + '" data-coverage-case-detail-trigger>'
           + '<span class="xmind-casegen-coverage-case-module">' + escapeHtml(item.module || '未命名模块') + '</span>'
           + '<span class="xmind-casegen-coverage-case-title-wrap">'
           +   '<span class="xmind-casegen-coverage-case-title">' + escapeHtml(item.title || '未命名用例') + '</span>'
           +   '<span class="xmind-casegen-coverage-case-priority ' + escapeHtml(priority.className) + '">' + escapeHtml(priority.label) + '</span>'
           +   '<span class="xmind-casegen-coverage-case-relation ' + (relation === 'related' ? 'is-related' : 'is-direct') + '">' + escapeHtml(relationLabel) + '</span>'
           + '</span>'
-        + '</button>';
+        + '</button><button type="button" class="xmind-casegen-coverage-case-delete" data-coverage-case-delete="' + escapeHtml(id) + '" aria-label="' + escapeHtml('删除用例：' + (item.title || '未命名用例')) + '" title="' + escapeHtml(deleteTitle) + '"' + (canDelete ? '' : ' disabled') + '>删除</button></div>';
       }).join('');
       if (!caseHtml) {
         caseHtml = '<div class="xmind-casegen-coverage-empty">'
@@ -8840,7 +9125,11 @@
       var segments = result && Array.isArray(result.segments) ? result.segments : [];
       var stableStatus = String(status || '');
       if (!stableStatus || !segments.length) return null;
+      var markingState = stableStatus === 'pending' || stableStatus === 'supplemented' ? ensureCoverageUiState() : null;
       var matches = segments.filter(function(segment) {
+        if (stableStatus === 'pending' || stableStatus === 'supplemented') {
+          return isCoverageSegmentMarked(markingState, segment, stableStatus);
+        }
         return segment && String(segment.status || '') === stableStatus;
       });
       if (!matches.length) return null;
@@ -8898,7 +9187,8 @@
       var stale = isCoverageResultStale(coverageState, requestInfo);
       var summaryHtml = result ? buildCoverageSummaryHtml(result, stale) : '';
       var noticeHtml = buildCoverageNoticeHtml(coverageState, requestInfo, stale);
-      var actionDisabled = coverageState.running === true || Boolean(requestInfo.error);
+      var busy = hasAnyRunningGenerationOperation();
+      var actionDisabled = busy || Boolean(requestInfo.error);
       if (!result && coverageState.running !== true) {
         noticeHtml += '<div class="xmind-casegen-coverage-notice is-stale">尚未生成需求覆盖分析结果。</div>';
       }
@@ -8922,16 +9212,19 @@
         +         '<strong>需求原文</strong>'
         +         '<span>点击片段查看对应用例</span>'
         +       '</div>'
-        +       (result ? buildCoverageSourceLegendHtml(result) : '')
+        +       (result ? buildCoverageSourceLegendHtml(result, coverageState) : '')
         +       (result ? buildCoverageSourceHtml(result, coverageState) : '<div class="xmind-casegen-coverage-empty">分析完成后会在这里按原文顺序展示覆盖状态。</div>')
         +     '</section>'
+        +     '<div class="xmind-casegen-coverage-sidebar">'
         +     '<section class="xmind-casegen-coverage-cases" aria-label="对应用例">'
         +       '<div class="xmind-casegen-coverage-column-head">'
         +         '<strong>对应用例</strong>'
         +         '<span>悬停用例查看详情</span>'
         +       '</div>'
-        +       (result ? buildCoverageCaseListHtml(result, coverageState) : '<div class="xmind-casegen-coverage-empty">请选择或等待左侧片段分析结果。</div>')
+        +       (result ? buildCoverageCaseListHtml(result, coverageState, requestInfo, busy) : '<div class="xmind-casegen-coverage-empty">请选择或等待左侧片段分析结果。</div>')
         +     '</section>'
+        +     buildCoverageActionsHtml(coverageState, requestInfo, stale, busy)
+        +     '</div>'
         +   '</div>'
         + '</div>';
       if (sourceAnchorState) restoreCoverageSourceAnchorState(sourceAnchorState);
@@ -9134,7 +9427,7 @@
       }
       var runningOperations = collectRunningGenerationOperations();
       var coverageState = ensureCoverageUiState();
-      if (runningOperations.length > 0 && coverageState.running !== true) {
+      if (runningOperations.length > 0 && coverageState.running !== true && coverageState.supplement.running !== true) {
         notifyStatus('当前有 XMind 任务进行中，请等待完成后再查看覆盖', 'warn', { forceInline: true });
         return;
       }
@@ -9188,12 +9481,28 @@
         : (summaryDialogMode === 'knowledge-base'
           ? 'knowledge-base'
           : (summaryDialogMode === 'coverage' ? 'coverage' : 'prep'));
+      if (summaryOverlayEl && open && mode === 'coverage' && summaryOverlayEl.parentNode !== document.body) {
+        summaryOverlayHomeParent = summaryOverlayEl.parentNode;
+        summaryOverlayHomeNextSibling = summaryOverlayEl.nextSibling;
+        document.body.appendChild(summaryOverlayEl);
+      } else if (summaryOverlayEl && summaryOverlayHomeParent && (!open || mode !== 'coverage')) {
+        if (summaryOverlayHomeNextSibling && summaryOverlayHomeNextSibling.parentNode === summaryOverlayHomeParent) {
+          summaryOverlayHomeParent.insertBefore(summaryOverlayEl, summaryOverlayHomeNextSibling);
+        } else {
+          summaryOverlayHomeParent.appendChild(summaryOverlayEl);
+        }
+        summaryOverlayHomeParent = null;
+        summaryOverlayHomeNextSibling = null;
+      }
       if (summaryOverlayEl) {
+        if (open && mode === 'coverage') summaryOverlayEl.setAttribute('data-drawer-scroll-owner', 'xmindCaseGenDrawer');
+        else summaryOverlayEl.removeAttribute('data-drawer-scroll-owner');
         summaryOverlayEl.hidden = !open;
         summaryOverlayEl.setAttribute('aria-hidden', open ? 'false' : 'true');
         if (summaryOverlayEl.classList) {
           summaryOverlayEl.classList.toggle('hidden', !open);
           summaryOverlayEl.classList.toggle('is-open', open);
+          summaryOverlayEl.classList.toggle('xmind-casegen-coverage-overlay', open && mode === 'coverage');
         }
       }
       if (summaryBtn) {
@@ -9666,19 +9975,6 @@
 
     function buildRootPipelineDedupeReadiness(context) {
       var visibleContext = ensureVisibleModuleContext(context);
-      var pipeline = getRootPipelineState();
-      var generatedDedupeModules = normalizeRootPipelineDedupeModules(
-        pipeline && Array.isArray(pipeline.generatedDedupeModules)
-          ? pipeline.generatedDedupeModules
-          : []
-      );
-      if (hasRootPipelineDedupeCases(generatedDedupeModules)) {
-        return {
-          missingModules: [],
-          dedupeModules: generatedDedupeModules,
-          ready: true,
-        };
-      }
       var missingModules = collectAiModulesWithoutCasesFromContext(visibleContext);
       var dedupeModules = collectAiDedupeModulesFromContext(visibleContext);
       return {
@@ -10951,6 +11247,17 @@
       return null;
     }
 
+    function buildXmindModelContract(contract) {
+      if (!contract || contract.coverageSupplement !== true) return contract;
+      var request = contract.coverageSupplementRequest || {};
+      return Object.assign({}, contract, {
+        coverageSupplementRequest: {
+          markedSegments: request.markedSegments || [],
+          signature: String(request.signature || ''),
+        },
+      });
+    }
+
     function buildXmindPrompt(contract) {
       var settingsSnapshot = buildXmindGenerationOptionsSnapshot();
       var assignedPrompt = state.assignments && state.assignments.xmindCaseGenPrompt
@@ -10972,7 +11279,10 @@
       if (hardConstraintText) {
         parts.push('【XMind 生成硬约束】\n' + hardConstraintText);
       }
-      parts.push('operation_contract(JSON)：' + JSON.stringify(contract));
+      if (contract && contract.coverageSupplement === true && contract.coverageSupplementRequest) {
+        parts.push('【需求覆盖补充规则】\n' + String(contract.coverageSupplementRequest.prompt || ''));
+      }
+      parts.push('operation_contract(JSON)：' + JSON.stringify(buildXmindModelContract(contract)));
       return parts.join('\n\n');
     }
 
@@ -11012,6 +11322,11 @@
     async function buildRequirementPayload(contract, visibleContext, moduleEntry, options) {
       var opts = options || {};
       var requirementSource = getSelectedRequirementSource();
+      if (contract && contract.coverageSupplement === true && contract.coverageSupplementRequest) {
+        requirementSource = Object.assign({}, requirementSource, {
+          text: String(contract.coverageSupplementRequest.markedRequirementText || requirementSource.text || ''),
+        });
+      }
       var generationOptions = buildXmindGenerationOptionsSnapshot();
       var hardConstraintText = buildXmindHardConstraintText(contract, generationOptions);
       var visibleModulesSnapshot = Array.isArray(opts.visibleModulesSnapshot)
@@ -11051,7 +11366,7 @@
           };
       var sections = [];
       sections.push('【需求标识】\n' + getRequirementLabelText());
-      sections.push('【operation_contract(JSON)】\n' + JSON.stringify(contract, null, 2));
+      sections.push('【operation_contract(JSON)】\n' + JSON.stringify(buildXmindModelContract(contract), null, 2));
       sections.push('【本轮生成选项(JSON)】\n' + JSON.stringify(generationOptions, null, 2));
       sections.push('【本轮生成选项说明】\n' + buildXmindGenerationOptionsSummary(generationOptions));
       if (hardConstraintText) {
@@ -11126,40 +11441,62 @@
       return result.slice(0, 24);
     }
 
-    function buildKnowledgeBaseQueryContext(requirementSource) {
+    function buildKnowledgeBaseQueryContext(requirementSource, visibleContext, moduleEntry) {
       var source = requirementSource && typeof requirementSource === 'object' ? requirementSource : {};
       return {
         requirementLabel: getRequirementLabelText(),
         requirementText: source.text ? String(source.text || '') : '',
         requirementSupplement: source.supplement ? String(source.supplement || '') : '',
         requirementMode: source.mode ? String(source.mode || '') : '',
-        operationType: 'workspace_requirement',
-        targetModule: '',
-        visibleModules: [],
-        visibleCases: [],
+        operationType: moduleEntry ? 'module_requirement' : 'workspace_requirement',
+        targetModule: moduleEntry && moduleEntry.title ? String(moduleEntry.title) : '',
+        visibleModules: buildKnowledgeBaseVisibleModuleSummary(visibleContext),
+        visibleCases: buildKnowledgeBaseVisibleCaseSummary(visibleContext, moduleEntry),
         operationContract: {},
       };
     }
 
-    function buildKnowledgeBaseQueryKey(baseUrl, queryContext) {
+    function buildKnowledgeBaseQueryKey(baseUrl, queryContext, knowledgeVersion, modelKey) {
       if (xmindKnowledgeBaseApi && typeof xmindKnowledgeBaseApi.buildQueryKey === 'function') {
         return xmindKnowledgeBaseApi.buildQueryKey({
           baseUrl: baseUrl,
           queryContext: queryContext,
+          knowledgeVersion: knowledgeVersion || '',
+          modelKey: modelKey || '',
         });
       }
       return JSON.stringify({
-        version: 3,
+        version: 4,
+        knowledgeVersion: knowledgeVersion || '',
+        modelKey: modelKey || '',
         baseUrl: normalizeKnowledgeBaseBaseUrl(baseUrl),
         requirementLabel: queryContext && queryContext.requirementLabel ? String(queryContext.requirementLabel || '').trim() : '',
         requirementText: queryContext && queryContext.requirementText ? String(queryContext.requirementText || '').trim() : '',
         requirementSupplement: queryContext && queryContext.requirementSupplement ? String(queryContext.requirementSupplement || '').trim() : '',
         requirementMode: queryContext && queryContext.requirementMode ? String(queryContext.requirementMode || '').trim() : '',
+        targetModule: queryContext && queryContext.targetModule ? String(queryContext.targetModule) : '',
+        operationType: queryContext && queryContext.operationType ? String(queryContext.operationType) : '',
+      });
+    }
+
+    function buildKnowledgeBaseModelKey(model, reasoning, temperature) {
+      var settings = state.settings || {};
+      var modelConfig = model && model.config ? model.config : (model && model.config_json ? model.config_json : {});
+      return JSON.stringify({
+        id: model && model.id ? model.id : '',
+        model: modelConfig.model || (model && model.model) || '',
+        provider: modelConfig.provider || (model && model.provider) || '',
+        baseUrl: modelConfig.baseUrl || (model && model.baseUrl) || '',
+        reasoning: reasoning || '',
+        temperature: temperature,
+        catalogLimit: settings.knowledgeBaseCatalogCharLimit || '',
+        injectedLimit: settings.knowledgeBaseInjectedContextCharLimit || '',
       });
     }
 
     function canReuseKnowledgeBaseState(kbState, baseUrl, queryKey) {
       var normalized = normalizeKnowledgeBaseState(kbState);
+      if (Number(normalized.pipelineVersion || 0) !== 4) return false;
       if (!normalized.enabled) return false;
       if (normalizeKnowledgeBaseBaseUrl(normalized.baseUrl) !== normalizeKnowledgeBaseBaseUrl(baseUrl)) return false;
       if (!queryKey || String(normalized.queryKey || '') !== String(queryKey || '')) return false;
@@ -11178,6 +11515,12 @@
     function buildReusedKnowledgeBaseState(kbState, contract, workspaceId) {
       var normalized = normalizeKnowledgeBaseState(kbState);
       return normalizeKnowledgeBaseState({
+        pipelineVersion: normalized.pipelineVersion,
+        knowledgeVersion: normalized.knowledgeVersion,
+        topicsAvailable: normalized.topicsAvailable,
+        selectedTopics: cloneJson(normalized.selectedTopics, []),
+        injectedTopicIds: cloneJson(normalized.injectedTopicIds, []),
+        omittedTopicIds: cloneJson(normalized.omittedTopicIds, []),
         baseUrl: normalized.baseUrl,
         enabled: normalized.enabled,
         workspaceId: String(workspaceId || normalized.workspaceId || ''),
@@ -11234,8 +11577,9 @@
       var stableActionKey = String(actionKey || '');
       var baseUrl = getCurrentKnowledgeBaseBaseUrl();
       var requirementSource = getSelectedRequirementSource();
-      var queryContext = buildKnowledgeBaseQueryContext(requirementSource);
-      var queryKey = buildKnowledgeBaseQueryKey(baseUrl, queryContext);
+      var queryContext = buildKnowledgeBaseQueryContext(requirementSource, visibleContext, moduleEntry);
+      var knowledgeVersion = '';
+      var modelKey = buildKnowledgeBaseModelKey(model, reasoning, temperature);
       if (!baseUrl) {
         setWorkspaceKnowledgeBaseState(
           stableWorkspaceId,
@@ -11257,6 +11601,19 @@
           return null;
         }
       }
+      if (xmindKnowledgeBaseApi && typeof xmindKnowledgeBaseApi.getVersion === 'function') {
+        try {
+          var versionInfo = await xmindKnowledgeBaseApi.getVersion(baseUrl);
+          knowledgeVersion = versionInfo && versionInfo.knowledgeVersion ? String(versionInfo.knowledgeVersion) : '';
+        } catch (versionError) {
+          delete knowledgeBaseActionResultMap[stableWorkspaceId];
+          setWorkspaceKnowledgeBaseState(stableWorkspaceId,
+            buildKnowledgeBaseSkipState(stableWorkspaceId, contract, '知识库版本检查失败：' + (versionError.message || '请稍后重试')),
+            { force: true });
+          return null;
+        }
+      }
+      var queryKey = buildKnowledgeBaseQueryKey(baseUrl, queryContext, knowledgeVersion, modelKey);
       var existingState = getWorkspaceKnowledgeBaseState(stableWorkspaceId);
       if (canReuseKnowledgeBaseState(existingState, baseUrl, queryKey)) {
         var reusedState = buildReusedKnowledgeBaseState(existingState, contract, stableWorkspaceId);
@@ -11319,6 +11676,8 @@
         requestId: requestId,
         queryContext: queryContext,
         model: cloneJson(model, null),
+        knowledgeVersion: knowledgeVersion,
+        modelKey: modelKey,
         reasoning: reasoning,
         temperature: temperature,
         callModel: callKnowledgeBaseFilterModel,
@@ -11331,7 +11690,7 @@
         },
       }).then(function(finalState) {
         var normalizedFinal = normalizeKnowledgeBaseState(finalState);
-        if (stableActionKey) {
+        if (stableActionKey && canReuseKnowledgeBaseState(normalizedFinal, baseUrl, queryKey)) {
           knowledgeBaseActionResultMap[stableWorkspaceId] = {
             actionKey: stableActionKey,
             queryKey: queryKey,
@@ -11740,7 +12099,7 @@
       var kbState = await runKnowledgeBasePipelineForGeneration(
         contract,
         visibleContext,
-        moduleEntry,
+        task && task.rootPipelineId ? null : moduleEntry,
         model,
         reasoning,
         temperature,
@@ -11846,6 +12205,7 @@
           ? xmindGenApi.getTemperatureForType('xmindcasegen')
           : 0.2,
         modules: cloneJson(built && built.modules, []),
+        referenceModules: cloneJson(built && built.referenceModules, []),
         dedupeMode: normalizeDedupeMode(built && built.dedupeMode ? built.dedupeMode : dedupeMode),
         partialModulesResponseAllowed: built && built.partialModulesResponseAllowed === true,
         beforeCaseCount: Number(built && built.beforeCaseCount || 0),
@@ -11855,16 +12215,23 @@
     function buildXmindDedupeExecutionInput(modules, options) {
       var opts = options || {};
       var batchCoreApi = getXmindDedupeBatchCoreApi();
+      var dedupeCoreApi = getXmindCaseDedupeCoreApi();
+      var preparedModules = dedupeCoreApi && typeof dedupeCoreApi.prepareDedupeModules === 'function'
+        ? dedupeCoreApi.prepareDedupeModules(modules, { idPrefix: 'generated' })
+        : cloneJson(modules, []);
       if (!batchCoreApi || typeof batchCoreApi.buildBatchPlan !== 'function') {
-        return buildXmindDedupeTaskInput(modules, opts);
+        return buildXmindDedupeTaskInput(preparedModules, opts);
       }
-      var plan = batchCoreApi.buildBatchPlan(modules, {
+      var plan = batchCoreApi.buildBatchPlan(preparedModules, {
         maxCasesPerBatch: 60,
         maxConcurrentBatches: 5,
       });
       if (!plan || plan.enabled !== true || !Array.isArray(plan.batches) || plan.batches.length <= 1) {
-        return buildXmindDedupeTaskInput(modules, opts);
+        return buildXmindDedupeTaskInput(preparedModules, opts);
       }
+      var plannedModules = Array.isArray(plan.modules) && plan.modules.length
+        ? cloneJson(plan.modules, [])
+        : cloneJson(preparedModules, []);
       var batchInputs = plan.batches.map(function(batch) {
         var taskInput = buildXmindDedupeTaskInput(batch.modules, {
           source: opts.source,
@@ -11878,6 +12245,7 @@
           id: String(batch.id || ''),
           index: Number(batch.index || 0),
           modules: cloneJson(taskInput.modules, []),
+          referenceModules: cloneJson(taskInput.referenceModules, []),
           targetCaseCount: Number(batch.targetCaseCount || taskInput.beforeCaseCount || 0),
           referenceCaseCount: Number(batch.referenceCaseCount || 0),
           model: cloneJson(taskInput.model, null),
@@ -11899,15 +12267,16 @@
         model: cloneJson(firstInput.model, null),
         reasoning: String(firstInput.reasoning || ''),
         temperature: Number(firstInput.temperature),
-        modules: cloneJson(modules, []),
+        modules: plannedModules,
         dedupeMode: normalizeDedupeMode(opts.dedupeMode || getDedupeModeFromSettings()),
-        partialModulesResponseAllowed: true,
+        partialModulesResponseAllowed: false,
         beforeCaseCount: Number(plan.totalCaseCount || 0),
         dedupeBatches: batchInputs.map(function(item) {
           return {
             id: item.id,
             index: item.index,
             modules: cloneJson(item.modules, []),
+            referenceModules: cloneJson(item.referenceModules, []),
             targetCaseCount: item.targetCaseCount,
             referenceCaseCount: item.referenceCaseCount,
           };
@@ -11922,6 +12291,7 @@
             contentBlocks: cloneJson(item.contentBlocks, []),
             reasoning: item.reasoning,
             temperature: item.temperature,
+            referenceModules: cloneJson(item.referenceModules, []),
           };
         }),
         modelRequestBatchConcurrency: Number(plan.maxConcurrentBatches || 1),
@@ -11938,10 +12308,31 @@
       if (!requirementText) {
         throw new Error('当前页签没有可分析的需求原文');
       }
-      var modules = buildVisibleModuleSnapshot(buildVisibleModuleContext());
+      var visibleContext = buildVisibleModuleContext();
+      var modules = buildVisibleModuleSnapshot(visibleContext);
       var request = coverageCoreApi.buildCoverageRequest({
         requirementText: requirementText,
         modules: modules,
+      });
+      var deleteTargets = [];
+      visibleContext.list.forEach(function(entry) {
+        getVisibleCasesForModuleEntry(entry).forEach(function(row) {
+          var normalized = normalizeCaseItem(row.item, entry.title);
+          if (!normalized) return;
+          deleteTargets.push({
+            type: 'case',
+            moduleKey: entry.moduleKey || normalizeModuleKey(entry.title),
+            moduleTitle: entry.title,
+            moduleId: row.source === 'ai' ? String(entry.aiModuleId || '') : '',
+            caseTitle: normalized.title,
+            caseSource: row.source,
+            caseSourceIndex: row.sourceIndex,
+            caseSignature: row.caseSignature,
+          });
+        });
+      });
+      (request && Array.isArray(request.cases) ? request.cases : []).forEach(function(item, index) {
+        item.deleteMeta = deleteTargets[index];
       });
       if (!request || !request.segmentCount) {
         throw new Error('当前需求原文无法拆分为可分析片段');
@@ -13902,6 +14293,10 @@
       }
       var confirmed = await confirmDeleteSelection(plan);
       if (!confirmed) return false;
+      return applyDeleteSelectionPlan(plan);
+    }
+
+    function applyDeleteSelectionPlan(plan) {
       var beforeSnapshot = buildDeleteHistorySnapshotPayload();
 
       var changed = false;
@@ -15111,6 +15506,9 @@
       coverageState.running = false;
       coverageState.taskId = '';
       if (coverageState.status === 'running') coverageState.status = '';
+      coverageState.supplement.running = false;
+      coverageState.supplement.taskId = '';
+      if (coverageState.supplement.status === 'running') coverageState.supplement.status = '';
       clearRootPendingModules();
       setAllModuleResultsVisibility(true);
       Object.keys(ensureState().modules || {}).forEach(function(key) {
@@ -15239,6 +15637,9 @@
           rootState.snapshotId = String(task.snapshotId || rootState.snapshotId || '');
           rootState.hideAiLayer = task.hadAiLayerBeforeAction === true;
           rootState.updatedAt = Date.now();
+          if (isCoverageSupplementTask(task)) {
+            setCoverageSupplementRunningState(task);
+          }
           if (task.hadAiCasesBeforeAction === true) {
             setAllModuleResultsVisibility(false);
           }
@@ -15442,6 +15843,7 @@
       var opts = options || {};
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
       var dedupeMode = normalizeDedupeMode(taskInput && taskInput.dedupeMode ? taskInput.dedupeMode : opts.dedupeMode);
+      var allowPartial = taskInput && taskInput.partialModulesResponseAllowed === true;
       return {
         workspaceId: taskWorkspaceId,
         scope: 'dedupe',
@@ -15450,6 +15852,7 @@
         dedupeStrength: DEDUPE_STRENGTH,
         dedupeMode: dedupeMode,
         dedupeModules: cloneJson(taskInput && taskInput.modules, []),
+        dedupeReferenceModules: cloneJson(taskInput && taskInput.referenceModules, []),
         dedupeBatches: cloneJson(taskInput && taskInput.dedupeBatches, []),
         dedupeBeforeCount: Number(taskInput && taskInput.beforeCaseCount || 0),
         modelRequestBatch: cloneJson(taskInput && taskInput.modelRequestBatch, []),
@@ -15457,6 +15860,7 @@
         modelRequestBatchCompleted: 0,
         dedupeVisibleStartedAt: Number(opts.dedupeVisibleStartedAt || 0) || 0,
         minVisibleUntil: Number(opts.minVisibleUntil || 0) || 0,
+        snapshotId: String(opts.snapshotId || ''),
         contract: {
           scope: 'xmind_ai_cases',
           mode: 'ai_dedupe_simplify',
@@ -15470,12 +15874,12 @@
           dedupe_order: ['within_module', 'cross_module'],
           crossModuleDedupe: true,
           moduleReturnPolicy: {
-            returnAllInputModules: false,
+            returnAllInputModules: !allowPartial,
             preserveModuleIdAndKey: true,
-            unchangedModulesMustBeReturned: false,
-            partialModulesResponseAllowed: true,
+            unchangedModulesMustBeReturned: !allowPartial,
+            partialModulesResponseAllowed: allowPartial,
           },
-          returnChangedModulesOnlyAllowed: true,
+          returnChangedModulesOnlyAllowed: allowPartial,
           reviewMethod: 'global_candidate_cluster_scan',
           duplicateDetectionPolicy: {
             compareFields: ['module', 'title', 'preconditions', 'steps', 'expected', 'test_purpose', 'test_point', 'validation_goal'],
@@ -16320,6 +16724,33 @@
       syncInterruptButton();
     }
 
+    function isCurrentDedupeTask(task) {
+      var taskId = String(task && task.id ? task.id : '');
+      if (!taskId) return true;
+      var dedupeState = ensureDedupeUiState();
+      if (dedupeState.taskId && String(dedupeState.taskId || '') !== taskId) return false;
+      var rootState = ensureRootUiState();
+      if (rootState.running === true
+        && rootState.taskId
+        && String(rootState.taskId || '') !== taskId) return false;
+      var snapshotSequence = String(task.snapshotId || '').match(/^op-snap-(\d+)$/);
+      if (snapshotSequence
+        && Number(ensureState().nextSnapshotId || 1) > Number(snapshotSequence[1]) + 1) return false;
+      if (task.rootPipelineId) {
+        var pipeline = getRootPipelineState();
+        if (pipeline && pipeline.id) {
+          if (String(pipeline.id || '') !== String(task.rootPipelineId || '')) return false;
+          if (pipeline.dedupeTaskId && String(pipeline.dedupeTaskId || '') !== taskId) return false;
+        }
+      }
+      return true;
+    }
+
+    function discardStaleDedupeTaskSnapshot(task) {
+      if (!task || !task.snapshotId) return;
+      discardCaseGenOperationSnapshotEntry(String(task.snapshotId || ''));
+    }
+
     function scheduleDedupeTerminalVisualState(task) {
       var dedupeState = ensureDedupeUiState();
       var until = Date.now() + DEDUPE_TERMINAL_VISUAL_MS;
@@ -16398,6 +16829,151 @@
       syncInterruptButton();
     }
 
+    function isCoverageSupplementTask(task) {
+      return Boolean(task && task.contract && task.contract.coverageSupplement === true);
+    }
+
+    function refreshCoverageSupplementDialog() {
+      if (workspaceShadowDepth <= 0 && summaryDialogOpen === true && summaryDialogMode === 'coverage') {
+        renderCoverageDialog();
+      }
+    }
+
+    function setCoverageSupplementRunningState(task) {
+      var coverageState = ensureCoverageUiState();
+      var request = task && task.contract && task.contract.coverageSupplementRequest
+        ? task.contract.coverageSupplementRequest
+        : {};
+      coverageState.supplement.running = true;
+      coverageState.supplement.taskId = String(task && task.id ? task.id : '');
+      coverageState.supplement.status = 'running';
+      coverageState.supplement.error = '';
+      coverageState.supplement.addedCases = 0;
+      if (!Object.keys(coverageState.pendingSegments || {}).length && request.pendingSegments) {
+        coverageState.pendingSegments = cloneJson(request.pendingSegments, {});
+        coverageState.pendingRequirementText = String(request.requirementText || '');
+      }
+      coverageState.updatedAt = Date.now();
+    }
+
+    function completeCoverageSupplementState(task, options) {
+      if (!isCoverageSupplementTask(task)) return;
+      var opts = options || {};
+      var coverageState = ensureCoverageUiState();
+      var request = task.contract.coverageSupplementRequest || {};
+      coverageState.supplement.running = false;
+      coverageState.supplement.taskId = '';
+      coverageState.supplement.status = String(opts.status || 'done');
+      coverageState.supplement.error = String(opts.error || '');
+      coverageState.supplement.addedCases = Math.max(0, Number(opts.addedCases || 0));
+      if (coverageState.supplement.status === 'done') {
+        var requirementText = String(request.requirementText || '');
+        if (String(coverageState.supplementedRequirementText || '') !== requirementText) {
+          coverageState.supplementedSegments = {};
+        }
+        coverageState.supplementedRequirementText = requirementText;
+        (Array.isArray(request.markedSegments) ? request.markedSegments : []).forEach(function(segment) {
+          var segmentId = segment ? String(segment.segmentId || segment.id || '') : '';
+          if (!segmentId) return;
+          coverageState.supplementedSegments[segmentId] = {
+            text: String(segment.text || ''),
+            updatedAt: Date.now(),
+          };
+        });
+        coverageState.pendingSegments = {};
+        coverageState.pendingRequirementText = '';
+      } else if (!Object.keys(coverageState.pendingSegments || {}).length && request.pendingSegments) {
+        coverageState.pendingSegments = cloneJson(request.pendingSegments, {});
+        coverageState.pendingRequirementText = String(request.requirementText || '');
+      }
+      coverageState.updatedAt = Date.now();
+      refreshCoverageSupplementDialog();
+    }
+
+    function startCoverageSupplementTask(options) {
+      var opts = options || {};
+      if (!hasActiveWorkspace() || hasAnyRunningGenerationOperation()) {
+        notifyStatus('当前有 XMind 任务进行中，请等待完成后再补充用例', 'warn', { forceInline: true });
+        return null;
+      }
+      var coverageState = ensureCoverageUiState();
+      var requestInfo = getCoverageCurrentRequestInfo();
+      if (!coverageState.result || !requestInfo.request || isCoverageResultStale(coverageState, requestInfo)) {
+        notifyStatus(requestInfo.error || '需求或用例已变化，请重新分析覆盖后再补充', 'warn', { forceInline: true });
+        return null;
+      }
+      var coverageCoreApi = getXmindRequirementCoverageCoreApi();
+      if (!coverageCoreApi || typeof coverageCoreApi.buildSupplementRequest !== 'function') {
+        notifyStatus('需求覆盖补充能力未就绪，请刷新后重试', 'err', { forceInline: true });
+        return null;
+      }
+      var request = null;
+      try {
+        request = coverageCoreApi.buildSupplementRequest(coverageState.result, coverageState.pendingSegments);
+      } catch (requestErr) {
+        notifyStatus(requestErr && requestErr.message ? requestErr.message : '请先标记待补充的需求片段', 'warn', { forceInline: true });
+        return null;
+      }
+      if (!request || !Array.isArray(request.markedSegments) || !request.markedSegments.length) {
+        notifyStatus('请先标记待补充的需求片段', 'warn', { forceInline: true });
+        return null;
+      }
+      var taskWorkspaceId = String(getActiveWorkspaceId() || '');
+      var contract = createOperationContract(ROOT_ACTIONS.APPEND_ALL, null);
+      contract.coverageSupplement = true;
+      contract.coverageAutoAnalyze = opts.autoAnalyze !== false;
+      contract.coverageSupplementRequest = {
+        requirementText: String(request.requirementText || ''),
+        markedRequirementText: String(request.markedRequirementText || ''),
+        markedSegments: cloneJson(request.markedSegments, []),
+        pendingSegments: cloneJson(coverageState.pendingSegments, {}),
+        signature: String(request.signature || ''),
+        prompt: String(request.prompt || ''),
+      };
+      var snapshotId = '';
+      try {
+        var taskInput = buildXmindGenerationTaskSeed(contract);
+        if (casesGenApi && typeof casesGenApi.snapshotAllCaseGenState === 'function') {
+          snapshotId = String(casesGenApi.snapshotAllCaseGenState() || '');
+        }
+        if (!snapshotId) snapshotId = snapshotAllCaseGenStateLocal();
+        var task = startPreparedManagedXmindTask(buildRootTaskPayload(ROOT_ACTIONS.APPEND_ALL, taskInput, {
+          workspaceId: taskWorkspaceId,
+          snapshotId: snapshotId,
+          contract: contract,
+          historyActionLabel: '需求覆盖补充用例',
+          hadAiContentBeforeAction: hasAnyAiModules(),
+          visibleModulesSnapshot: buildVisibleModuleSnapshot(buildVisibleModuleContext()),
+          knowledgeBaseActionKey: generateLocalId('kb-coverage-supplement'),
+          skipCoverageRetry: true,
+        }));
+        var rootState = ensureRootUiState();
+        rootState.running = true;
+        rootState.taskId = String(task && task.id ? task.id : '');
+        rootState.lastAction = ROOT_ACTIONS.APPEND_ALL;
+        rootState.snapshotId = snapshotId;
+        rootState.hideAiLayer = false;
+        rootState.status = '';
+        rootState.error = '';
+        rootState.updatedAt = Date.now();
+        setCoverageSupplementRunningState(task);
+        refreshCoverageSupplementDialog();
+        syncInterruptButton();
+        notifyStatus('正在根据待补充标记补充用例，完成后会自动更新结果', 'warn', { forceInline: true });
+        persistManagedTaskWorkspaceState(true);
+        return task;
+      } catch (err) {
+        if (snapshotId) discardCaseGenOperationSnapshotEntry(snapshotId);
+        completeCoverageSupplementState({ contract: contract }, {
+          status: 'error',
+          error: err && err.message ? String(err.message || '') : '补充用例启动失败',
+        });
+        notifyStatus('补充用例启动失败：' + (err && err.message ? err.message : '未知错误'), 'err', { forceInline: true });
+        persistManagedTaskWorkspaceState(true);
+        return null;
+      }
+    }
+
     function clearCoverageRunningState(status, errorText) {
       var coverageState = ensureCoverageUiState();
       coverageState.running = false;
@@ -16418,13 +16994,13 @@
       var taskInput = buildXmindCoverageTaskInput(request);
       var task = startManagedXmindTask(buildCoverageTaskPayload(taskInput, {
         workspaceId: getActiveWorkspaceId(),
-        coverageSource: 'manual-toolbar',
+        coverageSource: opts.source || 'manual-toolbar',
       }));
       var coverageState = ensureCoverageUiState();
       coverageState.selectedSegmentId = '';
       coverageState.error = '';
       setCoverageRunningState(task);
-      if (summaryDialogOpen === true && summaryDialogMode === 'coverage') {
+      if (workspaceShadowDepth <= 0 && summaryDialogOpen === true && summaryDialogMode === 'coverage') {
         renderCoverageDialog();
       }
       notifyStatus('需求覆盖分析中', 'warn', { forceInline: true });
@@ -16443,12 +17019,18 @@
       var taskWorkspaceId = String(opts.workspaceId || getActiveWorkspaceId() || '');
       var dedupeMode = normalizeDedupeMode(opts.dedupeMode || getDedupeModeFromSettings());
       var taskInput = buildXmindDedupeExecutionInput(modules, { source: source, dedupeMode: dedupeMode });
+      var snapshotId = '';
+      if (casesGenApi && typeof casesGenApi.snapshotAllCaseGenState === 'function') {
+        snapshotId = String(casesGenApi.snapshotAllCaseGenState() || '');
+      }
+      if (!snapshotId) snapshotId = snapshotAllCaseGenStateLocal();
       var dedupeVisibleStartedAt = Date.now();
       clearDedupeOverviewSummary({ clearTerminalVisual: true, sync: false });
       var task = startManagedXmindTask(buildDedupeTaskPayload(taskInput, {
         workspaceId: taskWorkspaceId,
         dedupeSource: source,
         dedupeMode: dedupeMode,
+        snapshotId: snapshotId,
         dedupeVisibleStartedAt: dedupeVisibleStartedAt,
         minVisibleUntil: dedupeVisibleStartedAt + DEDUPE_TERMINAL_VISUAL_MS,
         rootPipelineId: opts.rootPipelineId || '',
@@ -17372,6 +17954,14 @@
         task && task.resultRaw ? task.resultRaw : '',
         task && task.modelResponseDiagnostics
       );
+      if (isCoverageSupplementTask(task) && (
+        normalizedOutput.diagnostics.parseStatus !== 'json'
+        || normalizedOutput.diagnostics.missingModulesArray === true
+        || (normalizedOutput.diagnostics.moduleCandidateCount > 0 && !normalizedOutput.list.length)
+        || (normalizedOutput.diagnostics.caseCandidateCount > 0 && normalizedOutput.diagnostics.normalizedCaseCount <= 0)
+      )) {
+        throw new Error('补充用例结果格式不完整，请重试；待补充标记已保留');
+      }
       var filtered = filterModulesByContract(normalizedOutput.list, contract, visibleContext);
       var modules = filtered.list;
       var coverageGapInfo = evaluateRootCoverageGaps(task, modules, contract);
@@ -17396,6 +17986,7 @@
       rootState.error = '';
       rootState.updatedAt = Date.now();
       clearRootPendingModules(actionId);
+      completeCoverageSupplementState(task, { addedCases: applied.addedCases });
       markOpenButtonCompletionNotice({ persist: false });
       if (!applied.changed) {
         var rootNoChangeInfo = buildRootNoChangeInfo(actionId, filtered.diagnostics, applied.diagnostics, normalizedOutput.diagnostics);
@@ -17414,6 +18005,7 @@
         if (task && task.hadAiCasesBeforeAction === true) setAllModuleResultsVisibility(true);
         notifyStatus('本轮未生成新的模块或用例', 'warn', { forceInline: true });
         if (isDrawerOpen()) queueTerminalMindRender({ reason: 'root-task-no-change', persist: false, anchorNodeId: anchorNodeId });
+        if (isCoverageSupplementTask(task)) syncTerminalTaskRestoreContext(task);
         persistManagedTaskWorkspaceState(true);
         return false;
       }
@@ -17445,6 +18037,7 @@
       clearDeleteHistoryStacks();
       syncCasesGenPageRender();
       if (isDrawerOpen()) queueTerminalMindRender({ reason: 'root-task-committed', persist: false, anchorNodeId: anchorNodeId });
+      if (isCoverageSupplementTask(task)) syncTerminalTaskRestoreContext(task);
       persistManagedTaskWorkspaceState(true);
       return true;
     }
@@ -17469,6 +18062,10 @@
       var errorInfo = opts.resultKind === 'cancelled'
         ? buildGenerationCancelledInfo(task)
         : buildGenerationErrorInfo(new Error(rootState.error));
+      completeCoverageSupplementState(task, {
+        status: opts.resultKind === 'cancelled' ? 'cancelled' : 'error',
+        error: errorInfo.reasonText,
+      });
       var responseDiagnostics = buildModelResponseDiagnosticItems(task && task.modelResponseDiagnostics);
       var retryHistoryDiagnostics = buildCoverageRetryHistoryDiagnostics(task);
       var failureLabel = opts.resultKind === 'cancelled'
@@ -17497,6 +18094,7 @@
         notifyStatus(failureLabel, 'err', { forceInline: true });
       }
       if (isDrawerOpen()) queueTerminalMindRender({ reason: opts.renderReason || 'root-task-error', persist: false, anchorNodeId: anchorNodeId });
+      if (isCoverageSupplementTask(task)) syncTerminalTaskRestoreContext(task);
       persistManagedTaskWorkspaceState(true);
       return false;
     }
@@ -17777,6 +18375,9 @@
           {
             dedupeMode: dedupeMode,
             allowPartialModulesResponse: task && task.dedupePartialModulesResponseAllowed === true,
+            referenceModules: task && Array.isArray(task.dedupeReferenceModules)
+              ? task.dedupeReferenceModules
+              : [],
           }
         );
       }
@@ -17801,22 +18402,43 @@
             batch && Array.isArray(batch.modules) ? batch.modules : [],
             {
               dedupeMode: dedupeMode,
-              allowPartialModulesResponse: true,
+              allowPartialModulesResponse: false,
+              referenceModules: batch && Array.isArray(batch.referenceModules)
+                ? batch.referenceModules
+                : [],
             }
           ),
         };
       });
       var merged = batchCoreApi.mergeBatchResults(
         task && Array.isArray(task.dedupeModules) ? task.dedupeModules : [],
-        entries
+        entries,
+        { expectedBatches: batches }
       );
       merged.diagnostics = normalizeHistoryDiagnostics((merged.diagnostics || []).concat(
         'AI 用例去重已拆分为 ' + String(batches.length) + ' 个有界批次并行完成'
       ));
-      return merged;
+      var validated = dedupeCoreApi.normalizeDedupeResult(
+        JSON.stringify({
+          modules: merged.modules,
+          removed_cases: merged.removedCases,
+        }),
+        task && Array.isArray(task.dedupeModules) ? task.dedupeModules : [],
+        {
+          dedupeMode: dedupeMode,
+          allowPartialModulesResponse: false,
+          referenceModules: [],
+        }
+      );
+      validated.diagnostics = normalizeHistoryDiagnostics((validated.diagnostics || []).concat(merged.diagnostics || []));
+      return validated;
     }
 
     function completeDedupeTaskSuccess(task) {
+      if (!isCurrentDedupeTask(task)) {
+        discardStaleDedupeTaskSnapshot(task);
+        return false;
+      }
       var dedupeCoreApi = getXmindCaseDedupeCoreApi();
       if (!dedupeCoreApi || typeof dedupeCoreApi.normalizeDedupeResult !== 'function') {
         throw new Error('AI 用例去重能力未就绪，请刷新后重试');
@@ -17827,31 +18449,65 @@
       var removedCount = Number(result && result.removedCount || 0) || 0;
       var executionSummary = getDedupeExecutionDiagnosticText(removedCount, dedupeMode);
       diagnostics = normalizeHistoryDiagnostics(diagnostics.concat(executionSummary));
-      (result && Array.isArray(result.modules) ? result.modules : []).forEach(function(item) {
+      var expectedModules = task && Array.isArray(task.dedupeModules) ? task.dedupeModules : [];
+      var resultModules = result && Array.isArray(result.modules) ? result.modules : [];
+      if (!expectedModules.length || resultModules.length !== expectedModules.length) {
+        throw new Error('AI 用例去重模块结果不完整，已保留原用例');
+      }
+      var expectedModuleMap = {};
+      expectedModules.forEach(function(item) {
         var moduleId = item && item.moduleId ? String(item.moduleId || '') : '';
-        if (!moduleId) {
-          diagnostics.push('模块「' + normalizeModuleTitle(item && item.module ? item.module : '') + '」缺少模块标识，已跳过回写');
-          return;
-        }
+        if (!moduleId || expectedModuleMap[moduleId]) throw new Error('AI 用例去重来源模块标识无效，已保留原用例');
+        expectedModuleMap[moduleId] = item;
+      });
+      var preparedModuleMap = {};
+      var preparedCommits = resultModules.map(function(item) {
+        var moduleId = item && item.moduleId ? String(item.moduleId || '') : '';
+        if (!moduleId || !expectedModuleMap[moduleId] || preparedModuleMap[moduleId]) throw new Error('AI 用例去重目标模块标识无效，已保留原用例');
+        var currentModule = findAiModuleById(moduleId);
+        if (!currentModule) throw new Error('AI 用例去重目标模块已不存在，已保留原用例');
         var moduleTitle = normalizeModuleTitle(item && item.module ? item.module : '');
-        var nextCases = (Array.isArray(item && item.cases) ? item.cases : []).map(function(caseItem) {
-          return normalizeCaseItem(caseItem, moduleTitle);
-        }).filter(Boolean);
-        commitCaseList(moduleId, nextCases, Number(task && task.durationMs || 0), '', '');
-        var moduleState = ensureModuleUiState(moduleId);
-        if (moduleState) {
-          moduleState.running = false;
-          moduleState.taskId = '';
-          moduleState.status = '';
-          moduleState.error = '';
-          moduleState.hideResults = false;
-          clearModuleTopupHighlight(moduleState);
-          moduleState.updatedAt = Date.now();
+        if (normalizeModuleKey(currentModule.title || currentModule.module || '') !== normalizeModuleKey(moduleTitle)) {
+          throw new Error('AI 用例去重目标模块已变化，已保留原用例');
         }
+        if (!Array.isArray(item.cases)) throw new Error('AI 用例去重目标用例列表无效，已保留原用例');
+        var nextCases = item.cases.map(function(caseItem) {
+          return normalizeCaseItem(caseItem, moduleTitle);
+        });
+        if (nextCases.some(function(caseItem) { return !caseItem; })) throw new Error('AI 用例去重结果含无效用例，已保留原用例');
+        var sourceCases = expectedModuleMap[moduleId].cases;
+        var currentCases = getAiCasesForModule(moduleId).map(function(caseItem) { return normalizeCaseItem(caseItem, moduleTitle); });
+        var expectedCases = (Array.isArray(sourceCases) ? sourceCases : []).map(function(caseItem) { return normalizeCaseItem(caseItem, moduleTitle); });
+        if (JSON.stringify(currentCases) !== JSON.stringify(expectedCases)) throw new Error('AI 用例去重期间原用例已变化，已保留当前用例');
+        preparedModuleMap[moduleId] = true;
+        return { moduleId: moduleId, cases: nextCases };
       });
       diagnostics = normalizeHistoryDiagnostics(diagnostics);
       var dedupeRecords = normalizeHistoryDedupeRecords(result && result.removedCases ? result.removedCases : []);
-
+      var rollbackSharedKeys = ['caseGenModules', 'caseGenResults', 'caseGenSuggestions', 'caseGenModuleStatus', 'caseGenProgress', 'caseGenTiming', 'caseGenProgressNotice', 'caseGenSource'];
+      var rollbackSharedState = {};
+      rollbackSharedKeys.forEach(function(key) { rollbackSharedState[key] = cloneJson(state[key], state[key]); });
+      var rollbackSelections = cloneSelectionMap(state.caseSelections);
+      var rollbackXmindState = cloneJson(ensureState(), null);
+      if (!rollbackXmindState) throw new Error('AI 用例去重回写快照创建失败，已保留原用例');
+      try {
+        preparedCommits.forEach(function(item) {
+          commitCaseList(item.moduleId, item.cases, Number(task && task.durationMs || 0), '', '');
+          var committedCases = getAiCasesForModule(item.moduleId).map(function(caseItem) {
+            return normalizeCaseItem(caseItem, item.cases.length ? item.cases[0].module : '');
+          });
+          if (JSON.stringify(committedCases) !== JSON.stringify(item.cases)) throw new Error('AI 用例去重结果回写失败，已保留原用例');
+          var moduleState = ensureModuleUiState(item.moduleId);
+          if (moduleState) {
+            moduleState.running = false;
+            moduleState.taskId = '';
+            moduleState.status = '';
+            moduleState.error = '';
+            moduleState.hideResults = false;
+            clearModuleTopupHighlight(moduleState);
+            moduleState.updatedAt = Date.now();
+          }
+        });
       var dedupeState = ensureDedupeUiState();
       dedupeState.lastResult = {
         status: 'done',
@@ -17865,14 +18521,21 @@
         dedupeRecords: dedupeRecords,
         updatedAt: Date.now(),
       };
-      scheduleDedupeTerminalVisualState(task);
       clearDedupeRunningState('');
       clearDeleteHistoryStacks();
-      saveActiveWorkspaceSnapshot({
+      var snapshotSaved = saveActiveWorkspaceSnapshot({
         forceShared: true,
         skipSummaryDraftSync: true,
         skipViewStateCapture: true,
       });
+      if (snapshotSaved !== true) throw new Error('AI 用例去重结果快照保存失败，已保留原用例');
+      } catch (commitError) {
+        rollbackSharedKeys.forEach(function(key) { state[key] = rollbackSharedState[key]; });
+        state.caseSelections = restoreSelectionMap(rollbackSelections);
+        state.xmindCaseGen = rollbackXmindState;
+        throw commitError;
+      }
+      scheduleDedupeTerminalVisualState(task);
       renderWorkspaceTabs();
       syncCasesGenPageRender();
 
@@ -17926,15 +18589,23 @@
     }
 
     function completeDedupeTaskError(task, err, options) {
+      if (!isCurrentDedupeTask(task)) {
+        discardStaleDedupeTaskSnapshot(task);
+        return false;
+      }
       var opts = options || {};
       var resultKind = opts.resultKind === 'cancelled' ? 'cancelled' : 'error';
       var errorInfo = resultKind === 'cancelled'
         ? buildGenerationCancelledInfo(task)
         : buildGenerationErrorInfo(new Error(getTaskErrorMessage(task, err)));
-      var errorText = resultKind === 'cancelled' ? errorInfo.reasonText : errorInfo.reasonText;
+      if (resultKind !== 'cancelled' && task && task.status === 'done' && err && err.message) {
+        errorInfo.reasonText = String(err.message || '');
+      }
+      var errorText = errorInfo.reasonText;
       var diagnostics = normalizeHistoryDiagnostics(errorInfo.diagnostics || []);
       var stateMessage = resultKind === 'cancelled' ? '' : errorText;
       var dedupeMode = normalizeDedupeMode(task && task.dedupeMode);
+      discardStaleDedupeTaskSnapshot(task);
       var dedupeState = ensureDedupeUiState();
       dedupeState.lastResult = {
         status: resultKind,
@@ -18018,7 +18689,7 @@
       coverageState.error = '';
       coverageState.updatedAt = Date.now();
       coverageHighlightedCaseId = '';
-      if (summaryDialogOpen === true && summaryDialogMode === 'coverage') {
+      if (workspaceShadowDepth <= 0 && summaryDialogOpen === true && summaryDialogMode === 'coverage') {
         renderCoverageDialog();
       }
       notifyStatus('需求覆盖分析完成', 'ok', { forceInline: true });
@@ -18035,7 +18706,7 @@
         : buildGenerationErrorInfo(new Error(getTaskErrorMessage(task, err)));
       var errorText = resultKind === 'cancelled' ? errorInfo.reasonText : errorInfo.reasonText;
       clearCoverageRunningState(resultKind, resultKind === 'cancelled' ? '' : errorText);
-      if (summaryDialogOpen === true && summaryDialogMode === 'coverage') {
+      if (workspaceShadowDepth <= 0 && summaryDialogOpen === true && summaryDialogMode === 'coverage') {
         renderCoverageDialog();
       }
       if (resultKind === 'cancelled') {
@@ -18202,6 +18873,10 @@
       var promise = runInWorkspaceContext(getTaskWorkspaceId(task), function() {
         return Promise.resolve()
           .then(function() {
+            if (task.scope === 'dedupe' && !isCurrentDedupeTask(task)) {
+              discardStaleDedupeTaskSnapshot(task);
+              return false;
+            }
             restoreWorkflowContextFromManagedTasks([task]);
             if (task.scope === 'dedupe') {
               showTerminalDedupeRunningState(task);
@@ -18260,6 +18935,21 @@
                 finalizeRootPipelineIfReady(String(task.rootPipelineId || ''), {
                   anchorNodeId: getManagedTaskAnchorNodeId(task, null),
                 });
+              }
+              if (isCoverageSupplementTask(task)
+                && task.status === 'done'
+                && task.contract.coverageAutoAnalyze === true
+                && ensureCoverageUiState().supplement.status === 'done') {
+                try {
+                  startRequirementCoverageTask({ force: true, source: 'coverage-supplement' });
+                } catch (coverageErr) {
+                  var coverageState = ensureCoverageUiState();
+                  coverageState.error = '用例已补充，但自动覆盖分析未能启动：'
+                    + (coverageErr && coverageErr.message ? String(coverageErr.message || '') : '未知错误');
+                  coverageState.updatedAt = Date.now();
+                  refreshCoverageSupplementDialog();
+                  persistManagedTaskWorkspaceState(true);
+                }
               }
             });
           }
@@ -19926,11 +20616,30 @@
       }
       if (summaryDialogBodyEl) {
         summaryDialogBodyEl.addEventListener('click', function(event) {
+          var coverageDeleteTarget = event && event.target && event.target.closest
+            ? event.target.closest('[data-coverage-case-delete]')
+            : null;
+          if (coverageDeleteTarget) {
+            if (event && typeof event.preventDefault === 'function') event.preventDefault();
+            if (coverageDeleteTarget.disabled !== true) {
+              requestCoverageCaseDelete(String(coverageDeleteTarget.getAttribute('data-coverage-case-delete') || ''));
+            }
+            return;
+          }
           var coverageActionTarget = event && event.target && event.target.closest
             ? event.target.closest('[data-coverage-action]')
             : null;
           if (coverageActionTarget) {
             var coverageActionId = String(coverageActionTarget.getAttribute('data-coverage-action') || '');
+            if (coverageActionTarget.disabled === true) return;
+            if (coverageActionId === 'toggle-pending' || coverageActionId === 'mark-gaps' || coverageActionId === 'clear-batch') {
+              updateCoveragePendingMarks(coverageActionId);
+              return;
+            }
+            if (coverageActionId === 'supplement') {
+              requestCoverageSupplement();
+              return;
+            }
             if (coverageActionId === 'reanalyze' && coverageActionTarget.disabled !== true) {
               startRequirementCoverageTask({ force: true });
               return;
@@ -20184,6 +20893,7 @@
         document.addEventListener('keydown', function(event) {
           if (!event) return;
           if (event.key === 'Escape') {
+            if (document.querySelector('dialog.xmind-casegen-coverage-confirm-dialog[open]')) return;
             if (!isDrawerOpen() || summaryDialogOpen !== true) return;
             closeSummaryDialog();
             return;

@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>用例助手 - XMind 用例生成</title>
+<link rel="icon" href="./assets/favicon.svg" type="image/svg+xml"/>
+<script>
+(function() {
+  try {
+    var theme = '';
+    try {
+      theme = localStorage.getItem('tap-theme-hint') || '';
+    } catch (err) {
+      theme = '';
+    }
+    if (theme) theme = String(theme).toLowerCase();
+    if (theme !== 'dark' && theme !== 'light') {
+      var key = 'usecase-settings-v1';
+      var raw = '';
+      try {
+        raw = localStorage.getItem(key) || '';
+      } catch (err) {
+        raw = '';
+      }
+      var saved = {};
+      if (raw) {
+        try {
+          saved = JSON.parse(raw || '{}') || {};
+        } catch (err) {
+          saved = {};
+        }
+      }
+      theme = saved && saved.theme ? String(saved.theme).toLowerCase() : '';
+    }
+    if (theme !== 'dark' && theme !== 'light') return;
+    var root = document && document.documentElement ? document.documentElement : null;
+    if (!root) return;
+    if (root.dataset) {
+      root.dataset.theme = theme;
+    } else {
+      root.setAttribute('data-theme', theme);
+    }
+    if (root.style) root.style.colorScheme = theme === 'dark' ? 'dark' : 'light';
+
+    var preloadStyleId = 'tap-theme-preload';
+    if (!document.getElementById(preloadStyleId)) {
+      var style = document.createElement('style');
+      style.id = preloadStyleId;
+      style.textContent =
+        'html,body{background:#f9fafb;color:#0f172a;}'
+        + 'html[data-theme="dark"]{background:#151d2a;color:#e5e7eb;}'
+        + 'html[data-theme="dark"] body{background:#151d2a;color:#e5e7eb;}';
+      var head = document.head || document.getElementsByTagName('head')[0];
+      if (head) head.appendChild(style);
+    }
+  } catch (err) {
+    // ignore
+  }
+})();
+</script>
+<script>
+(function() {
+  try {
+    var root = document && document.documentElement ? document.documentElement : null;
+    if (!root) return;
+    var search = window && window.location ? window.location.search || '' : '';
+    var query = {};
+    if (search && search.charAt(0) == '?') search = search.slice(1);
+    if (search) {
+      search.split('&').forEach(function(pair) {
+        if (!pair) return;
+        var parts = pair.split('=');
+        var key = decodeURIComponent(parts.shift() || '');
+        if (!key) return;
+        var value = parts.length ? decodeURIComponent(parts.join('=')) : '';
+        query[key] = value;
+      });
+    }
+    function normalizeTab(tab) {
+      var name = tab ? String(tab || '') : '';
+      return name === 'auto' || name === 'clean' || name === 'xmind-casegen' ? 'casesgen' : name;
+    }
+    var urlTab = normalizeTab(query.tab);
+    var path = window && window.location ? window.location.pathname || '' : '';
+    var file = '';
+    if (path) {
+      var parts = path.split('/').filter(Boolean);
+      file = parts.length ? parts[parts.length - 1] : '';
+    }
+    var page = '';
+    if (file == 'ai-workflow.html') page = 'ai-workflow';
+    else if (file == 'ai-tools.html') page = 'ai-tools';
+    else if (file == 'case-exec.html') page = 'case-exec';
+    else if (file == 'case-library.html') page = 'case-library';
+    else if (file == 'admin.html') page = 'admin';
+    else if (file == 'settings.html') page = 'settings';
+    else if (file == 'index.html' || !file) page = 'index';
+    if (!page) page = 'index';
+    var allowMap = {
+      'ai-workflow': ['casesgen'],
+      'ai-tools': ['assign', 'models'],
+      'case-exec': ['tempexec', 'exec-overview'],
+      'case-library': ['case-library', 'case-archive'],
+      admin: ['project-admin', 'user-admin', 'ops-log'],
+      settings: ['settings']
+    };
+    var defaultMap = {
+      'ai-workflow': 'casesgen',
+      'ai-tools': 'assign',
+      'case-exec': 'tempexec',
+      'case-library': 'case-library',
+      admin: 'project-admin',
+      settings: 'settings',
+      index: 'casesgen'
+    };
+    function isAllowed(tab) {
+      if (!tab) return false;
+      var list = allowMap[page];
+      if (!list) return true;
+      return list.indexOf(tab) != -1;
+    }
+    var candidate = '';
+    if (urlTab && isAllowed(urlTab)) candidate = urlTab;
+    if (!candidate) {
+      var saved = '';
+      try {
+        if (typeof sessionStorage != 'undefined') {
+          saved = normalizeTab(sessionStorage.getItem('usecase-active-tab') || '');
+        }
+      } catch (err) {
+        saved = '';
+      }
+      if (saved) {
+        var valid = true;
+        try {
+          if (typeof sessionStorage != 'undefined') {
+            var tabSeq = sessionStorage.getItem('tap-active-tab-login-seq') || '';
+            var loginSeq = '';
+            if (typeof localStorage != 'undefined') {
+              loginSeq = localStorage.getItem('tap-login-seq') || '';
+            }
+            if (loginSeq && !tabSeq) {
+              sessionStorage.setItem('tap-active-tab-login-seq', loginSeq);
+              tabSeq = loginSeq;
+            }
+            if (loginSeq && tabSeq && tabSeq != loginSeq) {
+              valid = false;
+            }
+          }
+        } catch (err2) {
+          valid = false;
+        }
+        if (valid && isAllowed(saved)) candidate = saved;
+      }
+    }
+    if (!candidate) candidate = defaultMap[page] || 'casesgen';
+    root.setAttribute('data-preload-nav', '1');
+    root.setAttribute('data-init-tab', candidate);
+  } catch (err) {
+    // ignore
+  }
+})();
+</script>
+<link rel="stylesheet" href="./style.css"/>
+<link rel="stylesheet" href="./scripts/vendor/mind-elixir.css"/>
+<link rel="stylesheet" href="./styles/workspace-shell.css"/>
+<link rel="stylesheet" href="./styles/workspace-lists.css"/>
+</head>
+<body data-page="ai-workflow">
+<div class="app-layout">
+<aside class="sidebar">
+<div class="user-banner" id="userBanner">
+<span class="user-prefix">当前用户</span>
+<strong id="currentUsername">未登录</strong>
+<span class="user-role" id="currentUserRole"></span>
+<button class="pill-btn" id="userMenuToggle" type="button" aria-label="用户菜单">个人</button>
+<div class="user-menu" id="userMenu">
+<button class="ghost-btn" id="logoutBtn" type="button">登出</button>
+</div>
+</div>
+<div class="sidebar-header">
+<h1>用例助手</h1>
+</div>
+<nav class="tabs vertical">
+<div class="tab-group">
+<button class="tab-group-btn" data-group="ai">
+  <span class="tab-group-label">AI 功能</span>
+</button>
+<div class="tab-submenu hidden" data-group-menu="ai">
+<button data-tab-btn="casesgen">XMind 用例生成</button>
+<button data-tab-btn="assign">功能指派</button>
+<button data-tab-btn="models">模型管理</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="cases">用例相关</button>
+<div class="tab-submenu hidden" data-group-menu="cases">
+<button data-tab-btn="tempexec">用例执行</button>
+<button data-tab-btn="case-library">用例库</button>
+<button data-tab-btn="case-archive">用例归档</button>
+<button data-tab-btn="exec-overview">执行总览</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="manage">管理</button>
+<div class="tab-submenu hidden" data-group-menu="manage">
+<button class="hidden" data-tab-btn="project-admin" data-role="admin-only">项目管理</button>
+<button class="hidden" data-tab-btn="user-admin" data-role="admin-only">人员管理</button>
+<button class="hidden" data-tab-btn="ops-log" data-role="admin-only">操作记录</button>
+</div>
+</div>
+<div class="tab-group">
+<button class="tab-group-btn" data-group="settings">设置</button>
+<div class="tab-submenu hidden" data-group-menu="settings">
+<button data-tab-btn="settings">通用设置</button>
+</div>
+</div>
+</nav>
+<div class="sidebar-tabs" id="sidebarTabs">
+<div class="sidebar-tab-bar" id="sidebarTabBar">
+<button class="sidebar-tab is-active" type="button" id="sidebarTabMemo" data-sidebar-tab="memo">个人备忘</button>
+</div>
+<div class="sidebar-tab-panels" id="sidebarTabPanels">
+<div class="sidebar-tab-panel is-active" data-sidebar-panel="memo">
+<div class="memo-pad-panel" id="memoPadPanel">
+<div class="panel-head">
+<div class="panel-title-row">
+<div class="panel-title-main">
+<span class="title">个人备忘</span>
+<span class="memo-tab-progress" id="memoTabProgress">0/0</span>
+</div>
+<button class="panel-toggle" type="button" id="memoPadToggle" aria-expanded="true" aria-controls="memoPadBody">收起</button>
+</div>
+</div>
+<div class="memo-tabs" id="memoTabLayer">
+<div class="memo-tab-list" id="memoTabList"></div>
+<button class="memo-tab-add" type="button" id="memoTabAddBtn" aria-label="新增备忘页">+</button>
+</div>
+<div class="memo-pad-body" id="memoPadBody"></div>
+</div>
+</div>
+</div>
+</div>
+</aside>
+<div class="content-shell">
+  <main>
+<section class="card xmind-casegen-entry" data-section-id="casesgen" data-tab-section="casesgen">
+  <div class="xmind-casegen-entry-layout">
+    <header class="xmind-casegen-entry-content">
+      <h2>XMind 用例生成</h2>
+      <button class="xmind-casegen-entry-button casegen-tab-launcher" id="xmindCaseGenOpenBtn" type="button" aria-controls="xmindCaseGenDrawer" aria-expanded="false">打开 XMind 用例生成</button>
+    </header>
+    <section class="xmind-casegen-home-progress" id="xmindCaseGenHomeProgress" aria-labelledby="xmindCaseGenHomeProgressTitle">
+      <header class="xmind-casegen-home-progress-head">
+        <div>
+          <span class="xmind-casegen-home-progress-eyebrow">任务概览</span>
+          <h3 id="xmindCaseGenHomeProgressTitle">生成进度</h3>
+        </div>
+        <div class="xmind-casegen-home-progress-total">
+          <strong id="xmindCaseGenHomeProgressPercent">0%</strong>
+          <span>整体进度</span>
+        </div>
+      </header>
+      <div class="xmind-casegen-home-progress-summary">
+        <div class="xmind-casegen-home-progress-track" id="xmindCaseGenHomeProgressTrack" role="progressbar" aria-label="XMind 用例生成整体进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span id="xmindCaseGenHomeProgressFill"></span>
+        </div>
+        <div class="xmind-casegen-home-progress-meta" id="xmindCaseGenHomeProgressMeta">暂无生成任务</div>
+      </div>
+      <div class="xmind-casegen-home-progress-list" id="xmindCaseGenHomeProgressList">
+        <div class="xmind-casegen-home-progress-empty">暂无生成任务</div>
+      </div>
+    </section>
+  </div>
+</section>
+<div class="drawer" id="xmindCaseGenDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="xmindCaseGenDrawer"></div>
+  <div class="drawer-panel drawer-panel-wide drawer-panel-xmind">
+    <div class="drawer-header">
+      <h3 id="xmindCaseGenDrawerTitle">XMind 用例生成</h3>
+      <button class="link-toggle" id="closeXmindCaseGenDrawerBtn" data-drawer-close="xmindCaseGenDrawer">收起</button>
+    </div>
+    <div class="drawer-body is-mind-viewer" id="xmindCaseGenDrawerBody">
+      <div class="xmind-casegen-shell xmind-casegen-drawer-shell">
+        <div class="memo-tabs xmind-casegen-tabs" id="xmindCaseGenWorkspaceLayer">
+          <div class="memo-tab-list xmind-casegen-tab-list" id="xmindCaseGenWorkspaceList"></div>
+          <button class="memo-tab-add xmind-casegen-tab-add" id="xmindCaseGenWorkspaceAddBtn" type="button" aria-label="新建 XMind 生成页签">新建生成</button>
+        </div>
+        <div class="xmind-casegen-toolbar xmind-casegen-toolbar-bank" id="xmindCaseGenToolbar" hidden aria-hidden="true">
+          <div class="xmind-casegen-actions">
+            <button class="secondary" id="xmindCaseGenSummaryBtn" type="button" aria-expanded="false" title="打开生成前置准备">生成前置准备</button>
+            <button class="secondary" id="xmindCaseGenHistoryBtn" type="button" aria-expanded="false" title="查看生成记录">生成记录</button>
+            <button class="secondary" id="xmindCaseGenKnowledgeRuleBtn" type="button" aria-expanded="false" title="查看当前页签规则检索状态">规则检索：未启用</button>
+            <button class="secondary" id="xmindCaseGenKnowledgeAiBtn" type="button" aria-expanded="false" title="查看当前页签 AI 筛选状态">AI筛选：未启用</button>
+            <button class="secondary" id="xmindCaseGenDedupeBtn" type="button" title="对当前页签 AI 生成用例执行去重精简" disabled>AI用例去重</button>
+            <button class="secondary" id="xmindCaseGenCoverageBtn" type="button" aria-expanded="false" title="查看用例对需求原文的覆盖" disabled>需求覆盖</button>
+            <button class="secondary" id="xmindCaseGenStoreBtn" type="button" title="保存当前生成结果到用例库">保存入库</button>
+            <button class="secondary" id="xmindCaseGenInterruptBtn" type="button" title="中断当前 XMind 生成任务" disabled>中断生成</button>
+            <button class="secondary" id="xmindCaseGenDeleteUndoBtn" type="button" title="撤回最近一次删除" disabled>撤回删除</button>
+            <button class="secondary" id="xmindCaseGenDeleteRedoBtn" type="button" title="恢复最近一次撤回的删除" disabled>恢复删除</button>
+            <button class="secondary" id="xmindCaseGenExportBtn" type="button" title="导出当前XMind">导出当前XMind</button>
+            <button class="secondary" id="xmindCaseGenExportMarkdownBtn" type="button" title="导出当前AI Markdown">导出为Markdown</button>
+          </div>
+          <p class="status" id="xmindCaseGenStatus"></p>
+        </div>
+        <div class="xmind-casegen-canvas-shell">
+          <div class="xmind-structure-viewer xmind-casegen-viewer" id="xmindCaseGenMindContainer"></div>
+        </div>
+        <div class="xmind-casegen-summary-overlay hidden" id="xmindCaseGenSummaryOverlay" aria-hidden="true">
+          <div class="xmind-casegen-summary-dialog" id="xmindCaseGenSummaryDialog" role="dialog" aria-modal="true" aria-labelledby="xmindCaseGenSummaryDialogTitle">
+            <div class="xmind-casegen-summary-dialog-head">
+              <div class="xmind-casegen-summary-dialog-copy">
+                <strong class="xmind-casegen-summary-dialog-title" id="xmindCaseGenSummaryDialogTitle">生成前置准备</strong>
+                <p class="hint xmind-casegen-summary-dialog-desc" id="xmindCaseGenSummaryDialogDesc">按 3 步完成前置准备，确认后 step1 和 step2 会在本次生成中锁定。</p>
+              </div>
+              <div class="xmind-casegen-summary-dialog-actions">
+                <button class="link-toggle" id="xmindCaseGenSummaryCloseBtn" type="button">关闭</button>
+              </div>
+            </div>
+            <div class="xmind-casegen-summary-dialog-body" id="xmindCaseGenSummaryDialogBody"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseGenDbStoreDrawer" data-tab-section="casesgen">
+  <div class="drawer-mask" data-drawer-close="caseGenDbStoreDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseGenDbStoreDrawerTitle">入库</h3>
+      <button class="link-toggle" id="closeCaseGenDbStoreDrawerBtn" data-drawer-close="caseGenDbStoreDrawer">收起</button>
+    </div>
+    <div class="drawer-body" id="caseGenDbStoreDrawerBody">
+      <p class="hint" style="margin:0 0 10px;">选择项目与版本后写入用例库；追加入库需额外选择目标用例。</p>
+      <div class="case-library-filters" style="margin-bottom:8px;" id="caseGenDbStoreEntryNameRow">
+        <span class="case-library-label">用例名</span>
+        <input id="caseGenDbStoreEntryNameInput" maxlength="80" placeholder="请输入确认入库的用例名" style="min-width:240px; flex:1;" />
+        <span class="case-library-label">.xmind</span>
+      </div>
+      <div class="case-library-filters" style="margin-bottom:8px;">
+        <span class="case-library-label">项目</span>
+        <select id="caseGenDbStoreProjectSelect">
+          <option value="">请选择项目</option>
+        </select>
+        <span class="case-library-label">版本</span>
+        <select id="caseGenDbStoreVersionSelect" disabled>
+          <option value="">请选择版本</option>
+        </select>
+      </div>
+      <div class="case-library-filters hidden" style="margin-bottom:8px;" id="caseGenDbStoreCaseFileRow">
+        <span class="case-library-label">用例</span>
+        <select id="caseGenDbStoreCaseFileSelect" disabled style="min-width:240px;">
+          <option value="">请选择用例</option>
+        </select>
+      </div>
+      <div class="actions" style="margin-top:10px; justify-content:flex-end; gap:8px;">
+        <button class="pill primary" id="caseGenDbStoreConfirmBtn" disabled type="button">确认入库</button>
+      </div>
+      <p class="status" id="caseGenDbStoreStatus"></p>
+    </div>
+  </div>
+</div>
+<div class="drawer" id="caseLibraryImportDiffDrawer" data-tab-section="case-library">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportDiffDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="caseLibraryImportDiffTitle">同名用例差异对比</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportDiffDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">同一列表展示导入与库中差异：绿色表示新增，红色表示差异或将被覆盖/移除。</p>
+      <p class="status" id="caseLibraryImportDiffStatus"></p>
+      <div class="case-library-diff-head">
+        <p class="hint" id="caseLibraryImportDiffMeta"></p>
+      </div>
+      <div class="diff-locate-bar" id="caseLibraryImportDiffLocateBar"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table diff-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>模块</th>
+              <th>用例标题</th>
+              <th>优先级</th>
+              <th>前提条件</th>
+              <th>操作步骤</th>
+              <th>预期结果</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportDiffBody">
+            <tr><td colspan="7"><p class="hint">暂无数据</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions user-form-actions">
+        <button class="primary" id="caseLibraryImportDiffOverwriteBtn" type="button">确认覆盖导入</button>
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportDiffDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="drawer" id="caseLibraryImportSelectDrawer">
+  <div class="drawer-mask" data-drawer-close="caseLibraryImportSelectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3>从用例库中选择</h3>
+      <button class="link-toggle" data-drawer-close="caseLibraryImportSelectDrawer">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint">选择项目与版本后查询，并将所选用例导入当前操作。</p>
+      <div class="case-library-drawer-toolbar">
+        <div class="case-library-filters">
+          <label class="case-library-label" for="caseLibraryImportSelectProjectSelect">项目</label>
+          <select id="caseLibraryImportSelectProjectSelect"></select>
+          <label class="case-library-label" for="caseLibraryImportSelectVersionSelect">版本</label>
+          <select id="caseLibraryImportSelectVersionSelect" disabled></select>
+          <label class="case-library-label" for="caseLibraryImportSelectSearchInput">用例名</label>
+          <input id="caseLibraryImportSelectSearchInput" type="text" placeholder="搜索用例名" />
+        </div>
+        <div class="case-library-drawer-actions">
+          <button class="primary" id="caseLibraryImportSelectQueryBtn" type="button">查询</button>
+          <button class="secondary" id="caseLibraryImportSelectBatchBtn" type="button" disabled>批量导入</button>
+        </div>
+      </div>
+      <p class="status" id="caseLibraryImportSelectStatus"></p>
+      <div id="caseLibraryImportSelectPaginationTop"></div>
+      <div class="admin-table-wrapper">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="caseLibraryImportSelectSelectAll" aria-label="全选/全不选"/></th>
+              <th>所属项目</th>
+              <th>版本</th>
+              <th>用例名</th>
+              <th>复用类型</th>
+              <th>条目数</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="caseLibraryImportSelectListBody">
+            <tr><td colspan="7"><p class="hint">请选择项目后点击“查询”。</p></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="caseLibraryImportSelectPaginationBottom"></div>
+      <div class="actions user-form-actions">
+        <button class="ghost-btn" data-drawer-close="caseLibraryImportSelectDrawer" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="drawer hidden" id="execVersionSelectDrawer">
+  <div class="drawer-mask" data-drawer-close="execVersionSelectDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="execVersionSelectDrawerTitle">选择执行版本</h3>
+      <button class="link-toggle" data-drawer-close="execVersionSelectDrawer" type="button">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="hint" style="margin:0 0 10px;" id="execVersionSelectDrawerHint">
+        导入版本仅用于记录用例库归属；执行版本用于“用例执行”页面的版本分组、归档筛选等展示与统计。
+      </p>
+      <div class="case-library-drawer-meta" style="margin-bottom:10px;">
+        <div class="meta-line">
+          <span class="label">项目</span>
+          <span class="value" id="execVersionSelectDrawerProject">--</span>
+        </div>
+        <div class="meta-line">
+          <span class="label">导入版本</span>
+          <span class="value" id="execVersionSelectDrawerImportVersion">--</span>
+        </div>
+      </div>
+      <div class="case-library-filters" style="margin-bottom:8px;">
+        <span class="case-library-label">执行版本</span>
+        <select id="execVersionSelectDrawerVersionSelect" disabled>
+          <option value="">加载中...</option>
+        </select>
+      </div>
+      <p class="status" id="execVersionSelectDrawerStatus"></p>
+      <div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">
+        <button class="primary" id="execVersionSelectDrawerConfirmBtn" type="button" disabled>确认并继续</button>
+        <button class="ghost-btn" id="execVersionSelectDrawerCancelBtn" data-drawer-close="execVersionSelectDrawer" type="button">取消</button>
+      </div>
+</div>
+</div>
+</div>
+<div class="drawer" id="appConfirmDrawer">
+  <div class="drawer-mask" data-drawer-close="appConfirmDrawer"></div>
+  <div class="drawer-panel">
+    <div class="drawer-header">
+      <h3 id="appConfirmDrawerTitle">确认操作</h3>
+      <button class="link-toggle" data-drawer-close="appConfirmDrawer" type="button">收起</button>
+    </div>
+    <div class="drawer-body">
+      <p class="confirm-drawer-message" id="appConfirmDrawerMessage"></p>
+      <div class="row column hidden" id="appConfirmDrawerInputRow">
+        <label class="inline" id="appConfirmDrawerInputLabel">输入内容
+          <input id="appConfirmDrawerInput" type="text" placeholder="请输入内容"/>
+          <select id="appConfirmDrawerSelect" class="hidden"></select>
+        </label>
+      </div>
+      <p class="hint hidden" id="appConfirmDrawerHint"></p>
+      <p class="status" id="appConfirmDrawerStatus"></p>
+      <div class="actions user-form-actions" style="justify-content:flex-end; gap:8px;">
+        <button class="primary" id="appConfirmDrawerConfirmBtn" type="button">确认</button>
+        <button class="ghost-btn" id="appConfirmDrawerCancelBtn" data-drawer-close="appConfirmDrawer" type="button">取消</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+	
+
+  
+  <div class="drawer hidden" id="xmindStructureDrawer">
+    <div class="drawer-mask" data-drawer-close="xmindStructureDrawer"></div>
+    <div class="drawer-panel drawer-panel-wide">
+      <div class="drawer-header">
+        <h3 id="xmindStructureDrawerTitle">XMind 用例结构</h3>
+        <button class="link-toggle" id="closeXmindStructureDrawerBtn" data-drawer-close="xmindStructureDrawer">收起</button>
+      </div>
+      <div class="drawer-body" id="xmindStructureDrawerBody"></div>
+    </div>
+  </div>
+</main>
+</div>
+</div>
+<script src="./scripts/vendor/jszip.min.js" defer></script>
+<script src="./scripts/vendor/mind-elixir.iife.js" defer></script>
+<script src="./scripts/vendor/workspace-icons.js" defer></script>
+<script src="./scripts/base/workspaceShell.js" defer></script>
+<script src="./scripts/base/workspaceListPresentation.js" defer></script>
+<script src="./config/constants.js" defer></script>
+<script src="./config/domConfig.js" defer></script>
+<script src="./scripts/core/appInitHelpers.js" defer></script>
+<script src="./scripts/core/appRuntime.js" defer></script>
+<script src="./scripts/core/retainedGenerationRuntime.js" defer></script>
+<script src="./scripts/core/xlsxRequirementCore.js" defer></script>
+<script src="./scripts/core/xmindImportCore.js" defer></script>
+<script src="./scripts/core/casesCore.js" defer></script>
+<script src="./scripts/core/xmindCore.js" defer></script>
+<script src="./scripts/core/xmindRequestSchedulerCore.js" defer></script>
+<script src="./scripts/core/retainedPreparationTask.js" defer></script>
+<script src="./scripts/core/xmindWorkspaceRecoveryCore.js" defer></script>
+<script src="./scripts/core/xmindGenerationPayloadCore.js" defer></script>
+<script src="./scripts/core/xmindGenerationTimingCore.js" defer></script>
+<script src="./scripts/core/xmindMarkdownExportCore.js" defer></script>
+<script src="./scripts/core/xmindDedupeBatchCore.js" defer></script>
+<script src="./scripts/core/xmindCaseDedupeCore.js" defer></script>
+<script src="./scripts/core/xmindRequirementCoverageCore.js" defer></script>
+<script src="./scripts/core/xmindCoverageCaseTooltipCore.js" defer></script>
+<script src="./scripts/core/xmindRenderPolicyCore.js" defer></script>
+<script src="./scripts/core/mindElixirCore.js" defer></script>
+<script src="./scripts/core/xlsxCore.js" defer></script>
+<script src="./scripts/core/tempexecDefaults.js" defer></script>
+<script src="./scripts/core/tempexecCore.js" defer></script>
+<script src="./scripts/core/casesGenCore.js" defer></script>
+<script src="./scripts/core/requirementCore.js" defer></script>
+<script src="./scripts/base/state.js" defer></script>
+<script src="./scripts/base/utils.js" defer></script>
+<script src="./scripts/base/drawer.js" defer></script>
+<script src="./scripts/base/confirmDrawer.js" defer></script>
+<script src="./scripts/base/execVersionDrawer.js" defer></script>
+<script src="./services/storage.js" defer></script>
+<script src="./services/requirementMediaStore.js" defer></script>
+<script src="./services/modelClient.js" defer></script>
+<script src="./services/apiClient.js" defer></script>
+<script src="./services/modelTaskClient.js" defer></script>
+<script src="./scripts/modules/settings.js" defer></script>
+<script src="./scripts/modules/models.js" defer></script>
+<script src="./scripts/handlers/assignHandlers.js" defer></script>
+<script src="./scripts/modules/assign.js" defer></script>
+<script src="./scripts/modules/casegenProgress.js" defer></script>
+<script src="./scripts/modules/memoPad.js" defer></script>
+<script src="./scripts/modules/xmindKnowledgeBase.js" defer></script>
+<script src="./scripts/modules/casePageAiGenPrep.js" defer></script>
+<script src="./scripts/handlers/layoutHandlers.js" defer></script>
+<script src="./scripts/modules/xmindCasegen.js" defer></script>
+<script src="./scripts/modules/tempexec.js" defer></script>
+<script src="./scripts/modules/caseLibrary.js" defer></script>
+<script src="./scripts/modules/caseArchive.js" defer></script>
+<script src="./scripts/modules/execOverview.js" defer></script>
+<script src="./scripts/modules/opsLog.js" defer></script>
+<script src="./scripts/modules/admin.js" defer></script>
+<script src="./scripts/modules/authGuard.js" defer></script>
+<script src="./scripts/modules/app.js" defer></script>
+<script src="./scripts/modules/bootstrap.js" defer></script>
+<script>
+  (function() {
+    // 兜底：本地静态资源偶发“空响应”会导致关键脚本缺失（如 switchTab/drawer），自动刷新一次可恢复。
+    var retryKey = 'tap_bootstrap_reload_retry';
+    function getRetryCount() {
+      try {
+        return Number(sessionStorage.getItem(retryKey) || '0') || 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+    function setRetryCount(n) {
+      try {
+        sessionStorage.setItem(retryKey, String(n || 0));
+      } catch (e) {
+        // ignore
+      }
+    }
+    function clearRetryCount() {
+      try {
+        sessionStorage.removeItem(retryKey);
+      } catch (e) {
+        // ignore
+      }
+    }
+    function isAppReady() {
+      if (!window.app) return false;
+      if (typeof window.app.switchTab !== 'function') return false;
+      if (!window.app.drawer || typeof window.app.drawer.createDrawer !== 'function') return false;
+      return true;
+    }
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        if (isAppReady()) {
+          clearRetryCount();
+          return;
+        }
+        var count = getRetryCount();
+        if (count >= 2) return;
+        setRetryCount(count + 1);
+        try { window.location.reload(); } catch (e) {}
+      }, 1800);
+    });
+  })();
+</script>
+</body>
+</html>

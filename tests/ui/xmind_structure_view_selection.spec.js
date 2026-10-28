@@ -170,6 +170,87 @@ async function expectViewerUsesBothSides(page, viewerSelector, rootTopic, module
   expect(sides.includes('right')).toBeTruthy();
 }
 
+async function expectViewerHorizontalReachability(page, viewerSelector, phase) {
+  const canvas = page.locator(viewerSelector + ' .xmind-structure-canvas');
+  const originalScrollLeft = await canvas.evaluate((element) => element.scrollLeft);
+  async function readBounds(edge) {
+    return canvas.evaluate(async (element, nextEdge) => {
+      element.scrollLeft = nextEdge === 'left' ? 0 : element.scrollWidth;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      var canvasRect = element.getBoundingClientRect();
+      var rects = Array.prototype.map.call(element.querySelectorAll('me-tpc'), function(node) {
+        return node.getBoundingClientRect();
+      }).filter(function(rect) {
+        return rect.width > 0 && rect.height > 0;
+      });
+      return {
+        count: rects.length,
+        leftGap: Math.min.apply(null, rects.map(function(rect) { return rect.left; })) - canvasRect.left,
+        rightGap: Math.max.apply(null, rects.map(function(rect) { return rect.right; })) - canvasRect.right,
+        rightmostVisibleWidth: Math.max.apply(null, rects.map(function(rect) { return rect.right; })) - canvasRect.left,
+      };
+    }, edge);
+  }
+  try {
+    await expect.poll(async () => (await readBounds('left')).count, phase + '应存在节点').toBeGreaterThan(0);
+    await expect.poll(async () => (await readBounds('left')).leftGap, phase + '滚到最左应展示完整左侧节点').toBeGreaterThanOrEqual(-1);
+    const dragFeedback = await canvas.evaluate(async (element) => {
+      element.scrollLeft = 0;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      var root = element.querySelector('me-root me-tpc');
+      var rootLeft = root.getBoundingClientRect().left;
+      var canScroll = element.scrollWidth - element.clientWidth > 100;
+      if (!canScroll) return null;
+      element.scrollLeft = 100;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      return {
+        scrollLeft: element.scrollLeft,
+        movement: rootLeft - root.getBoundingClientRect().left,
+      };
+    });
+    if (dragFeedback) {
+      expect(dragFeedback.scrollLeft, phase + '应能从左端向右拖动滚动条').toBeGreaterThanOrEqual(99);
+      expect(dragFeedback.movement, phase + '向右拖动100px应有对应画面反馈').toBeGreaterThanOrEqual(99);
+      expect(dragFeedback.movement, phase + '向右拖动100px不应额外跳动').toBeLessThanOrEqual(101);
+    }
+    await expect.poll(async () => (await readBounds('right')).rightGap, phase + '滚到最右应展示完整右侧节点').toBeLessThanOrEqual(1);
+    await expect.poll(async () => (await readBounds('right')).rightmostVisibleWidth, phase + '滚到最右应仍有节点可见').toBeGreaterThan(0);
+  } finally {
+    await canvas.evaluate((element, scrollLeft) => { element.scrollLeft = scrollLeft; }, originalScrollLeft);
+  }
+}
+
+async function expectViewerScrollBoundariesAcrossControls(page, viewerSelector, rootTopic) {
+  const canvas = page.locator(viewerSelector + ' .xmind-structure-canvas');
+  await expect.poll(async () => {
+    const rootCenter = await getNodeCenter(page, viewerSelector, rootTopic);
+    const canvasCenter = await canvas.evaluate((element) => {
+      var rect = element.getBoundingClientRect();
+      return rect.left + (rect.width / 2);
+    });
+    return Math.abs(rootCenter.x - canvasCenter);
+  }, '首次打开后根节点应水平居中').toBeLessThanOrEqual(1);
+  const initialRootCenter = await getNodeCenter(page, viewerSelector, rootTopic);
+  await page.waitForTimeout(500);
+  const settledRootCenter = await getNodeCenter(page, viewerSelector, rootTopic);
+  expect(Math.abs(settledRootCenter.x - initialRootCenter.x), '延迟布局后根节点不应跳动').toBeLessThanOrEqual(1);
+  await expectViewerHorizontalReachability(page, viewerSelector, '初始展示');
+  for (var index = 0; index < 2; index += 1) {
+    await page.click(viewerSelector + ' [data-mind-action="zoom-in"]');
+    await expectViewerHorizontalReachability(page, viewerSelector, '第' + String(index + 1) + '次放大后');
+  }
+  await page.click(viewerSelector + ' [data-mind-action="drawer-fullscreen"]');
+  await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/xmind-drawer-fullscreen/);
+  await expectViewerHorizontalReachability(page, viewerSelector, '全屏后');
+  await page.click(viewerSelector + ' [data-mind-action="drawer-fullscreen"]');
+  await expect(page.locator('#xmindStructureDrawer')).not.toHaveClass(/xmind-drawer-fullscreen/);
+  await expectViewerHorizontalReachability(page, viewerSelector, '复原后');
+  await page.click(viewerSelector + ' [data-mind-action="zoom-out"]');
+  await expectViewerHorizontalReachability(page, viewerSelector, '缩小后');
+  await page.click(viewerSelector + ' [data-mind-action="zoom-fit"]');
+  await expectViewerHorizontalReachability(page, viewerSelector, '全览后');
+}
+
 async function clickReadonlyNode(page, viewerSelector, topicText, ctrlKey) {
   var point = await getNodeCenter(page, viewerSelector, topicText);
   if (ctrlKey === true) await page.keyboard.down('Control');
@@ -494,6 +575,7 @@ test.describe('XMind 只读态节点选择', () => {
     await expect(page.locator('#caseLibraryEditCard')).toBeVisible();
     await page.click('#caseLibraryXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    await expectViewerScrollBoundariesAcrossControls(page, '#caseLibraryXmindStructureViewer', rootTopic);
     await page.click('#caseLibraryXmindStructureViewer [data-mind-action="zoom-fit"]');
     await expectViewerUsesBothSides(page, '#caseLibraryXmindStructureViewer', rootTopic, modules);
 
@@ -572,7 +654,246 @@ test.describe('XMind 只读态节点选择', () => {
     await openTempExecMoreActions(page);
     await page.click('#tempExecXmindViewBtn');
     await expect(page.locator('#xmindStructureDrawer')).toHaveClass(/open/);
+    await expectViewerScrollBoundariesAcrossControls(page, '#tempExecXmindStructureViewer', fileName);
     await page.click('#tempExecXmindStructureViewer [data-mind-action="zoom-fit"]');
     await expectViewerUsesBothSides(page, '#tempExecXmindStructureViewer', fileName, modules);
+  });
+
+  test('XMind 单侧长树根节点居中稳定且重绘后保持视口', async ({ page }) => {
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.removeItem('tap-auth-token'); } catch (_) {}
+    });
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.fallback();
+      }
+      return route.abort();
+    });
+    await gotoExec(page);
+    const viewerSelector = '#xmindSingleSideRegressionViewer';
+    const rootTopic = '单侧长树根节点居中回归';
+    await page.evaluate((rootTitle) => {
+      var viewer = document.createElement('div');
+      viewer.id = 'xmindSingleSideRegressionViewer';
+      viewer.className = 'xmind-structure-viewer';
+      viewer.style.cssText = 'position:fixed;left:60px;top:70px;width:925px;height:514px;z-index:100000;';
+      document.body.appendChild(viewer);
+      var api = window.app.mindElixirCoreApi;
+      var mindData = api.buildMindDataFromCases([{
+        module: '单侧完整路径模块',
+        title: '长路径用例标题'.repeat(8),
+        priority: 'P1',
+        preconditions: '账号已登录且满足所有前置条件',
+        steps: '进入目标功能后完成连续操作并检查页面状态',
+        expected: '全部页面展示与数据变化符合预期',
+      }], { rootTitle: rootTitle });
+      window.xmindSingleSideRegressionData = mindData;
+      window.xmindSingleSideRegressionInstance = api.renderMindMap(viewer, mindData, {
+        direction: 'right',
+        allowEdit: false,
+        initialCenterNodeId: mindData.nodeData.id,
+      });
+    }, rootTopic);
+    const canvas = page.locator(viewerSelector + ' .xmind-structure-canvas');
+    await expect(page.locator(viewerSelector + ' me-tpc')).not.toHaveCount(0);
+    const layout = await canvas.evaluate((element) => {
+      var map = element.querySelector('.map-canvas');
+      var root = element.querySelector('me-root me-tpc .text');
+      var rect = element.getBoundingClientRect();
+      var rootRect = root.getBoundingClientRect();
+      return {
+        mapWidth: map.offsetWidth,
+        viewportWidth: element.clientWidth,
+        rootOffset: (rootRect.left + rootRect.width / 2) - (rect.left + rect.width / 2),
+      };
+    });
+    expect(layout.mapWidth, '完整用例路径的布局宽度应超过画布').toBeGreaterThan(layout.viewportWidth);
+    await expect.poll(async () => {
+      const rootCenter = await getNodeCenter(page, viewerSelector, rootTopic);
+      const canvasCenter = await canvas.evaluate((element) => {
+        var rect = element.getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      });
+      return Math.abs(rootCenter.x - canvasCenter);
+    }, '单侧长树首次展示应将根节点居中').toBeLessThanOrEqual(1);
+    const centeredRoot = await getNodeCenter(page, viewerSelector, rootTopic);
+    await page.waitForTimeout(700);
+    const settledRoot = await getNodeCenter(page, viewerSelector, rootTopic);
+    expect(Math.abs(settledRoot.x - centeredRoot.x), '单侧长树延迟布局后根节点不应偏移').toBeLessThanOrEqual(1);
+    const firstFrameCenter = await page.evaluate(async () => {
+      var api = window.app.mindElixirCoreApi;
+      window.xmindSingleSideRegressionInstance = api.renderMindMap(
+        document.getElementById('xmindSingleSideRegressionViewer'),
+        window.xmindSingleSideRegressionData,
+        {
+          instance: window.xmindSingleSideRegressionInstance,
+          preserveViewState: true,
+          direction: 'right',
+          allowEdit: false,
+        }
+      );
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      var root = document.querySelector('#xmindSingleSideRegressionViewer me-root me-tpc .text');
+      var rect = root.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    expect(Math.abs(firstFrameCenter.x - centeredRoot.x), '单侧长树重绘首帧应保留水平位置').toBeLessThanOrEqual(1);
+    expect(Math.abs(firstFrameCenter.y - centeredRoot.y), '单侧长树重绘首帧应保留垂直位置').toBeLessThanOrEqual(1);
+    await page.waitForTimeout(700);
+    const restoredRoot = await getNodeCenter(page, viewerSelector, rootTopic);
+    expect(Math.abs(restoredRoot.x - centeredRoot.x), '单侧长树重绘稳定后应保留水平位置').toBeLessThanOrEqual(1);
+    expect(Math.abs(restoredRoot.y - centeredRoot.y), '单侧长树重绘稳定后应保留垂直位置').toBeLessThanOrEqual(1);
+    await expectViewerHorizontalReachability(page, viewerSelector, '单侧长树');
+  });
+
+  test('XMind 结构原生横向滚动后重绘保留视口位置', async ({ page }) => {
+    await page.addInitScript(() => {
+      try { localStorage.setItem('tap-e2e-skip-auth', '1'); } catch (_) {}
+      try { localStorage.removeItem('tap-auth-token'); } catch (_) {}
+    });
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.startsWith('http://localhost') || url.startsWith('http://127.0.0.1') || url.startsWith('file:')) {
+        return route.fallback();
+      }
+      return route.abort();
+    });
+    await gotoExec(page);
+    const viewerSelector = '#xmindScrollRegressionViewer';
+    const rootTopic = '原生横向滚动恢复用例';
+    await page.evaluate((rootTitle) => {
+      var viewer = document.createElement('div');
+      viewer.id = 'xmindScrollRegressionViewer';
+      viewer.className = 'xmind-structure-viewer';
+      viewer.style.cssText = 'position:fixed;left:60px;top:70px;width:1000px;height:600px;z-index:100000;';
+      document.body.appendChild(viewer);
+      var cases = ['登录模块', '支付模块', '订单模块', '消息模块'].map(function(moduleName, index) {
+        return {
+          module: moduleName,
+          title: moduleName + '连续操作校验'.repeat(12),
+          priority: 'P1',
+          preconditions: '账号已登录且满足操作条件',
+          steps: '执行第' + String(index + 1) + '条用例中的操作步骤',
+          expected: '页面和数据均符合预期',
+        };
+      });
+      var api = window.app.mindElixirCoreApi;
+      var mindData = api.buildMindDataFromCases(cases, { rootTitle: rootTitle });
+      window.xmindScrollRegressionData = mindData;
+      window.xmindScrollRegressionInstance = api.renderMindMap(viewer, mindData, {
+        direction: 'side',
+        allowEdit: false,
+        initialCenterNodeId: mindData.nodeData.id,
+      });
+    }, rootTopic);
+    await expect(page.locator(viewerSelector + ' me-tpc')).not.toHaveCount(0);
+    await page.waitForTimeout(500);
+    await page.click(viewerSelector + ' [data-mind-action="zoom-in"]');
+    await page.click(viewerSelector + ' [data-mind-action="zoom-in"]');
+    const canvas = page.locator(viewerSelector + ' .xmind-structure-canvas');
+    await canvas.evaluate(async (element) => {
+      element.scrollLeft = 140;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    const scrollLeftBefore = await canvas.evaluate((element) => element.scrollLeft);
+    expect(scrollLeftBefore, '重绘前应实际发生原生横向滚动').toBeGreaterThanOrEqual(139);
+    const rootCenterBefore = await getNodeCenter(page, viewerSelector, rootTopic);
+    await page.evaluate(() => {
+      var api = window.app.mindElixirCoreApi;
+      window.xmindScrollRegressionInstance = api.renderMindMap(
+        document.getElementById('xmindScrollRegressionViewer'),
+        window.xmindScrollRegressionData,
+        {
+          instance: window.xmindScrollRegressionInstance,
+          preserveViewState: true,
+          direction: 'side',
+          allowEdit: false,
+        }
+      );
+    });
+    await page.waitForTimeout(500);
+    const rootCenterAfter = await getNodeCenter(page, viewerSelector, rootTopic);
+    expect(Math.abs(rootCenterAfter.x - rootCenterBefore.x), '重绘后节点水平位置应保留').toBeLessThanOrEqual(1);
+    expect(Math.abs(rootCenterAfter.y - rootCenterBefore.y), '重绘后节点垂直位置应保留').toBeLessThanOrEqual(1);
+    const scrollLeftAfter = await canvas.evaluate((element) => element.scrollLeft);
+    expect(Math.abs(scrollLeftAfter - scrollLeftBefore), '重绘后原生横向滚动位置应保留').toBeLessThanOrEqual(1);
+    await expectViewerHorizontalReachability(page, viewerSelector, '原生横滚后重绘');
+    const leftEdge = await canvas.evaluate(async (element) => {
+      element.scrollLeft = 0;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      var mapContainer = element.querySelector('.map-container');
+      return {
+        scrollLeft: element.scrollLeft,
+        marginLeft: parseFloat(getComputedStyle(mapContainer).marginLeft) || 0,
+      };
+    });
+    expect(leftEdge.scrollLeft, '右拖平移前应位于原生滚动最左端').toBe(0);
+    expect(leftEdge.marginLeft, '右拖平移前应已为左侧节点预留可滚动空间').toBeGreaterThan(0);
+    const dragPoint = await canvas.evaluate((element) => {
+      var rect = element.getBoundingClientRect();
+      var columns = [0.5, 0.6, 0.7, 0.4, 0.3, 0.2, 0.8];
+      var rows = [0.2, 0.3, 0.4, 0.6, 0.75, 0.85];
+      for (var rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+        for (var columnIndex = 0; columnIndex < columns.length; columnIndex += 1) {
+          var pointX = rect.left + (rect.width * columns[columnIndex]);
+          var pointY = rect.top + (rect.height * rows[rowIndex]);
+          if (pointX + 100 >= rect.right - 12) continue;
+          var blocked = false;
+          for (var offset = 0; offset <= 100; offset += 25) {
+            var target = document.elementFromPoint(pointX + offset, pointY);
+            if (!target || !target.closest('.map-container') || target.closest('me-tpc, [data-mind-controls]')) {
+              blocked = true;
+              break;
+            }
+          }
+          if (!blocked) return { x: pointX, y: pointY };
+        }
+      }
+      return null;
+    });
+    expect(dragPoint, '画布应存在可向右拖动100px的空白区域').toBeTruthy();
+    const rootCenterBeforePan = await getNodeCenter(page, viewerSelector, rootTopic);
+    await page.mouse.move(dragPoint.x, dragPoint.y);
+    await page.mouse.down({ button: 'right' });
+    await page.mouse.move(dragPoint.x + 100, dragPoint.y, { steps: 8 });
+    await page.mouse.up({ button: 'right' });
+    await expect.poll(async () => {
+      const rootCenter = await getNodeCenter(page, viewerSelector, rootTopic);
+      return rootCenter.x - rootCenterBeforePan.x;
+    }, '最左端向右拖动画布100px应使节点向右移动至少80px').toBeGreaterThanOrEqual(80);
+    const rootCenterAfterPan = await getNodeCenter(page, viewerSelector, rootTopic);
+    const firstFrameCenter = await page.evaluate(async () => {
+      var api = window.app.mindElixirCoreApi;
+      window.xmindScrollRegressionInstance = api.renderMindMap(
+        document.getElementById('xmindScrollRegressionViewer'),
+        window.xmindScrollRegressionData,
+        {
+          instance: window.xmindScrollRegressionInstance,
+          preserveViewState: true,
+          direction: 'side',
+          allowEdit: false,
+        }
+      );
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      var root = document.querySelector('#xmindScrollRegressionViewer me-root me-tpc .text');
+      var rect = root.getBoundingClientRect();
+      return { x: rect.left + (rect.width / 2), y: rect.top + (rect.height / 2) };
+    });
+    expect(Math.abs(firstFrameCenter.x - rootCenterAfterPan.x), '画布平移后重绘首帧应保留水平位置').toBeLessThanOrEqual(1);
+    expect(Math.abs(firstFrameCenter.y - rootCenterAfterPan.y), '画布平移后重绘首帧应保留垂直位置').toBeLessThanOrEqual(1);
+    await page.waitForTimeout(500);
+    const rootCenterAfterPanRestore = await getNodeCenter(page, viewerSelector, rootTopic);
+    expect(Math.abs(rootCenterAfterPanRestore.x - rootCenterAfterPan.x), '画布平移后重绘稳定时应保留水平位置').toBeLessThanOrEqual(1);
+    expect(Math.abs(rootCenterAfterPanRestore.y - rootCenterAfterPan.y), '画布平移后重绘稳定时应保留垂直位置').toBeLessThanOrEqual(1);
+    await page.mouse.move(dragPoint.x + 100, dragPoint.y);
+    await page.mouse.down({ button: 'right' });
+    await page.mouse.move(dragPoint.x, dragPoint.y, { steps: 8 });
+    await page.mouse.up({ button: 'right' });
+    await expect.poll(async () => {
+      const rootCenter = await getNodeCenter(page, viewerSelector, rootTopic);
+      return Math.abs(rootCenter.x - rootCenterBeforePan.x);
+    }, '向左拖动画布100px应回到右拖前的位置').toBeLessThanOrEqual(1);
   });
 });

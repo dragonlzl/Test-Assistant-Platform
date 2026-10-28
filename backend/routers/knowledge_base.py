@@ -14,6 +14,7 @@ from ..utils import ensure_project_access
 from ..knowledge_base_service import (
     catalog_knowledge_base,
     get_knowledge_base_documents,
+    get_knowledge_base_version,
     KnowledgeBaseServiceError,
     search_knowledge_base,
     validate_knowledge_base,
@@ -107,6 +108,18 @@ def validate_shared_knowledge_base(
             force_refresh=payload.force_refresh,
             deep_check=payload.deep_check,
         )
+    except KnowledgeBaseServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
+
+@router.post("/version", response_model=schemas.KnowledgeBaseVersionResponse)
+def version_shared_knowledge_base(
+    payload: schemas.KnowledgeBaseVersionRequest,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_knowledge_base_version(authorized_payload(db, user, payload.model_dump()))
     except KnowledgeBaseServiceError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 

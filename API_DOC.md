@@ -165,8 +165,30 @@
 - `POST /api/knowledge-base/sources`（管理员）：`{ project_id, name, base_url }`，201 返回登记。相同项目和规范化地址再次登记会更新名称并启用；共享给另一个项目需显式再次登记。
 - `DELETE /api/knowledge-base/sources/{source_id}`（管理员）：停用知识库，后续请求立即拒绝，包含缓存读取。
 - `POST /api/knowledge-base/access`：只检查授权，不访问源站。入参 `{ project_id?, knowledge_base_id?, base_url? }`，成功返回 `{ id, project_id, allowed: true }`，用于网页复用已下载上下文前重新鉴权。
-- 原 `POST /api/knowledge-base/validate|catalog|documents|search` 接受同一来源选择参数。传 ID 时由服务器解析地址；旧 base_url 仅在匹配到已授权登记时接受。同时传项目、ID、URL 时必须全部匹配。无授权统一返回 403，不泄漏未授权知识库的目录、摘要或正文。
-- 文档读取参数 `doc_ids` 必须属于授权来源目录。目录清单中的资源路径不能跳出该来源目录。MCP 知识工具仅接受项目与知识库 ID，不接受 URL。
+- `POST /api/knowledge-base/version|validate|catalog|documents|search` 接受同一来源选择参数。传 ID 时由服务器解析地址；旧 base_url 仅在匹配到已授权登记时接受。同时传项目、ID、URL 时必须全部匹配。无授权统一返回 403，不泄漏未授权知识库的目录、摘要或正文。
+- 文档读取参数 `doc_ids`、主题读取参数 `topic_ids` 必须属于授权来源。目录清单中的资源路径不能跳出该来源目录，读取不跟随 HTTP 重定向。MCP 知识工具仅接受项目与知识库 ID，不接受 URL。
 - 旧个人地址不自动迁移为共享知识库，管理员需按真实项目归属登记。源站若可被用户无鉴权直接访问，需在部署时限制为平台服务器可达；平台鉴权无法保护被绕过的公开源站。
 
 模型列表代理 `POST /api/model-proxy/models` 仅接受不带查询参数的标准 `/models` 地址，不支持任意文件 GET，避免绕过知识库项目授权。
+
+### 9.1 主题读取与知识库版本
+
+以下接口均先校验当前项目授权，再读取源站或服务器缓存。来源参数统一为 `{ project_id?, knowledge_base_id?, base_url? }`，必须指定 `knowledge_base_id` 或匹配已授权登记的 `base_url`。
+
+- `POST /api/knowledge-base/version`：来源参数和可选 `timeout_sec`；每次强制刷新源站 `kb-manifest.json`，返回 `{ knowledge_version, topics_available }`。支持主题的知识库以 `topics_version` 为版本；旧知识库回退为 `generated_at`，`topics_available` 为 `false`。网页每轮复用知识缓存前调用此接口，版本改变时重新获取目录、筛选结果与正文。
+- `POST /api/knowledge-base/catalog`：来源参数、`timeout_sec?`、`force_refresh?`、`max_docs?`；原 `documents` 数组中每个文档新增 `topics` 元数据数组，以及来源修订字段。主题元数据包括 `topic_id`、`doc_id`、`module`、`title`、`heading_path`、`aliases`、`summary`、`kind`、`related_topic_ids`、`warnings`、`source_url`、`source_revision_id`、`source_revision_timestamp`，不包含 `content`。具体主题名使用 `heading_path`，`title` 可为所属文档标题。旧知识库的 `topics` 为空数组。
+- `POST /api/knowledge-base/documents`：来源参数、`timeout_sec?`、`force_refresh?`、`knowledge_version?`，以及 `topic_ids` 或 `doc_ids`。优先使用非空 `topic_ids`，单次最多 32 个去重主题；不自动展开 `related_topic_ids`。旧 `doc_ids` 仍支持单次最多 8 篇文档，返回全部正文分节，不再截断前 20 节。
+- 目录与正文响应的 `manifest` 均新增 `knowledge_version`、`topics_path`。服务器按版本隔离索引、主题和正文缓存；主题文件自身版本必须与 `kb-manifest.json` 一致。传入 `knowledge_version` 时会重新读取源站清单并核对，版本变化或主题文件版本不一致返回 409，调用方应重新检索。未知主题返回 404，整批不返回部分结果；数量超限返回 400；源站读取失败、格式错误或资源越界返回 502。
+
+主题正文读取示例：
+
+```json
+{
+  "project_id": 1,
+  "knowledge_base_id": 2,
+  "knowledge_version": "知识库返回的版本字符串",
+  "topic_ids": ["03_角色与养成/狼人::f998d14b372a90b3"]
+}
+```
+
+主题读取仍返回 `documents` 数组，每个元素对应一个主题；`doc_id` 保留所属源文档 ID，另含 `topic_id` 和上述主题元数据。`sections` 为一条完整主题正文：`section_id` 等于 `topic_id`，`heading` 为完整标题路径，`content` 保留主题及其子章节、条件与边界；`warnings` 同时附在正文前，`char_count` 包含警告。此时响应 `doc_count` 表示本次返回的主题数，`manifest.doc_count` 仍表示知识库文档总数。来源 URL、修订 ID 与时间用于追溯资料，不参与执行指令。

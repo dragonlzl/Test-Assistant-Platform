@@ -768,6 +768,8 @@ class ModelTaskCancelOut(BaseModel):
 
 class KnowledgeBaseManifestSummary(BaseModel):
     generated_at: Optional[str] = None
+    knowledge_version: str = ""
+    topics_path: str = ""
     docs_dir: Optional[str] = None
     index_path: Optional[str] = None
     doc_count: int = 0
@@ -796,6 +798,15 @@ class KnowledgeBaseValidateRequest(KnowledgeBaseTarget):
     timeout_sec: Optional[int] = 15
     force_refresh: bool = False
     deep_check: bool = True
+
+
+class KnowledgeBaseVersionRequest(KnowledgeBaseTarget):
+    timeout_sec: Optional[int] = 15
+
+
+class KnowledgeBaseVersionResponse(BaseModel):
+    knowledge_version: str = ""
+    topics_available: bool = False
 
 
 class KnowledgeBaseValidateResponse(BaseModel):
@@ -828,6 +839,22 @@ class KnowledgeBaseCandidateOut(BaseModel):
     document_excerpt: str = ""
 
 
+class KnowledgeBaseTopicOut(BaseModel):
+    topic_id: str
+    doc_id: str = ""
+    module: str = ""
+    title: str = ""
+    heading_path: List[str] = Field(default_factory=list)
+    aliases: List[str] = Field(default_factory=list)
+    summary: str = ""
+    kind: str = ""
+    related_topic_ids: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    source_url: str = ""
+    source_revision_id: str = ""
+    source_revision_timestamp: str = ""
+
+
 class KnowledgeBaseCatalogItemOut(BaseModel):
     doc_id: str
     module: str = ""
@@ -838,7 +865,10 @@ class KnowledgeBaseCatalogItemOut(BaseModel):
     relative_path: str = ""
     clean_path: str = ""
     source_url: str = ""
+    source_revision_id: str = ""
+    source_revision_timestamp: str = ""
     heading_samples: List[str] = Field(default_factory=list)
+    topics: List[KnowledgeBaseTopicOut] = Field(default_factory=list)
 
 
 class KnowledgeBaseCatalogRequest(KnowledgeBaseTarget):
@@ -866,17 +896,28 @@ class KnowledgeBaseSectionOut(BaseModel):
 
 class KnowledgeBaseDocumentOut(BaseModel):
     doc_id: str
+    topic_id: str = ""
     module: str = ""
     title: str = ""
     relative_path: str = ""
     clean_path: str = ""
     source_url: str = ""
+    source_revision_id: str = ""
+    source_revision_timestamp: str = ""
+    heading_path: List[str] = Field(default_factory=list)
+    aliases: List[str] = Field(default_factory=list)
+    summary: str = ""
+    kind: str = ""
+    related_topic_ids: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
     section_count: int = 0
     sections: List[KnowledgeBaseSectionOut] = Field(default_factory=list)
 
 
 class KnowledgeBaseDocumentsRequest(KnowledgeBaseTarget):
     doc_ids: List[str] = Field(default_factory=list)
+    topic_ids: List[str] = Field(default_factory=list)
+    knowledge_version: Optional[str] = None
     timeout_sec: Optional[int] = 15
     force_refresh: bool = False
 

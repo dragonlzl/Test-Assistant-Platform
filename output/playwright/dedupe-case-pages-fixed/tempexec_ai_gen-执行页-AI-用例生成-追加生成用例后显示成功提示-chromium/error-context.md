@@ -1,0 +1,230 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - complementary:
+    - generic:
+      - heading "用例助手" [level=1]:
+        - generic:
+          - generic: T
+    - navigation:
+      - generic:
+        - heading "AI 功能" [level=2]:
+          - generic: AI 功能
+        - generic:
+          - button "用例生成":
+            - generic:
+              - img
+            - generic: 用例生成
+          - button "功能指派，未保存指派模型":
+            - generic:
+              - img
+            - generic: 功能指派
+            - generic: 未保存指派模型
+          - button "模型管理":
+            - generic:
+              - img
+            - generic: 模型管理
+      - generic:
+        - heading "用例相关" [level=2]
+        - generic:
+          - button "用例执行":
+            - generic:
+              - img
+            - generic: 用例执行
+          - button "用例库":
+            - generic:
+              - img
+            - generic: 用例库
+          - button "用例归档":
+            - generic:
+              - img
+            - generic: 用例归档
+          - button "执行总览":
+            - generic:
+              - img
+            - generic: 执行总览
+      - generic:
+        - heading "管理" [level=2]
+        - generic:
+          - button "项目管理":
+            - generic:
+              - img
+            - generic: 项目管理
+          - button "人员管理":
+            - generic:
+              - img
+            - generic: 人员管理
+          - button "操作记录":
+            - generic:
+              - img
+            - generic: 操作记录
+      - generic:
+        - heading "设置" [level=2]
+        - generic:
+          - button "通用设置":
+            - generic:
+              - img
+            - generic: 通用设置
+    - generic:
+      - generic "个人工具":
+        - button "个人备忘":
+          - img
+          - generic: 个人备忘
+    - generic:
+      - generic: 当前用户
+      - button "用户菜单":
+        - generic: e
+      - menu:
+        - generic:
+          - generic: e
+          - generic:
+            - strong: e2e
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置":
+          - img
+          - generic: 通用设置
+        - menuitem "退出登录":
+          - img
+          - generic: 退出登录
+  - complementary "用例执行页面导航" [ref=e3]:
+    - generic [ref=e4]:
+      - heading "用例执行" [level=2] [ref=e5]
+      - button "收起快捷导航" [expanded] [ref=e6] [cursor=pointer]:
+        - img [ref=e7]
+    - navigation "用例执行快捷入口":
+      - generic:
+        - generic:
+          - generic: 专注区
+        - generic:
+          - generic: 暂无专注用例
+      - generic:
+        - button "用例导入":
+          - generic:
+            - generic: 用例导入
+        - button "选择用例执行":
+          - generic:
+            - generic: 选择用例执行
+        - button "执行分配":
+          - generic:
+            - generic: 执行分配
+        - button "归档操作&进度预览":
+          - generic:
+            - generic: 归档操作&进度预览
+  - generic [ref=e11]:
+    - generic [ref=e12]:
+      - banner [ref=e13]:
+        - heading "项目 未归属 版本 未归属 用例 用例追加" [level=1] [ref=e14]:
+          - generic [ref=e15]:
+            - generic [ref=e16]: 项目
+            - strong [ref=e17]: 未归属
+          - generic [ref=e18]: /
+          - generic [ref=e19]:
+            - generic [ref=e20]: 版本
+            - strong [ref=e21]: 未归属
+          - generic [ref=e22]: /
+          - generic [ref=e23]:
+            - generic [ref=e24]: 用例
+            - strong [ref=e25]: 用例追加
+      - generic [ref=e28]:
+        - generic [ref=e29]:
+          - textbox "搜索用例关键字" [ref=e31]
+          - generic [ref=e32]:
+            - button "用例变更" [disabled] [ref=e34]
+            - group "切换用例" [ref=e35]:
+              - generic [ref=e36]: 用例切换：
+              - button "上一份" [disabled] [ref=e37]
+              - button "下一份" [disabled] [ref=e38]
+            - button "更多操作" [ref=e40] [cursor=pointer]:
+              - generic [ref=e41]: 更多操作
+        - generic [ref=e43]:
+          - button "已执行 0" [ref=e44] [cursor=pointer]
+          - button "未执行 1" [ref=e45] [cursor=pointer]
+          - button "通过 0" [ref=e46] [cursor=pointer]
+          - button "失败 0" [ref=e47] [cursor=pointer]
+          - button "阻塞 0" [ref=e48] [cursor=pointer]
+          - button "不适用 0" [ref=e49] [cursor=pointer]
+    - main [ref=e50]:
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - generic [ref=e55]: 显示 1-1 / 1 条，每页 20 条
+          - generic [ref=e56]:
+            - button "上一页" [disabled] [ref=e57]
+            - generic [ref=e58]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=e59]
+            - generic [ref=e60]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=e61]: "1"
+              - text: 页
+        - table [ref=e62]:
+          - rowgroup [ref=e77]:
+            - row "编号 模块 用例标题 优先级 前提条件 操作步骤 预期结果 实际结果 备注 缺陷链接 AI操作 增删" [ref=e78]:
+              - columnheader [ref=e79]:
+                - checkbox [ref=e80]
+              - columnheader "编号" [ref=e81]
+              - columnheader "模块" [ref=e82]
+              - columnheader "用例标题" [ref=e83]
+              - columnheader "优先级" [ref=e84]
+              - columnheader "前提条件" [ref=e85]
+              - columnheader "操作步骤" [ref=e86]
+              - columnheader "预期结果" [ref=e87]
+              - columnheader "实际结果" [ref=e88]
+              - columnheader "备注" [ref=e89]
+              - columnheader "缺陷链接" [ref=e90]
+              - columnheader "AI操作" [ref=e91]
+              - columnheader "增删" [ref=e92]
+          - rowgroup [ref=e93]:
+            - row "1 登录 登录成功 P1 点击此处编辑 输入正确账号密码 登录成功 未执行 备注 缺陷链接 − ＋" [ref=e94]:
+              - cell [ref=e95]:
+                - checkbox [ref=e96]
+              - cell "1" [ref=e97]
+              - cell "登录" [ref=e98]
+              - cell "登录成功" [ref=e99]:
+                - generic [ref=e100]: 登录成功
+              - cell "P1" [ref=e101]:
+                - combobox "修改优先级" [ref=e102]:
+                  - option "P0"
+                  - option "P1" [selected]
+                  - option "P2"
+              - cell "点击此处编辑" [ref=e103]:
+                - generic [ref=e104]: 点击此处编辑
+              - cell "输入正确账号密码" [ref=e105]:
+                - generic [ref=e106]: 输入正确账号密码
+              - cell "登录成功" [ref=e107]:
+                - generic [ref=e108]: 登录成功
+              - cell "未执行" [ref=e109]:
+                - combobox [ref=e110]:
+                  - option "未执行" [selected]
+                  - option "通过"
+                  - option "失败"
+                  - option "阻塞"
+                  - option "不适用"
+              - cell "备注" [ref=e111]:
+                - button "备注" [ref=e112] [cursor=pointer]
+              - cell "缺陷链接" [ref=e113]:
+                - button "缺陷链接" [ref=e114] [cursor=pointer]
+              - cell [ref=e115]
+              - cell "− ＋" [ref=e116]:
+                - generic [ref=e117]:
+                  - button "−" [ref=e118] [cursor=pointer]
+                  - button "＋" [ref=e119] [cursor=pointer]
+        - generic [ref=e120]:
+          - generic [ref=e121]: 显示 1-1 / 1 条，每页 20 条
+          - generic [ref=e122]:
+            - button "上一页" [disabled] [ref=e123]
+            - generic [ref=e124]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=e125]
+            - generic [ref=e126]:
+              - text: 跳至
+              - spinbutton "跳至 页" [ref=e127]: "1"
+              - text: 页
+      - generic [ref=e130]:
+        - generic [ref=e131]:
+          - heading "AI 用例生成" [level=3] [ref=e132]
+          - button "收起" [ref=e133] [cursor=pointer]
+        - paragraph [ref=e136]: AI 用例生成失败：HTTP 501：上游返回 HTML 错误页（页面标题：Error response）
+      - option "请选择版本" [selected]
+```

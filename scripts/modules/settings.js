@@ -113,7 +113,7 @@
     var defaultKnowledgeBaseInjectedContextCharLimit = Number(config.defaultKnowledgeBaseInjectedContextCharLimit)
       || (defaultSettings && defaultSettings.knowledgeBaseInjectedContextCharLimit
         ? Number(defaultSettings.knowledgeBaseInjectedContextCharLimit)
-        : 24000);
+        : 120000);
     var minKnowledgeBaseInjectedContextCharLimit = Number(config.minKnowledgeBaseInjectedContextCharLimit) || 4000;
     var maxKnowledgeBaseInjectedContextCharLimit = Number(config.maxKnowledgeBaseInjectedContextCharLimit) || 200000;
     var defaultXmindRequestPayloadLimit = Number(config.defaultXmindRequestPayloadLimit)

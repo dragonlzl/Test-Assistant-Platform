@@ -17,7 +17,7 @@ DEFAULT_CATALOG_MAX_DOCS = 300
 MAX_CATALOG_MAX_DOCS = 1000
 DEFAULT_DOCUMENT_MAX_DOCS = 8
 MAX_DOCUMENT_MAX_DOCS = 8
-DEFAULT_SECTION_LIMIT = 20
+MAX_DOCUMENT_TOPICS = 32
 DEFAULT_SECTION_CHAR_LIMIT = 1500
 MIN_SECTION_MERGE_CHARS = 12
 JSON_CACHE_TTL_SEC = 300
@@ -125,6 +125,11 @@ def _cache_get(cache_map: Dict[str, Any], cache_key: str, ttl_sec: int):
 
 def _cache_set(cache_map: Dict[str, Any], cache_key: str, value: Any):
     with _CACHE_LOCK:
+        if "::version:" in cache_key:
+            prefix = cache_key.split("::version:", 1)[0]
+            for previous_key in list(cache_map):
+                if previous_key == prefix or previous_key.startswith(prefix + "::version:"):
+                    cache_map.pop(previous_key, None)
         cache_map[cache_key] = {
             "fetched_at": time.time(),
             "value": value,
@@ -213,8 +218,8 @@ def _fetch_bytes(url: str, timeout_sec: int) -> bytes:
     raise KnowledgeBaseServiceError("读取知识库失败：" + str(last_exc or "网络异常"), 502)
 
 
-def _fetch_json(url: str, timeout_sec: int, force_refresh: bool = False):
-    cache_key = "json:" + url
+def _fetch_json(url: str, timeout_sec: int, force_refresh: bool = False, knowledge_version: str = ""):
+    cache_key = "json:" + url + ("::version:" + knowledge_version if knowledge_version else "")
     if not force_refresh:
         cached = _cache_get(_JSON_CACHE, cache_key, JSON_CACHE_TTL_SEC)
         if cached is not None:
@@ -228,8 +233,8 @@ def _fetch_json(url: str, timeout_sec: int, force_refresh: bool = False):
     return value
 
 
-def _fetch_text(url: str, timeout_sec: int, force_refresh: bool = False):
-    cache_key = "text:" + url
+def _fetch_text(url: str, timeout_sec: int, force_refresh: bool = False, knowledge_version: str = ""):
+    cache_key = "text:" + url + ("::version:" + knowledge_version if knowledge_version else "")
     if not force_refresh:
         cached = _cache_get(_TEXT_CACHE, cache_key, DOC_CACHE_TTL_SEC)
         if cached is not None:
@@ -257,17 +262,28 @@ def _normalize_index_entries(raw_index: Any) -> List[Dict[str, Any]]:
     return normalized
 
 
-def _load_resources(base_url: str, timeout_sec: int, force_refresh: bool = False):
+def _load_resources(
+    base_url: str,
+    timeout_sec: int,
+    force_refresh: bool = False,
+    expected_version: str = "",
+):
     normalized_base_url = normalize_base_url(base_url)
+    kb_manifest = _fetch_json(
+        _build_resource_url(normalized_base_url, "kb-manifest.json"),
+        timeout_sec,
+        force_refresh=force_refresh or bool(expected_version),
+    )
+    if not isinstance(kb_manifest, dict):
+        raise KnowledgeBaseServiceError("知识库 kb-manifest.json 格式不正确", 502)
+    knowledge_version = _knowledge_version(kb_manifest)
+    if expected_version and expected_version != knowledge_version:
+        raise KnowledgeBaseServiceError("知识库版本已更新，请重新检索", 409)
     manifest = _fetch_json(
         _build_resource_url(normalized_base_url, "manifest.json"),
         timeout_sec,
         force_refresh=force_refresh,
-    )
-    kb_manifest = _fetch_json(
-        _build_resource_url(normalized_base_url, "kb-manifest.json"),
-        timeout_sec,
-        force_refresh=force_refresh,
+        knowledge_version=knowledge_version,
     )
     index_path = str(kb_manifest.get("index_path") or "_llm/search-index.json").strip()
     if not index_path:
@@ -276,6 +292,7 @@ def _load_resources(base_url: str, timeout_sec: int, force_refresh: bool = False
         _build_resource_url(normalized_base_url, index_path),
         timeout_sec,
         force_refresh=force_refresh,
+        knowledge_version=knowledge_version,
     )
     entries = _normalize_index_entries(raw_index)
     if not isinstance(manifest, list):
@@ -289,6 +306,91 @@ def _stringify(value: Any) -> str:
     if isinstance(value, str):
         return value.strip()
     return str(value).strip()
+
+
+def _knowledge_version(kb_manifest: Dict[str, Any]) -> str:
+    return _stringify(kb_manifest.get("topics_version") or kb_manifest.get("generated_at"))
+
+
+def get_knowledge_base_version(payload: Dict[str, Any]) -> Dict[str, Any]:
+    base_url = normalize_base_url(payload.get("base_url"))
+    kb_manifest = _fetch_json(
+        _build_resource_url(base_url, "kb-manifest.json"),
+        _normalize_timeout_sec(payload.get("timeout_sec")),
+        force_refresh=True,
+    )
+    if not isinstance(kb_manifest, dict):
+        raise KnowledgeBaseServiceError("知识库 kb-manifest.json 格式不正确", 502)
+    return {
+        "knowledge_version": _knowledge_version(kb_manifest),
+        "topics_available": bool(kb_manifest.get("topics_path") and kb_manifest.get("topics_version")),
+    }
+
+
+def _topic_metadata(topic: Dict[str, Any], document: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "topic_id": _stringify(topic.get("topic_id")),
+        "doc_id": _stringify(document.get("doc_id")),
+        "module": _stringify(document.get("module")),
+        "title": _stringify(topic.get("title")),
+        "heading_path": [_stringify(part) for part in (topic.get("heading_path") or []) if _stringify(part)],
+        "aliases": _dedupe_text_list(list(topic.get("aliases") or [])),
+        "summary": _stringify(topic.get("summary")),
+        "kind": _stringify(topic.get("kind")),
+        "related_topic_ids": _dedupe_text_list(list(topic.get("related_topic_ids") or [])),
+        "warnings": _dedupe_text_list(list(topic.get("warnings") or [])),
+        "source_url": _stringify(topic.get("source_url") or document.get("source_url")),
+        "source_revision_id": _stringify(topic.get("source_revision_id") or document.get("source_revision_id")),
+        "source_revision_timestamp": _stringify(topic.get("source_revision_timestamp") or document.get("source_revision_timestamp")),
+    }
+
+
+def _load_topics(
+    base_url: str,
+    kb_manifest: Dict[str, Any],
+    timeout_sec: int,
+    force_refresh: bool = False,
+) -> List[Dict[str, Any]]:
+    topics_path = _stringify(kb_manifest.get("topics_path"))
+    if not topics_path:
+        return []
+    version = _stringify(kb_manifest.get("topics_version"))
+    if not version:
+        raise KnowledgeBaseServiceError("知识库主题清单缺少 topics_version", 502)
+    bundle = _fetch_json(
+        _build_resource_url(base_url, topics_path),
+        timeout_sec,
+        force_refresh=force_refresh,
+        knowledge_version=version,
+    )
+    if not isinstance(bundle, dict) or not isinstance(bundle.get("documents"), list):
+        raise KnowledgeBaseServiceError("知识库主题清单格式不正确", 502)
+    if _stringify(bundle.get("knowledge_version")) != version:
+        cache_key = "json:" + _build_resource_url(base_url, topics_path) + "::version:" + version
+        with _CACHE_LOCK:
+            _JSON_CACHE.pop(cache_key, None)
+        raise KnowledgeBaseServiceError("知识库主题版本不一致，请刷新后重试", 409)
+    documents = []
+    seen_topic_ids = set()
+    for raw_document in bundle["documents"]:
+        if not isinstance(raw_document, dict) or not _stringify(raw_document.get("doc_id")):
+            raise KnowledgeBaseServiceError("知识库主题文档缺少 doc_id", 502)
+        raw_topics = raw_document.get("topics")
+        if not isinstance(raw_topics, list):
+            raise KnowledgeBaseServiceError("知识库主题文档缺少 topics 数组", 502)
+        document = dict(raw_document)
+        document["topics"] = []
+        for raw_topic in raw_topics:
+            if not isinstance(raw_topic, dict):
+                raise KnowledgeBaseServiceError("知识库主题格式不正确", 502)
+            topic = _topic_metadata(raw_topic, document)
+            if not topic["topic_id"] or topic["topic_id"] in seen_topic_ids:
+                raise KnowledgeBaseServiceError("知识库主题 ID 缺失或重复", 502)
+            seen_topic_ids.add(topic["topic_id"])
+            topic["content"] = _stringify(raw_topic.get("content"))
+            document["topics"].append(topic)
+        documents.append(document)
+    return documents
 
 
 def _short_text(value: str, max_chars: int) -> str:
@@ -375,6 +477,8 @@ def _build_manifest_metadata(manifest: List[Dict[str, Any]], docs_dir: str) -> D
             "relative_path": relative_path,
             "clean_path": clean_path,
             "source_url": _stringify(item.get("source_url")),
+            "source_revision_id": _stringify(item.get("source_revision_id")),
+            "source_revision_timestamp": _stringify(item.get("source_revision_timestamp")),
             "order": index,
         }
         items.append(meta)
@@ -474,6 +578,8 @@ def _build_manifest_summary(
 ) -> Dict[str, Any]:
     return {
         "generated_at": _stringify(kb_manifest.get("generated_at")),
+        "knowledge_version": _knowledge_version(kb_manifest),
+        "topics_path": _stringify(kb_manifest.get("topics_path")),
         "docs_dir": _stringify(kb_manifest.get("docs_dir")),
         "index_path": _stringify(kb_manifest.get("index_path") or "_llm/search-index.json"),
         "doc_count": int(kb_manifest.get("doc_count") or len(manifest)),
@@ -517,6 +623,8 @@ def _build_catalog_items(
                 "relative_path": _normalize_relative_path(meta.get("relative_path")),
                 "clean_path": clean_path or _normalize_relative_path(meta.get("clean_path")),
                 "source_url": _stringify(meta.get("source_url")),
+                "source_revision_id": _stringify(meta.get("source_revision_id")),
+                "source_revision_timestamp": _stringify(meta.get("source_revision_timestamp")),
                 "heading_samples": [],
                 "order": int(meta.get("order") or 0),
             }
@@ -564,6 +672,8 @@ def _build_catalog_items(
             "relative_path": _normalize_relative_path(meta.get("relative_path")),
             "clean_path": _normalize_relative_path(meta.get("clean_path")),
             "source_url": _stringify(meta.get("source_url")),
+            "source_revision_id": _stringify(meta.get("source_revision_id")),
+            "source_revision_timestamp": _stringify(meta.get("source_revision_timestamp")),
             "heading_samples": [],
             "order": int(meta.get("order") or 0),
         }
@@ -934,8 +1044,6 @@ def _build_document_sections(doc_id: str, title: str, doc_text: str) -> List[Dic
         chunks = _split_long_content(item.get("content"), DEFAULT_SECTION_CHAR_LIMIT)
         for chunk_index, chunk in enumerate(chunks):
             order += 1
-            if order > DEFAULT_SECTION_LIMIT:
-                return result
             heading = _stringify(item.get("heading")) or title or "正文"
             if chunk_index > 0:
                 heading = heading + "（续" + str(chunk_index + 1) + "）"
@@ -1008,6 +1116,7 @@ def validate_knowledge_base(
                     _build_resource_url(normalized_base_url, clean_path),
                     timeout,
                     force_refresh=force_refresh,
+                    knowledge_version=_knowledge_version(kb_manifest),
                 )
             except KnowledgeBaseServiceError as exc:
                 missing_files.append({
@@ -1071,6 +1180,17 @@ def catalog_knowledge_base(payload: Dict[str, Any]) -> Dict[str, Any]:
         force_refresh=force_refresh,
     )
     all_items = _build_catalog_items(manifest, kb_manifest, entries)
+    topic_documents = _load_topics(normalized_base_url, kb_manifest, timeout, force_refresh)
+    topics_by_doc = {_stringify(item.get("doc_id")): item for item in topic_documents}
+    topics_by_path = {_normalize_relative_path(item.get("clean_path")): item for item in topic_documents}
+    for item in all_items:
+        topic_document = topics_by_doc.get(item["doc_id"]) or topics_by_path.get(item["clean_path"])
+        if topic_document:
+            item["aliases"] = _dedupe_text_list(item["aliases"] + list(topic_document.get("aliases") or []))
+            item["topics"] = [
+                {key: value for key, value in topic.items() if key != "content"}
+                for topic in topic_document["topics"]
+            ]
     offset = max(0, int(payload.get("offset") or 0))
     catalog_items = all_items[offset:offset + max_docs]
     return {
@@ -1084,10 +1204,66 @@ def catalog_knowledge_base(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _get_knowledge_base_topics(
+    payload: Dict[str, Any],
+    topic_ids: List[str],
+    expected_version: str,
+    timeout: int,
+    force_refresh: bool,
+) -> Dict[str, Any]:
+    if len(topic_ids) > MAX_DOCUMENT_TOPICS:
+        raise KnowledgeBaseServiceError("单次最多拉取 32 个知识库主题", 400)
+    normalized_base_url, manifest, kb_manifest, entries = _load_resources(
+        payload.get("base_url"), timeout, force_refresh, expected_version,
+    )
+    topic_documents = _load_topics(normalized_base_url, kb_manifest, timeout, force_refresh)
+    lookup = {}
+    for document in topic_documents:
+        for topic in document["topics"]:
+            lookup[topic["topic_id"]] = (document, topic)
+    unknown_ids = [topic_id for topic_id in topic_ids if topic_id not in lookup]
+    if unknown_ids:
+        raise KnowledgeBaseServiceError("未找到指定知识库主题：" + "、".join(unknown_ids[:5]), 404)
+    documents = []
+    for topic_id in topic_ids:
+        document, topic = lookup[topic_id]
+        content = topic["content"]
+        if topic["warnings"]:
+            warning_text = "\n".join("> 注意：" + warning for warning in topic["warnings"])
+            content = warning_text + "\n\n" + content
+        heading = " / ".join(topic["heading_path"]) or topic["title"]
+        documents.append({
+            **{key: value for key, value in topic.items() if key != "content"},
+            "relative_path": _normalize_relative_path(document.get("relative_path")),
+            "clean_path": _normalize_relative_path(document.get("clean_path")),
+            "section_count": 1,
+            "sections": [{
+                "section_id": topic_id,
+                "heading": heading,
+                "content": content,
+                "order": 1,
+                "char_count": len(content),
+            }],
+        })
+    catalog_items = _build_catalog_items(manifest, kb_manifest, entries)
+    return {
+        "base_url": _stringify(payload.get("base_url")),
+        "normalized_base_url": normalized_base_url,
+        "manifest": _build_manifest_summary(kb_manifest, manifest, len(catalog_items), len(entries)),
+        "documents": documents,
+        "doc_count": len(documents),
+        "warnings": _build_manifest_warnings(kb_manifest, manifest, len(catalog_items), len(entries)),
+    }
+
+
 def get_knowledge_base_documents(payload: Dict[str, Any]) -> Dict[str, Any]:
     base_url = payload.get("base_url")
     timeout = _normalize_timeout_sec(payload.get("timeout_sec"))
     force_refresh = payload.get("force_refresh") is True
+    topic_ids = list(dict.fromkeys(_stringify(item) for item in (payload.get("topic_ids") or []) if _stringify(item)))
+    expected_version = _stringify(payload.get("knowledge_version"))
+    if topic_ids:
+        return _get_knowledge_base_topics(payload, topic_ids, expected_version, timeout, force_refresh)
     requested_doc_ids = []
     seen = {}
     for raw_doc_id in payload.get("doc_ids") or []:
@@ -1105,6 +1281,7 @@ def get_knowledge_base_documents(payload: Dict[str, Any]) -> Dict[str, Any]:
         base_url,
         timeout,
         force_refresh=force_refresh,
+        expected_version=expected_version,
     )
     all_catalog_items = _build_catalog_items(manifest, kb_manifest, entries)
     catalog_lookup = {}
@@ -1130,6 +1307,7 @@ def get_knowledge_base_documents(payload: Dict[str, Any]) -> Dict[str, Any]:
             _build_resource_url(normalized_base_url, clean_path),
             timeout,
             force_refresh=force_refresh,
+            knowledge_version=_knowledge_version(kb_manifest),
         )
         sections = _build_document_sections(doc_id, _stringify(doc_meta.get("title")), doc_text)
         documents.append({
@@ -1139,6 +1317,8 @@ def get_knowledge_base_documents(payload: Dict[str, Any]) -> Dict[str, Any]:
             "relative_path": _normalize_relative_path(doc_meta.get("relative_path")),
             "clean_path": clean_path,
             "source_url": _stringify(doc_meta.get("source_url")),
+            "source_revision_id": _stringify(doc_meta.get("source_revision_id")),
+            "source_revision_timestamp": _stringify(doc_meta.get("source_revision_timestamp")),
             "section_count": len(sections),
             "sections": sections,
         })
@@ -1222,6 +1402,7 @@ def search_knowledge_base(payload: Dict[str, Any]) -> Dict[str, Any]:
             _build_resource_url(normalized_base_url, clean_path),
             timeout,
             force_refresh=force_refresh,
+            knowledge_version=_knowledge_version(kb_manifest),
         )
         excerpt = _make_excerpt(doc_text, item.get("matched_terms") or [], 900)
         seen_doc_excerpt[clean_path] = excerpt

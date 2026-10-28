@@ -11,9 +11,14 @@
 - 一键启动（后端 + 静态页）：macOS/Linux 运行 `./start.sh`，Windows 运行 `start.bat`。可用环境变量：`APP_DB_FILE`、`API_HOST`、`API_PORT`、`ADMIN_USER`、`ADMIN_PASS`、`DEFAULT_USER_PASS`、`RELOAD`。
 - `node --check scripts/base/state.js scripts/base/utils.js scripts/modules/app.js scripts/modules/bootstrap.js`：快速语法检查，避免旧浏览器报错。
 - `node tests/node/reuse_applicability_core.test.js`：验证复用预设获取/解锁方式识别、自动不适用、人工结果保护与恢复规则。
+- `npm run test:ui -- tests/ui/xmind_structure_view_buttons.spec.js tests/ui/xmind_structure_view_selection.spec.js --workers=1`：使用本地 API mock 验证用例库/执行页 XMind 结构的左右节点可达、缩放、全屏复原、边界拖动和原生滚动后重绘保留视口，不连接正式数据库或真实模型。
+- `node tests/node/xmind_case_dedupe_core.test.js`、`node tests/node/xmind_dedupe_batch_core.test.js`、`node tests/node/case_page_ai_dedupe.test.js`：验证 AI 去重稳定 ID、删除与保留关系、跨批引用、合法删空和异常结果保护。`npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js tests/ui/case_library_ai_gen.spec.js tests/ui/tempexec_ai_gen.spec.js --grep '去重|生成用例后可勾选|追加生成用例后显示' --workers=1`：本地 API/模型 mock 验证 XMind、用例库和执行页的回写、失败保留与警告统计，不连接正式数据库或真实模型。
+- `node tests/node/xmind_coverage_supplement_core.test.js`：验证需求覆盖补充的分类标记拼接、重复段落定位、已有用例携带和原文保护。`npm run test:ui -- tests/ui/xmind_coverage_supplement.spec.js --workers=1`：使用本地 API/模型 mock 验证待补充标记及批量撤回、刷新恢复、确认/取消、现有及新模块追加、关闭界面后自动重分析、累计“后补充”标识、固定操作区布局，以及对应用例删除确认、连续删除、基线用例隔离和撤销，不连接正式数据库或真实模型。
+- `npm run test:ui -- tests/ui/xmind_coverage_supplement.spec.js --grep '需求覆盖滚轮交互' --workers=1`：使用本地 API/模型 mock 验证原文与对应用例独立滚轮滚动、顶底边界不穿透、固定操作区、键盘及触摸事件放行、关闭重开和背景滚动锁，不连接正式数据库或真实模型。
 - `npm run test:ui -- tests/ui/xlsx_requirement_core.spec.js tests/ui/xmind_casegen_flow.spec.js --grep 'Excel|xls' --workers=1`：使用合成 OOXML 和本地 API/模型 mock 验证 XMind 需求 Excel（.xlsx）的多工作表与行列阅读顺序、富文本/合并/数值格式、配图锚点与发送、文件选择/拖拽、格式错误保护和异步导入隔离，不连接真实模型或正式数据库。
 - `npm run test:ui -- tests/ui/requirement_media_store.spec.js --workers=1`：验证需求图片通过浏览器 IndexedDB 保存、跨页/刷新后按引用恢复、按当前账号隔离、未引用缓存回收及缓存不可用提示；上述 Excel 回归命令另覆盖刷新/跨页切换模型后的图片恢复和旧缓存失效提示，不连接真实模型或正式数据库。
 - `npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js --grep '关闭最后一个已生成的文档页签' --workers=1`：使用本地 API/模型 mock 验证关闭最后一个已生成的文档页签后，收起重开、切页返回及刷新均保持无页签空态，并保留同页旧流程缓存；不连接正式数据库或真实模型。
+- `npm run test:ui -- tests/ui/workflow_cache_recovery.spec.js tests/ui/xmind_casegen_flow.spec.js --grep '有效大文档生成快照|删光旧页签后新建并正常生成|异常过大的本地生成快照|生成快照超限时' --workers=1`：使用本地 API/模型 mock 验证删光后新建生成的页签及用例跨页、刷新保留，有效大快照不因超过 150 万字符被清空，损坏超大缓存仍正常清理；不连接正式数据库或真实模型。
 - `npm run test:ui -- tests/ui/models_vision_support.spec.js tests/ui/model_vision_probe.spec.js tests/ui/xmind_casegen_flow.spec.js --grep '视觉|无配图' --workers=1`：使用本地 API/模型 mock 验证每个模型的视觉支持选择与持久化、实际图片识别验证、模型拒绝或忽略图片、错误分类和取消，以及生成前弹窗中止/无视觉继续、图片不参与识别提示和纯文本跳过验证；不连接真实模型或正式数据库。
 - `python3 -m unittest discover -s tests/python -p test_model_gateway.py`：验证模型网关的非流式连接关闭、SSE 分块读取、仅 packycode 类型启用最小请求、其他类型协议不变（仅使用本地模拟服务，不连接模型供应商或数据库）。
 - `python3 -m unittest discover -s tests/python -p 'test_*code*.py'`：验证 Packycode 代理完成判定与重启后禁止重复请求（本地模拟服务、数据库会话 mock）。
@@ -42,11 +47,13 @@
 - 在评审描述中强调是否需要重新下载静态资源或清理浏览器缓存，方便使用者快速复现。
 
 ## MCP 与知识库权限验证
+- `.venv\Scripts\python.exe scripts/knowledge_topics_tool.py build F:\share\sk [--dry-run]`：从完整 Markdown 构建派生主题索引并更新知识库清单，不改原始资料；Wiki 同步后需重新构建，部署方式见 `KNOWLEDGE_BASE_GUIDE.md`。macOS/Linux 使用 `.venv/bin/python`。
+- `.venv\Scripts\python.exe -m unittest discover -s tests/python -p "test_knowledge_topics*.py" -v`、`node tests/node/knowledge_topics_pipeline.test.js`、`npm run test:ui -- tests/ui/xmind_knowledge_base.spec.js --workers=1`：验证主题完整性、脚注/数值与冲突保留、版本和权限隔离、AI 主题选择及整主题预算、生成注入和缓存失效；仅使用临时文件/本地 HTTP/API 与模型 mock，不连接正式数据库或真实模型。
 - `npm run test:ui -- tests/ui/models_settings.spec.js --grep '功能指派页只展示保留能力并使用最新基础文案'`：验证默认 XMind/用例库提示词包含人类风格、复杂度自检、按独立目标拆分及必要连续操作保留规则。
 - `.venv/bin/python -m unittest discover -s tests/python -p test_case_similarity.py -v`：临时测试库验证 MCP 新增相似检查、对比后修改/新增/跳过、令牌与版本校验、权限隔离、并发幂等和混合写入回滚；不调用真实模型。
 - `.venv/bin/python -m unittest discover -s tests/python -p test_execution_reuse.py -v`：临时测试库验证 MCP/HTTP 复用子项新增及“AI新增子项”独立标识、解锁方式配置、快速执行、人工结果保护、权限/只读、幂等并发/冲突及整体回滚，并与浏览器规则进行一致性比较（需 Node）。
 - `.venv/bin/python -m unittest discover -s tests/python -p test_execution_evidence.py -v`：临时测试库验证 MCP 失败凭证、关键截图裁剪、无图原因、复用子项隔离、人工改通过保留、归档恢复、权限、幂等并发和事务回滚；需安装最新后端依赖（Pillow），不连接正式库。
-- `npm run test:ui -- tests/ui/case_library_edit_focus.spec.js tests/ui/tempexec_edit_defer_save.spec.js tests/ui/tempexec_reuse_align.spec.js tests/ui/tempexec_view_empty.spec.js`：验证 AI 操作列空值/多标识、人工编辑后保留、列顺序、复用对齐和执行空态，使用本地 API mock。
+- `npm run test:ui -- tests/ui/case_library_edit_focus.spec.js tests/ui/tempexec_edit_defer_save.spec.js tests/ui/tempexec_reuse_align.spec.js tests/ui/tempexec_view_empty.spec.js`：验证用例库不展示“AI操作”列、编辑焦点与优先级保存，以及执行页 AI 标识空值/多标识、人工编辑后保留、列顺序、复用对齐和执行空态，使用本地 API mock。
 - `.venv/bin/python -m unittest discover -s tests/python -p test_operation_query.py -v`：临时测试库验证操作记录筛选、游标快照、大详情分段、SQL 贡献汇总、HTTP/MCP 管理员权限和索引。
 - `npm run test:ui -- tests/ui/ops_log.spec.js tests/ui/ops_log_drawer_restore.spec.js tests/ui/ops_log_exec_case_run.spec.js tests/ui/ops_activity.spec.js tests/ui/ops_contribution.spec.js tests/ui/ops_exec_contribution.spec.js --workers=1`：操作记录分页、详情、恢复与统计图回归；需先安装后端依赖到 `.venv`，UI 夹具调用内存 SQLite 查询适配器，不连接正式库。
 - `.venv/bin/python -m unittest discover -s tests/python -p test_mcp_service.py -v`：自动创建临时测试库并启动独立后端，覆盖 MCP 握手、人工编写风格上下文、用例字段协议兼容、工具链路、凭据撤销、权限实时变化、知识库跨项目隔离、幂等重试、并发冲突及事务回滚。测试结束自动清理，不使用正式数据库。

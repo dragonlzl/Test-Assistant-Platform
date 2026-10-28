@@ -292,6 +292,80 @@
       };
     }
 
+    function getSupplementMarkedSegments(result, pendingSegments) {
+      var pending = pendingSegments && typeof pendingSegments === 'object' ? pendingSegments : {};
+      return (result && Array.isArray(result.segments) ? result.segments : []).filter(function(segment) {
+        var mark = segment && pending[segment.id];
+        return mark && (mark.manual === true || mark.batch === true)
+          && (!mark.text || mark.text === segment.text);
+      }).map(function(segment) {
+        var status = ['covered', 'partial', 'uncovered', 'context'].indexOf(segment.status) >= 0 ? segment.status : 'context';
+        return {
+          segmentId: segment.id,
+          text: String(segment.text || ''),
+          status: status,
+          role: status === 'context' ? 'context' : 'supplement',
+        };
+      });
+    }
+
+    function buildSupplementRequest(result, pendingSegments) {
+      var source = result && typeof result === 'object' ? result : {};
+      var markedSegments = getSupplementMarkedSegments(source, pendingSegments);
+      if (!markedSegments.length) throw new Error('请先标记待补充的需求片段');
+      var requirementText = String(source.requirementText || '');
+      var cursor = 0;
+      var pieces = [];
+      var labels = { covered: '已覆盖待补充', partial: '部分覆盖待补充', uncovered: '未覆盖待补充', context: '上下文待补充' };
+      var markedById = {};
+      markedSegments.forEach(function(segment) { markedById[segment.segmentId] = segment; });
+      (Array.isArray(source.segments) ? source.segments : []).forEach(function(segment) {
+        var offset = requirementText.indexOf(segment.text, cursor);
+        if (offset < 0 || !segment.text) throw new Error('需求片段已变化，请重新分析覆盖后再补充');
+        pieces.push(requirementText.slice(cursor, offset));
+        var marked = markedById[segment.id];
+        pieces.push(marked ? '【' + labels[marked.status] + ' ' + marked.segmentId + '】\n' + segment.text
+          + '\n【结束 ' + marked.segmentId + '】' : segment.text);
+        cursor = offset + segment.text.length;
+      });
+      pieces.push(requirementText.slice(cursor));
+      var markedRequirementText = pieces.join('');
+      var cases = cloneJson(source.cases, []);
+      var prompt = [
+        '根据需求覆盖审查的待补充标记，补充测试用例。',
+        '先阅读完整需求及全部已有用例，只返回新增用例，不能删除、替换、改写已有用例，不输出与已有用例测试目标相同的重复用例。',
+        '未覆盖待补充：补齐需求明确要求但尚无用例验证的目标；部分覆盖待补充：对照已有用例，只补缺少的关键约束；已覆盖待补充：检查人工指定片段是否仍有遗漏，仅补实际缺口。',
+        '上下文待补充：作为背景、术语及业务约束参考，与其他标记片段合理结合，不把纯标题或背景强行编成独立用例。仅标记上下文时也应据此寻找合理缺口，无缺口返回空 modules。',
+        '优先把新用例放入最合适的现有模块，module 名称与现有模块完全一致；没有合适模块时允许新建模块。',
+        '临时拼接标记只用于指明本次补充范围，不属于产品需求，不能写入用例标题或预期结果。',
+        '严格返回 JSON：{"modules":[{"module":"模块名","cases":[{"module":"模块名","title":"用例标题","priority":"P0|P1|P2","preconditions":"前置条件","steps":["操作步骤"],"expected":"预期结果","remark":""}]}]}。',
+      ].join('\n');
+      var requestText = JSON.stringify({
+        operation_contract: {
+          scope: 'xmind_coverage_supplement',
+          append_only: true,
+          existing_cases_read_only: true,
+          supplement_marked_segments_only: true,
+          context_marks_are_reference: true,
+          allow_new_modules: true,
+        },
+        original_requirement_text: requirementText,
+        requirement_text: markedRequirementText,
+        marked_segments: markedSegments,
+        existing_cases: cases,
+      }, null, 2);
+      return {
+        prompt: prompt,
+        requestText: requestText,
+        requirementText: requirementText,
+        markedRequirementText: markedRequirementText,
+        markedSegments: markedSegments,
+        segments: cloneJson(source.segments, []),
+        cases: cases,
+        signature: String(source.signature || ''),
+      };
+    }
+
     function normalizeCoverageStatus(value, directCaseIds, relatedCaseIds) {
       var raw = normalizeText(value).toLowerCase();
       var hasDirect = Array.isArray(directCaseIds) && directCaseIds.length > 0;
@@ -487,6 +561,8 @@
       normalizeCaseEntries: normalizeCaseEntries,
       buildCoverageSignature: buildCoverageSignature,
       buildCoverageRequest: buildCoverageRequest,
+      getSupplementMarkedSegments: getSupplementMarkedSegments,
+      buildSupplementRequest: buildSupplementRequest,
       normalizeCoverageResult: normalizeCoverageResult,
       findDefaultSelectedSegmentId: findDefaultSelectedSegmentId,
     };

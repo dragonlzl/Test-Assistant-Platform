@@ -980,6 +980,11 @@
       return true;
     }
 
+    function isValidWorkflowSnapshot(snapshot) {
+      return Boolean(snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+        && snapshot.data && typeof snapshot.data === 'object' && !Array.isArray(snapshot.data));
+    }
+
     function restoreWorkflowState() {
       if (!storage || typeof storage.getJson !== 'function') return false;
       if (!workflowStorageKey) return false;
@@ -991,22 +996,13 @@
       } catch (err) {
         rawSnapshot = '';
       }
-      if (rawSnapshot && rawSnapshot.length > workflowSnapshotMaxChars) {
-        if (storage && typeof storage.remove === 'function') storage.remove(workflowStorageKey);
-        clearPersistedXmindTasks('workflow-oversize-reset');
-        state.workflowRecoveryNotice = {
-          reason: 'oversize',
-          shown: false,
-        };
-        return false;
-      }
       var snapshot = storage.getJson(workflowStorageKey, null);
-      if (!snapshot || typeof snapshot !== 'object') {
+      if (!isValidWorkflowSnapshot(snapshot)) {
         if (rawSnapshot) {
           if (storage && typeof storage.remove === 'function') storage.remove(workflowStorageKey);
           clearPersistedXmindTasks('workflow-invalid-reset');
           state.workflowRecoveryNotice = {
-            reason: 'invalid',
+            reason: rawSnapshot.length > workflowSnapshotMaxChars ? 'oversize' : 'invalid',
             shown: false,
           };
         }
@@ -1029,6 +1025,13 @@
         rawSnapshot = '';
       }
       if (!rawSnapshot || rawSnapshot.length <= workflowSnapshotMaxChars) return false;
+      var snapshot = null;
+      try {
+        snapshot = JSON.parse(rawSnapshot);
+      } catch (err) {
+        snapshot = null;
+      }
+      if (isValidWorkflowSnapshot(snapshot)) return false;
       try {
         if (typeof localStorage !== 'undefined') {
           localStorage.removeItem(workflowStorageKey);

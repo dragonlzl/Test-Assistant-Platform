@@ -29,6 +29,69 @@
       }
     }
 
+    function normalizeCaseId(value) {
+      return normalizeText(value);
+    }
+
+    function getCaseDedupeId(item) {
+      if (!item || typeof item !== 'object') return '';
+      return normalizeCaseId(item.dedupe_id || item.dedupeId || item.dedupeID || item.id || item.caseId || item.case_id || '');
+    }
+
+    function stableValue(value, isRoot) {
+      if (value === null || value === undefined) return value;
+      if (typeof value === 'string') return value.replace(/\r\n?/g, '\n').trim();
+      if (typeof value !== 'object') return value;
+      if (Array.isArray(value)) return value.map(function(item) { return stableValue(item, false); });
+      var result = {};
+      Object.keys(value).sort().forEach(function(key) {
+        if (isRoot && (key === 'dedupe_id' || key === 'dedupeId' || key === 'dedupeID'
+          || key === 'id' || key === 'caseId' || key === 'case_id')) return;
+        result[key] = stableValue(value[key], false);
+      });
+      return result;
+    }
+
+    function stableStringify(value, stripIdentity) {
+      try {
+        return JSON.stringify(stableValue(value, stripIdentity === true));
+      } catch (err) {
+        return '';
+      }
+    }
+
+    function assignDedupeIds(modules, options) {
+      var activeOptions = options && typeof options === 'object' ? options : {};
+      var idPrefix = normalizeText(activeOptions.idPrefix || 'generated') || 'generated';
+      var used = Object.create(null);
+      return (Array.isArray(modules) ? modules : []).map(function(moduleItem, moduleIndex) {
+        var moduleCopy = cloneJson(moduleItem, {});
+        if (!moduleCopy || typeof moduleCopy !== 'object') return moduleCopy;
+        var moduleTitle = normalizeModuleTitle(moduleCopy.module || moduleCopy.moduleName || moduleCopy.module_name || moduleCopy.title || '');
+        var moduleKey = normalizeModuleKey(moduleCopy.moduleKey || moduleCopy.module_key || moduleCopy.key || moduleTitle);
+        moduleCopy.module = moduleCopy.module || moduleTitle;
+        moduleCopy.moduleKey = moduleCopy.moduleKey || moduleKey;
+        moduleCopy.cases = normalizeCaseList(moduleCopy.cases).map(function(caseItem, caseIndex) {
+          var item = cloneJson(caseItem, {});
+          var existing = getCaseDedupeId(item);
+          var candidate = existing || idPrefix + ':' + String(moduleIndex + 1) + ':' + String(caseIndex + 1) + ':' + moduleKey;
+          var suffix = 1;
+          while (used[candidate]) {
+            candidate = (existing || idPrefix + ':' + String(moduleIndex + 1) + ':' + String(caseIndex + 1) + ':' + moduleKey) + ':' + String(suffix);
+            suffix += 1;
+          }
+          used[candidate] = true;
+          item.dedupe_id = candidate;
+          return item;
+        });
+        return moduleCopy;
+      });
+    }
+
+    function prepareDedupeModules(list, options) {
+      return assignDedupeIds(normalizeModulesInput(list), options);
+    }
+
     function normalizeCaseList(list) {
       return (Array.isArray(list) ? list : []).map(function(item) {
         return item && typeof item === 'object' ? cloneJson(item, {}) : null;
@@ -53,11 +116,22 @@
     }
 
     function normalizeModulesInput(list) {
+      if (list !== undefined && list !== null && !Array.isArray(list)) throw new Error('AI去重输入模块列表无效');
       var result = [];
-      var seen = {};
-      (Array.isArray(list) ? list : []).forEach(function(item) {
+      var seen = Object.create(null);
+      (Array.isArray(list) ? Array.from(list) : []).forEach(function(item) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('AI去重输入模块无效');
+        if (!Array.isArray(item.cases)) throw new Error('AI去重输入模块 cases 必须是数组');
+        if (!item.cases.length) return;
+        for (var caseIndex = 0; caseIndex < item.cases.length; caseIndex += 1) {
+          var caseItem = item.cases[caseIndex];
+          if (!caseItem || typeof caseItem !== 'object' || Array.isArray(caseItem)) throw new Error('AI去重输入用例无效');
+          var caseCopy = cloneJson(caseItem, null);
+          if (!caseCopy || typeof caseCopy !== 'object' || Array.isArray(caseCopy)) throw new Error('AI去重输入用例无效');
+        }
         var normalized = normalizeModuleInput(item);
-        if (!normalized || seen[normalized.moduleKey]) return;
+        if (!normalized) throw new Error('AI去重输入模块无效');
+        if (seen[normalized.moduleKey]) throw new Error('AI去重输入模块键重复：' + normalized.moduleKey);
         seen[normalized.moduleKey] = true;
         result.push(normalized);
       });
@@ -65,16 +139,29 @@
     }
 
     function normalizeReferenceModulesInput(list) {
-      return (Array.isArray(list) ? list : []).map(function(item) {
-        if (!item || typeof item !== 'object') return null;
+      if (list !== undefined && list !== null && !Array.isArray(list)) throw new Error('AI去重只读参考模块列表无效');
+      return (Array.isArray(list) ? Array.from(list) : []).map(function(item) {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('AI去重只读参考模块无效');
+        if (!Array.isArray(item.cases)) throw new Error('AI去重只读参考模块 cases 必须是数组');
+        if (!item.cases.length) return null;
         var title = normalizeModuleTitle(item.module || item.moduleName || item.module_name || item.title || '');
         var key = normalizeModuleKey(item.moduleKey || item.module_key || item.key || title);
-        var cases = normalizeCaseList(item.cases);
-        if (!title || !key || !cases.length) return null;
+        var cases = [];
+        for (var caseIndex = 0; caseIndex < item.cases.length; caseIndex += 1) {
+          var caseItem = item.cases[caseIndex];
+          if (!caseItem || typeof caseItem !== 'object' || Array.isArray(caseItem)) throw new Error('AI去重只读参考用例无效');
+          var caseCopy = cloneJson(caseItem, null);
+          if (!caseCopy || typeof caseCopy !== 'object' || Array.isArray(caseCopy)) throw new Error('AI去重只读参考用例无效');
+          cases.push(caseCopy);
+        }
+        if (!title || !key) throw new Error('AI去重只读参考模块无效');
         return {
           moduleId: item.moduleId || item.module_id ? String(item.moduleId || item.module_id || '') : '',
           moduleKey: key,
           module: title,
+          key_scenarios: Array.isArray(item.key_scenarios) ? item.key_scenarios.slice() : [],
+          test_points: Array.isArray(item.test_points) ? item.test_points.slice() : [],
+          coupled_modules: Array.isArray(item.coupled_modules) ? item.coupled_modules.slice() : [],
           cases: cases,
         };
       }).filter(Boolean);
@@ -100,52 +187,40 @@
       if (!raw) return null;
       try {
         return JSON.parse(raw);
-      } catch (err) {}
-      var objStart = raw.indexOf('{');
-      var objEnd = raw.lastIndexOf('}');
-      if (objStart >= 0 && objEnd > objStart) {
-        try {
-          return JSON.parse(raw.slice(objStart, objEnd + 1));
-        } catch (err2) {}
+      } catch (err) {
+        return null;
       }
-      var arrStart = raw.indexOf('[');
-      var arrEnd = raw.lastIndexOf(']');
-      if (arrStart >= 0 && arrEnd > arrStart) {
-        try {
-          return JSON.parse(raw.slice(arrStart, arrEnd + 1));
-        } catch (err3) {}
-      }
-      return null;
     }
 
     function normalizeCaseTitle(item, fallback) {
       if (!item || typeof item !== 'object') return normalizeText(fallback || '未命名用例') || '未命名用例';
-      return normalizeText(item.title || item.caseTitle || item.case_title || item.name || item['标题'] || fallback || '未命名用例') || '未命名用例';
+      return normalizeText(item.title || item.caseTitle || item.case_title || item.name || item['标题'] || item['用例标题'] || fallback || '未命名用例') || '未命名用例';
     }
 
     function normalizeCaseSteps(item) {
       if (!item || typeof item !== 'object') return '';
       if (Array.isArray(item.steps)) return item.steps.map(normalizeText).join('|');
-      return normalizeText(item.steps || item.step || item['步骤'] || '');
+      return normalizeText(item.steps || item.step || item.actions || item['步骤'] || item['操作步骤'] || '');
     }
 
     function buildCaseSignature(item, moduleTitle) {
       var source = item && typeof item === 'object' ? item : {};
-      return [
-        normalizeModuleKey(moduleTitle || source.module || source.moduleName || ''),
-        normalizeCaseTitle(source, ''),
-        normalizeText(source.preconditions || source.precondition || source['前置条件'] || ''),
-        normalizeCaseSteps(source),
-        normalizeText(source.expected || source.expect || source['预期结果'] || ''),
-      ].join('::').toLowerCase();
+      var normalized = stableValue(source, true);
+      if (normalized && typeof normalized === 'object') {
+        delete normalized.module;
+        delete normalized.moduleName;
+        delete normalized.module_name;
+      }
+      return normalizeModuleKey(moduleTitle || source.module || source.moduleName || '')
+        + '::' + stableStringify(normalized, true);
     }
 
     function buildCaseTitleKey(moduleKey, title) {
-      return String(moduleKey || '') + '::' + normalizeText(title || '').toLowerCase();
+      return String(moduleKey || '') + '::' + normalizeText(title || '');
     }
 
     function normalizeStringList(value) {
-      var seen = {};
+      var seen = Object.create(null);
       var source = Array.isArray(value)
         ? value
         : (value === null || value === undefined ? [] : [value]);
@@ -171,7 +246,7 @@
     }
 
     function buildCaseSignatureCounter(list, moduleTitle) {
-      var map = {};
+      var map = Object.create(null);
       (Array.isArray(list) ? list : []).forEach(function(item) {
         var signature = buildCaseSignature(item, moduleTitle);
         if (!signature) return;
@@ -260,7 +335,7 @@
 
     function collectExplicitRemovedCases(payload, moduleMap) {
       var result = [];
-      var seen = {};
+      var seen = Object.create(null);
       readRemovedCaseList(payload).forEach(function(item) {
         var records = normalizeRemovedCaseRecords(item, moduleMap);
         (Array.isArray(records) ? records : []).forEach(function(record) {
@@ -299,8 +374,8 @@
         ? [
           '本次为全局去重的有界批次：target_modules 是本批唯一可编辑用例；readonly_reference_modules 是更早批次的只读用例摘要。',
           '必须把 target_modules 与 readonly_reference_modules 一起用于重复候选审查，但只能删除、合并或改写 target_modules 中的用例。',
-          '当目标用例与只读引用重复时，保留只读引用对应覆盖，仅在目标模块中删除或合并重复项；不得返回或改写只读引用模块。',
-          'modules 只能返回 target_modules 中发生变化的模块，removed_cases 也只能记录 target_modules 中被处理的用例。',
+          '当目标用例与只读引用重复时，保留只读引用对应覆盖，在目标模块中删除重复项并使用 duplicate 关系；merge 只能指向本批可编辑的保留用例，不得合并到只读引用；不得返回或改写只读引用模块。',
+          'modules 必须返回 target_modules 中的全部模块（包括未变化模块），removed_cases 也只能记录 target_modules 中被处理的用例。',
         ]
         : [];
       return [
@@ -316,18 +391,23 @@
         'C. 对同义表达保持敏感：例如“禁用/禁止/不可用”、“可发射/可使用/允许触发”、“数量显示/储存显示/显示一致性”等，如果测试目的、测试点、触发条件和预期结果基本一致，应判为重复候选。',
         'D. 只有当两条用例分别验证不同业务对象、不同用户路径、不同状态流转、不同异常/边界/权限/数据风险点时，才应保留为独立覆盖；不能仅因模块不同而保留重复用例。',
         'E. 输出前必须确认整份用例集、每个输入模块以及所有模块内和跨模块重复候选都已完成审查，并把所有明确重复或合并关系写入 removed_cases；不得只返回第一批发现的重复项。',
-        'F. modules 允许只返回发生变化的模块；发生删除、合并、改写的模块必须返回该模块完整 cases。未发生变化的模块可以省略，系统会原样保留；如果返回未变化模块，也必须原样带回 moduleId、moduleKey、module 和 cases。',
+        batchMode
+          ? 'F. 本批必须返回 target_modules 中的全部模块；每个模块必须带回 moduleId、moduleKey、module 和完整 cases 数组，即使该模块未发生变化也不能省略。'
+          : 'F. modules 允许只返回发生变化的模块；发生删除、合并、改写的模块必须返回该模块完整 cases。未发生变化的模块可以省略，系统会原样保留；如果返回未变化模块，也必须原样带回 moduleId、moduleKey、module 和 cases。',
         '约束：',
         '1. 只能处理输入模块中已有的用例，不得新增模块。',
         '2. 不要为了减少数量牺牲有独立测试目的、独立测试点的关键功能、异常、边界、权限、数据校验、状态流转覆盖。',
         '3. 只有在合并重复用例或开启“去重并精简”时，才允许改写标题、步骤、预期。',
-        '4. 发生变化的模块必须返回该模块的 moduleId、moduleKey、module 和完整 cases 数组；未变化模块可以不返回。',
+        '优先级、前置条件、备注及其他元数据必须原样保留；merge 不得指向只读参考用例。',
+        batchMode
+          ? '4. 本批所有 target_modules 都必须返回 moduleId、moduleKey、module 和完整 cases 数组。'
+          : '4. 发生变化的模块必须返回该模块的 moduleId、moduleKey、module 和完整 cases 数组；未变化模块可以不返回。',
         '5. 只返回 JSON，不要输出解释文本。',
         '6. 必须在 removed_cases 中逐条列出去掉、重复或合并的原用例，并说明处理关系；没有去掉则返回空数组。',
-        '7. 如果是重复删除，removed_cases.type 返回 "duplicate"，duplicate_with 写保留的用例标题，duplicate_point 用 12 个中文字以内说明重复点，例如“步骤和预期一致”“校验目标相同”。',
-        '8. 如果是合并，removed_cases.type 返回 "merge"，merged_from 写合并前的原用例标题数组，merged_into 写合并后的用例标题。',
+        '7. 如果是重复删除，removed_cases.type 返回 "duplicate"，优先使用 dedupe_id 和 duplicate_with_id 指向原用例与最终保留用例，同时兼容唯一标题 duplicate_with；duplicate_point 用 12 个中文字以内说明重复点，例如“步骤和预期一致”“校验目标相同”。',
+        '8. 如果是合并，removed_cases.type 返回 "merge"，使用 merged_from_ids/merged_into_id 指向所有合并源和最终保留用例，同时兼容唯一标题 merged_from/merged_into。',
         '9. removed_cases.reason 必须言简意赅，控制在 20 个中文字以内，只写核心原因，如“覆盖高度重叠”“步骤重复”“场景已合并”。',
-        '返回格式：{"modules":[{"moduleId":"输入中的moduleId","moduleKey":"输入中的moduleKey","module":"发生变化的模块名","cases":[{"module":"模块名","title":"用例标题","priority":"P1","preconditions":"前置条件","steps":["1、步骤"],"expected":"预期结果"}]}],"removed_cases":[{"type":"duplicate","module":"模块名","title":"被去掉的原用例标题","reason":"步骤重复","duplicate_with":"保留用例标题","duplicate_point":"步骤和预期一致"},{"type":"merge","module":"模块名","title":"被合并的原用例标题","reason":"场景已合并","merged_from":["合并前用例1","合并前用例2"],"merged_into":"合并后用例标题"}],"summary":{"removed":0,"reason":"简述"}}',
+        '返回格式：{"modules":[{"moduleId":"输入中的moduleId","moduleKey":"输入中的moduleKey","module":"发生变化的模块名","cases":[{"dedupe_id":"输入用例dedupe_id","module":"模块名","title":"用例标题","priority":"P1","preconditions":"前置条件","steps":["1、步骤"],"expected":"预期结果"}]}],"removed_cases":[{"type":"duplicate","dedupe_id":"被去掉用例ID","duplicate_with_id":"最终保留用例ID","module":"模块名","title":"被去掉的原用例标题","reason":"步骤重复","duplicate_with":"保留用例标题","duplicate_point":"步骤和预期一致"},{"type":"merge","merged_from_ids":["合并源用例ID"],"merged_into_id":"最终保留用例ID","module":"模块名","reason":"场景已合并","merged_from":["合并前用例1"],"merged_into":"合并后用例标题"}],"summary":{"removed":0,"reason":"简述"}}',
       ].join('\n');
     }
 
@@ -344,8 +424,10 @@
 
     function buildDedupeRequest(input) {
       var source = input && typeof input === 'object' ? input : {};
-      var modules = normalizeModulesInput(source.modules);
-      var referenceModules = normalizeReferenceModulesInput(source.referenceModules);
+      var modules = prepareDedupeModules(source.modules, source);
+      var referenceModules = assignDedupeIds(normalizeReferenceModulesInput(source.referenceModules), {
+        idPrefix: source.referenceIdPrefix || 'reference',
+      });
       var batchMode = source.batchMode === true;
       var requirementText = String(source.requirementText || '').trim();
       var requirementSupplement = String(source.requirementSupplement || '').trim();
@@ -363,7 +445,7 @@
           batch_index: Number(source.batchIndex || 0),
           batch_count: Number(source.batchCount || 0),
           return_full_replacement: false,
-          return_changed_modules_only_allowed: true,
+          return_changed_modules_only_allowed: !batchMode,
           editable_scope: 'ai_generated_cases_only',
           quality_goal: 'improve_product_quality_without_reducing_coverage_or_defect_detection_value',
           dedupe_scope: 'all_input_modules_global',
@@ -378,10 +460,10 @@
             return_reference_modules: false,
           } : null,
           module_return_policy: {
-            return_all_input_modules: false,
+            return_all_input_modules: batchMode,
             preserve_module_id_and_key: true,
-            unchanged_modules_must_be_returned: false,
-            partial_modules_response_allowed: true,
+            unchanged_modules_must_be_returned: batchMode,
+            partial_modules_response_allowed: !batchMode,
           },
           review_method: 'global_candidate_cluster_scan',
           duplicate_detection_policy: {
@@ -438,7 +520,7 @@
         referenceModules: referenceModules,
         batchMode: batchMode,
         dedupeMode: dedupeMode,
-        partialModulesResponseAllowed: true,
+        partialModulesResponseAllowed: !batchMode,
         beforeCaseCount: modules.reduce(function(total, item) {
           return total + (Array.isArray(item.cases) ? item.cases.length : 0);
         }, 0),
@@ -448,60 +530,259 @@
     function normalizeDedupeResult(rawText, inputModules, options) {
       var opts = options || {};
       var dedupeMode = normalizeDedupeMode(opts.dedupeMode || opts.mode);
-      var resultLabel = isDedupeSimplifyMode(dedupeMode) ? '精简' : '去重';
       var allowPartialModulesResponse = opts.allowPartialModulesResponse === true
         || opts.partialModulesResponseAllowed === true;
-      var modules = normalizeModulesInput(inputModules);
-      var moduleMap = {};
-      var moduleIdMap = {};
-      modules.forEach(function(item) {
-        moduleMap[item.moduleKey] = item;
-        moduleMap[normalizeModuleKey(item.module)] = item;
-        if (item.moduleId) moduleIdMap[item.moduleId] = item;
+      var sourceModules = prepareDedupeModules(inputModules, opts);
+      var referenceModules = assignDedupeIds(normalizeReferenceModulesInput(opts.referenceModules), {
+        idPrefix: opts.referenceIdPrefix || 'reference',
       });
+      var moduleMap = Object.create(null);
+      var moduleTitleMap = Object.create(null);
+      var moduleIdMap = Object.create(null);
+      var caseIdMap = Object.create(null);
+      var titleMap = Object.create(null);
+      var signatureMap = Object.create(null);
+      function fail(message) {
+        throw new Error('AI去重结果校验失败：' + message);
+      }
+      function addModuleIndex(moduleItem, editable) {
+        if (!moduleItem) fail('模块无效');
+        if (moduleMap[moduleItem.moduleKey] && editable) fail('模块重复或模块键冲突');
+        if (!moduleMap[moduleItem.moduleKey]) moduleMap[moduleItem.moduleKey] = { module: moduleItem, editable: editable };
+        var titleKey = normalizeModuleKey(moduleItem.module);
+        if (!moduleTitleMap[titleKey]) moduleTitleMap[titleKey] = { module: moduleItem, editable: editable };
+        else if (editable && moduleTitleMap[titleKey].editable) fail('模块标题重复');
+        if (moduleItem.moduleId) {
+          if (moduleIdMap[moduleItem.moduleId]
+            && moduleIdMap[moduleItem.moduleId].module.moduleKey !== moduleItem.moduleKey) fail('模块ID重复');
+          if (!moduleIdMap[moduleItem.moduleId]) moduleIdMap[moduleItem.moduleId] = { module: moduleItem, editable: editable };
+        }
+        moduleItem.cases.forEach(function(caseItem) {
+          var id = getCaseDedupeId(caseItem);
+          if (!id || caseIdMap[id]) fail('用例 dedupe_id 重复或为空');
+          caseIdMap[id] = { caseItem: caseItem, module: moduleItem, editable: editable };
+          var titleKey = buildCaseTitleKey(moduleItem.moduleKey, normalizeCaseTitle(caseItem, ''));
+          if (!titleMap[titleKey]) titleMap[titleKey] = [];
+          titleMap[titleKey].push(caseIdMap[id]);
+          var signature = buildCaseSignature(caseItem, moduleItem.module);
+          if (!signatureMap[signature]) signatureMap[signature] = [];
+          signatureMap[signature].push(caseIdMap[id]);
+        });
+      }
+      sourceModules.forEach(function(item) { addModuleIndex(item, true); });
+      referenceModules.forEach(function(item) { addModuleIndex(item, false); });
       var payload = extractJsonPayload(rawText);
-      var explicitRemovedCases = collectExplicitRemovedCases(payload, moduleMap);
-      var explicitRemovedByModule = {};
-      var explicitRemovedKeyMap = {};
-      explicitRemovedCases.forEach(function(item) {
-        if (!explicitRemovedByModule[item.moduleKey]) explicitRemovedByModule[item.moduleKey] = [];
-        explicitRemovedByModule[item.moduleKey].push(item);
-        explicitRemovedKeyMap[buildCaseTitleKey(item.moduleKey, item.title)] = true;
-        if (item.signature) explicitRemovedKeyMap[item.moduleKey + '::' + item.signature] = true;
-      });
-      var rawModules = [];
-      if (payload && Array.isArray(payload.modules)) rawModules = payload.modules;
-      else if (Array.isArray(payload)) rawModules = payload;
-      var outputMap = {};
-      var outputSeenMap = {};
-      (Array.isArray(rawModules) ? rawModules : []).forEach(function(item) {
-        if (!item || typeof item !== 'object') return;
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) fail('JSON 顶层必须是对象');
+      if (payload.error || payload.errors || payload.ok === false || payload.success === false) fail('模型返回错误对象');
+      var rawModules = payload.modules;
+      if (!Array.isArray(rawModules)) fail('modules 必须是数组');
+      var outputMap = Object.create(null);
+      rawModules.forEach(function(item) {
+        if (!item || typeof item !== 'object') fail('模块项无效');
+        var moduleId = normalizeText(item.moduleId || item.module_id || '');
         var title = normalizeModuleTitle(item.module || item.moduleName || item.module_name || item.title || item.moduleTitle || item.module_title || '');
         var key = normalizeModuleKey(item.moduleKey || item.module_key || item.key || title);
-        var sourceModule = moduleMap[key] || moduleIdMap[String(item.moduleId || item.module_id || '')];
-        if (!sourceModule || outputSeenMap[sourceModule.moduleKey]) return;
-        key = sourceModule.moduleKey;
-        outputMap[key] = normalizeCaseList(item.cases);
-        outputSeenMap[key] = true;
+        var indexed = moduleMap[key] || moduleTitleMap[normalizeModuleKey(title)] || (moduleId ? moduleIdMap[moduleId] : null);
+        if (!indexed || !indexed.editable) fail('未知或只读模块：' + (key || moduleId));
+        if (moduleId && moduleId !== indexed.module.moduleId) fail('模块ID被改写');
+        if ((item.moduleKey !== undefined || item.module_key !== undefined || item.key !== undefined)
+          && key !== indexed.module.moduleKey) fail('模块键被改写');
+        var explicitTitle = item.module || item.moduleName || item.module_name || item.title || item.moduleTitle || item.module_title;
+        if (explicitTitle && normalizeModuleTitle(explicitTitle) !== indexed.module.module) fail('模块标题被改写');
+        if (outputMap[indexed.module.moduleKey]) fail('重复返回模块：' + indexed.module.module);
+        if (!Array.isArray(item.cases)) fail('模块 cases 必须是数组');
+        outputMap[indexed.module.moduleKey] = { source: indexed.module, cases: item.cases };
       });
-      var diagnostics = [];
-      var missingOutputModules = [];
-      var emptyOutputModules = [];
-      var removedCases = [];
-      var resultModules = modules.map(function(source) {
-        var outputCases = outputMap[source.moduleKey];
-        var usedFallback = false;
-        var hasOutputModule = outputSeenMap[source.moduleKey] === true;
-        if (!hasOutputModule) {
-          outputCases = normalizeCaseList(source.cases);
-          usedFallback = true;
-          missingOutputModules.push(source.module);
-        } else if (!Array.isArray(outputCases) || !outputCases.length) {
-          outputCases = normalizeCaseList(source.cases);
-          usedFallback = true;
-          emptyOutputModules.push(source.module);
+      function resolveCase(value, moduleHint, allowReference) {
+        var explicitId = value && typeof value === 'object'
+          && (value.dedupe_id !== undefined || value.dedupeId !== undefined || value.id !== undefined || value.caseId !== undefined || value.case_id !== undefined);
+        var id = normalizeText(value && typeof value === 'object'
+          ? (value.dedupe_id || value.dedupeId || value.id || value.caseId || value.case_id || '') : value);
+        if (id) {
+          var byId = caseIdMap[id];
+          if (byId) {
+            if (!allowReference && !byId.editable) fail('关系目标不存在：' + id);
+            return byId;
+          }
+          if (explicitId) fail('关系目标不存在：' + id);
         }
-        var result = {
+        if (explicitId && !id) fail('关系目标ID为空');
+        var title = normalizeCaseTitle(value && typeof value === 'object' ? value : { title: value }, '');
+        var keys = [];
+        if (moduleHint) keys.push(buildCaseTitleKey(normalizeModuleKey(moduleHint), title));
+        else Object.keys(titleMap).forEach(function(key) {
+          if (key.slice(key.indexOf('::') + 2) === title) keys.push(key);
+        });
+        var candidates = [];
+        keys.forEach(function(key) {
+          (titleMap[key] || []).forEach(function(item) {
+            if (allowReference || item.editable) candidates.push(item);
+          });
+        });
+        if (candidates.length !== 1) {
+          var signature = value && typeof value === 'object' ? buildCaseSignature(value, moduleHint || '') : '';
+          var bySignature = signatureMap[signature] || [];
+          candidates = bySignature.filter(function(item) { return allowReference || item.editable; });
+        }
+        if (candidates.length !== 1) fail('关系标题不唯一或目标不存在：' + title);
+        return candidates[0];
+      }
+      function readRelationId(item, names) {
+        for (var i = 0; i < names.length; i += 1) {
+          if (item[names[i]] !== undefined && item[names[i]] !== null && normalizeText(item[names[i]])) return normalizeText(item[names[i]]);
+        }
+        return '';
+      }
+      function relationModuleHint(item, prefix) {
+        return item[prefix + '_module_key'] || item[prefix + '_module'] || item[prefix + 'ModuleKey'] || item[prefix + 'Module'] || '';
+      }
+      var removedRecords = [];
+      var removedSourceIds = Object.create(null);
+      var mergeTargetIds = Object.create(null);
+      var removedItems = payload.removed_cases !== undefined ? payload.removed_cases : payload.removedCases;
+      if (removedItems === undefined && payload.summary && typeof payload.summary === 'object') {
+        removedItems = payload.summary.removed_cases !== undefined ? payload.summary.removed_cases : payload.summary.removedCases;
+      }
+      if (!Array.isArray(removedItems)) fail('removed_cases 必须是数组');
+      if (!allowPartialModulesResponse) {
+        var missingModules = sourceModules.filter(function(item) { return !outputMap[item.moduleKey]; });
+        if (missingModules.length) fail('模型未返回全部模块：' + summarizeModuleNames(missingModules.map(function(item) { return item.module; })));
+      }
+      removedItems.forEach(function(item) {
+        if (!item || typeof item !== 'object') fail('删除记录无效');
+        var moduleHint = item.moduleKey || item.module_key || item.module || item.moduleName || '';
+        var sourceModule = moduleHint ? moduleMap[normalizeModuleKey(moduleHint)] || moduleTitleMap[normalizeModuleKey(moduleHint)] || moduleIdMap[normalizeText(moduleHint)] : null;
+        var sourceIds = [];
+        var hasMergeIds = item.merged_from_ids !== undefined || item.mergedFromIds !== undefined;
+        var mergedIds = item.merged_from_ids || item.mergedFromIds || item.merged_from || item.mergedFrom || [];
+        if (!Array.isArray(mergedIds)) mergedIds = [mergedIds];
+        mergedIds.forEach(function(value) {
+          var resolved = resolveCase(hasMergeIds ? { dedupe_id: value } : value, moduleHint, false);
+          sourceIds.push(resolved);
+        });
+        var sourceId = readRelationId(item, ['dedupe_id', 'dedupeId', 'id']);
+        if (!sourceIds.length && sourceId) sourceIds.push(resolveCase({ dedupe_id: sourceId }, moduleHint, false));
+        if (!sourceIds.length) {
+          var title = item.title || item.caseTitle || item.case_title || item.name || '';
+          if (!title) fail('删除记录未说明原用例');
+          sourceIds.push(resolveCase(title, sourceModule ? sourceModule.module.moduleKey : moduleHint, false));
+        }
+        var actionType = normalizeRemovedActionType(item.type || item.action || item.actionType || item.action_type || item.kind || '', {
+          duplicateOf: item.duplicate_with_id || item.duplicateWithId || item.duplicate_with || item.duplicateWith || item.duplicate_of || item.duplicateOf,
+          mergedFrom: mergedIds,
+        });
+        var targetId = actionType === 'duplicate'
+          ? readRelationId(item, ['duplicate_with_id', 'duplicateWithId', 'duplicate_of_id', 'duplicateOfId'])
+          : readRelationId(item, ['merged_into_id', 'mergedIntoId']);
+        var targetValue = targetId || item.duplicate_with || item.duplicateWith || item.duplicate_of || item.duplicateOf || item.merged_into || item.mergedInto || item.targetTitle || item.target_title || '';
+        if (!targetValue) fail('删除关系未说明保留目标');
+        var target = resolveCase(targetId ? { dedupe_id: targetId } : targetValue, relationModuleHint(item, actionType === 'duplicate' ? 'duplicate_with' : 'merged_into') || moduleHint, true);
+        if (!target || !target.caseItem) fail('保留目标不存在');
+        if (actionType === 'merge' && !target.editable) fail('不能将生成用例合并到只读参考用例');
+        if (removedSourceIds[getCaseDedupeId(target.caseItem)]) fail('保留目标也被删除');
+        var deletionSources = sourceIds.filter(function(source) {
+          return actionType !== 'merge' || getCaseDedupeId(source.caseItem) !== getCaseDedupeId(target.caseItem);
+        });
+        if (!deletionSources.length) fail('合并关系没有被合并删除的原用例');
+        deletionSources.forEach(function(source) {
+          if (!source.editable) fail('不能删除只读参考用例');
+          var id = getCaseDedupeId(source.caseItem);
+          if (id === getCaseDedupeId(target.caseItem)) fail('删除源与保留目标相同');
+          if (removedSourceIds[id]) fail('重复删除同一用例：' + id);
+          removedSourceIds[id] = true;
+          removedRecords.push({
+            dedupe_id: id,
+            moduleId: source.module.moduleId,
+            moduleKey: source.module.moduleKey,
+            module: source.module.module,
+            title: normalizeCaseTitle(source.caseItem, ''),
+            reason: normalizeDedupeReason(item.reason || item.removeReason || item.remove_reason || item.dedupeReason || item.dedupe_reason || item.cause || ''),
+            actionType: actionType,
+            duplicateOf: normalizeText(item.duplicate_of || item.duplicateOf || item.duplicate_with || item.duplicateWith || ''),
+            duplicateWithId: actionType === 'duplicate' ? getCaseDedupeId(target.caseItem) : '',
+            duplicatePoint: normalizeDedupeReason(item.duplicate_point || item.duplicatePoint || item.overlapPoint || item.overlap_point || ''),
+            mergedInto: actionType === 'merge' ? normalizeCaseTitle(target.caseItem, '') : '',
+            mergedIntoId: actionType === 'merge' ? getCaseDedupeId(target.caseItem) : '',
+            mergedFrom: actionType === 'merge' ? [normalizeCaseTitle(source.caseItem, '')] : [],
+            mergedFromIds: actionType === 'merge' ? [id] : [],
+            signature: buildCaseSignature(source.caseItem, source.module.module),
+          });
+          if (actionType === 'merge') mergeTargetIds[getCaseDedupeId(target.caseItem)] = true;
+        });
+      });
+      removedRecords.forEach(function(record) {
+        var targetId = record.duplicateWithId || record.mergedIntoId;
+        if (targetId && removedSourceIds[targetId]) fail('保留目标也被删除：' + targetId);
+      });
+      var resultModules = sourceModules.map(function(source) {
+        var output = outputMap[source.moduleKey];
+        var usedFallback = !output;
+        var rawCases = output ? output.cases : source.cases;
+        if (!Array.isArray(rawCases)) fail('输出用例无效');
+        if (usedFallback && removedSourceIdsForModule(removedSourceIds, source)) fail('模块未返回但声明了删除：' + source.module);
+        var seenOutput = Object.create(null);
+        var outputCases = rawCases.map(function(rawCase) {
+          if (!rawCase || typeof rawCase !== 'object') fail('输出用例无效');
+          var resolved = resolveCase(rawCase, source.moduleKey, false);
+          var sourceId = getCaseDedupeId(resolved.caseItem);
+          if (removedSourceIds[sourceId]) fail('被删除用例仍在输出中：' + sourceId);
+          ['id', 'caseId', 'case_id'].forEach(function(identityKey) {
+            if (rawCase[identityKey] !== undefined && resolved.caseItem[identityKey] !== undefined
+              && normalizeText(rawCase[identityKey]) !== normalizeText(resolved.caseItem[identityKey])) {
+              fail('输出用例标识被改写：' + sourceId);
+            }
+          });
+          if (seenOutput[sourceId]) fail('输出重复用例：' + sourceId);
+          seenOutput[sourceId] = true;
+          var copy = cloneJson(rawCase, {});
+          Object.keys(copy).forEach(function(key) {
+            if (key === 'dedupe_id' || key === 'dedupeId' || key === 'dedupeID') return;
+            if (!Object.prototype.hasOwnProperty.call(resolved.caseItem, key)) fail('输出包含非法字段：' + key);
+          });
+          if (rawCase.dedupeId !== undefined && normalizeCaseId(rawCase.dedupeId) !== sourceId) fail('输出用例标识被改写：' + sourceId);
+          if (rawCase.dedupeID !== undefined && normalizeCaseId(rawCase.dedupeID) !== sourceId) fail('输出用例标识被改写：' + sourceId);
+          var requiredTextKeys = ['title', 'caseTitle', 'case_title', 'name', '标题', '用例标题', 'steps', 'step', 'actions', '步骤', '操作步骤', 'expected', 'expect', 'result', '预期结果'];
+          var editableKeys = requiredTextKeys;
+          function isValidTextValue(value, allowEmpty) {
+            if (typeof value === 'string') return allowEmpty || Boolean(normalizeText(value));
+            if (Array.isArray(value)) return (allowEmpty || value.length > 0) && value.every(function(part) {
+              return typeof part === 'string' && (allowEmpty || Boolean(normalizeText(part)));
+            });
+            return false;
+          }
+          Object.keys(resolved.caseItem).forEach(function(key) {
+            var isRequired = requiredTextKeys.indexOf(key) !== -1;
+            if (isRequired) {
+              if (!Object.prototype.hasOwnProperty.call(copy, key) || !isValidTextValue(copy[key], false)) fail('输出用例缺少或清空关键内容字段：' + key);
+              if (['title', 'caseTitle', 'case_title', 'name', '标题', '用例标题'].indexOf(key) !== -1 && typeof copy[key] !== 'string') fail('用例标题必须是字符串');
+            } else if (!Object.prototype.hasOwnProperty.call(copy, key)) {
+              copy[key] = cloneJson(resolved.caseItem[key], resolved.caseItem[key]);
+            }
+            if (['priority', 'level', '优先级'].indexOf(key) !== -1 && normalizeText(resolved.caseItem[key]) && !normalizeText(copy[key])) fail('用例优先级不能为空');
+            if (['priority', 'level', '优先级'].indexOf(key) !== -1 && copy[key] !== '' && copy[key] !== null && copy[key] !== undefined
+              && (typeof copy[key] !== 'string' || ['P0', 'P1', 'P2'].indexOf(copy[key].toUpperCase()) === -1)) fail('用例优先级无效');
+            if (['preconditions', 'precondition', '前置条件', '前提条件'].indexOf(key) !== -1 && !isValidTextValue(copy[key], true)) fail('用例前置条件类型无效');
+            if (editableKeys.indexOf(key) === -1 && stableStringify(copy[key], false) !== stableStringify(resolved.caseItem[key], false)) fail('输出用例元数据被改写：' + key);
+          });
+          copy.dedupe_id = sourceId;
+          if (!isDedupeSimplifyMode(dedupeMode)
+            && !mergeTargetIds[sourceId]
+            && stableStringify(copy, true) !== stableStringify(resolved.caseItem, true)) fail('仅去重模式擅自改写用例：' + sourceId);
+          return copy;
+        });
+        var expectedSourceIds = Object.create(null);
+        source.cases.forEach(function(caseItem) { expectedSourceIds[getCaseDedupeId(caseItem)] = true; });
+        Object.keys(seenOutput).forEach(function(id) {
+          if (!expectedSourceIds[id]) fail('输出包含未知用例：' + id);
+        });
+        source.cases.forEach(function(caseItem) {
+          var id = getCaseDedupeId(caseItem);
+          if (!seenOutput[id] && !removedSourceIds[id]) fail('用例未返回且未说明删除：' + id);
+        });
+        if (!outputCases.length && !Object.keys(seenOutput).length && !source.cases.every(function(caseItem) { return removedSourceIds[getCaseDedupeId(caseItem)]; })) {
+          fail('空模块没有完整删除关系：' + source.module);
+        }
+        return {
           moduleId: source.moduleId,
           moduleKey: source.moduleKey,
           module: source.module,
@@ -510,75 +791,26 @@
           usedFallback: usedFallback,
           cases: outputCases,
         };
-        var moduleRemovedCases = usedFallback ? [] : (explicitRemovedByModule[source.moduleKey] || []).slice();
-        if (!usedFallback && Math.max(0, source.cases.length - outputCases.length) > moduleRemovedCases.length) {
-          var afterCounter = buildCaseSignatureCounter(outputCases, source.module);
-          var expectedRemoved = Math.max(0, source.cases.length - outputCases.length);
-          source.cases.forEach(function(caseItem, caseIndex) {
-            if (moduleRemovedCases.length >= expectedRemoved) return;
-            var signature = buildCaseSignature(caseItem, source.module);
-            if (afterCounter[signature] > 0) {
-              afterCounter[signature] -= 1;
-              return;
-            }
-            var title = normalizeCaseTitle(caseItem, '用例' + String(caseIndex + 1));
-            var titleKey = buildCaseTitleKey(source.moduleKey, title);
-            var signatureKey = source.moduleKey + '::' + signature;
-            if (explicitRemovedKeyMap[titleKey] || explicitRemovedKeyMap[signatureKey]) return;
-            moduleRemovedCases.push({
-              moduleId: source.moduleId,
-              moduleKey: source.moduleKey,
-              module: source.module,
-              title: title,
-              reason: isDedupeSimplifyMode(dedupeMode)
-                ? '模型精简后未保留，判断为重复、重叠或可被其他用例覆盖'
-                : '模型去重后未保留，判断为重复或高度重叠',
-              actionType: 'removed',
-              duplicateOf: '',
-              duplicatePoint: '',
-              mergedInto: '',
-              mergedFrom: [],
-              signature: signature,
-            });
-          });
-        }
-        moduleRemovedCases.forEach(function(item) {
-          removedCases.push(item);
-        });
-        return result;
       });
-      if (missingOutputModules.length && !allowPartialModulesResponse) {
-        diagnostics.push(
-          '模型只返回了 ' + String(Math.max(0, modules.length - missingOutputModules.length))
-          + '/' + String(modules.length) + ' 个模块的完整' + resultLabel + '结果，'
-          + String(missingOutputModules.length) + ' 个未返回模块已保留原用例'
-          + (summarizeModuleNames(missingOutputModules) ? '：' + summarizeModuleNames(missingOutputModules) : '')
-        );
+      function removedSourceIdsForModule(map, moduleItem) {
+        return moduleItem.cases.some(function(caseItem) { return map[getCaseDedupeId(caseItem)]; });
       }
-      if (emptyOutputModules.length) {
-        diagnostics.push(
-          String(emptyOutputModules.length) + ' 个模块返回空用例，已保留原用例'
-          + (summarizeModuleNames(emptyOutputModules) ? '：' + summarizeModuleNames(emptyOutputModules) : '')
-        );
-      }
-      var beforeCount = resultModules.reduce(function(total, item) {
-        return total + Number(item.beforeCount || 0);
-      }, 0);
-      var afterCount = resultModules.reduce(function(total, item) {
-        return total + Number(item.afterCount || 0);
-      }, 0);
+      var beforeCount = resultModules.reduce(function(total, item) { return total + item.beforeCount; }, 0);
+      var afterCount = resultModules.reduce(function(total, item) { return total + item.afterCount; }, 0);
+      var diagnostics = [];
       return {
         modules: resultModules,
         beforeCount: beforeCount,
         afterCount: afterCount,
-        removedCount: Math.max(0, beforeCount - afterCount, removedCases.length),
-        removedCases: removedCases,
+        removedCount: Math.max(0, beforeCount - afterCount),
+        removedCases: removedRecords,
         diagnostics: diagnostics,
       };
     }
 
     return {
       buildDedupeRequest: buildDedupeRequest,
+      prepareDedupeModules: prepareDedupeModules,
       normalizeDedupeResult: normalizeDedupeResult,
     };
   }

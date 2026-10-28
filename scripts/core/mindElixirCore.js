@@ -1004,6 +1004,8 @@
       var inputSelectionGuardPoint = null;
       var nodeDecorateTimer = 0;
       var nodeDecorateObserver = null;
+      var transformObserver = null;
+      var viewportResizeObserver = null;
       var nodeDecorationApplying = false;
       var drawerEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer') : null;
       var drawerPanelEl = viewerEl && typeof viewerEl.closest === 'function' ? viewerEl.closest('.drawer-panel') : null;
@@ -1740,6 +1742,7 @@
         } catch (err) {
           return;
         }
+        syncMindHorizontalOverflow(inst);
         updateViewerDragState(viewerEl, inst, dragging);
         notifyViewportStateChange(reason);
       }
@@ -1782,6 +1785,7 @@
         var next = clampScale(current + step, zoomMinScale, maxScale);
         var center = getCanvasCenterPoint();
         inst.scale(next, center);
+        syncMindHorizontalOverflow(inst);
         updateViewerDragState(viewerEl, inst, false);
         notifyViewportStateChange(step > 0 ? 'zoom-in' : 'zoom-out');
       }
@@ -1808,6 +1812,7 @@
           y: isFinite(Number(e.clientY)) ? Number(e.clientY) : getCanvasCenterPoint().y,
         };
         inst.scale(next, center);
+        syncMindHorizontalOverflow(inst);
         updateViewerDragState(viewerEl, inst, false);
         notifyViewportStateChange('zoom-wheel');
         return true;
@@ -1850,6 +1855,7 @@
               }, delayMs);
             });
           }
+          syncMindHorizontalOverflow(inst);
         }
         updateViewerDragState(viewerEl, inst, false);
         notifyViewportStateChange('zoom-fit');
@@ -5376,6 +5382,32 @@
         nodeDecorateObserver.observe(canvasEl, { childList: true, subtree: true });
       }
 
+      function onMindViewportResize() {
+        scheduleMindHorizontalOverflowSync(getInstance());
+      }
+
+      function cleanupMindHorizontalOverflow() {
+        if (transformObserver) {
+          transformObserver.disconnect();
+          transformObserver = null;
+        }
+        if (viewportResizeObserver) {
+          viewportResizeObserver.disconnect();
+          viewportResizeObserver = null;
+        }
+        if (typeof window !== 'undefined' && window && typeof window.removeEventListener === 'function') {
+          window.removeEventListener('resize', onMindViewportResize);
+        }
+        if (instance && instance.__tapHorizontalOverflowFrame) {
+          if (typeof window !== 'undefined' && window && typeof window.cancelAnimationFrame === 'function') {
+            window.cancelAnimationFrame(instance.__tapHorizontalOverflowFrame);
+          } else {
+            clearTimeout(instance.__tapHorizontalOverflowFrame);
+          }
+          instance.__tapHorizontalOverflowFrame = 0;
+        }
+      }
+
       if (typeof MutationObserver !== 'undefined' && canvasEl) {
         nodeDecorateObserver = new MutationObserver(function(mutations) {
           if (nodeDecorationApplying || !shouldScheduleNodeDecorationsForMutations(mutations)) return;
@@ -5389,8 +5421,34 @@
         }
       }
 
+      if (typeof MutationObserver !== 'undefined' && instance.map) {
+        transformObserver = new MutationObserver(function() {
+          scheduleMindHorizontalOverflowSync(getInstance());
+        });
+        try {
+          transformObserver.observe(instance.map, {
+            attributes: true,
+            attributeFilter: ['style'],
+          });
+        } catch (err4) {
+          transformObserver = null;
+        }
+      }
+      if (typeof ResizeObserver !== 'undefined') {
+        viewportResizeObserver = new ResizeObserver(onMindViewportResize);
+        viewportResizeObserver.observe(canvasEl);
+        if (instance.map) viewportResizeObserver.observe(instance.map);
+      }
+      if (typeof window !== 'undefined' && window && typeof window.addEventListener === 'function') {
+        window.addEventListener('resize', onMindViewportResize);
+      }
+      if (Array.isArray(instance.disposable)) {
+        instance.disposable.push(cleanupMindHorizontalOverflow);
+      }
+
       setSearchCount();
       syncInstanceScaleBounds(instance, zoomMinScale);
+      syncMindHorizontalOverflow(instance);
       updateViewerDragState(viewerEl, instance, false);
       syncFullscreenButtonState();
       scheduleNodeDecorations();
@@ -5581,6 +5639,7 @@
           nodeDecorateObserver.disconnect();
           nodeDecorateObserver = null;
         }
+        cleanupMindHorizontalOverflow();
         if (boxRectEl && boxRectEl.parentNode) {
           boxRectEl.parentNode.removeChild(boxRectEl);
         }
@@ -5636,7 +5695,8 @@
     }
 
     function captureMindViewState(instance) {
-      if (!instance || !instance.map || !instance.container) return null;
+      if (!instance || !instance.el || !instance.map || !instance.container) return null;
+      syncMindHorizontalOverflow(instance);
       var transform = '';
       if (instance.map.style && instance.map.style.transform) {
         transform = String(instance.map.style.transform || '');
@@ -5644,8 +5704,8 @@
       return {
         transform: transform,
         scaleVal: resolveScale(instance),
-        scrollLeft: Number(instance.container.scrollLeft || 0),
-        scrollTop: Number(instance.container.scrollTop || 0),
+        scrollLeft: Number(instance.el.scrollLeft || 0),
+        scrollTop: Number(instance.el.scrollTop || 0),
       };
     }
 
@@ -5687,6 +5747,70 @@
       if (!isFinite(y)) y = 0;
       instance.map.style.transform = 'translate3d(' + x + 'px, ' + y + 'px, 0px) scale(' + scaleVal + ')';
       return true;
+    }
+
+    function syncMindHorizontalOverflow(instance, restoredScrollLeft) {
+      if (!instance || !instance.el || !instance.container || !instance.map) return false;
+      if (!instance.container.getBoundingClientRect || !instance.map.getBoundingClientRect) {
+        return false;
+      }
+
+      var surface = instance.container.parentElement;
+      var hasScrollSurface = Boolean(surface && surface.classList && surface.classList.contains('xmind-scroll-surface'));
+      var viewportWidth = Number(instance.el.clientWidth || 0);
+      if (hasScrollSurface) {
+        var nextMinWidth = viewportWidth + 'px';
+        if (instance.container.style.minWidth !== nextMinWidth) {
+          instance.container.style.minWidth = nextMinWidth;
+        }
+        var nextMinHeight = Number(instance.el.clientHeight || 0) + 'px';
+        if (instance.container.style.minHeight !== nextMinHeight) {
+          instance.container.style.minHeight = nextMinHeight;
+        }
+      }
+      var containerRect = instance.container.getBoundingClientRect();
+      var mapRect = instance.map.getBoundingClientRect();
+      if (!containerRect || !mapRect || !isFinite(containerRect.left) || !isFinite(mapRect.left)) return false;
+
+      var previousLeft = parseFloat(instance.container.style.marginLeft) || 0;
+      var currentScrollLeft = Number(instance.el.scrollLeft || 0);
+      var nextLeft = Math.round(Math.max(0, containerRect.left - mapRect.left) * 100) / 100;
+      var nextScrollLeft = currentScrollLeft + nextLeft - previousLeft;
+      if (nextScrollLeft < 0) {
+        var transformState = parseMindTransformState(instance.map.style.transform);
+        transformState.x += previousLeft - currentScrollLeft;
+        writeMindTransformState(instance, transformState);
+        mapRect = instance.map.getBoundingClientRect();
+        nextLeft = 0;
+        nextScrollLeft = 0;
+      }
+      var nextMarginLeft = nextLeft + 'px';
+      var marginChanged = instance.container.style.marginLeft !== nextMarginLeft;
+      if (marginChanged) {
+        instance.container.style.marginLeft = nextMarginLeft;
+      }
+      if (hasScrollSurface) {
+        var contentRight = nextLeft + mapRect.right - containerRect.left;
+        var requiredScrollLeft = Math.max(nextScrollLeft, Number(restoredScrollLeft) || 0);
+        var nextWidth = Math.ceil(Math.max(viewportWidth, contentRight, requiredScrollLeft + viewportWidth)) + 'px';
+        if (surface.style.width !== nextWidth) surface.style.width = nextWidth;
+      }
+      if (marginChanged) instance.el.scrollLeft = Math.max(0, nextScrollLeft);
+      return true;
+    }
+
+    function scheduleMindHorizontalOverflowSync(instance) {
+      if (!instance || typeof instance !== 'object') return;
+      if (instance.__tapHorizontalOverflowFrame) return;
+      var callback = function() {
+        instance.__tapHorizontalOverflowFrame = 0;
+        syncMindHorizontalOverflow(instance);
+      };
+      if (typeof window !== 'undefined' && window && typeof window.requestAnimationFrame === 'function') {
+        instance.__tapHorizontalOverflowFrame = window.requestAnimationFrame(callback);
+      } else {
+        instance.__tapHorizontalOverflowFrame = setTimeout(callback, 16);
+      }
     }
 
     function captureMindAnchorState(instance, anchorNodeId) {
@@ -5754,16 +5878,18 @@
 
     function restoreMindViewState(instance, viewState) {
       if (!instance || !instance.map || !instance.container || !viewState) return false;
-      if (instance.container) {
-        instance.container.scrollLeft = Number(viewState.scrollLeft || 0);
-        instance.container.scrollTop = Number(viewState.scrollTop || 0);
-      }
+      instance.container.style.marginLeft = '0px';
       if (viewState.transform && instance.map.style) {
         instance.map.style.transform = String(viewState.transform);
       }
       var scaleVal = Number(viewState.scaleVal);
       if (isFinite(scaleVal) && scaleVal > 0) {
         instance.scaleVal = scaleVal;
+      }
+      syncMindHorizontalOverflow(instance, viewState.scrollLeft);
+      if (instance.el) {
+        instance.el.scrollLeft = Number(viewState.scrollLeft || 0);
+        instance.el.scrollTop = Number(viewState.scrollTop || 0);
       }
       if (typeof instance.__tapSyncZoomMinScale === 'function') {
         instance.__tapSyncZoomMinScale();
@@ -6005,6 +6131,10 @@
         nodeData: initialMindData.nodeData,
         direction: direction,
       });
+      var scrollSurface = document.createElement('div');
+      scrollSurface.className = 'xmind-scroll-surface';
+      canvasEl.insertBefore(scrollSurface, instance.container);
+      scrollSurface.appendChild(instance.container);
       detachMindDragGhost(instance);
       if (initialEditing) {
         if (typeof instance.enableEdit === 'function') {

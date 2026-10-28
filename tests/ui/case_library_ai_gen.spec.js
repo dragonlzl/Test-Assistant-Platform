@@ -201,16 +201,46 @@ async function fulfillCaseLibrarySemanticDedupe(route, body) {
   expect(requestPayload.operation_contract.generated_cases_editable).toBe(true);
   expect(requestPayload.original_cases_readonly.length).toBeGreaterThan(0);
   const generated = requestPayload.generated_cases_editable || [];
+  const originalCases = requestPayload.original_cases_readonly || [];
   const seen = new Set();
+  const keptBySignature = new Map();
+  const removedCases = [];
   const payload = {
     generated_modules: generated.map((mod) => {
       const kept = [];
       (mod.cases || []).forEach((item) => {
-        if (item.title === '登录成功') return;
-        const key = [item.module, item.title, item.precondition || '', item.steps, item.expected].join('::');
-        if (seen.has(key)) return;
+        const dedupeId = String(item.dedupe_id || item.dedupeId || item.id || `${mod.module}-generated-${kept.length + 1}`);
+        const normalized = { ...item, dedupe_id: dedupeId };
+        if (item.title === '登录成功') {
+          const original = originalCases.find((candidate) => candidate.title === item.title) || originalCases[0];
+          removedCases.push({
+            type: 'duplicate_with_original',
+            module: mod.module,
+            title: item.title,
+            dedupe_id: dedupeId,
+            reason: '与原用例重复',
+            duplicate_with: original && original.title ? original.title : item.title,
+            duplicate_with_id: original && (original.dedupe_id || original.id) ? String(original.dedupe_id || original.id) : '',
+          });
+          return;
+        }
+        const key = [item.module, item.title, item.precondition || item.preconditions || '', item.steps, item.expected].join('::');
+        if (seen.has(key)) {
+          const target = keptBySignature.get(key);
+          removedCases.push({
+            type: 'duplicate_generated',
+            module: mod.module,
+            title: item.title,
+            dedupe_id: dedupeId,
+            reason: '生成用例重复',
+            duplicate_with: target && target.title ? target.title : item.title,
+            duplicate_with_id: target && target.dedupe_id ? target.dedupe_id : '',
+          });
+          return;
+        }
         seen.add(key);
-        kept.push(item);
+        keptBySignature.set(key, normalized);
+        kept.push(normalized);
       });
       return {
         module: mod.module,
@@ -219,14 +249,8 @@ async function fulfillCaseLibrarySemanticDedupe(route, body) {
         cases: kept,
       };
     }).filter((mod) => mod.cases.length),
-    removed_cases: [{
-      type: 'duplicate_with_original',
-      module: '登录',
-      title: '登录成功',
-      reason: '与原用例重复',
-      duplicate_with: '登录成功',
-    }],
-    summary: { removed: 1, reason: '语义重复' },
+    removed_cases: removedCases,
+    summary: { removed: removedCases.length, reason: '语义重复' },
   };
   return route.fulfill({
     status: 200,
@@ -460,9 +484,10 @@ test.describe('用例库 AI 用例生成', () => {
         baseUrl: modelBaseUrl,
         apiKey: 'mock-key',
         model: 'mock-model',
+        availableModels: [{ id: 'mock-model', name: 'mock-model' }],
         maxTokens: 512,
       }],
-      assignments: { caseLibraryGenId: modelId },
+      assignments: { caseLibraryGenId: modelId, caseLibraryGenModelId: 'mock-model' },
     });
 
     let discoveryCalls = 0;
@@ -473,6 +498,23 @@ test.describe('用例库 AI 用例生成', () => {
       if (isSemanticDedupeRequest(body)) {
         semanticDedupeCalls += 1;
         const semanticPayload = JSON.parse(body.messages[1].content);
+        const failureRequirement = semanticPayload.requirement && semanticPayload.requirement.text
+          ? String(semanticPayload.requirement.text)
+          : '';
+        if (failureRequirement.indexOf('去重失败空对象') !== -1) {
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ choices: [{ message: { content: '{}' } }] }),
+          });
+        }
+        if (failureRequirement.indexOf('去重失败错误对象') !== -1) {
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ error: 'upstream unavailable' }) } }] }),
+          });
+        }
         const generatedTitles = [];
         (semanticPayload.generated_cases_editable || []).forEach((mod) => {
           (mod.cases || []).forEach((item) => generatedTitles.push(item.title));
@@ -731,6 +773,21 @@ test.describe('用例库 AI 用例生成', () => {
     await expect(page.locator('#caseLibraryAiGenDrawer')).toHaveClass(/open/);
     await expect(page.locator('#caseLibraryAiGenResultBody td.ai-gen-appended-cell').getByText('支付成功', { exact: true })).toBeVisible();
     await expect(page.locator('#caseLibraryAiGenResultBody td').getByText('支付成功', { exact: true }).locator('..').locator('input[data-case-lib-ai-select]')).toBeDisabled();
+
+    await page.click('#caseLibraryAiGenDiscardBtn');
+    await expect(page.locator('#caseLibraryAiGenResult')).toBeHidden();
+    await startCaseLibraryAiGeneration(page, '需求：去重失败空对象');
+    await expect(page.locator('#caseLibraryAiGenStatus')).toContainText('去重失败，已保留生成结果');
+    await expect(page.locator('#caseLibraryAiGenResultSummary')).toHaveText('生成 4 条，去重未完成');
+    await expect(page.locator('#caseLibraryAiGenResultBody tr').filter({ hasText: '登录成功' })).toHaveCount(1);
+    await expect(page.locator('#caseLibraryAiGenResultBody tr').filter({ hasText: '支付成功' })).toHaveCount(2);
+
+    await page.click('#caseLibraryAiGenDiscardBtn');
+    await startCaseLibraryAiGeneration(page, '需求：去重失败错误对象');
+    await expect(page.locator('#caseLibraryAiGenStatus')).toContainText('去重失败，已保留生成结果');
+    await expect(page.locator('#caseLibraryAiGenResultSummary')).toHaveText('生成 4 条，去重未完成');
+    await expect(page.locator('#caseLibraryAiGenResultBody tr').filter({ hasText: '登录成功' })).toHaveCount(1);
+    await expect(page.locator('#caseLibraryAiGenResultBody tr').filter({ hasText: '支付成功' })).toHaveCount(2);
   });
 
   test('生成过程中切换用例不影响生成', async ({ page }) => {
@@ -814,7 +871,7 @@ test.describe('用例库 AI 用例生成', () => {
         model: 'mock-model',
         maxTokens: 512,
       }],
-      assignments: { caseLibraryGenId: modelId },
+      assignments: { caseLibraryGenId: modelId, caseLibraryGenModelId: 'mock-model' },
     });
 
     const fulfillSwitchModelResponse = async (route) => {
@@ -963,7 +1020,7 @@ test.describe('用例库 AI 用例生成', () => {
     await page.addInitScript((payload) => {
       try { localStorage.setItem('tap-auth-token', payload.token); } catch (_) {}
       try { localStorage.setItem('cleaner-models-v1', JSON.stringify([payload.model])); } catch (_) {}
-      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify({ caseLibraryGenId: payload.model.id })); } catch (_) {}
+      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify({ caseLibraryGenId: payload.model.id, caseLibraryGenModelId: 'mock-model' })); } catch (_) {}
       try { localStorage.setItem('tap-case-library-ai-gen-task:case-library', JSON.stringify(payload.task)); } catch (_) {}
     }, { token, model, task: retainedTask });
     await buildCaseLibraryRoutes(page, {

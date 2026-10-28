@@ -157,11 +157,10 @@ test.describe('用例库编辑交互', () => {
     await page.click(`#caseLibraryEditListBody [data-case-lib-edit="${caseFileId}"]`);
     await expect(page.locator('#caseLibraryEditView')).toContainText('正常登录');
 
-    const aiCell = page.locator('#caseLibraryEditView tbody tr.case-row').first().locator('td.ai-operations');
-    await expect(aiCell.locator('[data-ai-operation]')).toHaveText(['AI新增', 'AI新增子项', 'AI修改', 'AI执行']);
-    await expect(page.locator('#caseLibraryEditView tbody tr.case-row').nth(1).locator('td.ai-operations')).toBeEmpty();
+    await expect(page.locator('#caseLibraryEditView .ai-operations, #caseLibraryEditView [data-ai-operation]')).toHaveCount(0);
+    await expect(page.locator('#caseLibraryEditView tbody tr.case-row').first().locator('td')).toHaveCount(9);
     expect(await page.locator('#caseLibraryEditView th').allTextContents()).toEqual([
-      '', '编号', '模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果', 'AI操作', '增删'
+      '', '编号', '模块', '用例标题', '优先级', '前提条件', '操作步骤', '预期结果', '增删'
     ]);
 
     const moduleCell = page.locator('#caseLibraryEditView [data-case-lib-edit-field="module"][data-index="0"]');
@@ -199,8 +198,7 @@ test.describe('用例库编辑交互', () => {
     await prioritySaved;
     await expect(prioritySelect).toHaveAttribute('data-priority', 'p2');
     await expect.poll(() => lastPriorityPatch).toBe('P2');
-    await expect(aiCell.locator('[data-ai-operation]')).toHaveText(['AI新增', 'AI新增子项', 'AI修改', 'AI执行']);
-    await aiCell.scrollIntoViewIfNeeded();
+    await expect(page.locator('#caseLibraryEditView .ai-operations, #caseLibraryEditView [data-ai-operation]')).toHaveCount(0);
     await page.screenshot({ path: 'output/playwright/ai-operations-library.png', fullPage: true });
   });
 });

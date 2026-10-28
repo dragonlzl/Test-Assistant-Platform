@@ -9,6 +9,12 @@
       if (node.classList && node.classList.contains('drawer')) {
         return node.classList.contains('open') || node.classList.contains('closing');
       }
+      var ownerId = node.getAttribute ? node.getAttribute('data-drawer-scroll-owner') : '';
+      if (ownerId) {
+        var owner = document.getElementById(ownerId);
+        if (owner && owner.classList && owner.classList.contains('drawer')
+          && (owner.classList.contains('open') || owner.classList.contains('closing'))) return true;
+      }
       node = node.parentNode;
     }
     return false;

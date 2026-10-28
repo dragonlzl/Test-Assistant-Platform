@@ -1,0 +1,237 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - complementary:
+    - generic:
+      - heading "用例助手" [level=1]:
+        - generic:
+          - generic: T
+    - navigation:
+      - generic:
+        - heading "AI 功能" [level=2]:
+          - generic: AI 功能
+        - generic:
+          - button "用例生成":
+            - generic:
+              - img
+            - generic: 用例生成
+          - button "功能指派，未保存指派模型":
+            - generic:
+              - img
+            - generic: 功能指派
+            - generic: 未保存指派模型
+          - button "模型管理":
+            - generic:
+              - img
+            - generic: 模型管理
+      - generic:
+        - heading "用例相关" [level=2]
+        - generic:
+          - button "用例执行":
+            - generic:
+              - img
+            - generic: 用例执行
+          - button "用例库":
+            - generic:
+              - img
+            - generic: 用例库
+          - button "用例归档":
+            - generic:
+              - img
+            - generic: 用例归档
+          - button "执行总览":
+            - generic:
+              - img
+            - generic: 执行总览
+      - generic:
+        - heading "管理" [level=2]
+        - generic:
+          - button "项目管理":
+            - generic:
+              - img
+            - generic: 项目管理
+      - generic:
+        - heading "设置" [level=2]
+        - generic:
+          - button "通用设置":
+            - generic:
+              - img
+            - generic: 通用设置
+    - generic:
+      - generic "个人工具":
+        - button "个人备忘":
+          - img
+          - generic: 个人备忘
+    - generic:
+      - generic: 当前用户
+      - button "用户菜单":
+        - generic: d
+      - menu:
+        - generic:
+          - generic: d
+          - generic:
+            - strong: demo_user_auto_dedupe
+            - generic: 角色
+            - generic: 用户
+        - menuitem "通用设置":
+          - img
+          - generic: 通用设置
+        - menuitem "退出登录":
+          - img
+          - generic: 退出登录
+  - main [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - heading "XMind 用例生成" [level=2] [ref=e8]
+        - button "XMind用例生成" [expanded] [ref=e9] [cursor=pointer]: 打开 XMind 用例生成
+      - region "生成进度" [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - generic [ref=e13]: 任务概览
+            - heading "生成进度" [level=3] [ref=e14]
+          - generic [ref=e15]:
+            - strong [ref=e16]: 100%
+            - generic [ref=e17]: 整体进度
+        - generic [ref=e18]:
+          - progressbar "XMind 用例生成整体进度" [ref=e19]
+          - generic [ref=e21]: 1 个任务 · 1 个已完成 · 2 个模块 · 2 条用例
+        - button "XMind自动去重需求 生成完成 · 2 模块 · 2 用例 100% 100" [ref=e23] [cursor=pointer]:
+          - generic [ref=e24]:
+            - generic [ref=e26]:
+              - strong [ref=e27]: XMind自动去重需求
+              - generic [ref=e28]: 生成完成 · 2 模块 · 2 用例
+            - generic [ref=e29]: 100%
+          - progressbar "XMind自动去重需求生成进度" [ref=e30]
+    - generic [ref=e34]:
+      - generic [ref=e35]:
+        - heading "XMind 用例生成" [level=3] [ref=e36]
+        - button "收起" [ref=e37] [cursor=pointer]
+      - generic [ref=e39]:
+        - generic [ref=e40]:
+          - generic "XMind自动去重需求" [ref=e42] [cursor=pointer]:
+            - generic [ref=e43]:
+              - generic [ref=e45]: XMind自动去重需求
+              - generic [ref=e46]:
+                - generic [ref=e47]: 未入库
+                - generic [ref=e49]: 2 模块
+                - generic [ref=e51]: 2 用例
+            - button "×" [ref=e52]
+          - button "新建 XMind 生成页签" [ref=e53] [cursor=pointer]: 新建生成
+        - generic [ref=e55]:
+          - generic [ref=e56]:
+            - generic [ref=e58]:
+              - button "生成前置准备" [ref=e59] [cursor=pointer]
+              - generic [ref=e60]:
+                - generic "当前可继续发起生成、补全或删除操作" [ref=e61]:
+                  - generic [ref=e63]: 当前没有生成任务
+                - generic "当前画布展示的模块和用例总数会随生成、补全、删除实时刷新；去重为最近一次 AI 去重移除数量" [ref=e64]:
+                  - generic [ref=e65]:
+                    - strong [ref=e66]: "2"
+                    - generic [ref=e67]: 模块
+                  - generic [ref=e68]:
+                    - strong [ref=e69]: "2"
+                    - generic [ref=e70]: 用例
+                  - generic "最近一次 AI 用例去重并精简移除 2 条用例" [ref=e71]:
+                    - generic [ref=e72]: 去重
+                    - strong [ref=e73]: "2"
+                    - generic [ref=e74]: 条
+            - generic [ref=e75]:
+              - generic [ref=e76]:
+                - button "生成记录（有新的生成记录）" [ref=e78] [cursor=pointer]: 生成记录
+                - generic [ref=e79]:
+                  - button "知识检索：未启用" [ref=e80] [cursor=pointer]
+                  - button "AI筛选：未启用" [ref=e81] [cursor=pointer]
+                - generic [ref=e82]:
+                  - button "AI用例去重" [ref=e83] [cursor=pointer]
+                  - button "需求覆盖" [ref=e84] [cursor=pointer]
+                  - button "保存入库" [ref=e85] [cursor=pointer]
+                  - button "导出当前XMind" [ref=e86] [cursor=pointer]
+                  - button "导出为Markdown" [ref=e87] [cursor=pointer]
+                - generic [ref=e88]:
+                  - button "撤回删除" [disabled] [ref=e89]
+                  - button "恢复删除" [disabled] [ref=e90]
+                - generic [ref=e91]:
+                  - paragraph [ref=e93]: 已重新生成 2 个模块，2 条用例，已去重精简 2 条
+                  - button "中断生成" [disabled] [ref=e94]
+              - generic [ref=e95]:
+                - searchbox "搜索节点内容" [ref=e96]
+                - generic [ref=e97]: 0/0
+                - button "↑" [ref=e98] [cursor=pointer]
+                - button "↓" [ref=e99] [cursor=pointer]
+                - button "清空" [ref=e100] [cursor=pointer]
+              - generic [ref=e102]:
+                - button "-" [ref=e103] [cursor=pointer]
+                - button "全览" [ref=e104] [cursor=pointer]
+                - button "+" [ref=e105] [cursor=pointer]
+                - button "全屏" [ref=e106] [cursor=pointer]
+                - generic [ref=e107]:
+                  - generic [ref=e108]: 模型
+                  - combobox "XMind 用例生成模型" [ref=e109]:
+                    - option "跟随功能指派 · MockXmindCaseGenModel · mock-model" [selected]
+                    - option "MockXmindCaseGenModel · mock-model"
+                  - generic [ref=e110]: 推理
+                  - combobox "推理等级" [ref=e111]:
+                    - option "默认" [selected]
+                    - option "None（不启用推理）"
+                    - option "Low"
+                    - option "Medium（默认）"
+                    - option "High"
+                    - option "XHigh"
+                    - option "Max"
+            - button "收起 XMind 生成工具栏" [expanded] [ref=e112] [cursor=pointer]: 收起工具栏
+          - generic [ref=e116]:
+            - generic [ref=e117]:
+              - generic:
+                - generic [ref=e118] [cursor=pointer]:
+                  - generic: 登录模块
+                - generic:
+                  - generic:
+                    - generic [ref=e120] [cursor=pointer]:
+                      - generic: 登录模块-完整-1
+                    - generic:
+                      - generic:
+                        - generic [ref=e122] [cursor=pointer]:
+                          - generic: P1
+                        - generic:
+                          - generic:
+                            - generic [ref=e124] [cursor=pointer]:
+                              - generic: 登录模块前置条件
+                            - generic:
+                              - generic:
+                                - generic [ref=e126] [cursor=pointer]:
+                                  - generic: 1、进入登录模块 2、执行登录模块-完整-1
+                                - generic [ref=e128] [cursor=pointer]:
+                                  - generic: 登录模块-完整-1执行成功
+                - img
+            - generic [ref=e130]:
+              - generic: XMind自动去重需求
+            - generic [ref=e131]:
+              - generic:
+                - generic [ref=e132] [cursor=pointer]:
+                  - generic: 支付模块
+                - generic:
+                  - generic:
+                    - generic [ref=e134] [cursor=pointer]:
+                      - generic: 支付模块-完整-1
+                    - generic:
+                      - generic:
+                        - generic [ref=e136] [cursor=pointer]:
+                          - generic: P1
+                        - generic:
+                          - generic:
+                            - generic [ref=e138] [cursor=pointer]:
+                              - generic: 支付模块前置条件
+                            - generic:
+                              - generic:
+                                - generic [ref=e140] [cursor=pointer]:
+                                  - generic: 1、进入支付模块 2、执行支付模块-完整-1
+                                - generic [ref=e142] [cursor=pointer]:
+                                  - generic: 支付模块-完整-1执行成功
+                - img
+            - img
+            - img
+            - img
+    - option "请选择项目" [selected]
+    - option "请选择版本" [selected]
+```

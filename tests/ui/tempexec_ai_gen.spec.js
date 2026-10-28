@@ -67,16 +67,46 @@ async function fulfillTempExecSemanticDedupe(route, body) {
   expect(requestPayload.operation_contract.generated_cases_editable).toBe(true);
   expect(requestPayload.original_cases_readonly.length).toBeGreaterThan(0);
   const generated = requestPayload.generated_cases_editable || [];
+  const originalCases = requestPayload.original_cases_readonly || [];
   const seen = new Set();
+  const keptBySignature = new Map();
+  const removedCases = [];
   const payload = {
     generated_modules: generated.map((mod) => {
       const kept = [];
       (mod.cases || []).forEach((item) => {
-        if (item.title === '登录成功') return;
+        const dedupeId = String(item.dedupe_id || item.dedupeId || item.id || `${mod.module}-generated-${kept.length + 1}`);
+        const normalized = { ...item, dedupe_id: dedupeId };
+        if (item.title === '登录成功') {
+          const original = originalCases.find((candidate) => candidate.title === item.title) || originalCases[0];
+          removedCases.push({
+            type: 'duplicate_with_original',
+            module: mod.module,
+            title: item.title,
+            dedupe_id: dedupeId,
+            reason: '与原用例重复',
+            duplicate_with: original && original.title ? original.title : item.title,
+            duplicate_with_id: original && (original.dedupe_id || original.id) ? String(original.dedupe_id || original.id) : '',
+          });
+          return;
+        }
         const key = [item.module, item.title, item.precondition || item.preconditions || '', item.steps, item.expected].join('::');
-        if (seen.has(key)) return;
+        if (seen.has(key)) {
+          const target = keptBySignature.get(key);
+          removedCases.push({
+            type: 'duplicate_generated',
+            module: mod.module,
+            title: item.title,
+            dedupe_id: dedupeId,
+            reason: '生成用例重复',
+            duplicate_with: target && target.title ? target.title : item.title,
+            duplicate_with_id: target && target.dedupe_id ? target.dedupe_id : '',
+          });
+          return;
+        }
         seen.add(key);
-        kept.push(item);
+        keptBySignature.set(key, normalized);
+        kept.push(normalized);
       });
       return {
         module: mod.module,
@@ -85,14 +115,8 @@ async function fulfillTempExecSemanticDedupe(route, body) {
         cases: kept,
       };
     }).filter((mod) => mod.cases.length),
-    removed_cases: [{
-      type: 'duplicate_with_original',
-      module: '登录',
-      title: '登录成功',
-      reason: '与原用例重复',
-      duplicate_with: '登录成功',
-    }],
-    summary: { removed: 1, reason: '语义重复' },
+    removed_cases: removedCases,
+    summary: { removed: removedCases.length, reason: '语义重复' },
   };
   return route.fulfill({
     status: 200,
@@ -203,20 +227,32 @@ test.describe('执行页 AI 用例生成', () => {
         baseUrl: modelBaseUrl,
         apiKey: 'mock-key',
         model: 'mock-model',
+        availableModels: [{ id: 'mock-model', name: 'mock-model' }],
         maxTokens: 512,
       }],
-      assignments: { caseLibraryGenId: modelId },
+      assignments: { caseLibraryGenId: modelId, caseLibraryGenModelId: 'mock-model' },
     });
 
     let discoveryCalls = 0;
     let moduleCalls = 0;
     let semanticDedupeCalls = 0;
-    await page.route('**/mock-temp-exec-ai-append', async (route) => {
+    await page.route('**/mock-temp-exec-ai-append**', async (route) => {
       const body = route.request().postDataJSON();
       if (isSemanticDedupeRequest(body)) {
         semanticDedupeCalls += 1;
         const requestBody = body && body.payload ? body.payload : body;
         const requestPayload = JSON.parse(requestBody.messages[1].content);
+        const failureRequirement = requestPayload.requirement && requestPayload.requirement.text
+          ? String(requestPayload.requirement.text)
+          : '';
+        if (failureRequirement.indexOf('去重失败空对象') !== -1) {
+          return route.fulfill({ status: 200, contentType: 'application/json',
+            body: JSON.stringify({ choices: [{ message: { content: '{}' } }] }) });
+        }
+        if (failureRequirement.indexOf('去重失败错误对象') !== -1) {
+          return route.fulfill({ status: 200, contentType: 'application/json',
+            body: JSON.stringify({ choices: [{ message: { content: JSON.stringify({ error: 'upstream unavailable' }) } }] }) });
+        }
         const generatedTitles = [];
         (requestPayload.generated_cases_editable || []).forEach((mod) => {
           (mod.cases || []).forEach((item) => generatedTitles.push(item.title));
@@ -230,7 +266,7 @@ test.describe('执行页 AI 用例生成', () => {
       const pipelineMeta = userPayload.xmind_external_pipeline || {};
       expect(userPayload.locked_imported_cases.mode).toBe('import');
       expect(userPayload.locked_imported_cases.readonly).toBe(true);
-      expect(userPayload.locked_imported_cases.case_count).toBe(1);
+      expect(userPayload.locked_imported_cases.case_count).toBeGreaterThan(0);
       expect(userPayload.case_page_generation_mode.mode).toBe('enhanced');
       expect(userPayload.case_page_generation_mode.label).toBe('增强补全');
       expect(userPayload.case_page_generation_mode.strategy).toBe('strong_completion');
@@ -315,13 +351,12 @@ test.describe('执行页 AI 用例生成', () => {
           expected: '提示余额不足',
           remark: '',
         }];
-      if (targetModule === '登录') {
-        expect(userPayload.operation_contract.mode).toBe('module_append_cases');
-        expect(userPayload.current_operation_module.visible_cases.length).toBe(1);
-      } else {
-        expect(userPayload.operation_contract.mode).toBe('module_full_cases');
-        expect(userPayload.current_operation_module.visible_cases.length).toBe(0);
-      }
+      const visibleCaseCount = (userPayload.locked_imported_cases.cases || [])
+        .filter((item) => item.module === targetModule).length;
+      expect(userPayload.operation_contract.mode).toBe(
+        visibleCaseCount > 0 ? 'module_append_cases' : 'module_full_cases'
+      );
+      expect(userPayload.current_operation_module.visible_cases.length).toBe(visibleCaseCount);
       const payload = {
         modules: [{
           module: targetModule,
@@ -438,6 +473,21 @@ test.describe('执行页 AI 用例生成', () => {
     await expect(page.locator('#tempExecAiGenResultBody td').getByText('登录失败-密码错误', { exact: true }).locator('..').locator('input[data-temp-exec-ai-select]')).toBeDisabled();
     await expect(page.locator('#tempExecView')).toContainText('支付失败-余额不足');
     await expect(page.locator('#tempExecView')).toContainText('登录失败-密码错误');
+
+    await page.click('#tempExecAiGenDiscardBtn');
+    await expect(page.locator('#tempExecAiGenResult')).toBeHidden();
+    await startTempExecAiGeneration(page, '需求：去重失败空对象');
+    await expect(page.locator('#tempExecAiGenStatus')).toContainText('去重失败，已保留生成结果');
+    await expect(page.locator('#tempExecAiGenResultSummary')).toHaveText('生成 4 条，去重未完成');
+    await expect(page.locator('#tempExecAiGenResultBody tr').filter({ hasText: '登录成功' })).toHaveCount(1);
+    await expect(page.locator('#tempExecAiGenResultBody tr').filter({ hasText: '支付失败-余额不足' })).toHaveCount(2);
+
+    await page.click('#tempExecAiGenDiscardBtn');
+    await startTempExecAiGeneration(page, '需求：去重失败错误对象');
+    await expect(page.locator('#tempExecAiGenStatus')).toContainText('去重失败，已保留生成结果');
+    await expect(page.locator('#tempExecAiGenResultSummary')).toHaveText('生成 4 条，去重未完成');
+    await expect(page.locator('#tempExecAiGenResultBody tr').filter({ hasText: '登录成功' })).toHaveCount(1);
+    await expect(page.locator('#tempExecAiGenResultBody tr').filter({ hasText: '支付失败-余额不足' })).toHaveCount(2);
   });
 
   test('生成前准备必须选择生成模式', async ({ page }) => {
@@ -482,7 +532,7 @@ test.describe('执行页 AI 用例生成', () => {
         model: 'mock-model',
         maxTokens: 512,
       }],
-      assignments: { caseLibraryGenId: modelId },
+      assignments: { caseLibraryGenId: modelId, caseLibraryGenModelId: 'mock-model' },
     });
 
     let modelCalls = 0;
@@ -591,7 +641,7 @@ test.describe('执行页 AI 用例生成', () => {
         model: 'mock-model',
         maxTokens: 512,
       }],
-      assignments: { caseLibraryGenId: modelId },
+      assignments: { caseLibraryGenId: modelId, caseLibraryGenModelId: 'mock-model' },
     });
 
     await page.route('**/mock-temp-exec-ai', async (route) => {
@@ -749,7 +799,7 @@ test.describe('执行页 AI 用例生成', () => {
         model: 'mock-model',
         maxTokens: 512,
       }],
-      assignments: { caseLibraryGenId: modelId },
+      assignments: { caseLibraryGenId: modelId, caseLibraryGenModelId: 'mock-model' },
     });
 
     await page.route('**/mock-temp-exec-ai-global', async (route) => {
@@ -891,7 +941,7 @@ test.describe('执行页 AI 用例生成', () => {
       try { localStorage.setItem('usecase-temp-exec-v1', JSON.stringify(data.payload)); } catch (_) {}
       try { localStorage.setItem('tempexec-focus-v1', JSON.stringify([])); } catch (_) {}
       try { localStorage.setItem('cleaner-models-v1', JSON.stringify([data.model])); } catch (_) {}
-      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify({ caseLibraryGenId: data.model.id })); } catch (_) {}
+      try { localStorage.setItem('cleaner-assignment-v1', JSON.stringify({ caseLibraryGenId: data.model.id, caseLibraryGenModelId: 'mock-model' })); } catch (_) {}
       try { localStorage.setItem('tap-case-library-ai-gen-task:temp-exec', JSON.stringify(data.task)); } catch (_) {}
     }, { payload, model, task: retainedTask });
     const routeCtl = await installPersistentModelTaskRoute(page, {
@@ -989,7 +1039,7 @@ test.describe('执行页 AI 用例生成', () => {
         model: 'mock-model',
         maxTokens: 512,
       }],
-      assignments: { caseLibraryGenId: modelId },
+      assignments: { caseLibraryGenId: modelId, caseLibraryGenModelId: 'mock-model' },
     });
 
     const routeCtl = await installPersistentModelTaskRoute(page, {

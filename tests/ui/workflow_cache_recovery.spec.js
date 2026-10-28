@@ -1,6 +1,109 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('XMind 启动快照恢复', () => {
+  test('有效大文档生成快照切页返回及刷新后仍保留页签和用例', async ({ page }) => {
+    await page.route('**/*', (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname.startsWith('/api/')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      }
+      if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return route.continue();
+      return route.abort();
+    });
+    await page.addInitScript(() => {
+      localStorage.setItem('tap-e2e-skip-auth', '1');
+      if (sessionStorage.getItem('__pw-large-valid-workflow-seeded')) return;
+      sessionStorage.setItem('__pw-large-valid-workflow-seeded', '1');
+      var workspaceId = 'large-valid-workspace';
+      var moduleId = 'large-valid-module';
+      var now = Date.now();
+      var host = {
+        activeWorkspaceId: workspaceId,
+        mirrorWorkspaceId: workspaceId,
+        workspaceOrder: [workspaceId],
+        nextWorkspaceSeq: 2,
+        workspaces: {},
+        mode: 'full',
+        hasModuleSkeleton: true,
+        prep: { step: 3, requirementMode: 'document', caseImportMode: 'skip', completed: true },
+        viewState: { drawerOpen: false, fullscreen: false },
+      };
+      host.workspaces[workspaceId] = {
+        id: workspaceId,
+        seq: 1,
+        name: '有效大文档需求',
+        generationId: 'large-valid-generation',
+        createdAt: now,
+        updatedAt: now,
+        snapshot: { __topLevelActiveSnapshot: true },
+      };
+      var results = {};
+      results[moduleId] = JSON.stringify([{
+        title: '大文档生成结果保留',
+        precondition: '已导入需求文档',
+        steps: ['执行文档中的操作'],
+        expected: '切页与刷新后保留结果',
+      }]);
+      localStorage.setItem('usecase-workflow-state-v1', JSON.stringify({
+        version: 1,
+        user_id: '0',
+        updated_at: now,
+        data: {
+          requirementLabel: '有效大文档需求',
+          requirementLabelSource: 'file',
+          lastRawImportName: '有效大文档需求.txt',
+          rawText: '需求'.repeat(750001),
+          caseGenModules: [{ id: moduleId, module: '大文档模块', key_scenarios: [], test_points: [] }],
+          caseGenResults: results,
+          caseGenSettings: { activeTab: 'xmind-modules' },
+          xmindCaseGen: host,
+        },
+      }));
+    });
+
+    const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:8090';
+    await page.goto(base + '/case-exec.html?tab=tempexec');
+    await page.waitForFunction(() => window.app && window.app.__tapWorkflowReady === true && window.app.authReady === true);
+    const restoredOnExecutionPage = await page.evaluate(() => {
+      var raw = localStorage.getItem('usecase-workflow-state-v1') || '';
+      var host = window.app.state.xmindCaseGen || {};
+      return { length: raw.length, workspaceOrder: host.workspaceOrder || [] };
+    });
+    expect(restoredOnExecutionPage.length).toBeGreaterThan(1500000);
+    expect(restoredOnExecutionPage.workspaceOrder).toEqual(['large-valid-workspace']);
+
+    await page.click('[data-tab-btn="casesgen"]');
+    await expect(page).toHaveURL(/\/ai-workflow\.html\?tab=casesgen/);
+    await page.waitForFunction(() => window.app && window.app.__tapWorkflowReady === true && window.app.authReady === true);
+    await page.click('#xmindCaseGenOpenBtn');
+    await expect(page.locator('#xmindCaseGenDrawer')).toHaveClass(/open/);
+
+    const assertGeneratedWorkspace = async () => {
+      await expect(page.locator('#xmindCaseGenWorkspaceList [data-xmind-workspace-tab]')).toHaveCount(1);
+      await expect.poll(() => page.evaluate(() => {
+        var state = window.app.state;
+        var host = state.xmindCaseGen || {};
+        return {
+          workspaceOrder: host.workspaceOrder || [],
+          activeWorkspaceId: host.activeWorkspaceId,
+          requirementLength: document.getElementById('rawText').value.length,
+          moduleTitles: (state.caseGenModules || []).map(function(module) { return module.module; }),
+          caseTitles: JSON.parse((state.caseGenResults || {})['large-valid-module'] || '[]').map(function(entry) { return entry.title; }),
+        };
+      })).toEqual({
+        workspaceOrder: ['large-valid-workspace'],
+        activeWorkspaceId: 'large-valid-workspace',
+        requirementLength: 1500002,
+        moduleTitles: ['大文档模块'],
+        caseTitles: ['大文档生成结果保留'],
+      });
+    };
+    await assertGeneratedWorkspace();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.app && window.app.__tapWorkflowReady === true && window.app.authReady === true);
+    await assertGeneratedWorkspace();
+  });
+
   test('异常过大的本地生成快照不会阻塞页面启动', async ({ page }) => {
     await page.route('**/*', (route) => {
       const url = route.request().url();

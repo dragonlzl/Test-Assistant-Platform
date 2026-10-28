@@ -1,0 +1,1 @@
+[{"id":5001,"name":"default","owner_id":223,"scope":"user","config_json":{"caseGenId":"901","caseGenPrompt":"普通用例提示词","xmindCaseGenId":"901","xmindCaseGenModelId":"mock-model","xmindCaseGenPrompt":"基础提示词-XMind页","xmindCaseGenReasoning":"","xmindCaseGenTemperature":0.2}}]

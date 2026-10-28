@@ -13,7 +13,9 @@
 
 ```bash
 node tests/node/xmind_request_scheduler_core.test.js
+node tests/node/xmind_case_dedupe_core.test.js
 node tests/node/xmind_dedupe_batch_core.test.js
+node tests/node/case_page_ai_dedupe.test.js
 node tests/node/xmind_workspace_recovery_core.test.js
 node tests/node/xmind_task_resume_guard.test.js
 node tests/node/xmind_generation_timing_core.test.js
@@ -38,6 +40,14 @@ npm run test:ui -- tests/ui/tempexec_ai_gen.spec.js --workers=1
 - XMind 多工作区、需求/已有用例导入、生成、中断与刷新恢复、去重、覆盖、导出、新建入库和追加入库。
 - 用例库和执行页内生成与追加。
 - 四类保留模型指派、模型缺失/请求失败和废弃配置忽略。
+
+AI 去重定向回归使用本地 API/模型 mock，不连接正式数据库或真实模型：
+
+```bash
+npm run test:ui -- tests/ui/xmind_casegen_flow.spec.js tests/ui/case_library_ai_gen.spec.js tests/ui/tempexec_ai_gen.spec.js --grep '去重|生成用例后可勾选|追加生成用例后显示' --workers=1
+```
+
+覆盖稳定 ID、跨模块/跨批次删除关系、合法删空、元数据保护、漏报关系和异常回包保留原结果，以及去重失败警告与候选数量统计。并验证自动去重使用最终生成结果、等待期间人工修改保护，以及取消旧任务后启动新任务的状态隔离。
 
 ## API 回归
 
@@ -99,7 +109,7 @@ npm run test:ui -- tests/ui/models_settings.spec.js --grep '功能指派页只�
 npm run test:ui -- tests/ui/case_library_edit_focus.spec.js tests/ui/tempexec_edit_defer_save.spec.js tests/ui/tempexec_reuse_align.spec.js tests/ui/tempexec_view_empty.spec.js
 ```
 
-界面回归使用本地 API mock，覆盖“AI操作”列顺序、空值、多标识、人工编辑保留、窄屏深色展示及复用子项对齐。
+界面回归使用本地 API mock，覆盖用例库不展示“AI操作”列、编辑焦点与优先级保存，以及执行页 AI 标识的列顺序、空值、多标识、人工编辑保留、窄屏深色展示、复用子项对齐和执行空态。
 
 ## 复用子项 MCP / HTTP
 

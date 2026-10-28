@@ -1292,6 +1292,7 @@
           generationMode: '',
           resultGeneratedCount: 0,
           resultDedupeCount: 0,
+          resultDedupePending: false,
         };
       }
       if (!state.tempExecAiGen.selection || !(state.tempExecAiGen.selection instanceof Set)) {
@@ -1758,6 +1759,17 @@
       });
     }
 
+    function cloneTempExecAiGenCaseList(items) {
+      if (!Array.isArray(items)) return [];
+      try {
+        return JSON.parse(JSON.stringify(items));
+      } catch (err) {
+        return items.map(function(item) {
+          return item && typeof item === 'object' ? Object.assign({}, item) : item;
+        });
+      }
+    }
+
     function buildTempExecAiGenSignature(fileId, requirementText, moduleList, prepContext) {
       var seed = String(fileId || '') + '|' + String(requirementText || '') + '|' + (moduleList || []).join('|');
       if (prepContext && prepContext.settings) {
@@ -1895,11 +1907,15 @@
       if (generatedCount === null) generatedCount = keptCount + removedCount;
       ai.resultGeneratedCount = generatedCount;
       ai.resultDedupeCount = removedCount;
+      ai.resultDedupePending = Boolean(parsed && parsed.ai_dedupe_error);
     }
 
     function formatTempExecAiGenCompleteStatus(ai) {
       var generatedCount = normalizeTempExecAiGenCount(ai.resultGeneratedCount);
       var dedupeCount = normalizeTempExecAiGenCount(ai.resultDedupeCount);
+      if (ai.resultDedupePending === true) {
+        return '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重未完成';
+      }
       var text = '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条';
       if (!ai.modules || !ai.modules.length) return '生成完成：' + text + '，未返回可追加用例';
       return '生成完成：' + text;
@@ -1914,7 +1930,9 @@
       }
       var generatedCount = normalizeTempExecAiGenCount(ai.resultGeneratedCount);
       var dedupeCount = normalizeTempExecAiGenCount(ai.resultDedupeCount);
-      tempExecAiGenResultSummary.textContent = '生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条';
+      tempExecAiGenResultSummary.textContent = ai.resultDedupePending === true
+        ? ('生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重未完成')
+        : ('生成 ' + (generatedCount === null ? 0 : generatedCount) + ' 条，去重 ' + (dedupeCount === null ? 0 : dedupeCount) + ' 条');
     }
 
     function renderTempExecAiGenResult() {
@@ -2191,6 +2209,7 @@
       ai.generationMode = '';
       ai.resultGeneratedCount = 0;
       ai.resultDedupeCount = 0;
+      ai.resultDedupePending = false;
       if (!keepRequirement) {
         ai.requirementText = '';
         ai.requirementFileName = '';
@@ -2270,7 +2289,7 @@
         semanticDedupeRunning: false,
         semanticDedupeResult: snapshot,
         semanticDedupeCompletedAt: Date.now(),
-        semanticDedupeError: errorText ? String(errorText || '') : '',
+        semanticDedupeError: errorText ? String(errorText || '') : String(snapshot.ai_dedupe_error || ''),
       }, 'semantic-dedupe');
     }
 
@@ -2282,11 +2301,14 @@
         ai.selection = new Set();
         ai.resultGeneratedCount = 0;
         ai.resultDedupeCount = 0;
+        ai.resultDedupePending = false;
       } else {
         ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
         ai.selection = new Set();
         applyTempExecAiGenResultStats(ai, parsed);
-        setStatus(tempExecAiGenStatus, formatTempExecAiGenCompleteStatus(ai), 'ok');
+        setStatus(tempExecAiGenStatus, parsed && parsed.ai_dedupe_error
+          ? ('去重失败，已保留生成结果：' + String(parsed.ai_dedupe_error || ''))
+          : formatTempExecAiGenCompleteStatus(ai), parsed && parsed.ai_dedupe_error ? 'warn' : 'ok');
         if (resultToken) {
           applyTempExecAiGenAppendMap(ai.modules, getTempExecAiGenAppendMap(task.caseFileId, resultToken));
         }
@@ -2376,7 +2398,9 @@
         }
         if (parsed && !parsed.error && task.prepContext) {
           var prepApi = getCasePageAiGenPrepApi();
-          var sourceCases = file && Array.isArray(file.cases) ? file.cases : [];
+          var sourceCases = task.prepContext && Array.isArray(task.prepContext.sourceCases)
+            ? cloneTempExecAiGenCaseList(task.prepContext.sourceCases)
+            : (file && Array.isArray(file.cases) ? cloneTempExecAiGenCaseList(file.cases) : []);
           if (prepApi && typeof prepApi.applyAiDedupeToParsed === 'function' && core && typeof core.callModelWithConfig === 'function') {
             if (task.id && tempExecAiDedupeResultMap[task.id]) {
               finishTempExecAiGenParsedResult(ai, tempExecAiDedupeResultMap[task.id], task, resultToken);
@@ -2409,11 +2433,12 @@
               if (task.id) tempExecAiDedupeResultMap[task.id] = nextParsed;
               persistTempExecAiGenSemanticDedupeResult(task, nextParsed, '');
               finishTempExecAiGenParsedResult(ai, nextParsed, task, resultToken);
-            }).catch(function() {
+            }).catch(function(err) {
               var currentTask = getCurrentTempExecAiGenTask();
               if (!currentTask || currentTask.id !== task.id || currentTask.status === 'cancelled') return;
+              parsed.ai_dedupe_error = err && err.message ? err.message : 'AI 语义去重失败';
               if (task.id) tempExecAiDedupeResultMap[task.id] = parsed;
-              persistTempExecAiGenSemanticDedupeResult(task, parsed, 'AI 语义去重失败');
+              persistTempExecAiGenSemanticDedupeResult(task, parsed, parsed.ai_dedupe_error);
               finishTempExecAiGenParsedResult(ai, parsed, task, resultToken);
             }).finally(function() {
               delete tempExecAiDedupeTaskMap[task.id];
@@ -2626,7 +2651,7 @@
         displayName: currentFile.name || currentFile.file_name_clean || '当前执行用例',
         projectId: currentFile.projectId || currentFile.project_id || '',
         versionId: currentFile.versionId || currentFile.version_id || '',
-        cases: currentFile.cases || [],
+        cases: cloneTempExecAiGenCaseList(currentFile.cases || []),
         requirementText: currentRequirement || ai.requirementText || '',
         requirementSupplement: '',
         model: model,
@@ -2807,8 +2832,9 @@
         setStatus(tempExecAiGenStatus, '未找到执行用例内容', 'warn');
         return;
       }
-      var moduleList = buildTempExecAiGenModuleList(currentFile.cases || []);
-      var casePayload = buildTempExecAiGenCasePayload(currentFile.cases || []);
+      var originalCasesForRun = cloneTempExecAiGenCaseList(currentFile.cases || []);
+      var moduleList = buildTempExecAiGenModuleList(originalCasesForRun);
+      var casePayload = buildTempExecAiGenCasePayload(originalCasesForRun);
       var threshold = (state && state.settings && state.settings.caseLibraryGenCoverageThreshold !== undefined)
         ? Number(state.settings.caseLibraryGenCoverageThreshold)
         : 90;
@@ -2875,6 +2901,7 @@
       ai.generationMode = resolveTempExecAiGenGenerationMode(prepContext);
       ai.resultGeneratedCount = 0;
       ai.resultDedupeCount = 0;
+      ai.resultDedupePending = false;
       setStatus(tempExecAiGenStatus, '正在生成用例...', '');
       renderTempExecAiGenResult();
       syncTempExecAiGenRunBtn();
@@ -2922,7 +2949,10 @@
           if (parsed && !parsed.error && prepContext && prepApi) {
             if (typeof prepApi.applyAiDedupeToParsed === 'function') {
               setStatus(tempExecAiGenStatus, '正在进行 AI 语义去重...', '');
-              return prepApi.applyAiDedupeToParsed(parsed, currentFile.cases || [], prepContext, {
+              var baselineCases = prepContext && Array.isArray(prepContext.sourceCases)
+                ? cloneTempExecAiGenCaseList(prepContext.sourceCases)
+                : originalCasesForRun;
+              return prepApi.applyAiDedupeToParsed(parsed, baselineCases, prepContext, {
                 model: model,
                 reasoning: reasoning,
                 temperature: temperature,
@@ -2939,11 +2969,14 @@
           ai.modules = [];
           ai.resultGeneratedCount = 0;
           ai.resultDedupeCount = 0;
+          ai.resultDedupePending = false;
         } else {
           ai.modules = parsed && Array.isArray(parsed.modules) ? parsed.modules : [];
           applyTempExecAiGenResultStats(ai, parsed);
           if (resultToken) applyTempExecAiGenAppendMap(ai.modules, getTempExecAiGenAppendMap(ai.caseFileId, resultToken));
-          setStatus(tempExecAiGenStatus, formatTempExecAiGenCompleteStatus(ai), 'ok');
+          setStatus(tempExecAiGenStatus, parsed && parsed.ai_dedupe_error
+            ? ('去重失败，已保留生成结果：' + String(parsed.ai_dedupe_error || ''))
+            : formatTempExecAiGenCompleteStatus(ai), parsed && parsed.ai_dedupe_error ? 'warn' : 'ok');
           genOk = true;
         }
         })

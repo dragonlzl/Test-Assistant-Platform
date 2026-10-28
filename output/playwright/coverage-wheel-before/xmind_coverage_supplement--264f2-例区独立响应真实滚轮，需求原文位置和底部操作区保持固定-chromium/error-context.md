@@ -1,0 +1,1180 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary:
+      - generic:
+        - heading "用例助手" [level=1]:
+          - generic:
+            - generic: T
+      - navigation:
+        - generic:
+          - heading "AI 功能" [level=2]:
+            - generic: AI 功能
+          - generic:
+            - button "用例生成":
+              - generic:
+                - img
+              - generic: 用例生成
+            - button "功能指派，未保存指派模型":
+              - generic:
+                - img
+              - generic: 功能指派
+              - generic: 未保存指派模型
+            - button "模型管理":
+              - generic:
+                - img
+              - generic: 模型管理
+        - generic:
+          - heading "用例相关" [level=2]
+          - generic:
+            - button "用例执行":
+              - generic:
+                - img
+              - generic: 用例执行
+            - button "用例库":
+              - generic:
+                - img
+              - generic: 用例库
+            - button "用例归档":
+              - generic:
+                - img
+              - generic: 用例归档
+            - button "执行总览":
+              - generic:
+                - img
+              - generic: 执行总览
+        - generic:
+          - heading "管理" [level=2]
+          - generic:
+            - button "项目管理":
+              - generic:
+                - img
+              - generic: 项目管理
+        - generic:
+          - heading "设置" [level=2]
+          - generic:
+            - button "通用设置":
+              - generic:
+                - img
+              - generic: 通用设置
+      - generic:
+        - generic "个人工具":
+          - button "个人备忘":
+            - img
+            - generic: 个人备忘
+      - generic:
+        - generic: 当前用户
+        - button "用户菜单":
+          - generic: c
+        - menu:
+          - generic:
+            - generic: c
+            - generic:
+              - strong: coverage-supplement-local
+              - generic: 角色
+              - generic: 用户
+          - menuitem "通用设置":
+            - img
+            - generic: 通用设置
+          - menuitem "退出登录":
+            - img
+            - generic: 退出登录
+    - main [ref=e4]:
+      - generic [ref=e6]:
+        - generic [ref=e7]:
+          - heading "XMind 用例生成" [level=2] [ref=e8]
+          - button "XMind用例生成" [expanded] [ref=e9] [cursor=pointer]: 打开 XMind 用例生成
+        - region "生成进度" [ref=e10]:
+          - generic [ref=e11]:
+            - generic [ref=e12]:
+              - generic [ref=e13]: 任务概览
+              - heading "生成进度" [level=3] [ref=e14]
+            - generic [ref=e15]:
+              - strong [ref=e16]: 100%
+              - generic [ref=e17]: 整体进度
+          - generic [ref=e18]:
+            - progressbar "XMind 用例生成整体进度" [ref=e19]
+            - generic [ref=e21]: 1 个任务 · 1 个已完成 · 1 个模块 · 35 条用例
+          - button "需求覆盖补充回归 生成完成 · 1 模块 · 35 用例 100% 100" [ref=e23] [cursor=pointer]:
+            - generic [ref=e24]:
+              - generic [ref=e26]:
+                - strong [ref=e27]: 需求覆盖补充回归
+                - generic [ref=e28]: 生成完成 · 1 模块 · 35 用例
+              - generic [ref=e29]: 100%
+            - progressbar "需求覆盖补充回归生成进度" [ref=e30]
+      - generic [ref=e34]:
+        - generic [ref=e35]:
+          - heading "XMind 用例生成" [level=3] [ref=e36]
+          - button "收起" [ref=e37] [cursor=pointer]
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - generic "需求覆盖补充回归" [ref=e42] [cursor=pointer]:
+              - generic [ref=e43]:
+                - generic [ref=e45]: 需求覆盖补充回归
+                - generic [ref=e46]:
+                  - generic [ref=e47]: 未入库
+                  - generic [ref=e49]: 1 模块
+                  - generic [ref=e51]: 35 用例
+              - button "×" [ref=e52]
+            - button "新建 XMind 生成页签" [ref=e53] [cursor=pointer]: 新建生成
+          - generic [ref=e55]:
+            - generic [ref=e56]:
+              - generic [ref=e58]:
+                - button "生成前置准备" [ref=e59] [cursor=pointer]
+                - generic [ref=e60]:
+                  - generic "当前可继续发起生成、补全或删除操作" [ref=e61]:
+                    - generic [ref=e63]: 当前没有生成任务
+                  - generic "当前画布展示的模块和用例总数会随生成、补全、删除实时刷新；去重为最近一次 AI 去重移除数量" [ref=e64]:
+                    - generic [ref=e65]:
+                      - strong [ref=e66]: "1"
+                      - generic [ref=e67]: 模块
+                    - generic [ref=e68]:
+                      - strong [ref=e69]: "35"
+                      - generic [ref=e70]: 用例
+              - generic [ref=e71]:
+                - generic [ref=e72]:
+                  - button "生成记录" [ref=e74] [cursor=pointer]
+                  - generic [ref=e75]:
+                    - button "知识检索：未启用" [ref=e76] [cursor=pointer]
+                    - button "AI筛选：未启用" [ref=e77] [cursor=pointer]
+                  - generic [ref=e78]:
+                    - button "AI用例去重" [ref=e79] [cursor=pointer]
+                    - button "需求覆盖" [expanded] [ref=e80] [cursor=pointer]
+                    - button "保存入库" [ref=e81] [cursor=pointer]
+                    - button "导出当前XMind" [ref=e82] [cursor=pointer]
+                    - button "导出为Markdown" [ref=e83] [cursor=pointer]
+                  - generic [ref=e84]:
+                    - button "撤回删除" [disabled] [ref=e85]
+                    - button "恢复删除" [disabled] [ref=e86]
+                  - generic [ref=e87]:
+                    - paragraph [ref=e89]: 需求覆盖分析完成
+                    - button "中断生成" [disabled] [ref=e90]
+                - generic [ref=e91]:
+                  - searchbox "搜索节点内容" [ref=e92]
+                  - generic [ref=e93]: 0/0
+                  - button "↑" [ref=e94] [cursor=pointer]
+                  - button "↓" [ref=e95] [cursor=pointer]
+                  - button "清空" [ref=e96] [cursor=pointer]
+                - generic [ref=e98]:
+                  - button "-" [ref=e99] [cursor=pointer]
+                  - button "全览" [ref=e100] [cursor=pointer]
+                  - button "+" [ref=e101] [cursor=pointer]
+                  - button "全屏" [ref=e102] [cursor=pointer]
+                  - generic [ref=e103]:
+                    - generic [ref=e104]: 模型
+                    - combobox "XMind 用例生成模型" [ref=e105]:
+                      - option "跟随功能指派 · Local coverage supplement model · local-coverage-model" [selected]
+                      - option "Local coverage supplement model · local-coverage-model"
+                    - generic [ref=e106]: 推理
+                    - combobox "推理等级" [ref=e107]:
+                      - option "默认" [selected]
+                      - option "None（不启用推理）"
+                      - option "Low"
+                      - option "Medium（默认）"
+                      - option "High"
+                      - option "XHigh"
+                      - option "Max"
+              - button "收起 XMind 生成工具栏" [expanded] [ref=e108] [cursor=pointer]: 收起工具栏
+            - generic [ref=e112]:
+              - generic [ref=e113]:
+                - generic:
+                  - generic [ref=e114] [cursor=pointer]:
+                    - generic: 登录模块
+                  - generic:
+                    - generic:
+                      - generic [ref=e116] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 1
+                      - generic:
+                        - generic:
+                          - generic [ref=e118] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e120] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e122] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e124] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e125] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 2
+                      - generic:
+                        - generic:
+                          - generic [ref=e127] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e129] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e131] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e133] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e134] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 3
+                      - generic:
+                        - generic:
+                          - generic [ref=e136] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e138] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e140] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e142] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e143] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 4
+                      - generic:
+                        - generic:
+                          - generic [ref=e145] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e147] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e149] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e151] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e152] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 5
+                      - generic:
+                        - generic:
+                          - generic [ref=e154] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e156] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e158] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e160] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e161] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 6
+                      - generic:
+                        - generic:
+                          - generic [ref=e163] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e165] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e167] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e169] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e170] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 7
+                      - generic:
+                        - generic:
+                          - generic [ref=e172] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e174] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e176] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e178] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e179] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 8
+                      - generic:
+                        - generic:
+                          - generic [ref=e181] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e183] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e185] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e187] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e188] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 9
+                      - generic:
+                        - generic:
+                          - generic [ref=e190] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e192] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e194] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e196] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e197] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 10
+                      - generic:
+                        - generic:
+                          - generic [ref=e199] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e201] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e203] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e205] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e206] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 11
+                      - generic:
+                        - generic:
+                          - generic [ref=e208] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e210] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e212] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e214] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e215] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 12
+                      - generic:
+                        - generic:
+                          - generic [ref=e217] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e219] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e221] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e223] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e224] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 13
+                      - generic:
+                        - generic:
+                          - generic [ref=e226] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e228] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e230] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e232] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e233] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 14
+                      - generic:
+                        - generic:
+                          - generic [ref=e235] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e237] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e239] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e241] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e242] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 15
+                      - generic:
+                        - generic:
+                          - generic [ref=e244] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e246] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e248] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e250] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e251] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 16
+                      - generic:
+                        - generic:
+                          - generic [ref=e253] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e255] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e257] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e259] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e260] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 17
+                      - generic:
+                        - generic:
+                          - generic [ref=e262] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e264] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e266] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e268] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e269] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 18
+                      - generic:
+                        - generic:
+                          - generic [ref=e271] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e273] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e275] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e277] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e278] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 19
+                      - generic:
+                        - generic:
+                          - generic [ref=e280] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e282] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e284] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e286] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e287] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 20
+                      - generic:
+                        - generic:
+                          - generic [ref=e289] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e291] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e293] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e295] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e296] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 21
+                      - generic:
+                        - generic:
+                          - generic [ref=e298] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e300] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e302] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e304] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e305] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 22
+                      - generic:
+                        - generic:
+                          - generic [ref=e307] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e309] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e311] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e313] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e314] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 23
+                      - generic:
+                        - generic:
+                          - generic [ref=e316] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e318] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e320] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e322] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e323] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 24
+                      - generic:
+                        - generic:
+                          - generic [ref=e325] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e327] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e329] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e331] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e332] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 25
+                      - generic:
+                        - generic:
+                          - generic [ref=e334] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e336] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e338] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e340] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e341] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 26
+                      - generic:
+                        - generic:
+                          - generic [ref=e343] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e345] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e347] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e349] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e350] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 27
+                      - generic:
+                        - generic:
+                          - generic [ref=e352] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e354] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e356] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e358] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e359] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 28
+                      - generic:
+                        - generic:
+                          - generic [ref=e361] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e363] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e365] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e367] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e368] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 29
+                      - generic:
+                        - generic:
+                          - generic [ref=e370] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e372] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e374] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e376] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e377] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 30
+                      - generic:
+                        - generic:
+                          - generic [ref=e379] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e381] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e383] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e385] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e386] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 31
+                      - generic:
+                        - generic:
+                          - generic [ref=e388] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e390] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e392] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e394] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e395] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 32
+                      - generic:
+                        - generic:
+                          - generic [ref=e397] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e399] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e401] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e403] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e404] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 33
+                      - generic:
+                        - generic:
+                          - generic [ref=e406] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e408] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e410] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e412] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e413] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 34
+                      - generic:
+                        - generic:
+                          - generic [ref=e415] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e417] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e419] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e421] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                    - generic:
+                      - generic [ref=e422] [cursor=pointer]:
+                        - generic: 登录用例独立滚动校验 35
+                      - generic:
+                        - generic:
+                          - generic [ref=e424] [cursor=pointer]:
+                            - generic: P1
+                          - generic:
+                            - generic:
+                              - generic [ref=e426] [cursor=pointer]:
+                                - generic: 注册账号已存在
+                              - generic:
+                                - generic:
+                                  - generic [ref=e428] [cursor=pointer]:
+                                    - generic: 1、进入登录页 2、执行对应操作
+                                  - generic [ref=e430] [cursor=pointer]:
+                                    - generic: 展示对应结果
+                  - img
+              - generic [ref=e432]:
+                - generic: 需求覆盖补充回归
+              - img
+              - img
+              - img
+      - option "请选择项目" [selected]
+      - option "请选择版本" [selected]
+  - dialog "需求覆盖" [ref=e434]:
+    - generic [ref=e435]:
+      - generic [ref=e436]:
+        - strong [ref=e437]: 需求覆盖
+        - paragraph [ref=e438]: 查看当前可见用例对需求原文本身的覆盖关系。
+      - button "关闭" [ref=e440] [cursor=pointer]
+    - generic [ref=e442]:
+      - generic [ref=e443]:
+        - generic [ref=e445]:
+          - generic [ref=e446]: 50%
+          - generic [ref=e447]: 需求覆盖
+          - button "已覆盖 1" [ref=e449] [cursor=pointer]
+          - button "部分 1" [ref=e450] [cursor=pointer]
+          - button "未覆盖 1" [ref=e451] [cursor=pointer]
+          - button "上下文 25" [ref=e452] [cursor=pointer]
+        - button "重新分析" [ref=e453] [cursor=pointer]
+      - generic [ref=e454]:
+        - region "需求原文覆盖片段" [ref=e455]:
+          - generic [ref=e456]:
+            - strong [ref=e457]: 需求原文
+            - generic [ref=e458]: 点击片段查看对应用例
+          - generic "需求原文覆盖状态图例" [ref=e459]:
+            - button "实线 已覆盖 1" [ref=e460] [cursor=pointer]:
+              - generic [ref=e461]: 实线
+              - generic [ref=e462]: 已覆盖 1
+            - button "虚线 部分覆盖 1" [ref=e463] [cursor=pointer]:
+              - generic [ref=e464]: 虚线
+              - generic [ref=e465]: 部分覆盖 1
+            - button "普通正文 未覆盖 1" [ref=e466] [cursor=pointer]:
+              - generic [ref=e467]: 普通正文
+              - generic [ref=e468]: 未覆盖 1
+            - button "灰色正文 上下文 25" [ref=e469] [cursor=pointer]:
+              - generic [ref=e470]: 灰色正文
+              - generic [ref=e471]: 上下文 25
+            - button "待补充 0" [disabled] [ref=e472]
+            - button "后补充 0" [disabled] [ref=e473]
+          - article [ref=e474]:
+            - button "1. 用户登录成功后进入首页" [ref=e475] [cursor=pointer]
+            - button "2. 用户退出登录后清除会话并回到登录页" [ref=e476] [cursor=pointer]
+            - button "3. 用户可以重置已遗忘的登录密码" [ref=e477] [cursor=pointer]
+            - button "4. 背景上下文：登录模块服务于所有注册用户" [ref=e478] [cursor=pointer]
+            - button "5. 背景上下文补充说明 1，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e479] [cursor=pointer]
+            - button "6. 背景上下文补充说明 2，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e480] [cursor=pointer]
+            - button "7. 背景上下文补充说明 3，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e481] [cursor=pointer]
+            - button "8. 背景上下文补充说明 4，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e482] [cursor=pointer]
+            - button "9. 背景上下文补充说明 5，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e483] [cursor=pointer]
+            - button "10. 背景上下文补充说明 6，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e484] [cursor=pointer]
+            - button "11. 背景上下文补充说明 7，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e485] [cursor=pointer]
+            - button "12. 背景上下文补充说明 8，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e486] [cursor=pointer]
+            - button "13. 背景上下文补充说明 9，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e487] [cursor=pointer]
+            - button "14. 背景上下文补充说明 10，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e488] [cursor=pointer]
+            - button "15. 背景上下文补充说明 11，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e489] [cursor=pointer]
+            - button "16. 背景上下文补充说明 12，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e490] [cursor=pointer]
+            - button "17. 背景上下文补充说明 13，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e491] [cursor=pointer]
+            - button "18. 背景上下文补充说明 14，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e492] [cursor=pointer]
+            - button "19. 背景上下文补充说明 15，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e493] [cursor=pointer]
+            - button "20. 背景上下文补充说明 16，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e494] [cursor=pointer]
+            - button "21. 背景上下文补充说明 17，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e495] [cursor=pointer]
+            - button "22. 背景上下文补充说明 18，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e496] [cursor=pointer]
+            - button "23. 背景上下文补充说明 19，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e497] [cursor=pointer]
+            - button "24. 背景上下文补充说明 20，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e498] [cursor=pointer]
+            - button "25. 背景上下文补充说明 21，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e499] [cursor=pointer]
+            - button "26. 背景上下文补充说明 22，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e500] [cursor=pointer]
+            - button "27. 背景上下文补充说明 23，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e501] [cursor=pointer]
+            - button "28. 背景上下文补充说明 24，用于验证需求原文长内容的独立滚动和操作区可见性" [ref=e502] [cursor=pointer]
+        - generic [ref=e503]:
+          - region "对应用例" [ref=e504]:
+            - generic [ref=e505]:
+              - strong [ref=e506]: 对应用例
+              - generic [ref=e507]: 悬停用例查看详情
+            - generic [ref=e508]:
+              - generic [ref=e509]:
+                - strong [ref=e510]: 当前片段
+                - generic [ref=e511]: 1 处
+              - button "REQ-001 已覆盖 1. 用户登录成功后进入首页" [ref=e512] [cursor=pointer]:
+                - generic [ref=e513]:
+                  - generic [ref=e514]: REQ-001
+                  - generic [ref=e515]: 已覆盖
+                - generic [ref=e516]: 1. 用户登录成功后进入首页
+            - generic [ref=e517]:
+              - generic [ref=e518]:
+                - button "登录模块 登录用例独立滚动校验 1 P1 直接" [ref=e519] [cursor=pointer]:
+                  - generic [ref=e520]: 登录模块
+                  - generic [ref=e521]:
+                    - generic [ref=e522]: 登录用例独立滚动校验 1
+                    - generic [ref=e523]: P1
+                    - generic [ref=e524]: 直接
+                - button "删除用例：登录用例独立滚动校验 1" [ref=e525] [cursor=pointer]: 删除
+              - generic [ref=e526]:
+                - button "登录模块 登录用例独立滚动校验 2 P1 直接" [ref=e527] [cursor=pointer]:
+                  - generic [ref=e528]: 登录模块
+                  - generic [ref=e529]:
+                    - generic [ref=e530]: 登录用例独立滚动校验 2
+                    - generic [ref=e531]: P1
+                    - generic [ref=e532]: 直接
+                - button "删除用例：登录用例独立滚动校验 2" [ref=e533] [cursor=pointer]: 删除
+              - generic [ref=e534]:
+                - button "登录模块 登录用例独立滚动校验 3 P1 直接" [ref=e535] [cursor=pointer]:
+                  - generic [ref=e536]: 登录模块
+                  - generic [ref=e537]:
+                    - generic [ref=e538]: 登录用例独立滚动校验 3
+                    - generic [ref=e539]: P1
+                    - generic [ref=e540]: 直接
+                - button "删除用例：登录用例独立滚动校验 3" [ref=e541] [cursor=pointer]: 删除
+              - generic [ref=e542]:
+                - button "登录模块 登录用例独立滚动校验 4 P1 直接" [ref=e543] [cursor=pointer]:
+                  - generic [ref=e544]: 登录模块
+                  - generic [ref=e545]:
+                    - generic [ref=e546]: 登录用例独立滚动校验 4
+                    - generic [ref=e547]: P1
+                    - generic [ref=e548]: 直接
+                - button "删除用例：登录用例独立滚动校验 4" [ref=e549] [cursor=pointer]: 删除
+              - generic [ref=e550]:
+                - button "登录模块 登录用例独立滚动校验 5 P1 直接" [ref=e551] [cursor=pointer]:
+                  - generic [ref=e552]: 登录模块
+                  - generic [ref=e553]:
+                    - generic [ref=e554]: 登录用例独立滚动校验 5
+                    - generic [ref=e555]: P1
+                    - generic [ref=e556]: 直接
+                - button "删除用例：登录用例独立滚动校验 5" [ref=e557] [cursor=pointer]: 删除
+              - generic [ref=e558]:
+                - button "登录模块 登录用例独立滚动校验 6 P1 直接" [ref=e559] [cursor=pointer]:
+                  - generic [ref=e560]: 登录模块
+                  - generic [ref=e561]:
+                    - generic [ref=e562]: 登录用例独立滚动校验 6
+                    - generic [ref=e563]: P1
+                    - generic [ref=e564]: 直接
+                - button "删除用例：登录用例独立滚动校验 6" [ref=e565] [cursor=pointer]: 删除
+              - generic [ref=e566]:
+                - button "登录模块 登录用例独立滚动校验 7 P1 直接" [ref=e567] [cursor=pointer]:
+                  - generic [ref=e568]: 登录模块
+                  - generic [ref=e569]:
+                    - generic [ref=e570]: 登录用例独立滚动校验 7
+                    - generic [ref=e571]: P1
+                    - generic [ref=e572]: 直接
+                - button "删除用例：登录用例独立滚动校验 7" [ref=e573] [cursor=pointer]: 删除
+              - generic [ref=e574]:
+                - button "登录模块 登录用例独立滚动校验 8 P1 直接" [ref=e575] [cursor=pointer]:
+                  - generic [ref=e576]: 登录模块
+                  - generic [ref=e577]:
+                    - generic [ref=e578]: 登录用例独立滚动校验 8
+                    - generic [ref=e579]: P1
+                    - generic [ref=e580]: 直接
+                - button "删除用例：登录用例独立滚动校验 8" [ref=e581] [cursor=pointer]: 删除
+              - generic [ref=e582]:
+                - button "登录模块 登录用例独立滚动校验 9 P1 直接" [ref=e583] [cursor=pointer]:
+                  - generic [ref=e584]: 登录模块
+                  - generic [ref=e585]:
+                    - generic [ref=e586]: 登录用例独立滚动校验 9
+                    - generic [ref=e587]: P1
+                    - generic [ref=e588]: 直接
+                - button "删除用例：登录用例独立滚动校验 9" [ref=e589] [cursor=pointer]: 删除
+              - generic [ref=e590]:
+                - button "登录模块 登录用例独立滚动校验 10 P1 直接" [ref=e591] [cursor=pointer]:
+                  - generic [ref=e592]: 登录模块
+                  - generic [ref=e593]:
+                    - generic [ref=e594]: 登录用例独立滚动校验 10
+                    - generic [ref=e595]: P1
+                    - generic [ref=e596]: 直接
+                - button "删除用例：登录用例独立滚动校验 10" [ref=e597] [cursor=pointer]: 删除
+              - generic [ref=e598]:
+                - button "登录模块 登录用例独立滚动校验 11 P1 直接" [ref=e599] [cursor=pointer]:
+                  - generic [ref=e600]: 登录模块
+                  - generic [ref=e601]:
+                    - generic [ref=e602]: 登录用例独立滚动校验 11
+                    - generic [ref=e603]: P1
+                    - generic [ref=e604]: 直接
+                - button "删除用例：登录用例独立滚动校验 11" [ref=e605] [cursor=pointer]: 删除
+              - generic [ref=e606]:
+                - button "登录模块 登录用例独立滚动校验 12 P1 直接" [ref=e607] [cursor=pointer]:
+                  - generic [ref=e608]: 登录模块
+                  - generic [ref=e609]:
+                    - generic [ref=e610]: 登录用例独立滚动校验 12
+                    - generic [ref=e611]: P1
+                    - generic [ref=e612]: 直接
+                - button "删除用例：登录用例独立滚动校验 12" [ref=e613] [cursor=pointer]: 删除
+              - generic [ref=e614]:
+                - button "登录模块 登录用例独立滚动校验 13 P1 直接" [ref=e615] [cursor=pointer]:
+                  - generic [ref=e616]: 登录模块
+                  - generic [ref=e617]:
+                    - generic [ref=e618]: 登录用例独立滚动校验 13
+                    - generic [ref=e619]: P1
+                    - generic [ref=e620]: 直接
+                - button "删除用例：登录用例独立滚动校验 13" [ref=e621] [cursor=pointer]: 删除
+              - generic [ref=e622]:
+                - button "登录模块 登录用例独立滚动校验 14 P1 直接" [ref=e623] [cursor=pointer]:
+                  - generic [ref=e624]: 登录模块
+                  - generic [ref=e625]:
+                    - generic [ref=e626]: 登录用例独立滚动校验 14
+                    - generic [ref=e627]: P1
+                    - generic [ref=e628]: 直接
+                - button "删除用例：登录用例独立滚动校验 14" [ref=e629] [cursor=pointer]: 删除
+              - generic [ref=e630]:
+                - button "登录模块 登录用例独立滚动校验 15 P1 直接" [ref=e631] [cursor=pointer]:
+                  - generic [ref=e632]: 登录模块
+                  - generic [ref=e633]:
+                    - generic [ref=e634]: 登录用例独立滚动校验 15
+                    - generic [ref=e635]: P1
+                    - generic [ref=e636]: 直接
+                - button "删除用例：登录用例独立滚动校验 15" [ref=e637] [cursor=pointer]: 删除
+              - generic [ref=e638]:
+                - button "登录模块 登录用例独立滚动校验 16 P1 直接" [ref=e639] [cursor=pointer]:
+                  - generic [ref=e640]: 登录模块
+                  - generic [ref=e641]:
+                    - generic [ref=e642]: 登录用例独立滚动校验 16
+                    - generic [ref=e643]: P1
+                    - generic [ref=e644]: 直接
+                - button "删除用例：登录用例独立滚动校验 16" [ref=e645] [cursor=pointer]: 删除
+              - generic [ref=e646]:
+                - button "登录模块 登录用例独立滚动校验 17 P1 直接" [ref=e647] [cursor=pointer]:
+                  - generic [ref=e648]: 登录模块
+                  - generic [ref=e649]:
+                    - generic [ref=e650]: 登录用例独立滚动校验 17
+                    - generic [ref=e651]: P1
+                    - generic [ref=e652]: 直接
+                - button "删除用例：登录用例独立滚动校验 17" [ref=e653] [cursor=pointer]: 删除
+              - generic [ref=e654]:
+                - button "登录模块 登录用例独立滚动校验 18 P1 直接" [ref=e655] [cursor=pointer]:
+                  - generic [ref=e656]: 登录模块
+                  - generic [ref=e657]:
+                    - generic [ref=e658]: 登录用例独立滚动校验 18
+                    - generic [ref=e659]: P1
+                    - generic [ref=e660]: 直接
+                - button "删除用例：登录用例独立滚动校验 18" [ref=e661] [cursor=pointer]: 删除
+              - generic [ref=e662]:
+                - button "登录模块 登录用例独立滚动校验 19 P1 直接" [ref=e663] [cursor=pointer]:
+                  - generic [ref=e664]: 登录模块
+                  - generic [ref=e665]:
+                    - generic [ref=e666]: 登录用例独立滚动校验 19
+                    - generic [ref=e667]: P1
+                    - generic [ref=e668]: 直接
+                - button "删除用例：登录用例独立滚动校验 19" [ref=e669] [cursor=pointer]: 删除
+              - generic [ref=e670]:
+                - button "登录模块 登录用例独立滚动校验 20 P1 直接" [ref=e671] [cursor=pointer]:
+                  - generic [ref=e672]: 登录模块
+                  - generic [ref=e673]:
+                    - generic [ref=e674]: 登录用例独立滚动校验 20
+                    - generic [ref=e675]: P1
+                    - generic [ref=e676]: 直接
+                - button "删除用例：登录用例独立滚动校验 20" [ref=e677] [cursor=pointer]: 删除
+              - generic [ref=e678]:
+                - button "登录模块 登录用例独立滚动校验 21 P1 直接" [ref=e679] [cursor=pointer]:
+                  - generic [ref=e680]: 登录模块
+                  - generic [ref=e681]:
+                    - generic [ref=e682]: 登录用例独立滚动校验 21
+                    - generic [ref=e683]: P1
+                    - generic [ref=e684]: 直接
+                - button "删除用例：登录用例独立滚动校验 21" [ref=e685] [cursor=pointer]: 删除
+              - generic [ref=e686]:
+                - button "登录模块 登录用例独立滚动校验 22 P1 直接" [ref=e687] [cursor=pointer]:
+                  - generic [ref=e688]: 登录模块
+                  - generic [ref=e689]:
+                    - generic [ref=e690]: 登录用例独立滚动校验 22
+                    - generic [ref=e691]: P1
+                    - generic [ref=e692]: 直接
+                - button "删除用例：登录用例独立滚动校验 22" [ref=e693] [cursor=pointer]: 删除
+              - generic [ref=e694]:
+                - button "登录模块 登录用例独立滚动校验 23 P1 直接" [ref=e695] [cursor=pointer]:
+                  - generic [ref=e696]: 登录模块
+                  - generic [ref=e697]:
+                    - generic [ref=e698]: 登录用例独立滚动校验 23
+                    - generic [ref=e699]: P1
+                    - generic [ref=e700]: 直接
+                - button "删除用例：登录用例独立滚动校验 23" [ref=e701] [cursor=pointer]: 删除
+              - generic [ref=e702]:
+                - button "登录模块 登录用例独立滚动校验 24 P1 直接" [ref=e703] [cursor=pointer]:
+                  - generic [ref=e704]: 登录模块
+                  - generic [ref=e705]:
+                    - generic [ref=e706]: 登录用例独立滚动校验 24
+                    - generic [ref=e707]: P1
+                    - generic [ref=e708]: 直接
+                - button "删除用例：登录用例独立滚动校验 24" [ref=e709] [cursor=pointer]: 删除
+              - generic [ref=e710]:
+                - button "登录模块 登录用例独立滚动校验 25 P1 直接" [ref=e711] [cursor=pointer]:
+                  - generic [ref=e712]: 登录模块
+                  - generic [ref=e713]:
+                    - generic [ref=e714]: 登录用例独立滚动校验 25
+                    - generic [ref=e715]: P1
+                    - generic [ref=e716]: 直接
+                - button "删除用例：登录用例独立滚动校验 25" [ref=e717] [cursor=pointer]: 删除
+              - generic [ref=e718]:
+                - button "登录模块 登录用例独立滚动校验 26 P1 直接" [ref=e719] [cursor=pointer]:
+                  - generic [ref=e720]: 登录模块
+                  - generic [ref=e721]:
+                    - generic [ref=e722]: 登录用例独立滚动校验 26
+                    - generic [ref=e723]: P1
+                    - generic [ref=e724]: 直接
+                - button "删除用例：登录用例独立滚动校验 26" [ref=e725] [cursor=pointer]: 删除
+              - generic [ref=e726]:
+                - button "登录模块 登录用例独立滚动校验 27 P1 直接" [ref=e727] [cursor=pointer]:
+                  - generic [ref=e728]: 登录模块
+                  - generic [ref=e729]:
+                    - generic [ref=e730]: 登录用例独立滚动校验 27
+                    - generic [ref=e731]: P1
+                    - generic [ref=e732]: 直接
+                - button "删除用例：登录用例独立滚动校验 27" [ref=e733] [cursor=pointer]: 删除
+              - generic [ref=e734]:
+                - button "登录模块 登录用例独立滚动校验 28 P1 直接" [ref=e735] [cursor=pointer]:
+                  - generic [ref=e736]: 登录模块
+                  - generic [ref=e737]:
+                    - generic [ref=e738]: 登录用例独立滚动校验 28
+                    - generic [ref=e739]: P1
+                    - generic [ref=e740]: 直接
+                - button "删除用例：登录用例独立滚动校验 28" [ref=e741] [cursor=pointer]: 删除
+              - generic [ref=e742]:
+                - button "登录模块 登录用例独立滚动校验 29 P1 直接" [ref=e743] [cursor=pointer]:
+                  - generic [ref=e744]: 登录模块
+                  - generic [ref=e745]:
+                    - generic [ref=e746]: 登录用例独立滚动校验 29
+                    - generic [ref=e747]: P1
+                    - generic [ref=e748]: 直接
+                - button "删除用例：登录用例独立滚动校验 29" [ref=e749] [cursor=pointer]: 删除
+              - generic [ref=e750]:
+                - button "登录模块 登录用例独立滚动校验 30 P1 直接" [ref=e751] [cursor=pointer]:
+                  - generic [ref=e752]: 登录模块
+                  - generic [ref=e753]:
+                    - generic [ref=e754]: 登录用例独立滚动校验 30
+                    - generic [ref=e755]: P1
+                    - generic [ref=e756]: 直接
+                - button "删除用例：登录用例独立滚动校验 30" [ref=e757] [cursor=pointer]: 删除
+              - generic [ref=e758]:
+                - button "登录模块 登录用例独立滚动校验 31 P1 直接" [ref=e759] [cursor=pointer]:
+                  - generic [ref=e760]: 登录模块
+                  - generic [ref=e761]:
+                    - generic [ref=e762]: 登录用例独立滚动校验 31
+                    - generic [ref=e763]: P1
+                    - generic [ref=e764]: 直接
+                - button "删除用例：登录用例独立滚动校验 31" [ref=e765] [cursor=pointer]: 删除
+              - generic [ref=e766]:
+                - button "登录模块 登录用例独立滚动校验 32 P1 直接" [ref=e767] [cursor=pointer]:
+                  - generic [ref=e768]: 登录模块
+                  - generic [ref=e769]:
+                    - generic [ref=e770]: 登录用例独立滚动校验 32
+                    - generic [ref=e771]: P1
+                    - generic [ref=e772]: 直接
+                - button "删除用例：登录用例独立滚动校验 32" [ref=e773] [cursor=pointer]: 删除
+              - generic [ref=e774]:
+                - button "登录模块 登录用例独立滚动校验 33 P1 直接" [ref=e775] [cursor=pointer]:
+                  - generic [ref=e776]: 登录模块
+                  - generic [ref=e777]:
+                    - generic [ref=e778]: 登录用例独立滚动校验 33
+                    - generic [ref=e779]: P1
+                    - generic [ref=e780]: 直接
+                - button "删除用例：登录用例独立滚动校验 33" [ref=e781] [cursor=pointer]: 删除
+              - generic [ref=e782]:
+                - button "登录模块 登录用例独立滚动校验 34 P1 直接" [ref=e783] [cursor=pointer]:
+                  - generic [ref=e784]: 登录模块
+                  - generic [ref=e785]:
+                    - generic [ref=e786]: 登录用例独立滚动校验 34
+                    - generic [ref=e787]: P1
+                    - generic [ref=e788]: 直接
+                - button "删除用例：登录用例独立滚动校验 34" [ref=e789] [cursor=pointer]: 删除
+              - generic [ref=e790]:
+                - button "登录模块 登录用例独立滚动校验 35 P1 直接" [ref=e791] [cursor=pointer]:
+                  - generic [ref=e792]: 登录模块
+                  - generic [ref=e793]:
+                    - generic [ref=e794]: 登录用例独立滚动校验 35
+                    - generic [ref=e795]: P1
+                    - generic [ref=e796]: 直接
+                - button "删除用例：登录用例独立滚动校验 35" [ref=e797] [cursor=pointer]: 删除
+          - region "补充用例操作" [ref=e798]:
+            - generic [ref=e799]:
+              - strong [ref=e800]: 补充用例
+              - generic [ref=e801]: 待补充 0 段
+            - generic [ref=e802]:
+              - generic [ref=e803]: 未覆盖 0
+              - generic [ref=e804]: 部分覆盖 0
+              - generic [ref=e805]: 上下文 0
+              - generic [ref=e806]: 已覆盖 0
+            - generic [ref=e807]: 当前 REQ-001 · 已覆盖
+            - generic [ref=e808]:
+              - button "标记当前待补充" [ref=e809] [cursor=pointer]
+              - button "一键标记部分/未覆盖" [ref=e810] [cursor=pointer]
+              - button "取消一键标记" [disabled] [ref=e811]
+              - button "补充用例" [disabled] [ref=e812]
+            - status [ref=e813]: 标记目标后补充；上下文作为参考。后补充 0 段（累计保留）。
+  - tooltip "登录用例独立滚动校验 4 登录模块 前提条件 注册账号已存在 操作步骤 1、进入登录页 2、执行对应操作 预期结果 展示对应结果":
+    - generic:
+      - strong: 登录用例独立滚动校验 4
+      - generic: 登录模块
+    - generic:
+      - strong: 前提条件
+      - generic: 注册账号已存在
+    - generic:
+      - strong: 操作步骤
+      - generic:
+        - generic: 1、进入登录页
+        - generic: 2、执行对应操作
+    - generic:
+      - strong: 预期结果
+      - generic: 展示对应结果
+```

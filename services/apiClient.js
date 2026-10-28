@@ -942,6 +942,10 @@
     return integrationRequest('knowledge-base/access', 'POST', { base_url: baseUrl });
   }
 
+  function getKnowledgeBaseVersion(payload) {
+    return integrationRequest('knowledge-base/version', 'POST', payload || {});
+  }
+
   function catalogKnowledgeBase(payload) {
     return fetch('/api/knowledge-base/catalog', {
       method: 'POST',
@@ -1185,6 +1189,7 @@
     integrationRequest: integrationRequest,
     listKnowledgeSources: listKnowledgeSources,
     checkKnowledgeAccess: checkKnowledgeAccess,
+    getKnowledgeBaseVersion: getKnowledgeBaseVersion,
     catalogKnowledgeBase: catalogKnowledgeBase,
     getKnowledgeBaseDocuments: getKnowledgeBaseDocuments,
     searchKnowledgeBase: searchKnowledgeBase,

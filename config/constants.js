@@ -62,7 +62,7 @@
   var defaultKnowledgeBaseCatalogCharLimit = 120000;
   var minKnowledgeBaseCatalogCharLimit = 20000;
   var maxKnowledgeBaseCatalogCharLimit = 2000000;
-  var defaultKnowledgeBaseInjectedContextCharLimit = 24000;
+  var defaultKnowledgeBaseInjectedContextCharLimit = 120000;
   var minKnowledgeBaseInjectedContextCharLimit = 4000;
   var maxKnowledgeBaseInjectedContextCharLimit = 200000;
   var defaultXmindRequestPayloadLimit = 4000000;

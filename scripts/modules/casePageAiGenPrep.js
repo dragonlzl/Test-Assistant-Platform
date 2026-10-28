@@ -483,21 +483,25 @@
       return normalizeText(raw).replace(/[?#].*$/, '');
     }
 
-    function buildKnowledgeBaseCacheKey(baseUrl, queryContext) {
+    function buildKnowledgeBaseCacheKey(baseUrl, queryContext, knowledgeVersion, modelKey) {
       if (xmindKnowledgeBaseApi && typeof xmindKnowledgeBaseApi.buildQueryKey === 'function') {
         try {
           return xmindKnowledgeBaseApi.buildQueryKey({
             baseUrl: baseUrl,
             queryContext: queryContext || {},
+            knowledgeVersion: knowledgeVersion || '',
+            modelKey: modelKey || '',
           });
         } catch (err) {
           // fall through to local stable key
         }
       }
       return stableStringify({
-        version: 1,
+        version: 4,
         baseUrl: baseUrl || '',
         queryContext: queryContext || {},
+        knowledgeVersion: knowledgeVersion || '',
+        modelKey: modelKey || '',
       });
     }
 
@@ -1154,7 +1158,35 @@
         requirementMode: dialog.allowRequirementDocument === false ? 'manual' : (dialog.requirementMode || 'manual'),
         operationType: 'case-page-ai-gen',
       };
-      var cacheKey = buildKnowledgeBaseCacheKey(baseUrl, queryContext);
+      var knowledgeVersion = '';
+      if (apiClient && typeof apiClient.checkKnowledgeAccess === 'function') {
+        try {
+          await apiClient.checkKnowledgeAccess(baseUrl);
+        } catch (accessError) {
+          return buildKnowledgeBaseSkipState('知识库访问失败：' + (accessError.message || '没有权限'));
+        }
+      }
+      if (typeof xmindKnowledgeBaseApi.getVersion === 'function') {
+        try {
+          var versionInfo = await xmindKnowledgeBaseApi.getVersion(baseUrl);
+          knowledgeVersion = versionInfo && versionInfo.knowledgeVersion ? String(versionInfo.knowledgeVersion) : '';
+        } catch (versionError) {
+          return buildKnowledgeBaseSkipState('知识库版本检查失败：' + (versionError.message || '请稍后重试'));
+        }
+      }
+      var modelConfig = model && model.config ? model.config : (model && model.config_json ? model.config_json : {});
+      var settings = state.settings || {};
+      var modelKey = stableStringify({
+        id: model && model.id ? model.id : '',
+        model: modelConfig.model || (model && model.model) || '',
+        provider: modelConfig.provider || (model && model.provider) || '',
+        baseUrl: modelConfig.baseUrl || (model && model.baseUrl) || '',
+        reasoning: reasoning || '',
+        temperature: temperature,
+        catalogLimit: settings.knowledgeBaseCatalogCharLimit || '',
+        injectedLimit: settings.knowledgeBaseInjectedContextCharLimit || '',
+      });
+      var cacheKey = buildKnowledgeBaseCacheKey(baseUrl, queryContext, knowledgeVersion, modelKey);
       if (cacheKey && knowledgeBaseCache[cacheKey]) {
         var cached = cloneJson(knowledgeBaseCache[cacheKey], null);
         if (cached) {
@@ -1169,6 +1201,8 @@
         requestId: 'case-page-kb-' + Date.now().toString(36),
         queryContext: queryContext,
         model: model,
+        knowledgeVersion: knowledgeVersion,
+        modelKey: modelKey,
         reasoning: reasoning || '',
         temperature: temperature,
         callModel: callModelWithConfig,
@@ -1181,7 +1215,9 @@
           renderDialog(dialog.scene);
         },
       }).then(function(nextState) {
-        if (cacheKey && nextState && nextState.enabled !== false) {
+        if (cacheKey && nextState && nextState.enabled !== false
+          && nextState.ruleSearch && nextState.ruleSearch.status === 'done'
+          && nextState.aiFilter && (nextState.aiFilter.status === 'done' || nextState.aiFilter.status === 'skipped')) {
           knowledgeBaseCache[cacheKey] = cloneJson(nextState, null);
         }
         return nextState;
@@ -1489,16 +1525,28 @@
         '如果不确定某条生成用例是否冗余，应保留。',
         '返回只允许包含筛选后的 generated_modules 和 removed_cases，不得返回 original_cases_readonly。',
         'generated_modules 必须使用输入模块结构，cases 只包含保留后的生成用例；没有保留用例的模块可以省略。',
+        '必须原样保留每条生成用例的 dedupe_id；removed_cases 必须使用被移除用例的 dedupe_id，并使用 duplicate_with_id 或 merged_into_id 精确指向保留目标。',
+        '不得移动用例到其他模块、添加用例或修改 ID、来源等元数据；必须保留标题、优先级、前提条件、步骤和预期的完整字段结构。',
+        '仅去重时原样保留所有未合并用例；只有作为 merge 最终保留目标的生成用例允许为合并覆盖进行必要改写。',
+        '无论使用哪种策略，优先级、前置条件、备注及其他元数据必须原样保留；允许改写的内容只有标题、步骤和预期。',
+        'merge 只能指向保留的生成用例；与原有用例重复时使用 duplicate_with_original，不得将生成用例合并到只读原有用例。',
+        '删除关系不得只依赖标题；同标题或跨模块用例必须使用 ID，不能省略关系目标。',
         'removed_cases 逐条说明被移除的生成用例，type 可为 duplicate_with_original、duplicate_generated 或 merge。',
         '只返回 JSON，不要输出解释、Markdown 或代码块。',
-        '返回格式：{"generated_modules":[{"module":"模块名","coverage":60,"missing":false,"cases":[{"module":"模块名","title":"标题","priority":"P1","precondition":"","steps":"步骤","expected":"预期","remark":""}]}],"removed_cases":[{"type":"duplicate_with_original","module":"模块名","title":"被移除标题","reason":"与原用例重复","duplicate_with":"保留用例标题"}],"summary":{"removed":0,"reason":"简述"}}',
+        '返回格式：{"generated_modules":[{"module":"模块名","coverage":60,"missing":false,"cases":[{"dedupe_id":"generated:1:1","module":"模块名","title":"标题","priority":"P1","precondition":"","steps":"步骤","expected":"预期","remark":""}]}],"removed_cases":[{"type":"duplicate_with_original","dedupe_id":"generated:1:2","module":"模块名","title":"被移除标题","reason":"与原用例重复","duplicate_with_id":"original:1"}],"summary":{"removed":0,"reason":"简述"}}',
       ].join('\n');
     }
 
     function buildProtectedAiDedupeRequest(parsed, existingCases, prep, options) {
       var data = parsed && typeof parsed === 'object' ? parsed : {};
-      var generatedModules = Array.isArray(data.modules) ? data.modules : [];
-      var sourceCases = normalizeCaseList(existingCases || []);
+      var usedIds = Object.create(null);
+      var sourceCases = ensureAiCaseIds((Array.isArray(existingCases) ? existingCases : []).map(function(item) {
+        var normalized = normalizeCaseItem(item);
+        var id = getAiCaseId(item);
+        if (id) normalized.dedupe_id = id;
+        return normalized;
+      }), 'original', usedIds);
+      var generatedModules = ensureAiDedupeIds(Array.isArray(data.modules) ? data.modules : [], 'generated', usedIds);
       var settings = options || {};
       var payload = {
         operation_contract: {
@@ -1523,24 +1571,244 @@
         prompt: buildProtectedAiDedupePrompt(settings),
         userText: JSON.stringify(payload, null, 2),
         generatedModules: generatedModules,
+        originalCases: sourceCases,
       };
     }
 
-    function normalizeAiDedupeModules(rawModules, fallbackModules) {
-      var source = Array.isArray(rawModules) ? rawModules : [];
-      var output = [];
-      source.forEach(function(mod) {
-        if (!mod || typeof mod !== 'object') return;
-        var cases = Array.isArray(mod.cases) ? mod.cases : [];
-        if (!cases.length) return;
-        var moduleName = normalizeText(mod.module || mod.module_name || mod.title || '');
-        var nextMod = Object.assign({}, mod);
-        nextMod.module = moduleName || (mod.module || '');
-        nextMod.cases = cases;
-        output.push(nextMod);
+    function getAiCaseId(item) {
+      var source = item && typeof item === 'object' ? item : {};
+      var value = source.dedupe_id !== undefined ? source.dedupe_id
+        : (source.dedupeId !== undefined ? source.dedupeId
+          : (source.id !== undefined ? source.id : (source.caseId !== undefined ? source.caseId : source.case_id)));
+      return value === undefined || value === null ? '' : normalizeText(value);
+    }
+
+    function ensureAiCaseIds(cases, prefix, usedIds) {
+      var used = usedIds || Object.create(null);
+      return (Array.isArray(cases) ? cases : []).map(function(caseItem, caseIndex) {
+        var next = cloneJson(caseItem, {});
+        var id = getAiCaseId(next) || String(prefix || 'case') + ':' + String(caseIndex + 1);
+        var base = id;
+        var suffix = 1;
+        while (used[id]) {
+          id = base + ':' + String(suffix);
+          suffix += 1;
+        }
+        used[id] = true;
+        next.dedupe_id = id;
+        return next;
       });
-      if (!output.length && Array.isArray(fallbackModules) && fallbackModules.length) return [];
-      return output;
+    }
+
+    function ensureAiDedupeIds(modules, prefix, usedIds) {
+      var used = usedIds || Object.create(null);
+      return (Array.isArray(modules) ? modules : []).map(function(moduleItem, moduleIndex) {
+        if (!moduleItem || typeof moduleItem !== 'object' || Array.isArray(moduleItem)) {
+          throw new Error('AI 语义去重生成模块无效');
+        }
+        if (!Array.isArray(moduleItem.cases)) throw new Error('AI 语义去重生成模块缺少 cases');
+        var nextModule = cloneJson(moduleItem, {});
+        var moduleCases = Array.isArray(nextModule.cases) ? nextModule.cases : [];
+        nextModule.cases = moduleCases.map(function(caseItem, caseIndex) {
+          if (!caseItem || typeof caseItem !== 'object' || Array.isArray(caseItem)) {
+            throw new Error('AI 语义去重生成用例无效');
+          }
+          var next = cloneJson(caseItem, {});
+          var id = getAiCaseId(next) || String(prefix || 'generated') + ':' + String(moduleIndex + 1) + ':' + String(caseIndex + 1);
+          var base = id;
+          var suffix = 1;
+          while (used[id]) {
+            id = base + ':' + String(suffix);
+            suffix += 1;
+          }
+          used[id] = true;
+          next.dedupe_id = id;
+          return next;
+        });
+        return nextModule;
+      });
+    }
+
+    function aiModuleKey(moduleItem) {
+      var source = moduleItem && typeof moduleItem === 'object' ? moduleItem : {};
+      return normalizeText(source.module || source.module_name || source.title || '').toLowerCase().replace(/\s+/g, '');
+    }
+
+    function parseAiDedupePayload(text) {
+      var raw = String(text || '').trim();
+      var fence = raw.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+      if (fence) raw = String(fence[1] || '').trim();
+      try {
+        return JSON.parse(raw);
+      } catch (err) {
+        throw new Error('AI 语义去重返回的 JSON 不完整或包含额外内容');
+      }
+    }
+
+    function validateAiCaseFields(item, source, moduleItem, id) {
+      var editableFields = ['title', 'case_title', 'steps', 'step', 'expected', 'expect'];
+      Object.keys(item).forEach(function(key) {
+        if (!Object.prototype.hasOwnProperty.call(source, key)) {
+          throw new Error('AI 语义去重用例包含非法字段：' + key);
+        }
+      });
+      ['module', 'module_name'].forEach(function(key) {
+        if (item[key] !== undefined && aiModuleKey({ module: item[key] }) !== aiModuleKey(moduleItem)) {
+          throw new Error('AI 语义去重用例所属模块被修改：' + id);
+        }
+      });
+      function checkField(names, allowEmpty) {
+        var present = names.filter(function(key) { return Object.prototype.hasOwnProperty.call(item, key); });
+        if (!present.length) throw new Error('AI 语义去重用例缺少字段：' + names[0]);
+        present.forEach(function(key) {
+          var value = item[key];
+          var valid = typeof value === 'string'
+            ? allowEmpty || Boolean(normalizeText(value))
+            : Array.isArray(value) && (allowEmpty || value.length > 0) && value.every(function(entry) {
+              return typeof entry === 'string' && (allowEmpty || Boolean(normalizeText(entry)));
+            });
+          if (!valid) throw new Error('AI 语义去重用例字段无效：' + key);
+        });
+      }
+      if (typeof item.title !== 'string' && typeof item.case_title !== 'string') {
+        throw new Error('AI 语义去重用例标题无效：' + id);
+      }
+      checkField(['title', 'case_title'], false);
+      if (typeof item.priority !== 'string' || !/^P[012]$/.test(item.priority)) {
+        throw new Error('AI 语义去重用例优先级无效：' + id);
+      }
+      checkField(['precondition', 'preconditions'], true);
+      checkField(['steps', 'step'], false);
+      checkField(['expected', 'expect'], false);
+      ['remark', 'remarks'].forEach(function(key) {
+        if (Object.prototype.hasOwnProperty.call(item, key)) checkField([key], true);
+      });
+      Object.keys(item).forEach(function(key) {
+        if (editableFields.indexOf(key) === -1 && stableStringify(item[key]) !== stableStringify(source[key])) {
+          throw new Error('AI 语义去重用例身份或元数据被修改：' + id);
+        }
+      });
+      return editableFields;
+    }
+
+    function validateAiDedupeResult(payload, sourceModules, originalCases, simplify) {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('AI 语义去重返回格式不正确');
+      }
+      if (payload.error || payload.errors || payload.ok === false || payload.success === false) {
+        throw new Error('AI 语义去重返回错误对象');
+      }
+      var rawModules = payload.generated_modules !== undefined ? payload.generated_modules : payload.modules;
+      if (!Array.isArray(rawModules)) throw new Error('AI 语义去重缺少 generated_modules');
+      var source = sourceModules;
+      var sourceModulesByKey = Object.create(null);
+      var sourceCasesById = Object.create(null);
+      source.forEach(function(moduleItem) {
+        var moduleKey = aiModuleKey(moduleItem);
+        if (!moduleKey || sourceModulesByKey[moduleKey]) throw new Error('AI 语义去重输入模块重复');
+        sourceModulesByKey[moduleKey] = moduleItem;
+        (Array.isArray(moduleItem.cases) ? moduleItem.cases : []).forEach(function(caseItem) {
+          var id = getAiCaseId(caseItem);
+          if (!id || sourceCasesById[id]) throw new Error('AI 语义去重输入用例 ID 重复');
+          sourceCasesById[id] = { module: moduleItem, item: caseItem };
+        });
+      });
+      var originalById = Object.create(null);
+      originalCases.forEach(function(caseItem) {
+        var id = getAiCaseId(caseItem);
+        if (!id || originalById[id] || sourceCasesById[id]) throw new Error('AI 语义去重输入用例 ID 冲突');
+        originalById[id] = caseItem;
+      });
+      var outputById = Object.create(null);
+      var rewrittenIds = Object.create(null);
+      var outputModules = [];
+      rawModules.forEach(function(moduleItem) {
+        if (!moduleItem || typeof moduleItem !== 'object' || Array.isArray(moduleItem) || !Array.isArray(moduleItem.cases)) {
+          throw new Error('AI 语义去重模块或 cases 无效');
+        }
+        var key = aiModuleKey(moduleItem);
+        var sourceModule = sourceModulesByKey[key];
+        if (!sourceModule) throw new Error('AI 语义去重返回未知模块：' + key);
+        if (outputModules.some(function(item) { return aiModuleKey(item) === key; })) {
+          throw new Error('AI 语义去重重复返回模块：' + key);
+        }
+        ['moduleId', 'module_id', 'moduleKey', 'module_key', 'key'].forEach(function(identityKey) {
+          if (moduleItem[identityKey] !== undefined
+            && stableStringify(moduleItem[identityKey]) !== stableStringify(sourceModule[identityKey])) {
+            throw new Error('AI 语义去重模块身份被修改：' + key);
+          }
+        });
+        var outputModule = cloneJson(sourceModule, {});
+        outputModule.cases = moduleItem.cases.map(function(caseItem) {
+          if (!caseItem || typeof caseItem !== 'object' || Array.isArray(caseItem)) throw new Error('AI 语义去重返回未知用例');
+          var id = normalizeText(caseItem.dedupe_id);
+          if (!id || !sourceCasesById[id]) throw new Error('AI 语义去重返回未知用例：' + id);
+          if (outputById[id]) throw new Error('AI 语义去重重复返回用例：' + id);
+          var sourceEntry = sourceCasesById[id];
+          if (sourceEntry.module !== sourceModule) throw new Error('AI 语义去重用例被移动到其他模块：' + id);
+          var editableFields = validateAiCaseFields(caseItem, sourceEntry.item, sourceModule, id);
+          var normalizedCase = cloneJson(sourceEntry.item, {});
+          editableFields.forEach(function(field) {
+            if (!Object.prototype.hasOwnProperty.call(caseItem, field)) return;
+            normalizedCase[field] = cloneJson(caseItem[field], caseItem[field]);
+          });
+          if (stableStringify(normalizedCase) !== stableStringify(sourceEntry.item)) {
+            rewrittenIds[id] = true;
+          }
+          outputById[id] = true;
+          return normalizedCase;
+        });
+        outputModules.push(outputModule);
+      });
+      if (!Array.isArray(payload.removed_cases)) throw new Error('AI 语义去重 removed_cases 必须是数组');
+      var removed = payload.removed_cases;
+      var removedById = Object.create(null);
+      var mergeTargetIds = Object.create(null);
+      removed.forEach(function(record) {
+        if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error('AI 语义去重删除记录无效');
+        var sourceId = normalizeText(record.dedupe_id);
+        if (!sourceId || !sourceCasesById[sourceId]) throw new Error('AI 语义去重删除未知用例：' + sourceId);
+        if (removedById[sourceId]) throw new Error('AI 语义去重重复删除用例：' + sourceId);
+        var isMerge = record.type === 'merge';
+        if (!isMerge && record.type !== 'duplicate_with_original' && record.type !== 'duplicate_generated') {
+          throw new Error('AI 语义去重删除关系类型无效：' + sourceId);
+        }
+        var targetId = normalizeText(isMerge ? record.merged_into_id : record.duplicate_with_id);
+        if ((isMerge && (record.duplicate_with_id || record.duplicateWithId))
+          || (!isMerge && (record.merged_into_id || record.mergedIntoId))) {
+          throw new Error('AI 语义去重删除关系目标冲突：' + sourceId);
+        }
+        if (!targetId) throw new Error('AI 语义去重删除记录缺少目标 ID：' + sourceId);
+        if (targetId === sourceId) throw new Error('AI 语义去重删除源与目标相同：' + sourceId);
+        if (!sourceCasesById[targetId] && !originalById[targetId]) throw new Error('AI 语义去重目标不存在：' + targetId);
+        if ((record.type === 'duplicate_with_original' && !originalById[targetId])
+          || (record.type === 'duplicate_generated' && !sourceCasesById[targetId])) {
+          throw new Error('AI 语义去重删除关系目标范围无效：' + sourceId);
+        }
+        if (isMerge && !sourceCasesById[targetId]) {
+          throw new Error('AI 语义去重合并目标必须是生成用例：' + sourceId);
+        }
+        if (typeof record.reason !== 'string' || !normalizeText(record.reason)) {
+          throw new Error('AI 语义去重删除关系缺少原因：' + sourceId);
+        }
+        if (isMerge) mergeTargetIds[targetId] = true;
+        removedById[sourceId] = true;
+      });
+      removed.forEach(function(record) {
+        var targetId = normalizeText(record.duplicate_with_id || record.duplicateWithId
+          || record.merged_into_id || record.mergedIntoId || '');
+        if (sourceCasesById[targetId] && removedById[targetId]) {
+          throw new Error('AI 语义去重保留目标也被删除：' + targetId);
+        }
+      });
+      Object.keys(sourceCasesById).forEach(function(id) {
+        if (!outputById[id] && !removedById[id]) throw new Error('AI 语义去重漏报删除关系：' + id);
+        if (outputById[id] && removedById[id]) throw new Error('AI 语义去重同时保留并删除用例：' + id);
+      });
+      Object.keys(rewrittenIds).forEach(function(id) {
+        if (!simplify && !mergeTargetIds[id]) throw new Error('AI 语义去重仅去重模式擅自改写用例：' + id);
+      });
+      return { modules: outputModules, removed: removed };
     }
 
     function countModuleCases(modules) {
@@ -1558,9 +1826,11 @@
       if (!data || data.error || !Array.isArray(data.modules) || !data.modules.length) return data;
       if (!modelOptions || typeof modelOptions.callModelWithConfig !== 'function' || !modelOptions.model) return data;
       var beforeCount = countModuleCases(data.modules);
-      var request = buildProtectedAiDedupeRequest(data, existingCases, prep || {}, prep && prep.settings ? prep.settings : {});
+      var originalModules = cloneJson(data.modules, []);
+      var request = null;
       var content = '';
       try {
+        request = buildProtectedAiDedupeRequest(data, existingCases, prep || {}, prep && prep.settings ? prep.settings : {});
         content = await modelOptions.callModelWithConfig(
           modelOptions.model,
           request.userText,
@@ -1570,29 +1840,45 @@
           modelOptions.requestOptions || null
         );
       } catch (err) {
+        data.modules = originalModules;
+        delete data.ai_dedupe;
+        delete data.removed_cases;
         data.ai_dedupe_error = err && err.message ? err.message : 'AI 语义去重失败，已保留原始生成结果';
         return data;
       }
-      var payload = parseJsonPayload(content);
-      if (!payload || typeof payload !== 'object') {
-        data.ai_dedupe_error = 'AI 语义去重返回格式不正确，已保留原始生成结果';
+      try {
+        var payload = parseAiDedupePayload(content);
+        var validated = validateAiDedupeResult(
+          payload,
+          request.generatedModules,
+          request.originalCases,
+          Boolean(prep && prep.settings && prep.settings.dedupeSimplify)
+        );
+        var modules = validated.modules;
+        var aiRemoved = validated.removed;
+        var afterCount = countModuleCases(modules);
+        var removedCount = Math.max(0, beforeCount - afterCount);
+        data.modules = modules;
+        data.ai_dedupe = {
+          enabled: true,
+          removedCases: aiRemoved,
+          beforeCount: beforeCount,
+          afterCount: afterCount,
+          removedCount: removedCount,
+          summary: payload && payload.summary ? payload.summary : null,
+        };
+        data.removed_cases = aiRemoved;
+        delete data.ai_dedupe_error;
+        return data;
+      } catch (validationError) {
+        data.modules = originalModules;
+        delete data.ai_dedupe;
+        delete data.removed_cases;
+        data.ai_dedupe_error = (validationError && validationError.message
+          ? validationError.message
+          : 'AI 语义去重结果校验失败') + '，已保留原始生成结果';
         return data;
       }
-      var modules = normalizeAiDedupeModules(payload.generated_modules || payload.modules, data.modules);
-      var aiRemoved = Array.isArray(payload.removed_cases) ? payload.removed_cases : [];
-      var afterCount = countModuleCases(modules);
-      var removedCount = Math.max(0, beforeCount - afterCount);
-      data.modules = modules;
-      data.ai_dedupe = {
-        enabled: true,
-        removedCases: aiRemoved,
-        beforeCount: beforeCount,
-        afterCount: afterCount,
-        removedCount: removedCount,
-        summary: payload.summary || null,
-      };
-      data.removed_cases = aiRemoved;
-      return data;
     }
 
     var api = {

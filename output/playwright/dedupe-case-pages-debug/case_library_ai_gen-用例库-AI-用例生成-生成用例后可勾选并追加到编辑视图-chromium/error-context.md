@@ -1,0 +1,315 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - heading "用例助手" [level=1] [ref=e5]:
+        - generic [ref=e7]: T
+      - navigation [ref=e8]:
+        - generic [ref=e9]:
+          - heading "AI 功能" [level=2] [ref=e10]:
+            - generic [ref=e11]: AI 功能
+          - generic [ref=e12]:
+            - button "用例生成" [ref=e13] [cursor=pointer]:
+              - img [ref=e15]
+              - generic [ref=e19]: 用例生成
+            - button "功能指派，未保存指派模型" [ref=e20] [cursor=pointer]:
+              - img [ref=e22]
+              - generic [ref=e27]: 功能指派
+              - generic [ref=e28]: 未保存指派模型
+            - button "模型管理" [ref=e29] [cursor=pointer]:
+              - img [ref=e31]
+              - generic [ref=e34]: 模型管理
+        - generic [ref=e35]:
+          - heading "用例相关" [level=2] [ref=e36]
+          - generic [ref=e37]:
+            - button "用例执行" [ref=e38] [cursor=pointer]:
+              - img [ref=e40]
+              - generic [ref=e43]: 用例执行
+            - button "用例库" [ref=e44] [cursor=pointer]:
+              - img [ref=e46]
+              - generic [ref=e48]: 用例库
+            - button "用例归档" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+              - generic [ref=e54]: 用例归档
+            - button "执行总览" [ref=e55] [cursor=pointer]:
+              - img [ref=e57]
+              - generic [ref=e59]: 执行总览
+        - generic [ref=e60]:
+          - heading "管理" [level=2] [ref=e61]
+          - generic [ref=e62]:
+            - button "项目管理" [ref=e63] [cursor=pointer]:
+              - img [ref=e65]
+              - generic [ref=e68]: 项目管理
+            - button "人员管理" [ref=e69] [cursor=pointer]:
+              - img [ref=e71]
+              - generic [ref=e76]: 人员管理
+            - button "操作记录" [ref=e77] [cursor=pointer]:
+              - img [ref=e79]
+              - generic [ref=e82]: 操作记录
+        - generic [ref=e83]:
+          - heading "设置" [level=2] [ref=e84]
+          - button "通用设置" [ref=e86] [cursor=pointer]:
+            - img [ref=e88]
+            - generic [ref=e91]: 通用设置
+      - generic "个人工具" [ref=e93]:
+        - button "个人备忘" [ref=e94] [cursor=pointer]:
+          - img [ref=e95]
+          - generic [ref=e98]: 个人备忘
+      - generic [ref=e99]:
+        - generic [ref=e100]: 当前用户
+        - button "用户菜单" [ref=e101] [cursor=pointer]:
+          - generic [ref=e102]: d
+        - menu:
+          - generic:
+            - generic: d
+            - generic:
+              - strong: demo_admin
+              - generic: 角色
+              - generic: 管理员
+          - menuitem "通用设置":
+            - img
+            - generic: 通用设置
+          - menuitem "退出登录":
+            - img
+            - generic: 退出登录
+    - complementary "用例库页面导航" [ref=e103]:
+      - generic [ref=e104]:
+        - heading "用例库" [level=2] [ref=e105]
+        - button "收起快捷导航" [expanded] [ref=e106] [cursor=pointer]:
+          - img [ref=e107]
+      - navigation "用例库快捷入口" [ref=e110]:
+        - generic [ref=e111]:
+          - button "编写用例" [ref=e112] [cursor=pointer]:
+            - generic [ref=e117]: 编写用例
+          - button "导入用例" [ref=e118] [cursor=pointer]:
+            - generic [ref=e123]: 导入用例
+          - button "查看&编辑" [ref=e124] [cursor=pointer]:
+            - generic [ref=e129]: 查看&编辑
+          - button "易漏用例" [ref=e130] [cursor=pointer]:
+            - generic [ref=e134]: 易漏用例
+          - button "选择用例执行" [ref=e135] [cursor=pointer]:
+            - generic [ref=e139]: 选择用例执行
+          - button "用例改动历史" [ref=e140] [cursor=pointer]:
+            - generic [ref=e145]: 用例改动历史
+    - generic [ref=e147]:
+      - generic [ref=e148]:
+        - banner [ref=e149]:
+          - heading "项目 项目AI-生成 版本 v2 用例名 用例库AI生成" [level=1] [ref=e150]:
+            - generic [ref=e151]:
+              - generic [ref=e152]: 项目
+              - strong [ref=e153]: 项目AI-生成
+            - generic [ref=e154]: /
+            - generic [ref=e155]:
+              - generic [ref=e156]: 版本
+              - strong [ref=e157]: v2
+            - generic [ref=e158]: /
+            - generic [ref=e159]:
+              - generic [ref=e160]: 用例名
+              - strong [ref=e161]: 用例库AI生成
+        - region "用例库操作栏" [ref=e162]:
+          - generic [ref=e164]:
+            - generic [ref=e165]:
+              - textbox "搜索用例关键字" [ref=e167]
+              - button "AI 用例生成" [active] [ref=e168]:
+                - img [ref=e169]
+                - text: AI 用例生成
+              - button "XMind结构展示" [ref=e171] [cursor=pointer]:
+                - img [ref=e172]
+                - text: XMind结构展示
+              - generic [ref=e176] [cursor=pointer]:
+                - checkbox "显示易漏用例参考" [ref=e177]
+                - generic [ref=e178]: 易漏用例参考
+            - generic [ref=e179]:
+              - textbox "批量新增数量" [ref=e180]:
+                - /placeholder: 1-10
+                - text: "5"
+              - button "批量新增" [ref=e181] [cursor=pointer]:
+                - img [ref=e182]
+                - text: 批量新增
+              - button "批量删除" [disabled] [ref=e183]
+              - button "转到执行" [ref=e184] [cursor=pointer]:
+                - img [ref=e185]
+                - text: 转到执行
+      - main [ref=e187]:
+        - generic [ref=e190]:
+          - paragraph [ref=e191]
+          - generic [ref=e193]:
+            - paragraph [ref=e194]: 已加载 1 条用例，可直接编辑
+            - generic [ref=e195]:
+              - generic [ref=e196]:
+                - generic [ref=e197]: 显示 1-1 / 1 条，每页 20 条
+                - generic [ref=e198]:
+                  - button "上一页" [disabled] [ref=e199]
+                  - generic [ref=e200]: 第 1 / 1 页
+                  - button "下一页" [disabled] [ref=e201]
+                  - generic [ref=e202]:
+                    - text: 跳至
+                    - spinbutton "跳至 页" [ref=e203]: "1"
+                    - text: 页
+              - table [ref=e204]:
+                - rowgroup [ref=e205]:
+                  - row "编号 模块 用例标题 优先级 前提条件 操作步骤 预期结果 增删" [ref=e206]:
+                    - columnheader [ref=e207]:
+                      - checkbox [ref=e208]
+                    - columnheader "编号" [ref=e209]
+                    - columnheader "模块" [ref=e210]
+                    - columnheader "用例标题" [ref=e211]
+                    - columnheader "优先级" [ref=e212]
+                    - columnheader "前提条件" [ref=e213]
+                    - columnheader "操作步骤" [ref=e214]
+                    - columnheader "预期结果" [ref=e215]
+                    - columnheader "增删" [ref=e216]
+                - rowgroup [ref=e217]:
+                  - row "1 登录 登录成功 P1 已注册账号 输入正确账号密码 登录成功 − ＋" [ref=e218]:
+                    - cell [ref=e219]:
+                      - checkbox [ref=e220]
+                    - cell "1" [ref=e221]
+                    - cell "登录" [ref=e222]:
+                      - generic [ref=e223]: 登录
+                    - cell "登录成功" [ref=e224]:
+                      - generic [ref=e225]: 登录成功
+                    - cell "P1" [ref=e226]:
+                      - combobox "修改优先级" [ref=e227]:
+                        - option "P0"
+                        - option "P1" [selected]
+                        - option "P2"
+                    - cell "已注册账号" [ref=e228]:
+                      - generic [ref=e229]: 已注册账号
+                    - cell "输入正确账号密码" [ref=e230]:
+                      - generic [ref=e231]: 输入正确账号密码
+                    - cell "登录成功" [ref=e232]:
+                      - generic [ref=e233]: 登录成功
+                    - cell "− ＋" [ref=e234]:
+                      - generic [ref=e235]:
+                        - button "−" [ref=e236] [cursor=pointer]
+                        - button "＋" [ref=e237] [cursor=pointer]
+              - generic [ref=e238]:
+                - generic [ref=e239]: 显示 1-1 / 1 条，每页 20 条
+                - generic [ref=e240]:
+                  - button "上一页" [disabled] [ref=e241]
+                  - generic [ref=e242]: 第 1 / 1 页
+                  - button "下一页" [disabled] [ref=e243]
+                  - generic [ref=e244]:
+                    - text: 跳至
+                    - spinbutton "跳至 页" [ref=e245]: "1"
+                    - text: 页
+        - option "请选择项目" [selected]
+        - option "项目AI-生成"
+        - option "非复用模板" [selected]
+        - option "复用模板"
+        - generic:
+          - generic:
+            - generic:
+              - heading "查看&编辑" [level=3]
+              - button "收起"
+            - generic:
+              - generic:
+                - generic:
+                  - generic: 搜索过滤
+                  - generic: 项目
+                  - combobox "项目":
+                    - option "请选择项目"
+                    - option "项目AI-生成" [selected]
+                  - generic: 版本
+                  - combobox "版本":
+                    - option "全部版本" [selected]
+                    - option "v2"
+                  - generic: 归属
+                  - combobox "归属":
+                    - option "全部" [selected]
+                    - option "其他项目导入"
+                    - option "demo_admin"
+                  - generic: 用例名
+                  - textbox "用例名":
+                    - /placeholder: 搜索用例名
+                  - button "刷新"
+              - generic:
+                - generic:
+                  - generic: 全局操作
+                  - generic: 请选择用例变更版本
+                  - combobox "请选择用例变更版本":
+                    - option "请选择版本" [selected]
+                    - option "v2"
+                  - button "确认更换版本" [disabled]
+                - generic:
+                  - button "共享" [disabled]
+                  - button "导出XMind" [disabled]
+                  - button "导出Excel" [disabled]
+                  - button "删除所选" [disabled]
+              - paragraph: 加载用例条目...
+              - generic:
+                - generic:
+                  - generic: 显示 1-1 / 1 条，每页 20 条
+                  - generic:
+                    - button "上一页" [disabled]
+                    - generic: 第 1 / 1 页
+                    - button "下一页" [disabled]
+                    - generic:
+                      - text: 跳至
+                      - spinbutton "跳至 页": "1"
+                      - text: 页
+              - generic:
+                - table:
+                  - rowgroup:
+                    - row "全选/全不选 所属项目 版本 用例名 执行页状态 用例条目数 复用类型 导入人员 导入时间 最近更新人员 更新时间 关联用例 操作":
+                      - columnheader "全选/全不选":
+                        - checkbox "全选/全不选"
+                      - columnheader "所属项目"
+                      - columnheader "版本"
+                      - columnheader "用例名"
+                      - columnheader "执行页状态"
+                      - columnheader "用例条目数"
+                      - columnheader "复用类型"
+                      - columnheader "导入人员"
+                      - columnheader "导入时间"
+                      - columnheader "最近更新人员"
+                      - columnheader "更新时间"
+                      - columnheader "关联用例"
+                      - columnheader "操作"
+                  - rowgroup:
+                    - row "项目AI-生成 v2 用例库AI生成 未 1 否 demo_admin 10/27/2026, 12:05:27 PM demo_admin 10/27/2026, 12:05:27 PM 编辑":
+                      - cell:
+                        - checkbox
+                      - cell "项目AI-生成"
+                      - cell "v2"
+                      - cell "用例库AI生成"
+                      - cell "未":
+                        - generic:
+                          - generic "未转执行": 未
+                      - cell "1"
+                      - cell "否"
+                      - cell "demo_admin"
+                      - cell "10/27/2026, 12:05:27 PM"
+                      - cell "demo_admin"
+                      - cell "10/27/2026, 12:05:27 PM"
+                      - cell "编辑":
+                        - generic:
+                          - button "编辑"
+              - generic:
+                - generic:
+                  - generic: 显示 1-1 / 1 条，每页 20 条
+                  - generic:
+                    - button "上一页" [disabled]
+                    - generic: 第 1 / 1 页
+                    - button "下一页" [disabled]
+                    - generic:
+                      - text: 跳至
+                      - spinbutton "跳至 页": "1"
+                      - text: 页
+              - generic:
+                - button "关闭"
+        - option "请选择项目" [selected]
+        - option "项目AI-生成"
+        - option "请选择项目" [selected]
+        - option "项目AI-生成"
+        - option "请选择项目" [selected]
+        - option "项目AI-生成"
+        - option "请选择版本" [selected]
+        - option "请选择项目" [selected]
+        - option "项目AI-生成"
+        - option "请选择项目" [selected]
+        - option "项目AI-生成"
+  - generic: 请到AI功能-功能指派 页面下，配置该功能模型。
+```

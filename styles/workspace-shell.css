@@ -1403,7 +1403,7 @@
   width: 100%;
   height: 30px;
   min-height: 30px;
-  padding: 5px 28px 5px 30px;
+  padding: 5px 32px 5px 30px;
   border: 1px solid var(--workspace-border);
   color: var(--workspace-text);
   background: var(--workspace-surface);
@@ -1421,10 +1421,13 @@
   box-shadow: var(--workspace-focus);
 }
 
-.workspace-shell-enabled body[data-page="case-library"] .case-library-search-clear {
+.workspace-shell-enabled body[data-page="case-library"] .case-library-workspace-toolbar .case-library-search-clear {
   position: absolute;
   top: 50%;
   right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   min-width: 22px;
   height: 22px;
@@ -1440,15 +1443,24 @@
   transform: translateY(-50%);
 }
 
-.workspace-shell-enabled body[data-page="case-library"] .case-library-search-clear:hover:not(:disabled),
-.workspace-shell-enabled body[data-page="case-library"] .case-library-search-clear:focus-visible {
+.workspace-shell-enabled body[data-page="case-library"] .case-library-search-clear svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.workspace-shell-enabled body[data-page="case-library"] .case-library-workspace-toolbar .case-library-search-clear:hover:not(:disabled),
+.workspace-shell-enabled body[data-page="case-library"] .case-library-workspace-toolbar .case-library-search-clear:focus-visible {
   color: var(--workspace-text);
   background: var(--workspace-surface-hover);
   box-shadow: none;
   transform: translateY(-50%);
 }
 
-.workspace-shell-enabled body[data-page="case-library"] .case-library-search-clear:disabled {
+.workspace-shell-enabled body[data-page="case-library"] .case-library-workspace-toolbar .case-library-search-clear:disabled {
   visibility: hidden;
 }
 

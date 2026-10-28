@@ -1,0 +1,1 @@
+[{"id":901,"name":"MockXmindCaseGenModel","owner_id":223,"scope":"user","config_json":{"provider":"custom","baseUrl":"https://mock-model.local/v1/chat/completions","apiKey":"mock-key","model":"mock-model","maxTokens":1024,"capabilities":[]}}]

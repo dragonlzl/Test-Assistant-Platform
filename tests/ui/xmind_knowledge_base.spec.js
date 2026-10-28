@@ -78,6 +78,7 @@ async function setupSettingsRoutes(page) {
 
 async function mockCaseGenApisWithModel(page) {
   await page.addInitScript(() => {
+    window.__APP_ALLOW_MODEL_TASK_FALLBACK = true;
     try { localStorage.setItem('tap-auth-token', 'xmind-kb-ui-token'); } catch (_) {}
   });
 
@@ -118,12 +119,14 @@ async function mockCaseGenApisWithModel(page) {
         scope: 'user',
         config_json: {
           xmindCaseGenId: '901',
+          xmindCaseGenModelId: 'mock-model',
           xmindCaseGenPrompt: '基础提示词-XMind页',
           xmindCaseGenReasoning: '',
           xmindCaseGenTemperature: 0.2,
         },
       }]);
     }
+    if (path.indexOf('/api/model-tasks') === 0) return respond(404, { detail: 'mock fallback' });
     return respond(200, method === 'GET' ? [] : {});
   });
 }
@@ -229,38 +232,13 @@ async function syncActiveWorkspaceSnapshotFromLiveState(page, options) {
 async function createXmindWorkspaceByManualPrep(page, name, description) {
   await page.click('#xmindCaseGenWorkspaceAddBtn');
   await expect(page.locator('#xmindCaseGenSummaryOverlay')).toHaveClass(/is-open/);
-  await page.evaluate((payload) => {
-    var state = window.app && window.app.state ? window.app.state : null;
-    if (!state || !state.xmindCaseGen) return;
-    var prep = state.xmindCaseGen.prep = state.xmindCaseGen.prep || {};
-    prep.step = 3;
-    prep.requirementMode = 'manual';
-    prep.requirementSupplement = '';
-    prep.manualRequirementLabel = String(payload.name || '未命名需求');
-    prep.manualRequirementBlocks = [{
-      type: 'text',
-      text: String(payload.description || '需求描述'),
-    }];
-    prep.caseImportMode = 'skip';
-    prep.baseLocked = true;
-    prep.completed = true;
-  }, {
-    name: String(name || '未命名需求'),
-    description: String(description || '需求描述'),
-  });
-  await syncActiveWorkspaceSnapshotFromLiveState(page, {
-    workspaceName: String(name || '未命名需求'),
-    prep: {
-      step: 3,
-      requirementMode: 'manual',
-      manualRequirementLabel: String(name || '未命名需求'),
-      manualRequirementBlocks: [{ type: 'text', text: String(description || '需求描述') }],
-      caseImportMode: 'skip',
-      baseLocked: true,
-      completed: true,
-    },
-  });
-  await page.click('#xmindCaseGenSummaryCloseBtn');
+  await page.check('input[name="xmindRequirementMode"][value="manual"]');
+  await page.fill('#xmindCaseGenManualRequirementLabel', name);
+  await page.fill('#xmindCaseGenManualRequirementText', description);
+  await page.click('[data-prep-nav="next"]');
+  await page.check('input[name="xmindCaseImportMode"][value="skip"]');
+  await page.click('[data-prep-nav="next"]');
+  await page.click('[data-prep-nav="confirm"]');
   await expect(page.locator('#xmindCaseGenSummaryOverlay')).not.toHaveClass(/is-open/);
 }
 
@@ -311,11 +289,21 @@ async function waitForNodeStatusAbsent(page, topicText) {
 async function openNodeContextMenu(page, topicText) {
   const target = page.locator('#xmindCaseGenMindContainer me-tpc .text', { hasText: topicText }).first();
   await expect(target).toBeVisible();
-  await target.click({ button: 'right', force: true });
-  await page.waitForFunction(() => {
-    var buttons = document.querySelectorAll('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn');
-    return buttons && buttons.length > 0;
-  }, null, { timeout: 10000 });
+  await expect(async () => {
+    if (await page.locator('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn').count()) return;
+    await target.evaluate((element) => {
+      const node = element.closest('me-tpc');
+      const rect = node.getBoundingClientRect();
+      node.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+        button: 2,
+      }));
+    });
+    await expect(page.locator('.xmind-node-context-menu.is-open .xmind-node-context-menu-btn').first()).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 10000, intervals: [100, 300, 500] });
 }
 
 async function clickContextMenuAction(page, label) {
@@ -323,7 +311,8 @@ async function clickContextMenuAction(page, label) {
     hasText: String(label || '').trim(),
   }).first();
   await expect(button).toBeVisible();
-  await button.click({ force: true });
+  await expect(button).toBeEnabled();
+  await button.evaluate((element) => element.click());
 }
 
 async function switchWorkspace(page, label) {
@@ -561,7 +550,7 @@ async function installKnowledgeBaseStubs(page) {
       var targetModule = String(contract.targetModule || '登录模块');
       var mode = String(contract.mode || '');
       var responseModules = [];
-      if (mode === 'full_cases') {
+      if (mode === 'full_cases' || mode === 'append_all_modules_cases') {
         responseModules = [makeModule('登录模块'), makeModule('支付模块')];
       } else {
         responseModules = [makeModule(targetModule || '登录模块')];
@@ -572,6 +561,123 @@ async function installKnowledgeBaseStubs(page) {
 }
 
 test.describe('XMind 共享知识库', () => {
+  test('完整主题注入生成，同版本复用、版本更新重取及撤权后跳过', async ({ page }) => {
+    test.setTimeout(60000);
+    await mockCaseGenApisWithModel(page);
+    await gotoCasesgenWorkflow(page);
+    await waitXmindModelAssigned(page);
+    await installKnowledgeBaseStubs(page);
+    await page.evaluate(() => {
+      var client = window.app.apiClient;
+      var originalProxy = client.proxyModelRequest;
+      window.__topicVersion = 'topics-v1';
+      window.__topicSelectionCalls = 0;
+      window.__topicAccessDenied = false;
+      window.__topicAccessChecks = 0;
+      window.app.state.settings.knowledgeBaseBaseUrl = 'http://kb.example/sk/';
+      client.checkKnowledgeAccess = function() {
+        window.__topicAccessChecks += 1;
+        return window.__topicAccessDenied ? Promise.reject(new Error('来源权限已撤销')) : Promise.resolve({ allowed: true });
+      };
+      client.getKnowledgeBaseVersion = function() {
+        return Promise.resolve({ knowledge_version: window.__topicVersion, topics_available: true });
+      };
+      function manifest() {
+        return { knowledge_version: window.__topicVersion, topics_path: '_llm/topics.json', doc_count: 1 };
+      }
+      function topic() {
+        return {
+          doc_id: 'wolf', topic_id: 'wolf::devour', title: '狼人', module: '角色与养成',
+          heading_path: ['狼人', '技能', '吞噬'], aliases: ['狼人三技能'], summary: '吞噬回复与强化规则',
+          kind: 'rule', source_url: 'http://wiki.example/wolf', source_revision_id: '250565',
+          warnings: ['Wiki 数值存在冲突，强化结果需要确认'],
+        };
+      }
+      client.catalogKnowledgeBase = function(payload) {
+        window.__kbCatalogCalls.push(payload);
+        return Promise.resolve({ manifest: manifest(), documents: [{ doc_id: 'wolf', title: '狼人', topics: [topic()] }] });
+      };
+      client.getKnowledgeBaseDocuments = function(payload) {
+        window.__kbDocumentCalls.push(payload);
+        var data = topic();
+        data.sections = [{ section_id: data.topic_id, heading: '吞噬', content: '基础规则\n' + '完整技能条件\n'.repeat(25) + '导师强化：回复 3 点生命；版本=' + window.__topicVersion }];
+        return Promise.resolve({ knowledge_version: window.__topicVersion, manifest: manifest(), documents: [data] });
+      };
+      client.proxyModelRequest = function(payload) {
+        var messages = payload && payload.payload && payload.payload.messages || [];
+        var prompt = String(messages[0] && messages[0].content || '');
+        if (prompt.indexOf('共享知识库主题分析助手') === -1) return originalProxy(payload);
+        window.__topicSelectionCalls += 1;
+        var userText = String(messages[1] && messages[1].content || '');
+        var directory = JSON.parse(userText.split('【知识主题目录(JSON)】')[1]);
+        var id = directory.documents[0].topics[0][0];
+        return Promise.resolve({ ok: true, status: 200, text: function() {
+          return Promise.resolve(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+            selected_topic_ids: [id], items: [{ topic_id: id, reason: '需求涉及吞噬技能', usage: 'direct' }],
+          }) } }] }));
+        } });
+      };
+    });
+    await openXmindCaseGenDrawer(page);
+    await createXmindWorkspaceByManualPrep(page, '吞噬技能', '狼人三技能的回复与导师强化校验。');
+    await waitForNodeText(page, '吞噬技能');
+    await openNodeContextMenu(page, '吞噬技能');
+    await clickContextMenuAction(page, '生成全量用例');
+    await waitForNodeText(page, '登录模块');
+    await expect(page.locator('#xmindCaseGenStatus')).toContainText('已生成');
+    await expect.poll(() => page.evaluate(() => window.__xmindKbProxyCalls.some(function(call) {
+      return call.user.indexOf('导师强化：回复 3 点生命；版本=topics-v1') !== -1
+        && call.user.indexOf('Wiki 数值存在冲突') !== -1 && call.user.indexOf('250565') !== -1;
+    }))).toBe(true);
+    expect(await page.evaluate(() => window.__topicSelectionCalls)).toBe(1);
+    expect(await page.evaluate(() => window.__kbDocumentCalls[0].topic_ids)).toEqual(['wolf::devour']);
+
+    async function regenerate() {
+      await page.waitForFunction(() => window.app.xmindCasegenApi.getWorkspaceProgressItems().every(function(item) {
+        return item.running !== true;
+      }));
+      const before = await page.evaluate(() => window.__xmindKbProxyCalls.length);
+      await expect.poll(() => page.evaluate(() => {
+        var node = document.querySelector('#xmindCaseGenMindContainer me-tpc.xmind-casegen-node-root');
+        if (!node) return false;
+        var rect = node.getBoundingClientRect();
+        node.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true, cancelable: true, button: 2,
+          clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2,
+        }));
+        var button = document.querySelector('.xmind-node-context-menu.is-open [data-mind-node-menu="root-full-cases"]');
+        if (!button || button.disabled) return false;
+        button.click();
+        return true;
+      })).toBe(true);
+      await expect.poll(() => page.evaluate(() => window.__xmindKbProxyCalls.length)).toBeGreaterThan(before);
+      await expect(page.locator('#xmindCaseGenStatus')).toContainText(/已(?:重新)?生成/);
+      await page.waitForFunction(() => window.app.xmindCasegenApi.getWorkspaceProgressItems().every(function(item) {
+        return item.running !== true;
+      }));
+      return before;
+    }
+    await regenerate();
+    expect(await page.evaluate(() => window.__topicSelectionCalls)).toBe(1);
+    expect(await page.evaluate(() => window.__kbDocumentCalls.length)).toBe(1);
+    await page.evaluate(() => { window.__topicVersion = 'topics-v2'; });
+    const updatedCallsStart = await regenerate();
+    expect(await page.evaluate(() => window.__topicSelectionCalls)).toBe(2);
+    expect(await page.evaluate(() => window.__kbDocumentCalls.length)).toBe(2);
+    expect(await page.evaluate((start) => window.__xmindKbProxyCalls.slice(start).some(function(call) {
+      return call.user.indexOf('版本=topics-v2') !== -1;
+    }), updatedCallsStart)).toBe(true);
+    await page.evaluate(() => { window.__topicAccessDenied = true; });
+    const deniedCallsStart = await regenerate();
+    expect(await page.evaluate(() => window.__topicAccessChecks)).toBeGreaterThanOrEqual(4);
+    expect(await page.evaluate(() => window.__kbDocumentCalls.length)).toBe(2);
+    expect(await page.evaluate((start) => window.__xmindKbProxyCalls.slice(start).every(function(call) {
+      return call.user.indexOf('【知识库上下文】') === -1;
+    }), deniedCallsStart)).toBe(true);
+    await page.click('#xmindCaseGenKnowledgeRuleBtn');
+    await expect(page.locator('#xmindCaseGenSummaryDialogBody')).toContainText('来源权限已撤销');
+  });
+
   test('设置页可保存并校验知识库地址', async ({ page }) => {
     const state = await setupSettingsRoutes(page);
     await page.goto(base + '/settings.html?_=' + Date.now().toString(36));
@@ -652,7 +758,7 @@ test.describe('XMind 共享知识库', () => {
     const modelCallCountBeforeReuse = await page.evaluate(() => {
       return Array.isArray(window.__xmindKbProxyCalls) ? window.__xmindKbProxyCalls.length : 0;
     });
-    await openNodeContextMenu(page, '登录模块');
+    await openNodeContextMenu(page, '页签A');
     await clickContextMenuAction(page, '重新生成全量用例');
     await page.waitForFunction((beforeCount) => {
       return Array.isArray(window.__xmindKbProxyCalls) && window.__xmindKbProxyCalls.length > beforeCount;
@@ -708,11 +814,11 @@ test.describe('XMind 共享知识库', () => {
     const catalogCalls = await page.evaluate(() => {
       return window.__kbCatalogCalls ? JSON.parse(JSON.stringify(window.__kbCatalogCalls)) : [];
     });
-    expect(catalogCalls).toHaveLength(2);
+    expect(catalogCalls).toHaveLength(3);
     const documentCalls = await page.evaluate(() => {
       return window.__kbDocumentCalls ? JSON.parse(JSON.stringify(window.__kbDocumentCalls)) : [];
     });
-    expect(documentCalls).toHaveLength(2);
+    expect(documentCalls).toHaveLength(3);
     expect(documentCalls.some((item) => JSON.stringify(item.doc_ids || []).indexOf('doc-a-1') !== -1)).toBe(true);
     expect(documentCalls.some((item) => JSON.stringify(item.doc_ids || []).indexOf('doc-b-1') !== -1)).toBe(true);
 
@@ -758,6 +864,6 @@ test.describe('XMind 共享知识库', () => {
           || user.indexOf('【知识文档正文(JSON)】') !== -1;
       });
     });
-    expect(filterCalls).toHaveLength(4);
+    expect(filterCalls).toHaveLength(6);
   });
 });

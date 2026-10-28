@@ -1,0 +1,303 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - complementary:
+    - generic:
+      - heading "用例助手" [level=1]:
+        - generic:
+          - generic: T
+    - navigation:
+      - generic:
+        - heading "AI 功能" [level=2]:
+          - generic: AI 功能
+        - generic:
+          - button "用例生成，有新的生成结果":
+            - generic:
+              - img
+            - generic: 用例生成
+          - button "功能指派，未保存指派模型":
+            - generic:
+              - img
+            - generic: 功能指派
+            - generic: 未保存指派模型
+          - button "模型管理":
+            - generic:
+              - img
+            - generic: 模型管理
+      - generic:
+        - heading "用例相关" [level=2]
+        - generic:
+          - button "用例执行":
+            - generic:
+              - img
+            - generic: 用例执行
+          - button "用例库":
+            - generic:
+              - img
+            - generic: 用例库
+          - button "用例归档":
+            - generic:
+              - img
+            - generic: 用例归档
+          - button "执行总览":
+            - generic:
+              - img
+            - generic: 执行总览
+      - generic:
+        - heading "管理" [level=2]
+        - generic:
+          - button "项目管理":
+            - generic:
+              - img
+            - generic: 项目管理
+          - button "人员管理":
+            - generic:
+              - img
+            - generic: 人员管理
+          - button "操作记录":
+            - generic:
+              - img
+            - generic: 操作记录
+      - generic:
+        - heading "设置" [level=2]
+        - generic:
+          - button "通用设置":
+            - generic:
+              - img
+            - generic: 通用设置
+    - generic:
+      - generic "个人工具":
+        - button "个人备忘":
+          - img
+          - generic: 个人备忘
+    - generic:
+      - generic: 当前用户
+      - button "用户菜单":
+        - generic: d
+      - menu:
+        - generic:
+          - generic: d
+          - generic:
+            - strong: demo_admin
+            - generic: 角色
+            - generic: 管理员
+        - menuitem "通用设置":
+          - img
+          - generic: 通用设置
+        - menuitem "退出登录":
+          - img
+          - generic: 退出登录
+  - complementary "用例库页面导航" [ref=e3]:
+    - generic [ref=e4]:
+      - heading "用例库" [level=2] [ref=e5]
+      - button "收起快捷导航" [expanded] [ref=e6] [cursor=pointer]:
+        - img [ref=e7]
+    - navigation "用例库快捷入口":
+      - generic:
+        - button "编写用例":
+          - generic:
+            - generic: 编写用例
+        - button "导入用例":
+          - generic:
+            - generic: 导入用例
+        - button "查看&编辑":
+          - generic:
+            - generic: 查看&编辑
+        - button "易漏用例":
+          - generic:
+            - generic: 易漏用例
+        - button "选择用例执行":
+          - generic:
+            - generic: 选择用例执行
+        - button "用例改动历史":
+          - generic:
+            - generic: 用例改动历史
+  - generic [ref=e11]:
+    - generic [ref=e12]:
+      - banner [ref=e13]:
+        - heading "项目 项目AI-生成 版本 v2 用例名 用例库AI生成" [level=1] [ref=e14]:
+          - generic [ref=e15]:
+            - generic [ref=e16]: 项目
+            - strong [ref=e17]: 项目AI-生成
+          - generic [ref=e18]: /
+          - generic [ref=e19]:
+            - generic [ref=e20]: 版本
+            - strong [ref=e21]: v2
+          - generic [ref=e22]: /
+          - generic [ref=e23]:
+            - generic [ref=e24]: 用例名
+            - strong [ref=e25]: 用例库AI生成
+      - region "用例库操作栏" [ref=e26]:
+        - generic [ref=e28]:
+          - generic [ref=e29]:
+            - textbox "搜索用例关键字" [ref=e31]
+            - button "AI 用例生成" [ref=e32] [cursor=pointer]
+            - button "XMind结构展示" [ref=e33] [cursor=pointer]:
+              - img [ref=e34]
+              - text: XMind结构展示
+            - generic [ref=e38] [cursor=pointer]:
+              - checkbox "显示易漏用例参考" [ref=e39]
+              - generic [ref=e40]: 易漏用例参考
+          - generic [ref=e41]:
+            - textbox "批量新增数量" [ref=e42]:
+              - /placeholder: 1-10
+              - text: "5"
+            - button "批量新增" [ref=e43] [cursor=pointer]:
+              - img [ref=e44]
+              - text: 批量新增
+            - button "批量删除" [disabled] [ref=e45]
+            - button "转到执行" [ref=e46] [cursor=pointer]:
+              - img [ref=e47]
+              - text: 转到执行
+    - main [ref=e49]:
+      - generic [ref=e52]:
+        - paragraph [ref=e53]
+        - generic [ref=e55]:
+          - paragraph [ref=e56]: 已加载 1 条用例，可直接编辑
+          - generic [ref=e57]:
+            - generic [ref=e58]:
+              - generic [ref=e59]: 显示 1-1 / 1 条，每页 20 条
+              - generic [ref=e60]:
+                - button "上一页" [disabled] [ref=e61]
+                - generic [ref=e62]: 第 1 / 1 页
+                - button "下一页" [disabled] [ref=e63]
+                - generic [ref=e64]:
+                  - text: 跳至
+                  - spinbutton "跳至 页" [ref=e65]: "1"
+                  - text: 页
+            - table [ref=e66]:
+              - rowgroup [ref=e67]:
+                - row "编号 模块 用例标题 优先级 前提条件 操作步骤 预期结果 增删" [ref=e68]:
+                  - columnheader [ref=e69]:
+                    - checkbox [ref=e70]
+                  - columnheader "编号" [ref=e71]
+                  - columnheader "模块" [ref=e72]
+                  - columnheader "用例标题" [ref=e73]
+                  - columnheader "优先级" [ref=e74]
+                  - columnheader "前提条件" [ref=e75]
+                  - columnheader "操作步骤" [ref=e76]
+                  - columnheader "预期结果" [ref=e77]
+                  - columnheader "增删" [ref=e78]
+              - rowgroup [ref=e79]:
+                - row "1 登录 登录成功 P1 已注册账号 输入正确账号密码 登录成功 − ＋" [ref=e80]:
+                  - cell [ref=e81]:
+                    - checkbox [ref=e82]
+                  - cell "1" [ref=e83]
+                  - cell "登录" [ref=e84]:
+                    - generic [ref=e85]: 登录
+                  - cell "登录成功" [ref=e86]:
+                    - generic [ref=e87]: 登录成功
+                  - cell "P1" [ref=e88]:
+                    - combobox "修改优先级" [ref=e89]:
+                      - option "P0"
+                      - option "P1" [selected]
+                      - option "P2"
+                  - cell "已注册账号" [ref=e90]:
+                    - generic [ref=e91]: 已注册账号
+                  - cell "输入正确账号密码" [ref=e92]:
+                    - generic [ref=e93]: 输入正确账号密码
+                  - cell "登录成功" [ref=e94]:
+                    - generic [ref=e95]: 登录成功
+                  - cell "− ＋" [ref=e96]:
+                    - generic [ref=e97]:
+                      - button "−" [ref=e98] [cursor=pointer]
+                      - button "＋" [ref=e99] [cursor=pointer]
+            - generic [ref=e100]:
+              - generic [ref=e101]: 显示 1-1 / 1 条，每页 20 条
+              - generic [ref=e102]:
+                - button "上一页" [disabled] [ref=e103]
+                - generic [ref=e104]: 第 1 / 1 页
+                - button "下一页" [disabled] [ref=e105]
+                - generic [ref=e106]:
+                  - text: 跳至
+                  - spinbutton "跳至 页" [ref=e107]: "1"
+                  - text: 页
+      - option "请选择项目" [selected]
+      - option "项目AI-生成"
+      - option "非复用模板" [selected]
+      - option "复用模板"
+      - option "请选择项目"
+      - option "项目AI-生成" [selected]
+      - option "全部版本" [selected]
+      - option "v2"
+      - option "全部" [selected]
+      - option "其他项目导入"
+      - option "demo_admin"
+      - option "请选择版本" [selected]
+      - option "v2"
+      - generic [ref=e110]:
+        - generic [ref=e111]:
+          - heading "AI 用例生成" [level=3] [ref=e112]
+          - button "收起" [ref=e113] [cursor=pointer]
+        - generic [ref=e114]:
+          - paragraph [ref=e116]: 去重失败，已保留生成结果：AI 语义去重缺少 generated_modules，已保留原始生成结果
+          - generic [ref=e117]:
+            - generic [ref=e118]:
+              - generic [ref=e119]:
+                - button "全选" [ref=e120] [cursor=pointer]
+                - button "全不选" [ref=e121] [cursor=pointer]
+                - button "清空结果" [ref=e122] [cursor=pointer]
+                - button "重新生成" [ref=e123] [cursor=pointer]
+              - generic [ref=e124]:
+                - generic [ref=e125]: 生成 4 条，去重未完成
+                - generic [ref=e126]: 已选 0 / 4 条
+            - table [ref=e128]:
+              - rowgroup [ref=e129]:
+                - row "全选/全不选 模块 用例标题 优先级 前提条件 操作步骤 预期结果" [ref=e130]:
+                  - columnheader "全选/全不选" [ref=e131]:
+                    - checkbox "全选/全不选" [ref=e132]
+                  - columnheader "模块" [ref=e133]
+                  - columnheader "用例标题" [ref=e134]
+                  - columnheader "优先级" [ref=e135]
+                  - columnheader "前提条件" [ref=e136]
+                  - columnheader "操作步骤" [ref=e137]
+                  - columnheader "预期结果" [ref=e138]
+              - rowgroup [ref=e139]:
+                - row "支付 支付成功 P1 选择商品并完成支付 支付成功并提示结果" [ref=e140]:
+                  - cell [ref=e141]:
+                    - checkbox [ref=e142]
+                  - cell "支付" [ref=e143]
+                  - cell "支付成功" [ref=e144]
+                  - cell "P1" [ref=e145]
+                  - cell [ref=e146]
+                  - cell "选择商品并完成支付" [ref=e147]
+                  - cell "支付成功并提示结果" [ref=e148]
+                - row "支付成功 P1 选择商品并完成支付 支付成功并提示结果" [ref=e149]:
+                  - cell [ref=e150]:
+                    - checkbox [ref=e151]
+                  - cell "支付成功" [ref=e152]
+                  - cell "P1" [ref=e153]
+                  - cell [ref=e154]
+                  - cell "选择商品并完成支付" [ref=e155]
+                  - cell "支付成功并提示结果" [ref=e156]
+                - row "登录 登录失败-密码错误 P1 输入错误密码 提示密码错误" [ref=e157]:
+                  - cell [ref=e158]:
+                    - checkbox [ref=e159]
+                  - cell "登录" [ref=e160]
+                  - cell "登录失败-密码错误" [ref=e161]
+                  - cell "P1" [ref=e162]
+                  - cell [ref=e163]
+                  - cell "输入错误密码" [ref=e164]
+                  - cell "提示密码错误" [ref=e165]
+                - row "登录成功 P1 已注册账号 输入正确账号密码 登录成功" [ref=e166]:
+                  - cell [ref=e167]:
+                    - checkbox [ref=e168]
+                  - cell "登录成功" [ref=e169]
+                  - cell "P1" [ref=e170]
+                  - cell "已注册账号" [ref=e171]
+                  - cell "输入正确账号密码" [ref=e172]
+                  - cell "登录成功" [ref=e173]
+            - button "确认追加" [disabled] [ref=e175]
+      - option "请选择项目" [selected]
+      - option "项目AI-生成"
+      - option "请选择项目" [selected]
+      - option "项目AI-生成"
+      - option "请选择项目" [selected]
+      - option "项目AI-生成"
+      - option "请选择版本" [selected]
+      - option "请选择项目" [selected]
+      - option "项目AI-生成"
+      - option "请选择项目" [selected]
+      - option "项目AI-生成"
+```
